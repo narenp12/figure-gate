@@ -33,16 +33,18 @@ INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 TYPE_FLOOR_PT = 7.5
 
-# Usable width of the page the figure lands in, in points. Set it once and the
-# scale is derived per figure from that figure's own width - which is the part
-# people get wrong, because a wide figure shrinks much harder than a narrow one
-# and the same 8pt label is fine in one and illegible in the other.
+# SET THIS PER PROJECT: the usable width, in points, of the page the figure
+# lands in. Render one page, place a full-width figure, measure it. Within ~5%
+# is fine, since it only sets the type floor.
 #
-# Author at the width the figure is actually placed at and the scale is 1.0:
-# points authored are points printed, and this whole calculation disappears.
-# SET THIS PER PROJECT. Render one page, place a full-width figure, measure it.
-# Within ~5% is fine; it only sets the type floor. None means "assume scale 1.0",
-# which is correct when you author each figure at the width it is placed at.
+# Set it once and the scale is derived per figure from that figure's own width,
+# which is the part people get wrong: a wide figure shrinks much harder than a
+# narrow one, so the same 8pt label is comfortable in one and illegible in the
+# other.
+#
+# None means "assume scale 1.0" - correct when you author each figure at the
+# width it is actually placed at, which makes points authored equal points
+# printed and this whole calculation disappear.
 CONTENT_WIDTH_PT = None
 
 
