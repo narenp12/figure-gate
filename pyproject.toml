@@ -23,8 +23,8 @@ classifiers = [
 dependencies = ["matplotlib>=3.8"]
 
 [project.urls]
-Homepage = "https://github.com/narenprax/figure-gate"
-Issues = "https://github.com/narenprax/figure-gate/issues"
+Homepage = "https://github.com/narenp12/figure-gate"
+Issues = "https://github.com/narenp12/figure-gate/issues"
 
 [project.scripts]
 check-palette = "check_palette:main"

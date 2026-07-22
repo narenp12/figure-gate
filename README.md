@@ -55,7 +55,7 @@ sizes set through rcParams or by a helper are caught too.
 Nothing to install. Copy three files into your project:
 
 ```bash
-git clone https://github.com/narenprax/figure-gate
+git clone https://github.com/narenp12/figure-gate
 cp figure-gate/skill/assets/figure.mplstyle       your-project/diagrams/
 cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
 cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
