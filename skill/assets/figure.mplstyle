@@ -46,6 +46,26 @@ xtick.labelsize:    10
 ytick.labelsize:    10
 legend.fontsize:    9.5
 
+# --- series color -----------------------------------------------------------
+# Okabe-Ito, canonical order, six slots. Until this line existed the sheet set
+# every other visual default and left the one that decides whether a colorblind
+# reader can separate two curves on matplotlib's `tab10` - whose orange and
+# green measure dE 1.4 under protanopia. A figure on that cycle passed the whole
+# composition suite clean, because nothing on the figure side looked at color.
+#
+# Two slots are held out. Yellow #F0E442 is 1.32:1 on white and vanishes as a
+# hairline (use it as a fill with a dark edge). Black is the ink token, and
+# keeping it out of the series keeps "ink" unambiguous - that one is a
+# preference, not a measurement.
+#
+# Bare hex, per the TRAP at the top: `#` starts a comment here, and matplotlib
+# accepts a bare six-digit string as a color precisely so this format can carry
+# one. Note this line fails the trap differently from the rest: a `#` truncates
+# it mid-list, so it is a parse error rather than a silently empty value. The
+# key also does not contain the substring "color", so it is the "Bad value" log
+# assertion that catches a slip here, not the direct hash test beside it.
+axes.prop_cycle: cycler('color', ['E69F00','56B4E9','009E73','0072B2','D55E00','CC79A7'])
+
 # --- ink --------------------------------------------------------------------
 figure.facecolor:   white
 axes.facecolor:     white

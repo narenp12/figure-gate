@@ -135,6 +135,40 @@ def test_font_stack_ends_in_a_face_that_ships_with_matplotlib():
     assert stack[-1] in {"DejaVu Serif", "DejaVu Sans"}, stack
 
 
+OKABE_SERIES = ["#E69F00", "#56B4E9", "#009E73",
+                "#0072B2", "#D55E00", "#CC79A7"]
+
+
+def test_the_series_cycle_is_the_palette_the_guide_prescribes():
+    """Until this key existed the sheet set every visual default except the one
+    that decides whether a colorblind reader can separate two curves, so a
+    figure built on it inherited matplotlib's `tab10` -- whose orange and green
+    measure dE 1.4 under protanopia."""
+    cycle = [c.upper() for c in parsed()["axes.prop_cycle"].by_key()["color"]]
+    assert cycle == OKABE_SERIES, cycle
+
+
+def test_the_cycle_clears_the_palette_gates_it_is_measured_by():
+    """The sheet cannot prescribe a palette that its own validator rejects.
+    Adjacent for lines and bars; the first four for scatter and small
+    multiples, which compare every series against every other."""
+    import check_palette as cp
+    cycle = parsed()["axes.prop_cycle"].by_key()["color"]
+    rows, ok = cp.check(cycle)
+    assert ok, rows
+    rows, ok = cp.check(cycle[:4], all_pairs=True)
+    assert ok, rows
+
+
+def test_the_held_out_slots_stay_held_out():
+    """Yellow is 1.32:1 on white and vanishes as a hairline; black is the ink
+    token. Both are measured or stated in the guide, so a future edit that
+    quietly restores them to the series cycle should fail here."""
+    cycle = {c.upper() for c in parsed()["axes.prop_cycle"].by_key()["color"]}
+    assert "#F0E442" not in cycle
+    assert "#000000" not in cycle
+
+
 def test_type_sizes_clear_the_floor_at_scale_one():
     """The sheet's defaults have to be legal for the case the guide recommends:
     authoring at the width the figure is placed at."""

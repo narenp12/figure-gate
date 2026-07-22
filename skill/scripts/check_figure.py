@@ -21,14 +21,36 @@ Checks
     5. Redundancy      - shared-axis panels do not repeat a tick label column
     6. Type size       - every rendered string clears the floor once scaled
     7. Ink coverage    - the data region is neither empty nor packed
+    8. Series color    - the drawn hues separate under color blindness
+    9. Dual axis       - no second y scale carrying data of its own
+   10. Style sheet     - figure.mplstyle is the one actually in effect
+   11. Form            - no pie, no 3D, no truncated bar baseline
+   12. Identity        - series are not told apart by color alone
 """
 
 import itertools
 from collections import Counter
+from pathlib import Path
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
 INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
+
+# The theme has six categorical slots and the guide's claim is that there is no
+# seventh: a generated hue is indistinguishable from an existing slot under
+# simulated color blindness. Until now that claim was prose only.
+MAX_SERIES_HUES = 6
+
+# Ink and furniture from `figure.mplstyle`. These land in `ax.lines` and
+# `ax.patches` beside the data - reference rules, annotation boxes, spine-colored
+# strokes - and none of them carries a categorical identity, so counting them as
+# a data hue would fail figures for the color of their own furniture.
+INK_TOKENS = {"#000000", "#52514e", "#898781",     # ink primary/secondary/muted
+              "#e1e0d9", "#c3c2b7", "#ffffff"}     # grid, axis, surface
+
+# Two axes are the same frame when their bounds agree this closely. An inset or
+# a colorbar never does; `twinx`/`twiny` always does.
+FRAME_TOL = 1e-3
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 TYPE_FLOOR_PT = 7.5
@@ -335,6 +357,293 @@ def check_ink(fig):
                     " read badly, though a heatmap legitimately runs high")
 
 
+# --- color ------------------------------------------------------------------
+
+def _hex(c):
+    """A drawn color as lowercase 6-digit hex, or None if it never reaches the
+    page. Fully transparent is the case that matters: a bar's default edge color
+    is `none`, and reading it as black would put the ink token on every bar."""
+    from matplotlib.colors import to_hex, to_rgba
+    try:
+        r, g, b, a = to_rgba(c)
+    except (ValueError, TypeError):
+        return None
+    return None if a == 0 else to_hex((r, g, b))
+
+
+def _colors_of(value):
+    """Normalize the several shapes matplotlib returns a color in: a string from
+    `Line2D`, an RGBA tuple from `Patch`, an Nx4 array from a `Collection`."""
+    if isinstance(value, str):
+        return [value]
+    import numpy as np
+    try:
+        arr = np.asarray(value, dtype=float)
+    except (ValueError, TypeError):
+        return []
+    if arr.ndim == 1:
+        return [tuple(arr)] if arr.size in (3, 4) else []
+    if arr.ndim == 2 and arr.shape[1] in (3, 4):
+        return [tuple(row) for row in arr]
+    return []
+
+
+def _data_colors(fig):
+    """`(hex, label)` for every color on the figure that carries a categorical
+    identity. `label` is None for an artist matplotlib named itself.
+
+    Harvested narrowly on purpose. Two exclusions do the work:
+
+    - an artist with a colormap attached (`get_array()` is not None) encodes a
+      *value*, not an identity - a heatmap or a scatter colored by magnitude is
+      a continuous encoding and answers to the viridis rule instead
+    - the ink tokens, per `INK_TOKENS` above
+    """
+    out = []
+    for ax in fig.axes:
+        for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
+            if not artist.get_visible():
+                continue
+            if getattr(artist, "get_array", lambda: None)() is not None:
+                continue
+            raw = str(artist.get_label() or "")
+            label = raw if raw and not raw.startswith("_") else None
+            for getter in ("get_color", "get_facecolor", "get_edgecolor"):
+                fn = getattr(artist, getter, None)
+                if fn is None:
+                    continue
+                try:
+                    value = fn()
+                except (ValueError, TypeError, AttributeError):
+                    continue
+                for c in _colors_of(value):
+                    h = _hex(c)
+                    if h and h not in INK_TOKENS:
+                        out.append((h, label))
+    return out
+
+
+def _compares_all_pairs(fig):
+    """Which separation mode the figure needs. `check_palette.py` has to ask for
+    this on the command line because a list of hexes does not say what it will be
+    drawn as; a built figure does say. Scatter puts every series next to every
+    other, so every pair has to separate. Lines and bars only ever put
+    neighbours next to each other, and gating all pairs there would fail
+    palettes the guide explicitly sanctions."""
+    from matplotlib.collections import PathCollection
+    return any(isinstance(c, PathCollection)
+               for ax in fig.axes for c in ax.collections)
+
+
+def check_series_color(fig):
+    """The hues actually drawn, put through the palette gates.
+
+    The hole this closes: `check_palette.py` judges a list of hexes someone
+    remembered to paste into a terminal, and this file never looked at color at
+    all. A figure on matplotlib's default `tab10` cycle - whose orange and green
+    measure OKLab dE 1.4 under protanopia - passed every composition check
+    clean. Two scripts in one project that never spoke.
+
+    Only what is never legitimate is gated: separation under color blindness,
+    and separation in normal vision. The lightness-band and chroma-floor rows
+    are deliberately *not* applied to harvested colors. A black or gray series
+    is legal - a reference curve, a control group - and failing it is precisely
+    the noise that teaches people to skim past the row.
+    """
+    harvested = _data_colors(fig)
+    if not harvested:
+        return True, "no categorical series colors"
+
+    distinct = list(dict.fromkeys(h for h, _ in harvested))
+    plural = "s" if len(distinct) != 1 else ""
+    fails, notes = [], []
+
+    if len(distinct) > MAX_SERIES_HUES:
+        fails.append(f"{len(distinct)} distinct data hues, theme has "
+                     f"{MAX_SERIES_HUES}  <- fold the tail into 'Other' or facet")
+
+    # One hue carrying two identities is what a seventh series looks like once
+    # the cycler wraps: matplotlib reuses slot 1 without complaint and the
+    # legend confidently lists both. Keyed on the label text rather than a count,
+    # so one entity drawn as several artists in one color stays legal.
+    identities = {}
+    for h, label in harvested:
+        if label:
+            identities.setdefault(h, set()).add(label)
+    for h, labels in sorted(identities.items()):
+        if len(labels) > 1:
+            fails.append(f"{h} carries two identities {sorted(labels)}"
+                         "  <- the color cycle wrapped")
+
+    if len(distinct) >= 2:
+        try:
+            import check_palette as cp
+        except ImportError:
+            notes.append("check_palette.py is not importable beside this file, "
+                         "so separation went unchecked")
+        else:
+            mode = "all-pairs" if _compares_all_pairs(fig) else "adjacent"
+            rows, _ = cp.check(distinct, all_pairs=(mode == "all-pairs"))
+            for name, status, detail in rows:
+                if not name.startswith(("CVD separation", "Normal-vision floor")):
+                    continue
+                if status is False:
+                    fails.append(detail)
+                else:
+                    notes.append(detail.split("  <-")[0].strip())
+
+    head = f"{len(distinct)} data hue{plural}"
+    if fails:
+        return False, f"{head}: " + "; ".join(fails)
+    return True, f"{head}: " + ("; ".join(notes) if notes else "nothing to compare")
+
+
+# --- structure --------------------------------------------------------------
+
+def _has_data(ax):
+    return any(a.get_visible() for a in
+               list(ax.lines) + list(ax.patches)
+               + list(ax.collections) + list(ax.images))
+
+
+def check_dual_axis(fig):
+    """Two y scales in one frame, which nothing in this project banned and a
+    `twinx` figure sailed straight through.
+
+    Both scales are set by the author, so the crossing point of the two curves
+    is an artifact of the limits chosen rather than anything in the data. Move
+    the limits and the story changes; a reader cannot tell that from the figure.
+
+    The escape hatch is the one legitimate case: a *pure unit relabel* - degrees
+    C against degrees F, eV against nm - where the twin is furniture and carries
+    no data of its own. So the discriminator is data on both, not a shared
+    frame, which keeps the gate off `secondary_yaxis` and off correct work.
+    """
+    pairs = []
+    for i, j in itertools.combinations(range(len(fig.axes)), 2):
+        a, b = fig.axes[i], fig.axes[j]
+        if any(abs(x - y) > FRAME_TOL for x, y in
+               zip(a.get_position().bounds, b.get_position().bounds)):
+            continue
+        if _has_data(a) and _has_data(b):
+            pairs.append(f"ax{i}+ax{j}")
+    if not pairs:
+        return True, "one data scale per frame"
+    return False, (f"two y scales sharing a frame: {', '.join(pairs)}  <- the "
+                   "crossing point is set by the limits, not the data. Two "
+                   "panels, small multiples, or index both to a common base")
+
+
+def check_form(fig):
+    """The mechanical subset of form choice - the three cases where the form is
+    wrong no matter what the data is. `references/choosing-a-form.md` carries
+    the judgement calls this cannot make.
+    """
+    from matplotlib.container import BarContainer
+    from matplotlib.patches import Wedge
+
+    bad = []
+    for i, ax in enumerate(fig.axes):
+        if any(isinstance(p, Wedge) for p in ax.patches):
+            bad.append(f"ax{i} pie/donut: angle and area are the two tasks the "
+                       "eye judges worst - a dot plot or a bar reads as position")
+        if hasattr(ax, "get_zlim"):
+            bad.append(f"ax{i} 3D: perspective makes the encoding unreadable and "
+                       "occludes data - facet or use color for the third variable")
+        for con in getattr(ax, "containers", []):
+            if not isinstance(con, BarContainer):
+                continue
+            vertical = getattr(con, "orientation", "vertical") == "vertical"
+            lim = ax.get_ylim() if vertical else ax.get_xlim()
+            scale = ax.get_yscale() if vertical else ax.get_xscale()
+            # A log axis cannot include zero, so a log bar chart is truncated by
+            # construction and this gate has nothing to say about it.
+            if scale == "linear" and min(lim) > 0:
+                axis = "y" if vertical else "x"
+                bad.append(
+                    f"ax{i} bars on a truncated {axis} axis (starts at "
+                    f"{min(lim):.4g}): bar length encodes the value, so a "
+                    "cut baseline misstates every ratio  <- the fix is the "
+                    "form, not the axis - use a dot plot")
+            break
+    if not bad:
+        return True, "no pie, no 3D, no truncated bar baseline"
+    return False, "; ".join(bad)
+
+
+def check_identity_channel(fig):
+    """Identity carried by color and nothing else.
+
+    A warning rather than a gate, and the reason is honesty about what the
+    script can see: it can count the hues, but it cannot tell a direct label
+    from any other piece of text in the axes. Failing on that guess would fire
+    on correct work, and a gate people learn to skip is worse than no gate.
+    """
+    labeled = {h for h, label in _data_colors(fig) if label}
+    if len(labeled) < 2:
+        return True, "fewer than two identified series"
+    if fig.legends or any(ax.get_legend() is not None for ax in fig.axes):
+        return True, f"{len(labeled)} series, legend present"
+    if any(ax.texts for ax in fig.axes):
+        return True, f"{len(labeled)} series, in-axes text (assumed direct labels)"
+    return "warn", (f"{len(labeled)} series told apart by hue alone - no legend "
+                    "and no text in the axes. Direct labels beat a legend here: "
+                    "they remove the match-the-swatch step, and orange and sky "
+                    "blue are under 3:1 on white, where that step is hardest")
+
+
+# --- the sheet itself -------------------------------------------------------
+
+def _style_sheet():
+    """`figure.mplstyle` as the skill tells you to lay it out (beside this
+    script), and as this repository lays it out (`assets/` next to
+    `scripts/`)."""
+    here = Path(__file__).resolve().parent
+    for cand in (here / "figure.mplstyle",
+                 here.parent / "assets" / "figure.mplstyle"):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def check_style_sheet(fig):
+    """Every key in the sheet against the rcParams that are actually in effect.
+
+    Three separate silent failures land here at once: a color written with a
+    leading `#` (which is a comment in this format, so matplotlib keeps its own
+    default), a forgotten `plt.style.use`, and an rcParams override applied
+    later. All three ship stock matplotlib while every other check passes.
+
+    A warning, not a gate, for one honest reason: a figure built on a *different*
+    project's sheet is correct work, and this compares against the global
+    rcParams rather than what the figure was drawn under, so a figure built
+    inside an `rc_context` that has since exited reads as drift when it is not.
+    Both make a hard failure the wrong instrument. The row names the keys.
+    """
+    import matplotlib as mpl
+    path = _style_sheet()
+    if path is None:
+        return True, "no figure.mplstyle beside this script, nothing to compare"
+    written = mpl.rc_params_from_file(path, use_default_template=False)
+    drift = []
+    for key, value in written.items():
+        try:
+            same = mpl.rcParams[key] == value
+        except KeyError:
+            continue
+        if not isinstance(same, bool):        # a numpy array of comparisons
+            same = bool(getattr(same, "all", lambda: same)())
+        if not same:
+            drift.append(key)
+    if not drift:
+        return True, f"all {len(written)} keys match {path.name}"
+    return "warn", (f"{len(drift)} of {len(written)} keys differ from "
+                    f"{path.name}: {sorted(drift)[:5]}"
+                    f"{' ...' if len(drift) > 5 else ''}  <- the sheet is not "
+                    "the one in effect: check plt.style.use, and check no color "
+                    "in the sheet was written with a leading #")
+
+
 def audit(fig, scale=None, placed_frac=1.0):
     r = _renderer(fig)
     rows = [
@@ -345,6 +654,11 @@ def audit(fig, scale=None, placed_frac=1.0):
         ("Axis redundancy", *check_redundancy(fig, r)),
         ("Type size", *check_type_size(fig, r, scale, placed_frac)),
         ("Ink coverage", *check_ink(fig)),
+        ("Series color", *check_series_color(fig)),
+        ("Dual axis", *check_dual_axis(fig)),
+        ("Form", *check_form(fig)),
+        ("Identity channel", *check_identity_channel(fig)),
+        ("Style sheet", *check_style_sheet(fig)),
     ]
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.
