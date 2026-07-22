@@ -47,6 +47,7 @@ from any language or toolchain.
 | Dual axis | a second y scale carries data of its own |
 | Form | pie, 3D, or bars on a truncated baseline |
 | Identity channel | series are told apart by hue alone *(advisory)* |
+| Label attribution | a direct label sits nearer some other series than the one it names |
 | Style sheet | `figure.mplstyle` is not the one in effect *(advisory)* |
 
 **Series color is the one that ties the two scripts together.** They used to be

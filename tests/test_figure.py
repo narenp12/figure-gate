@@ -486,6 +486,61 @@ def test_identity_channel_is_satisfied_by_a_legend():
     assert gates(rows)["Identity channel"] is True
 
 
+# --- label attribution ------------------------------------------------------
+
+def _two_lines_with_a_drifting_label(offset):
+    """Two flat curves 0.4 apart, with `Alpha`'s direct label lifted `offset`
+    off its own line and toward the other one."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    x = [0, 5, 10]
+    ax.plot(x, [1.0] * 3, color=OKABE[0], label="Alpha")
+    ax.plot(x, [1.4] * 3, color=OKABE[1], label="Beta")
+    ax.annotate("Alpha", (5, 1.0 + offset), ha="center", va="center")
+    return fig
+
+
+def test_label_attribution_catches_a_label_nearer_the_wrong_curve():
+    """The defect text-on-text collision cannot see. This figure has exactly one
+    annotation, so nothing overlaps anything and `Text collision` is clean while
+    the label reads as belonging to the curve above it."""
+    fig = _two_lines_with_a_drifting_label(0.28)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is False
+    assert gates(rows)["Text collision"] is True
+
+
+def test_label_attribution_passes_a_label_hugging_its_own_curve():
+    """The same figure with the label where it belongs. A gate that fired here
+    would fire on every correct direct label in the project."""
+    fig = _two_lines_with_a_drifting_label(0.02)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
+def test_label_attribution_ignores_text_that_names_no_series():
+    """A callout, a panel letter or an `n = 300` attributes nothing to a curve.
+    Judging those means guessing intent, and guessing wrong is what teaches
+    people to skim the row."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 5, 10], [1.0] * 3, color=OKABE[0], label="Alpha")
+    ax.plot([0, 5, 10], [1.4] * 3, color=OKABE[1], label="Beta")
+    ax.annotate("n = 300", (5, 1.2), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
+def test_label_attribution_is_quiet_on_a_single_curve():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 5, 10], [1.0] * 3, color=OKABE[0], label="Alpha")
+    ax.annotate("Alpha", (5, 1.0), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
 # --- style sheet ------------------------------------------------------------
 
 def test_style_sheet_row_notices_the_sheet_is_not_in_effect():

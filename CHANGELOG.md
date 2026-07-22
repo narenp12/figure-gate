@@ -35,6 +35,28 @@ project, and nothing connected them.
 - **Style sheet** warns when the keys in `figure.mplstyle` are not the ones in
   effect. Catches the `#`-is-a-comment trap, a forgotten `plt.style.use`, and a
   later rcParams override in one row.
+- **Label attribution** fails a direct label that is not plainly nearest the
+  curve it names. `Text collision` compares text against text, so a label alone
+  in the corridor between two curves clears it; text against *data* is a
+  different question and nothing was asking it. Measured in display space as a
+  ratio — the reader's judgement is comparative, not a distance in points — and
+  harvested only from text matching exactly one series label, because a callout
+  or a panel letter attributes nothing to a curve.
+
+### Decided: identity does not ride on label color
+
+The usual advice is to color a direct label to match its series. Measured on
+this palette, against this project's own thresholds, it cannot be done: text
+needs 4.5:1 to be legible, and darkening the Okabe-Ito hues that far puts orange
+at dE 18.6 from its own line and sky blue at 17.1 — both past the `NORMAL_FLOOR`
+of 15 at which `check_palette` calls two colors different series. The label
+would read as a fourth hue. Below 15 the text is not legible. No setting
+satisfies both, so labels stay ink black and identity rides on proximity, which
+`Label attribution` now gates rather than assumes.
+
+`examples/demo.py` gains cartographic casing on its labels — a surface-colored
+stroke under the glyphs — so a gridline crossing behind a label stops breaking
+its edges.
 
 ### Decided: a legend entry is not a direct label
 

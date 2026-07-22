@@ -16,6 +16,7 @@ import numpy as np
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
+from matplotlib import patheffects as pe
 
 HERE = Path(__file__).resolve().parent
 SKILL = HERE.parent / "skill"
@@ -54,6 +55,11 @@ assert [c.lower() for c in CYCLE[:3]] == SERIES, (CYCLE[:3], SERIES)
 rows, ok = cp.check(SERIES, all_pairs=True)
 assert ok, rows
 
+# The halo has to be the surface the figure actually sits on, not a hardcoded
+# white -- a sheet that changes `axes.facecolor` would otherwise draw every
+# label with a bright outline around it.
+SURFACE = plt.rcParams["axes.facecolor"]
+
 rng = np.random.default_rng(0)
 x = np.linspace(0, 12, 300)
 
@@ -81,10 +87,25 @@ for color, decay, label, at_x, side in zip(
     # small faint swatch to a small faint curve, which is the step being
     # removed. The anchor is read off the drawn array rather than the analytic
     # curve, so the text sits on the line that actually rendered.
+    #
+    # The label stays ink black rather than taking its series color, which is
+    # the usual advice and was measured before being rejected. Text needs 4.5:1
+    # to be legible; darkening these hues far enough to reach it puts orange at
+    # dE 18.6 from its own line and sky blue at 17.1, both past the NORMAL_FLOOR
+    # of 15 that `check_palette` uses to call two colors different series. A
+    # label that reads as a fourth hue is worse than a black one. Below 15 the
+    # text is not legible. There is no setting that satisfies both, so identity
+    # rides on proximity alone -- which is why `check_label_attribution` exists
+    # and why it is a hard gate rather than a warning.
     at = int(np.argmin(np.abs(x - at_x)))
     ax.annotate(label, (x[at], y[at]), textcoords="offset points",
                 xytext=(0, 7 * side), ha="center",
-                va="bottom" if side > 0 else "top")
+                va="bottom" if side > 0 else "top",
+                # Casing, in the cartographic sense: the gridline that passes
+                # behind a label breaks its glyph edges, and the reader pays for
+                # that on every label the grid happens to cross.
+                path_effects=[pe.withStroke(linewidth=2.0,
+                                            foreground=SURFACE)])
 
 ax.set_xlabel("Training epoch")
 ax.set_ylabel("Validation loss")
