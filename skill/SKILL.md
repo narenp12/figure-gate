@@ -81,7 +81,20 @@ hand-drawn approximation of a statistical object will eventually be wrong in a
 way a reader notices, and this matters most in teaching material, because
 readers believe it.
 
-**3. Build on the style sheet.**
+**3. Choose the form, before any code.** This is the decision the other rules
+cannot rescue: palette, type and composition make a wrong reading *legible*, not
+right. Read `references/choosing-a-form.md` — it is organised around Cleveland &
+McGill's ordering of how accurately people read each encoding, and every rule in
+it names the perceptual or inferential result behind it.
+
+The three that come up most: n under about 30 wants a strip or dot plot showing
+every point, because a box hides n and hides bimodality; a comparison whose
+baseline is not meaningful wants a dot plot, not a bar with the axis cut, because
+length needs a zero and position does not; and paired measurements want a slope
+graph or the differences themselves, because two bars throw the pairing away.
+`check_figure.py` gates the mechanical subset — pie, 3D, truncated bar baseline.
+
+**4. Build on the style sheet.**
 
 ```python
 from pathlib import Path
@@ -105,7 +118,7 @@ Dashing means something specific — *unobserved*, *projected*, *threshold*. A
 true-but-unknown curve is dashed because it is unknown; a guide ring is not,
 because "this is a cycle" is not a hedge.
 
-**4. Compose deliberately.** Every gate in this skill is an *elimination* gate:
+**5. Compose deliberately.** Every gate in this skill is an *elimination* gate:
 each forbids one enumerated failure, and none of them ever looks at the figure
 as a whole. A figure can pass all of them and still be a gray smudge. These are
 the composition rules no script can infer for you:
@@ -127,7 +140,7 @@ the composition rules no script can infer for you:
 - Ordinal emphasis is a lightness ramp, not a transparency stack — a ramp keeps
   every mark opaque; ten alpha steps produce ten kinds of haze.
 
-**5. Run both validators.** They answer different questions, and passing one
+**6. Run both validators.** They answer different questions, and passing one
 says nothing about the other.
 
 ```bash
@@ -144,9 +157,18 @@ ok, rows = audit(fig)        # same, programmatically
 ```
 
 `check_figure.py` gates clipping, text collision, alpha stacking, mark ratio,
-axis redundancy, type size, and ink coverage. `check_palette.py` gates lightness
-band, chroma floor, colorblind separation, normal-vision separation, and
-contrast against the surface.
+axis redundancy, type size, ink coverage, series color, dual axes, form, the
+identity channel, and whether the style sheet is the one actually in effect.
+`check_palette.py` gates lightness band, chroma floor, colorblind separation,
+normal-vision separation, and contrast against the surface.
+
+The two used to be unable to speak: `check_palette.py` judged a list of hexes
+someone remembered to paste into a terminal, and `check_figure.py` never looked
+at color. So a figure on matplotlib's default `tab10` cycle — orange and green at
+OKLab ΔE 1.4 under protanopia, one hue to that reader — passed the whole
+composition suite clean. **Series color** closes it by reading the hues the
+figure actually drew and putting those through the palette gates, inferring
+adjacent-versus-all-pairs from whether the marks are scatter.
 
 **WARN is not FAIL, and the difference is load-bearing.** A sub-3:1 hue is legal
 *if* it carries a visible direct label; a saturated panel is fine *if* it is a
@@ -154,7 +176,7 @@ heatmap. Read the row and decide — do not skim past it. A gate everyone learns
 to ignore is worse than no gate, which is why the context-dependent checks warn
 instead of failing.
 
-**6. Then render a PNG and look at it.** Vector output is not readable as a
+**7. Then render a PNG and look at it.** Vector output is not readable as a
 file. The checker sees geometry, not meaning: it cannot tell you an arrow points
 at the wrong thing, that reading order runs backwards, or that a label is true
 of the concept and false of the curve beside it.
@@ -164,7 +186,7 @@ Save with `fig.savefig(path)` and let the style sheet set dpi and bbox. Never
 being the width you authored, and the type gate derives its floor from that
 width. The gate then passes a figure whose shipped size it never measured.
 
-**7. Render the finished document and look at that too.** A figure that is
+**8. Render the finished document and look at that too.** A figure that is
 perfect as a standalone PNG can be illegible on the page it ships on. This is
 the step that gets skipped and the one that catches the most embarrassing
 defects.
@@ -190,9 +212,17 @@ against every other, and only the first four slots clear that — past four, fol
 the tail into "Other" or facet. And there is no seventh series hue; a generated
 one is indistinguishable from an existing slot under simulated color blindness.
 
+`figure.mplstyle` now sets `axes.prop_cycle` to the six series slots, so a
+figure built on the sheet is on the right palette without anyone remembering to
+say so. Pass an explicit `color=` only when you mean to depart from it.
+
 Orange and sky blue sit under 3:1 on a white page. Legal, but each needs a
-**visible direct label**. Yellow at 1.32:1 genuinely vanishes as a hairline —
-use it as a fill with a dark edge or not at all.
+**visible direct label**, and **a legend entry does not count as one.** The
+obligation exists because the mark is faint against the page; a legend leaves
+the reader matching a small faint swatch to a small faint curve, which is the
+step a direct label removes. Put the text at the mark. Yellow at 1.32:1
+genuinely vanishes as a hairline — use it as a fill with a dark edge or not at
+all.
 
 **Grayscale is a separate question and Okabe-Ito does not solve it.** The
 canonical first two, orange and sky blue, differ by ΔL 0.011 — invisible once
@@ -283,6 +313,13 @@ you have to remember is a rule that eventually gets forgotten. Prefer a check
 you can run over an adjective you have to feel.
 
 ## Reference
+
+`references/choosing-a-form.md` — which form the data wants, before any of the
+styling rules apply. Built on Cleveland & McGill's ordering of the elementary
+perceptual tasks, with the statistical results behind the rules that matter most
+for teaching material: what a box plot hides at small n, why a cut baseline
+misstates every ratio, why two bars are the wrong form for paired data, and why
+overlapping confidence intervals are not a significance test.
 
 `references/style-guide.md` — the full guide: the measurements behind every
 threshold, the named failures each rule prevents, the palette tables with

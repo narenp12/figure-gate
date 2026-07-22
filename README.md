@@ -1,7 +1,7 @@
 # figure-gate
 
 Mechanical gates for figures that go into documents — papers, slides, theses,
-reports. Two validators and a matplotlib style sheet, plus a written guide, and
+reports. Two validators and a matplotlib style sheet, plus written guides, and
 an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper so Claude Code
 applies the same method.
 
@@ -43,6 +43,22 @@ from any language or toolchain.
 | Axis redundancy | panels on a shared scale repeat their axis furniture |
 | Type size | a string lands under 7.5pt *on the printed page* |
 | Ink coverage | a panel is empty or saturated *(advisory)* |
+| Series color | the hues actually drawn collapse under color blindness |
+| Dual axis | a second y scale carries data of its own |
+| Form | pie, 3D, or bars on a truncated baseline |
+| Identity channel | series are told apart by hue alone *(advisory)* |
+| Style sheet | `figure.mplstyle` is not the one in effect *(advisory)* |
+
+**Series color is the one that ties the two scripts together.** They used to be
+unable to speak: `check_palette.py` judged a list of hex strings someone
+remembered to paste into a terminal, and `check_figure.py` never looked at color
+at all. So a figure on matplotlib's default `tab10` cycle — whose orange and
+green measure ΔE 1.4 under protanopia, one hue to that reader — passed the whole
+composition suite clean. The gate now reads the hues off the figure's own
+artists and puts them through the palette gates, working out from the marks
+whether the figure needs adjacent separation (lines, bars) or all pairs
+(scatter). `figure.mplstyle` sets the cycle to Okabe-Ito, so a figure built on
+the sheet starts out right.
 
 The type gate is the one people are usually surprised by. A figure authored at
 14 inches and placed on a 750pt slide shrinks to 0.74×, so a 9pt label arrives
@@ -147,6 +163,12 @@ keeps its defaults — with every other test still green.
 The full reasoning, including the measurements behind each threshold and the
 rules that were tried and reverted, is in
 [`skill/references/style-guide.md`](skill/references/style-guide.md).
+
+Which *form* the data wants — the decision the styling rules cannot rescue — is
+in [`skill/references/choosing-a-form.md`](skill/references/choosing-a-form.md).
+It is built on Cleveland & McGill's ordering of the elementary perceptual tasks,
+and only its mechanical subset is gated: a script can rule out a pie or a cut
+bar baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 ## Requirements
 
