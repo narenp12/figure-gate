@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The README claims check_palette.py runs on Python 3.8+ with nothing
+  # installed. That claim is load-bearing -- it is why the file is usable from a
+  # non-Python toolchain -- so it gets its own job with no pip install at all,
+  # rather than being assumed.
+  stdlib-only:
+    name: check_palette on Python ${{ matrix.python }} (no dependencies)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: A valid palette exits 0
+        run: python skill/scripts/check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
+      - name: An invalid palette exits non-zero
+        run: |
+          if python skill/scripts/check_palette.py "#808080,#0072B2"; then
+            echo "::error::a gray 'color' passed the chroma floor"
+            exit 1
+          fi
+
+  test:
+    name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.11", "3.13"]
+        matplotlib: ["latest"]
+        include:
+          # The declared floor. If this breaks, the README is wrong and should
+          # be corrected rather than the pin quietly raised.
+          - python: "3.9"
+            matplotlib: "3.8.4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          if [ "${{ matrix.matplotlib }}" = "latest" ]; then
+            pip install matplotlib pytest
+          else
+            pip install "matplotlib==${{ matrix.matplotlib }}" pytest
+          fi
+      - run: pytest -q
+
+      # Every check in this repo insists that a gate nobody has watched fail is
+      # decoration. Applying that to the repo itself: the self-test must reject
+      # its own deliberately broken figure.
+      - name: The checker rejects a deliberately bad figure
+        run: python skill/scripts/check_figure.py
+
+      - name: The example builds and passes its own gates
+        run: python examples/demo.py
+
+  skill:
+    name: Skill metadata is valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pyyaml
+      - name: SKILL.md has parseable frontmatter with name and description
+        run: |
+          python - <<'PY'
+          import sys, yaml, pathlib
+          text = pathlib.Path("skill/SKILL.md").read_text()
+          if not text.startswith("---"):
+              sys.exit("SKILL.md is missing YAML frontmatter")
+          meta = yaml.safe_load(text.split("---", 2)[1])
+          for key in ("name", "description"):
+              if not meta.get(key):
+                  sys.exit(f"SKILL.md frontmatter is missing {key!r}")
+          if meta["name"] != "research-figures":
+              sys.exit(f"unexpected skill name: {meta['name']!r}")
+          print(f"ok: {meta['name']} ({len(meta['description'])} char description)")
+          PY
+      - name: Files the skill references actually exist
+        run: |
+          test -f skill/assets/figure.mplstyle
+          test -f skill/scripts/check_palette.py
+          test -f skill/scripts/check_figure.py
+          test -f skill/references/style-guide.md

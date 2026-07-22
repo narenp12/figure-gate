@@ -1,0 +1,53 @@
+# Figure style sheet. See references/style-guide.md.
+#
+#     import matplotlib.pyplot as plt
+#     plt.style.use("figure.mplstyle")
+#
+# Every rule here used to be a line of prose telling you to remember it. A style
+# sheet is matplotlib's own mechanism for this, so the guide states the intent
+# once and this file enforces it.
+#
+# TRAP: `#` starts a comment in this format, so colors are written BARE -
+# `grid.color: e1e0d9`, never `#e1e0d9`. With the hash, matplotlib logs "does
+# not look like a color arg" and silently keeps its defaults. Nothing gates
+# color on the figure side, so every other check still passes.
+
+# --- typeface ---------------------------------------------------------------
+# EDIT THIS to match the surrounding document's body face - figures set in the
+# document's own voice read as authored, figures in matplotlib's default read as
+# pasted in. It is the single largest visual-quality lever here and it costs one
+# line. Keep an always-available face last: STIXGeneral and DejaVu ship with
+# matplotlib, so the fallback needs nothing installed. Verify the weight you
+# need exists - a missing bold resolves silently to regular and flattens the
+# whole hierarchy to one weight.
+font.family:        serif
+font.serif:         STIX Two Text, STIXGeneral, DejaVu Serif
+mathtext.fontset:   stix
+
+# --- type sizes -------------------------------------------------------------
+# On-page targets divided by the figure's scale. Nothing below 7.5pt on page.
+font.size:          11
+axes.titlesize:     13
+axes.titleweight:   bold
+axes.labelsize:     11
+xtick.labelsize:    10
+ytick.labelsize:    10
+legend.fontsize:    9.5
+
+# --- ink --------------------------------------------------------------------
+figure.facecolor:   white
+axes.facecolor:     white
+text.color:         000000
+axes.labelcolor:    52514e
+axes.edgecolor:     c3c2b7
+xtick.color:        898781
+ytick.color:        898781
+
+# --- structure: journal figure, not dashboard -------------------------------
+axes.spines.top:    False
+axes.spines.right:  False
+axes.grid:          True
+grid.color:         e1e0d9
+grid.linewidth:     0.7
+grid.alpha:         1.0
+legend.frameon:     False
