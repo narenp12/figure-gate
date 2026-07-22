@@ -93,9 +93,33 @@ jobs:
               sys.exit(f"unexpected skill name: {meta['name']!r}")
           print(f"ok: {meta['name']} ({len(meta['description'])} char description)")
           PY
+      # A reference SKILL.md points at and the repository does not carry is a
+      # dead end for whoever follows it, and nothing else notices: the skill
+      # still loads, the suite still passes. Every path named in the procedure
+      # belongs on this list.
       - name: Files the skill references actually exist
         run: |
           test -f skill/assets/figure.mplstyle
           test -f skill/scripts/check_palette.py
           test -f skill/scripts/check_figure.py
           test -f skill/references/style-guide.md
+          test -f skill/references/choosing-a-form.md
+
+      # The list above is only as good as its maintenance, and it was already
+      # stale once. Read the paths out of SKILL.md instead of trusting anyone to
+      # remember, so adding a reference without shipping it fails here.
+      - name: Every path SKILL.md names resolves
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          skill = pathlib.Path("skill")
+          text = (skill / "SKILL.md").read_text()
+          named = sorted(set(re.findall(
+              r"(?:references|assets|scripts)/[A-Za-z0-9_.-]+", text)))
+          missing = [p for p in named if not (skill / p).is_file()]
+          for p in named:
+              print(("  ok " if p not in missing else "MISS ") + p)
+          if missing:
+              sys.exit(f"SKILL.md names files that do not exist: {missing}")
+          print(f"{len(named)} referenced paths all resolve")
+          PY
