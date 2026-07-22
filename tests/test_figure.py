@@ -82,6 +82,28 @@ def test_mark_ratio_catches_an_ornamental_star():
     assert gates(rows)["Mark ratio"] is False
 
 
+def test_mark_ratio_sees_line_markers_not_only_scatter():
+    """`ax.plot(marker=...)` is a mark like any other. Reading only
+    `collections` meant a 3pt marker beside a 30pt one passed clean."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 2, 3], marker="o", markersize=3)
+    ax.plot([1, 2, 3], [3, 2, 1], marker="s", markersize=30)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Mark ratio"] is False
+
+
+def test_mark_ratio_ignores_bar_height():
+    """A bar thirty times another bar is the encoding working. Counting patch
+    area here would fail every honest bar chart, and a gate that fires on
+    correct work is how a suite gets ignored."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.bar([1, 2, 3], [1, 2, 30])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Mark ratio"] is True
+
+
 def test_axis_redundancy_catches_a_repeated_y_label():
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 3), constrained_layout=True)
     for ax in (a, b):
@@ -160,6 +182,37 @@ def test_type_floor_is_measured_on_the_page_not_in_the_figure():
         assert smallest(20.0) is False     # scale 0.52 ->  5.2pt on page
     finally:
         cf.CONTENT_WIDTH_PT = saved
+
+
+def test_placed_frac_measures_the_width_the_figure_actually_ships_at():
+    """A half-width figure is half the size on the page. Measured as full
+    width it is certified at twice the type it ships at, which is the wrong
+    direction for a legibility gate to be wrong in."""
+    fig, ax = plt.subplots(figsize=(6.0, 4), constrained_layout=True)
+    ax.set_xlabel("Time", fontsize=9)
+
+    saved = cf.CONTENT_WIDTH_PT
+    try:
+        cf.CONTENT_WIDTH_PT = 430              # a single-column page
+        _, full = cf.audit(fig)                # scale 1.00 -> 9.0pt, fine
+        _, half = cf.audit(fig, placed_frac=0.5)   # scale 0.50 -> 4.5pt, not
+        assert gates(full)["Type size"] is True
+        assert gates(half)["Type size"] is False
+    finally:
+        cf.CONTENT_WIDTH_PT = saved
+        plt.close(fig)
+
+
+def test_placed_frac_without_a_content_width_is_a_contradiction():
+    """With CONTENT_WIDTH_PT unset the checker assumes you authored at the
+    placed width, which already fixes the scale at 1.0. Silently ignoring a
+    fractional placement there would report a legibility pass nobody earned."""
+    fig, _ = plt.subplots(figsize=(6, 4))
+    try:
+        with pytest.raises(ValueError, match="CONTENT_WIDTH_PT"):
+            cf.page_scale(fig, placed_frac=0.5)
+    finally:
+        plt.close(fig)
 
 
 def test_scale_of_none_means_points_are_points():

@@ -90,18 +90,26 @@ thing or that the reading order runs backwards.
 Established colorblind-safe categorical, published order. Adopting it as-is beats a
 private set: it carries a decade of use and readers who know it recognize it.
 
-| Slot | Hue | Hex | Contrast `#fcfcfb` | Role |
+| Slot | Hue | Hex | Contrast `#ffffff` | Role |
 |---|---|---|---|---|
-| 1 | black | `#000000` | 20.46 | ink token by convention |
-| 2 | orange | `#E69F00` | 2.19 † | series |
-| 3 | sky blue | `#56B4E9` | 2.25 † | series |
-| 4 | bluish green | `#009E73` | 3.33 | series |
-| 5 | yellow | `#F0E442` | 1.29 ‡ | fills, not hairlines |
-| 6 | blue | `#0072B2` | 5.05 | series |
-| 7 | vermillion | `#D55E00` | 3.77 | series |
-| 8 | reddish purple | `#CC79A7` | 2.98 † | series |
+| 1 | black | `#000000` | 21.00 | ink token by convention |
+| 2 | orange | `#E69F00` | 2.25 † | series |
+| 3 | sky blue | `#56B4E9` | 2.31 † | series |
+| 4 | bluish green | `#009E73` | 3.42 | series |
+| 5 | yellow | `#F0E442` | 1.32 ‡ | fills, not hairlines |
+| 6 | blue | `#0072B2` | 5.19 | series |
+| 7 | vermillion | `#D55E00` | 3.87 | series |
+| 8 | reddish purple | `#CC79A7` | 3.06 | series |
 
 † below 3:1 — must carry a visible direct label. ‡ below lightness band.
+
+Ratios are against white, because that is what `figure.mplstyle` renders and
+what the page under it is. They were previously quoted against `#fcfcfb`, a
+surface no figure in this project ever had; the numbers were all slightly wrong
+and reddish purple was listed as needing a direct label when on white it clears
+3:1 at 3.06. `tests/test_docs_match_code.py` now reads this table and checks
+every number against `contrast()`, so it cannot drift again. On a genuinely
+tinted page, pass `--surface`.
 
 Two slots held out: yellow at 1.29:1 genuinely vanishes as a hairline (fills only). Black
 is a preference (keeps "ink" unambiguous), not a measurement — take it as a series color
@@ -142,7 +150,7 @@ gate. Midpoint is `#f6f7f7`. Never a hue at the midpoint; never two cool poles.
 | Token | Hex | Defined in |
 |---|---|---|
 | Ink primary / secondary / muted | `#000000` / `#52514e` / `#898781` | `figure.mplstyle` |
-| Grid / axis / surface | `#e1e0d9` / `#c3c2b7` / `#fcfcfb` | `figure.mplstyle` |
+| Grid / axis / surface | `#e1e0d9` / `#c3c2b7` / `#ffffff` | `figure.mplstyle` |
 
 Status, drawn from the palette, always with icon or label:
 
@@ -169,7 +177,8 @@ python check_palette.py "#471365,#2c718e,#44bf70" --ordinal   # ramps
 
 Gates: lightness band, chroma floor, CVD separation ≥ 8, normal-vision ≥ 15, contrast ≥
 3:1. Separations are OKLab ΔE ×100. CVD gating on protanopia/deuteranopia (~8% of males);
-tritan reported but not gated (~0.01%).
+tritan reported but not gated (~0.01%). Surface defaults to white; `--surface` for a
+tinted page.
 
 ### Text on fills
 

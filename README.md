@@ -48,7 +48,10 @@ The type gate is the one people are usually surprised by. A figure authored at
 14 inches and placed on a 750pt slide shrinks to 0.74×, so a 9pt label arrives
 at 6.7pt — fine on your monitor, unreadable from the back of a lecture hall.
 The check derives the scale per figure and measures what actually renders, so
-sizes set through rcParams or by a helper are caught too.
+sizes set through rcParams or by a helper are caught too. Placing at a fraction
+of the content width? Say so — `audit(fig, placed_frac=0.48)` mirrors
+`\includegraphics[width=0.48\textwidth]`, and without it a half-width figure is
+certified at twice the type size it ships at.
 
 ## Install
 
@@ -90,7 +93,7 @@ plt.style.use(str(Path(__file__).parent / "figure.mplstyle"))
 
 okabe = colormaps["okabe_ito"]          # matplotlib >= 3.11
 fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
-ax.plot(x, y, color=okabe(1), lw=1.6, label="Baseline")
+ax.plot(x, y, color=okabe(1), label="Baseline")   # widths come from the sheet
 
 from check_figure import report
 report(fig, "my-figure")

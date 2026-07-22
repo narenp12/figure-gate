@@ -159,6 +159,11 @@ file. The checker sees geometry, not meaning: it cannot tell you an arrow points
 at the wrong thing, that reading order runs backwards, or that a label is true
 of the concept and false of the curve beside it.
 
+Save with `fig.savefig(path)` and let the style sheet set dpi and bbox. Never
+`bbox_inches="tight"`: it trims to the drawn content, so the saved width stops
+being the width you authored, and the type gate derives its floor from that
+width. The gate then passes a figure whose shipped size it never measured.
+
 **7. Render the finished document and look at that too.** A figure that is
 perfect as a standalone PNG can be illegible on the page it ships on. This is
 the step that gets skipped and the one that catches the most embarrassing
@@ -185,9 +190,9 @@ against every other, and only the first four slots clear that — past four, fol
 the tail into "Other" or facet. And there is no seventh series hue; a generated
 one is indistinguishable from an existing slot under simulated color blindness.
 
-Orange, sky blue and reddish purple sit under 3:1 on a light page. Legal, but
-each needs a **visible direct label**. Yellow at 1.29:1 genuinely vanishes as a
-hairline — use it as a fill with a dark edge or not at all.
+Orange and sky blue sit under 3:1 on a white page. Legal, but each needs a
+**visible direct label**. Yellow at 1.32:1 genuinely vanishes as a hairline —
+use it as a fill with a dark edge or not at all.
 
 **Grayscale is a separate question and Okabe-Ito does not solve it.** The
 canonical first two, orange and sky blue, differ by ΔL 0.011 — invisible once
@@ -231,6 +236,17 @@ figure's own width against `CONTENT_WIDTH_PT` and fails any string landing under
 7.5pt on the page. Per-figure is the entire point: a 14-inch figure on a 750pt
 slide shrinks to 0.74×, an 8.6-inch one is blown up to 1.21×, and the same 10pt
 label is comfortable in one and unreadable in the other.
+
+**A figure placed at a fraction of the content width must say so**, or it is
+measured as though it were full width and certified at a type size it does not
+ship at:
+
+```python
+audit(fig, placed_frac=0.48)     # \includegraphics[width=0.48\textwidth]
+```
+
+The kwarg mirrors the call site on purpose — you never know your scale, but you
+always know what you wrote in the document.
 
 **If text does not fit, cut the text.** "Acquisition function ranks the candidate
 molecules" becomes "Rank every candidate." The caption carries the rest.

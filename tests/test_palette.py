@@ -74,7 +74,7 @@ def test_orange_and_sky_blue_are_the_worst_grayscale_pair():
 def test_contrast_matches_wcag_reference_values():
     assert cp.contrast("#000000", "#ffffff") == pytest.approx(21.0, abs=0.01)
     assert cp.contrast("#ffffff", "#ffffff") == pytest.approx(1.0, abs=0.01)
-    assert cp.contrast("#F0E442", "#fcfcfb") == pytest.approx(1.29, abs=0.01)
+    assert cp.contrast("#F0E442", "#ffffff") == pytest.approx(1.32, abs=0.01)
 
 
 # --- each gate fails on something ------------------------------------------

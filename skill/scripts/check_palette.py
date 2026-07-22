@@ -7,7 +7,7 @@ and contrast against the surface.
     python check_palette.py "#E69F00,#56B4E9"
     python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
     python check_palette.py "#471365,#2c718e,#44bf70" --ordinal
-    python check_palette.py "#E69F00,#56B4E9" --surface "#ffffff"
+    python check_palette.py "#E69F00,#56B4E9" --surface "#f4f1ea"
 
 Separations are OKLab dE x100. Adjacent mode checks consecutive pairs only,
 which is what lines, bars and stacked marks need. `--pairs all` checks every
@@ -90,7 +90,7 @@ NORMAL_FLOOR = 15.0       # hard floor; no secondary encoding excuses this
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 
-def check(colors, surface="#fcfcfb", all_pairs=False, ordinal=False):
+def check(colors, surface="#ffffff", all_pairs=False, ordinal=False):
     lin = [hex_to_linear(c) for c in colors]
     lab = [linear_to_oklab(v) for v in lin]
     rows, ok = [], True
@@ -177,7 +177,12 @@ def check(colors, surface="#fcfcfb", all_pairs=False, ordinal=False):
 def main():
     ap = argparse.ArgumentParser(description="Validate a figure palette.")
     ap.add_argument("colors", help="comma-separated hex colors")
-    ap.add_argument("--surface", default="#fcfcfb", help="background the marks sit on")
+    # White, because that is what `figure.mplstyle` renders and what the page
+    # under it is. An earlier default of #fcfcfb described a surface no figure
+    # in this project ever had, so every contrast number in the guide was
+    # computed against a background that did not exist. Override it when the
+    # document's page really is tinted.
+    ap.add_argument("--surface", default="#ffffff", help="background the marks sit on")
     ap.add_argument("--pairs", choices=["adjacent", "all"], default="adjacent")
     ap.add_argument("--ordinal", action="store_true", help="ordered one-hue ramp")
     a = ap.parse_args()
