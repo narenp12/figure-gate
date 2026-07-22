@@ -13,5 +13,5 @@ First release.
 - `figure.mplstyle` — typeface, ink, type sizes, spines, grid, frameless
   legends.
 - `skill/` — Agent Skill wrapper (`SKILL.md` plus the full style guide).
-- 46 tests, including per-gate failure cases and a guard against the style
+- 49 tests, including per-gate failure cases and a guard against the style
   sheet's colors silently not applying.

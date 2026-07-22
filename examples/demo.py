@@ -29,14 +29,22 @@ import check_palette as cp         # noqa: E402
 # the moment a test runner or a build script invokes this.
 plt.style.use(str(SKILL / "assets" / "figure.mplstyle"))
 
-# Okabe-Ito is a matplotlib builtin as of 3.11. Slot 0 is black (the ink token
-# here), so the series ramp starts at 1 and is taken IN ORDER -- picking slots by
-# meaning is what puts two hues that collide under protanopia in one figure.
-OKABE = colormaps["okabe_ito"]
-SERIES = [OKABE(i) for i in (1, 2, 3)]
+# Okabe-Ito is a matplotlib builtin as of 3.11. Before that it is eight hex
+# strings, which is all it ever was -- so falling back costs nothing and keeps
+# this runnable on any matplotlib the checks themselves support.
+OKABE_ITO = ["#000000", "#e69f00", "#56b4e9", "#009e73",
+             "#f0e442", "#0072b2", "#d55e00", "#cc79a7"]
+if "okabe_ito" in colormaps:
+    OKABE_ITO = [matplotlib.colors.to_hex(colormaps["okabe_ito"](i))
+                 for i in range(8)]
+
+# Slot 0 is black (the ink token here), so the series ramp starts at 1 and is
+# taken IN ORDER -- picking slots by meaning is what puts two hues that collide
+# under protanopia in the same figure.
+SERIES = OKABE_ITO[1:4]
 
 # Prove it before drawing it. This is the cheap half of the method.
-rows, ok = cp.check([matplotlib.colors.to_hex(c) for c in SERIES], all_pairs=True)
+rows, ok = cp.check(SERIES, all_pairs=True)
 assert ok, rows
 
 rng = np.random.default_rng(0)
