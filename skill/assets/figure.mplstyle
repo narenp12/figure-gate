@@ -11,6 +11,13 @@
 # `grid.color: e1e0d9`, never `#e1e0d9`. With the hash, matplotlib logs "does
 # not look like a color arg" and silently keeps its defaults. Nothing gates
 # color on the figure side, so every other check still passes.
+#
+# TRAP: do not save with `bbox_inches="tight"`. It trims to the drawn content,
+# so the saved width is no longer the width you authored - and `page_scale()`
+# in check_figure.py derives the type floor from `fig.get_size_inches()`. The
+# gate then certifies a size the shipped file does not have. Same species as
+# the one above: silent, and every check still passes. `savefig.bbox` below
+# pins it. Size the figure with `figsize`; let constrained_layout do the rest.
 
 # --- typeface ---------------------------------------------------------------
 # EDIT THIS to match the surrounding document's body face - figures set in the
@@ -26,6 +33,11 @@ mathtext.fontset:   stix
 
 # --- type sizes -------------------------------------------------------------
 # On-page targets divided by the figure's scale. Nothing below 7.5pt on page.
+#
+# `axes.titlesize`/`titleweight` are for PANEL titles in a multi-panel figure -
+# the `(a)` `(b)` register. A single-panel figure carries no internal title:
+# the caption names the figure, and a title above the axes just says it twice
+# in a second typographic voice.
 font.size:          11
 axes.titlesize:     13
 axes.titleweight:   bold
@@ -51,3 +63,31 @@ grid.color:         e1e0d9
 grid.linewidth:     0.7
 grid.alpha:         1.0
 legend.frameon:     False
+axes.axisbelow:     True
+
+# --- marks ------------------------------------------------------------------
+# Hairlines, not dashboard strokes. These were prose in the guide and passed by
+# hand at every call site (`lw=1.6` in the README example), which is the same
+# failure mode the rest of this file exists to fix: a rule you have to remember
+# is a rule that eventually gets forgotten.
+lines.linewidth:        1.6
+lines.markersize:       5
+lines.markeredgewidth:  0.0
+axes.linewidth:         0.8
+patch.linewidth:        0.7
+legend.handlelength:    1.6
+errorbar.capsize:       2.5
+
+# --- output -----------------------------------------------------------------
+# The method says render a PNG and look at it. At matplotlib's default 100 dpi
+# that PNG is soft enough to hide exactly the type and hairline defects you
+# opened it to find. `savefig.bbox: standard` keeps the saved width equal to
+# the authored width - see the TRAP note at the top.
+figure.dpi:         150
+savefig.dpi:        300
+# `standard` reads back from rcParams as None - that is matplotlib's own
+# spelling for it, not a parse failure. `tight` is the one that reads back as
+# a string, and it is the one you do not want.
+savefig.bbox:       standard
+savefig.facecolor:  white
+savefig.transparent: False

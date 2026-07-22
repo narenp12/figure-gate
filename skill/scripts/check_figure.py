@@ -48,10 +48,26 @@ TYPE_FLOOR_PT = 7.5
 CONTENT_WIDTH_PT = None
 
 
-def page_scale(fig):
+def page_scale(fig, placed_frac=1.0):
+    """Scale from authored inches to points on the page.
+
+    `placed_frac` is the fraction of the content width the figure is placed at,
+    so it reads like the call site: `\\includegraphics[width=0.48\\textwidth]`
+    is `placed_frac=0.48`. Without it every figure is measured as if it were
+    full width, and a half-width figure is certified at twice the type size it
+    actually ships at - which is the wrong direction for a legibility gate to
+    be wrong in.
+    """
     if CONTENT_WIDTH_PT is None:
+        if placed_frac != 1.0:
+            raise ValueError(
+                "placed_frac requires CONTENT_WIDTH_PT to be set. With it None "
+                "the checker assumes you authored the figure at the width it "
+                "is placed at, which already makes the scale 1.0; a fractional "
+                "placement contradicts that. Set CONTENT_WIDTH_PT, or author "
+                "at the placed width and drop placed_frac.")
         return 1.0
-    return CONTENT_WIDTH_PT / (fig.get_size_inches()[0] * 72)
+    return CONTENT_WIDTH_PT * placed_frac / (fig.get_size_inches()[0] * 72)
 
 
 def _renderer(fig):
@@ -181,13 +197,25 @@ def check_contrast_stack(fig):
 
 def check_mark_ratio(fig):
     """One mark far larger than the rest stops reading as a mark and starts
-    reading as an ornament stuck on top of the plot."""
+    reading as an ornament stuck on top of the plot.
+
+    Reads scatter sizes (already an area in pt^2) and line markers (a diameter
+    in points, so squared to match). Bars and other patches are deliberately
+    NOT counted: a bar thirty times another bar is the encoding working, not a
+    defect. This gate is about marks whose size is not carrying the value.
+    """
     worst = None
     for ax in fig.axes:
         sizes = []
         for c in ax.collections:
             s = getattr(c, "get_sizes", lambda: [])()
             sizes.extend(float(v) for v in s if v > 0)
+        for ln in ax.lines:
+            if not ln.get_visible() or ln.get_marker() in ("", "None", None):
+                continue
+            ms = float(ln.get_markersize())
+            if ms > 0:
+                sizes.append(ms ** 2)
         if len(sizes) < 2:
             continue
         ratio = max(sizes) / min(sizes)
@@ -241,7 +269,7 @@ def check_redundancy(fig, r):
     return False, "; ".join(bits) + "  <- use sharex/sharey"
 
 
-def check_type_size(fig, r, scale=None):
+def check_type_size(fig, r, scale=None, placed_frac=1.0):
     """Every rendered string clears the legibility floor once the figure is
     scaled into the document.
 
@@ -250,7 +278,7 @@ def check_type_size(fig, r, scale=None):
     a helper. Reading `get_fontsize()` off the artists that actually rendered
     reports what is on the page instead of what is in the source.
     """
-    scale = page_scale(fig) if scale is None else scale
+    scale = page_scale(fig, placed_frac) if scale is None else scale
     ghosts = _ghost_ticks(fig)
     sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
              for t, _ in _texts(fig, r) if id(t) not in ghosts]
@@ -307,7 +335,7 @@ def check_ink(fig):
                     " read badly, though a heatmap legitimately runs high")
 
 
-def audit(fig, scale=None):
+def audit(fig, scale=None, placed_frac=1.0):
     r = _renderer(fig)
     rows = [
         ("Clipping", *check_clipping(fig, r)),
@@ -315,7 +343,7 @@ def audit(fig, scale=None):
         ("Contrast stack", *check_contrast_stack(fig)),
         ("Mark ratio", *check_mark_ratio(fig)),
         ("Axis redundancy", *check_redundancy(fig, r)),
-        ("Type size", *check_type_size(fig, r, scale)),
+        ("Type size", *check_type_size(fig, r, scale, placed_frac)),
         ("Ink coverage", *check_ink(fig)),
     ]
     # "warn" rows are advisory: they report something worth a look without
@@ -323,8 +351,8 @@ def audit(fig, scale=None):
     return all(s is not False for _, s, _ in rows), rows
 
 
-def report(fig, name="", scale=None):
-    ok, rows = audit(fig, scale)
+def report(fig, name="", scale=None, placed_frac=1.0):
+    ok, rows = audit(fig, scale, placed_frac)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False
     for label, status, detail in rows:

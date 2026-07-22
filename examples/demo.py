@@ -66,7 +66,10 @@ ax.legend(loc="upper right")
 
 # The caption carries the mechanism; the figure carries no internal title.
 passed = cf.report(fig, "demo")
-fig.savefig(HERE / "demo.png", dpi=200)
+# No dpi or bbox here on purpose: both come from the style sheet, which is the
+# point of having one. `bbox_inches="tight"` in particular would change the
+# saved width and quietly invalidate the type-size check that just ran.
+fig.savefig(HERE / "demo.png")
 plt.close(fig)
 
 print(f"wrote {HERE / 'demo.png'}")

@@ -84,6 +84,50 @@ def test_structure_choices_the_guide_promises():
     assert p["legend.frameon"] is False
 
 
+def test_mark_defaults_are_in_the_sheet_not_at_the_call_site():
+    """These were prose, passed by hand as `lw=1.6` wherever someone
+    remembered. The sheet is the mechanism for exactly that."""
+    p = parsed()
+    assert float(p["lines.linewidth"]) == pytest.approx(1.6)
+    assert float(p["lines.markersize"]) == pytest.approx(5)
+    assert float(p["axes.linewidth"]) == pytest.approx(0.8)
+
+
+def test_output_settings_survive_a_save(tmp_path):
+    """`savefig.bbox: standard` reads back as None - matplotlib's own spelling.
+    The value that must never appear is 'tight': it trims to drawn content, so
+    the saved width stops matching the authored width the type gate measures.
+    """
+    written = parsed()
+    assert written["savefig.bbox"] is None, written["savefig.bbox"]
+
+    with plt.style.context(str(STYLE_SHEET)):
+        assert plt.rcParams["savefig.bbox"] != "tight"
+        assert float(plt.rcParams["savefig.dpi"]) == pytest.approx(300)
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot([0, 1], [0, 1])
+        out = tmp_path / "f.png"
+        fig.savefig(out)
+        plt.close(fig)
+
+    from PIL import Image
+    with Image.open(out) as im:
+        # 4in authored at 300dpi. bbox_inches="tight" would land under this.
+        assert im.size[0] == 1200, f"saved width {im.size[0]}px, expected 1200"
+
+
+def test_the_surface_the_guide_measures_against_is_what_the_sheet_renders():
+    """Contrast ratios are quoted against a surface. If the sheet stops drawing
+    on it, every number in the palette table is measuring a page that does not
+    exist -- which is precisely what happened with #fcfcfb."""
+    import check_palette as cp
+    p = parsed()
+    assert mpl.colors.to_hex(p["figure.facecolor"]) == "#ffffff"
+    assert mpl.colors.to_hex(p["axes.facecolor"]) == "#ffffff"
+    import inspect
+    assert inspect.signature(cp.check).parameters["surface"].default == "#ffffff"
+
+
 def test_font_stack_ends_in_a_face_that_ships_with_matplotlib():
     """A missing face falls back silently. Putting an always-available family
     last is what keeps that fallback from landing somewhere arbitrary."""
