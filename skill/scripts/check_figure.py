@@ -592,6 +592,105 @@ def check_identity_channel(fig):
                     "blue are under 3:1 on white, where that step is hardest")
 
 
+LABEL_MARGIN = 2.0
+
+
+def _polyline_px(line, ax):
+    """A line's vertices in display space, densified so no gap exceeds 2px.
+
+    Vertices alone are not enough on a sparsely sampled line: two points 200px
+    apart say nothing about the stroke between them, and that stroke is what the
+    label actually lands next to.
+    """
+    import numpy as np
+    xy = np.asarray(line.get_xydata(), dtype=float)
+    if xy.ndim != 2 or len(xy) == 0:
+        return None
+    pts = ax.transData.transform(xy)
+    pts = pts[np.isfinite(pts).all(axis=1)]
+    if len(pts) < 2:
+        return pts if len(pts) else None
+    step = pts[1:] - pts[:-1]
+    counts = np.maximum(1, np.ceil(np.hypot(step[:, 0], step[:, 1]) / 2.0)
+                        ).astype(int)
+    out = [p + (np.arange(k) / k)[:, None] * d
+           for p, d, k in zip(pts[:-1], step, counts)]
+    out.append(pts[-1:])
+    return np.vstack(out)
+
+
+def _box_distance(bb, pts):
+    """Shortest distance from a text's box to any point on a polyline, in px.
+    Zero when the stroke passes under the text."""
+    import numpy as np
+    dx = np.maximum.reduce([bb.x0 - pts[:, 0], pts[:, 0] - bb.x1,
+                            np.zeros(len(pts))])
+    dy = np.maximum.reduce([bb.y0 - pts[:, 1], pts[:, 1] - bb.y1,
+                            np.zeros(len(pts))])
+    return float(np.min(np.hypot(dx, dy)))
+
+
+def check_label_attribution(fig, r):
+    """A direct label sitting nearer some other series than the one it names.
+
+    `check_collisions` compares text against text, so a label that clears every
+    other label and still floats in the corridor between two curves passes it
+    clean. That is not hypothetical: `examples/demo.py` shipped with "Tuned"
+    closer to a neighbouring curve than to its own and the whole suite was
+    green. Text against text and text against data are different questions.
+
+    Harvested narrowly on purpose - only text whose string matches exactly one
+    series label is judged, because only there is the intent known. A callout,
+    a panel letter, an "n = 300" attributes nothing to a curve, and failing
+    those is the noise that teaches people to skim the row.
+
+    The threshold is a ratio rather than a distance because the judgement the
+    reader makes is comparative: a label is unambiguous when its own curve is
+    plainly the closest thing to it, not when it is some absolute number of
+    points away.
+    """
+    bad, checked = [], 0
+    for ax in fig.axes:
+        px = {}
+        for line in ax.lines:
+            if not line.get_visible():
+                continue
+            p = _polyline_px(line, ax)
+            if p is not None and len(p):
+                px[line] = p
+        if len(px) < 2:
+            continue
+        owners = {}
+        for line in px:
+            owners.setdefault(str(line.get_label()), []).append(line)
+        for t, bb in _texts(fig, r):
+            if t.axes is not ax:
+                continue
+            match = owners.get(str(t.get_text()).strip())
+            if not match or len(match) != 1:
+                continue
+            own = match[0]
+            checked += 1
+            # A floor on the own-curve distance: without it a label printed
+            # directly on its line divides by ~zero, and every other line in the
+            # figure reads as infinitely far.
+            d_own = max(_box_distance(bb, px[own]), 0.5)
+            d_other = min(_box_distance(bb, p)
+                          for line, p in px.items() if line is not own)
+            if d_other < LABEL_MARGIN * d_own:
+                bad.append(f"{str(t.get_text())[:22]!r} is {d_own:.0f}px from "
+                           f"its own curve and {d_other:.0f}px from another")
+    if not checked:
+        return True, "no direct labels matched to a series"
+    if not bad:
+        return True, f"{checked} direct label{'s' if checked != 1 else ''}, "\
+                     f"each nearest the curve it names"
+    return False, ("; ".join(bad) + f"  <- the reader resolves a direct label "
+                   "by proximity, so it has to be plainly nearest its own "
+                   "curve. Move it to where that curve is furthest from its "
+                   "neighbours, or draw a leader line to the anchor")
+
+
 # --- the sheet itself -------------------------------------------------------
 
 def _style_sheet():
@@ -658,6 +757,7 @@ def audit(fig, scale=None, placed_frac=1.0):
         ("Dual axis", *check_dual_axis(fig)),
         ("Form", *check_form(fig)),
         ("Identity channel", *check_identity_channel(fig)),
+        ("Label attribution", *check_label_attribution(fig, r)),
         ("Style sheet", *check_style_sheet(fig)),
     ]
     # "warn" rows are advisory: they report something worth a look without
