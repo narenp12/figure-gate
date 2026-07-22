@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+### Five new gates, and the two scripts finally speak
+
+The motivating failure, reproduced end to end: a figure drawn on matplotlib's
+default `tab10` cycle with a `twinx` second y axis passed every check in
+`check_figure.py` and printed `-> COMPOSED`. The same three hues through
+`check_palette.py` reported `CVD separation (adjacent) worst #ff7f0e vs
+#2ca02c dE 1.4 (protan)` — one hue to a protanopic reader. Two scripts in one
+project, and nothing connected them.
+
+- **`figure.mplstyle` sets `axes.prop_cycle`** to the six Okabe-Ito series slots,
+  in canonical order. Until now the sheet set every visual default except the one
+  that decides whether a colorblind reader can separate two curves, so a figure
+  built on it inherited `tab10`. Yellow and black stay held out — yellow at 1.32:1
+  vanishes as a hairline, black is the ink token.
+- **Series color** reads the hues off the figure's own artists and puts them
+  through the palette gates, inferring adjacent-versus-all-pairs from whether the
+  marks are scatter. Also fails a seventh distinct hue, and one hue carrying two
+  labelled identities — which is what the cycler wrapping looks like, and was
+  prose only before. Harvest excludes colormapped artists and the sheet's ink
+  tokens; the lightness-band and chroma rows are deliberately not applied, because
+  a gray control curve is legal.
+- **Dual axis** fails two axes sharing a frame when both carry data: the crossing
+  point of the curves is then set by the limits rather than the data. A bare unit
+  relabel — `secondary_yaxis` with no artists of its own — still passes.
+- **Form** fails the mechanical subset of form choice: pie/donut, 3D axes, and
+  bars on a truncated baseline. Log-scale bars are exempt, since a log axis cannot
+  contain zero.
+- **Identity channel** warns when two or more labelled hues carry identity with no
+  legend and no in-axes text. A warning rather than a gate: the script cannot tell
+  a direct label from any other annotation, and guessing would fire on correct work.
+- **Style sheet** warns when the keys in `figure.mplstyle` are not the ones in
+  effect. Catches the `#`-is-a-comment trap, a forgotten `plt.style.use`, and a
+  later rcParams override in one row.
+
+### Decided: a legend entry is not a direct label
+
+The guide required a "visible direct label" for a sub-3:1 hue and `examples/demo.py`
+used a legend, so one of the two was wrong. Settled the strict way, because the
+obligation follows from the measurement: a faint mark plus a legend leaves the
+reader matching a small faint swatch to a small faint curve, which is the step a
+direct label removes. The demo now labels its curves directly.
+
+### New reference
+
+`skill/references/choosing-a-form.md`, plus a step in `SKILL.md`'s procedure.
+Grounded in statistical graphics rather than general information design —
+Cleveland & McGill's ordering of the elementary perceptual tasks, and the
+statistical results behind the rules that matter most in teaching material: what a
+box plot hides at small n, why a cut baseline misstates every ratio, why two bars
+are the wrong form for paired data, and why overlapping confidence intervals are
+not a significance test.
+
+## Earlier in Unreleased
+
 Corrections, no new gates. Nothing that passed before fails now.
 
 - **Surface is white everywhere.** `check_palette.py` defaulted to `#fcfcfb`, a

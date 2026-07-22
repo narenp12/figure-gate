@@ -6,6 +6,10 @@ This is the reasoning behind `SKILL.md` — the measurements, and the failure ea
 was written to prevent. Read it when deviating from a constraint, when a validator fails
 in a way you want to argue with, or when porting the checks off matplotlib.
 
+Everything here is downstream of the form being right in the first place, which is
+`choosing-a-form.md` — the perceptual and statistical argument for what to draw, before
+any question of how it looks.
+
 Ships with one style sheet and two validators:
 
 | File | In the skill | Needs | What it is |
@@ -54,10 +58,11 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 
 1. **Ground content.** Use the document's exact nouns. Compute real numbers. Every label
    checked against the drawn data, not the idea it names.
-2. **Build** on `figure.mplstyle`.
-3. **Compose, run `check_figure.py`, render a PNG, look at it.**
-4. **Validate palette with `check_palette.py`.** Do not eyeball color.
-5. **Render the finished document and look at *that*.**
+2. **Choose the form** — `choosing-a-form.md`. Nothing downstream fixes a wrong one.
+3. **Build** on `figure.mplstyle`.
+4. **Compose, run `check_figure.py`, render a PNG, look at it.**
+5. **Validate palette with `check_palette.py`.** Do not eyeball color.
+6. **Render the finished document and look at *that*.**
 
 ### Composition rules (what the checker cannot tell you)
 
@@ -102,6 +107,13 @@ private set: it carries a decade of use and readers who know it recognize it.
 | 8 | reddish purple | `#CC79A7` | 3.06 | series |
 
 † below 3:1 — must carry a visible direct label. ‡ below lightness band.
+
+**A legend entry is not a direct label.** The rule was ambiguous on this and
+`examples/demo.py` read it the other way for a while. It is settled the strict
+way, because the obligation follows from the measurement: a sub-3:1 mark is
+faint against the page, and a legend leaves the reader matching a small faint
+swatch to a small faint curve — the exact step a direct label exists to remove.
+Text at the mark, in ink, with the mark beside it carrying the identity.
 
 Ratios are against white, because that is what `figure.mplstyle` renders and
 what the page under it is. They were previously quoted against `#fcfcfb`, a

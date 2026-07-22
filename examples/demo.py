@@ -43,6 +43,13 @@ if "okabe_ito" in colormaps:
 # under protanopia in the same figure.
 SERIES = OKABE_ITO[1:4]
 
+# The style sheet carries the same six slots as `axes.prop_cycle`, so a figure
+# that just draws inherits them. Pinning the two together here means a future
+# edit to either one shows up as a failure in the example rather than as two
+# palettes that quietly disagree.
+CYCLE = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+assert [c.lower() for c in CYCLE[:3]] == SERIES, (CYCLE[:3], SERIES)
+
 # Prove it before drawing it. This is the cheap half of the method.
 rows, ok = cp.check(SERIES, all_pairs=True)
 assert ok, rows
@@ -55,14 +62,32 @@ fig, ax = plt.subplots(figsize=(7.2, 4.0), constrained_layout=True)
 # legend orders these as improvements, the curves have to actually improve --
 # the guide's most-repeated failure is a callout that is true of the concept and
 # false of the line beside it.
-for color, decay, label in zip(
-        SERIES, (0.12, 0.22, 0.35), ("Baseline", "Tuned", "Bayesian")):
+# Where each curve is labelled, and on which side. Staggered rather than set at
+# one epoch: with all three at x=9 the lowest label landed in the gap the middle
+# curve was passing through, which is legible in the PNG and invisible to the
+# collision check -- that gate compares text against text, not text against a
+# line. Step 6 of the procedure exists for exactly this class of defect.
+for color, decay, label, at_x, side in zip(
+        SERIES,
+        (0.12, 0.22, 0.35),
+        ("Baseline", "Tuned", "Bayesian"),
+        (9.0, 10.5, 6.5),
+        (1, 1, -1)):
     y = np.exp(-decay * x) + 0.02 * rng.standard_normal(x.size)
     ax.plot(x, y, color=color, lw=1.6, label=label)
+    # Direct labels, not a legend. Orange and sky blue are under 3:1 on white,
+    # and the guide's rule for a sub-3:1 hue is a visible direct label -- a
+    # legend does not discharge it, because it leaves the reader matching a
+    # small faint swatch to a small faint curve, which is the step being
+    # removed. The anchor is read off the drawn array rather than the analytic
+    # curve, so the text sits on the line that actually rendered.
+    at = int(np.argmin(np.abs(x - at_x)))
+    ax.annotate(label, (x[at], y[at]), textcoords="offset points",
+                xytext=(0, 7 * side), ha="center",
+                va="bottom" if side > 0 else "top")
 
 ax.set_xlabel("Training epoch")
 ax.set_ylabel("Validation loss")
-ax.legend(loc="upper right")
 
 # The caption carries the mechanism; the figure carries no internal title.
 passed = cf.report(fig, "demo")
