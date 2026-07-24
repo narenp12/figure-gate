@@ -698,3 +698,25 @@ def test_context_ink_does_not_warn():
     ok, rows = cf.audit(fig, context_axes=[ax])
     plt.close(fig)
     assert gates(rows)["Ink coverage"] is True
+
+
+def test_overplotting_warns_on_dense_scatter():
+    """~70 points packed into a tiny cluster at large size should WARN."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    rng = np.random.default_rng(42)
+    x = rng.normal(0.5, 0.015, 70)
+    y = rng.normal(0.5, 0.015, 70)
+    ax.scatter(x, y, s=160, alpha=0.5)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_overplotting_clean_on_spread_scatter():
+    """Well-separated points should not trigger the overplotting WARN."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([1, 2, 3, 4, 5, 6, 7, 8], [1, 4, 2, 5, 3, 6, 8, 7], s=40)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
