@@ -75,6 +75,16 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 - Shared scale → shared axis furniture.
 - Encode only what exists. A path through unordered data draws a sequence that is not
   there.
+- A path with real order (a trajectory) must read as directed — downsample or smooth
+  it, add a single arrowhead pointing forward, or model it so it stays visually
+  contained (a noisy SGD walk near a minimum is an Ornstein–Uhlenbeck process, whose
+  stationary distribution is the Gaussian being drawn). A self-intersecting scribble
+  drowns out every other mark.
+- Marks over a textured or variable-value context surface need a 1–3px white stroke
+  behind them (`pe.withStroke(foreground="white")` in matplotlib) — a knockout halo
+  that guarantees separation regardless of the local background value. A line that
+  vanishes where it crosses a contour is not a line; a marker that disappears into a
+  filled band is not a marker.
 - Ordinal emphasis is a lightness ramp, not a transparency stack.
 
 ### Then still look at it
@@ -221,6 +231,16 @@ tinted page.
 
 ## Legibility budget
 
+**Decide on-page placement before authoring.** "8-inch figure" means nothing until you
+know what width the document gives it — a full page, a text block, two columns? Author it
+at that width, and the scale is 1.0, the type gate is exact, and there is nothing to
+compute.
+
+A figure placed below roughly 35% of the content width (two-column width for a landscape
+figure) puts every label at or below 6pt on the page, regardless of what the script says.
+`check_figure.py` warns when `placed_frac < 0.35`, but the right thing is to change the
+placement or the figure, not to shrink the type further.
+
 Set `CONTENT_WIDTH_PT` once in `check_figure.py`. The script derives the scale per figure
 and fails any string under 7.5pt on page. Per-figure is the point: a 14in figure on a
 750pt slide shrinks to 0.74×, a 8.6in one is 1.21×, and the same 10pt label is fine in
@@ -251,6 +271,8 @@ checked against the render. No invented precision. No em-dashes in rendered stri
 - [ ] Every label checked against the drawn data, not the idea
 - [ ] Nothing drawn that the data does not support
 - [ ] Ordinal vs categorical decided correctly
+- [ ] Placement decided before authoring; figure authored at its placed width
+- [ ] Named algorithm shown with its defining objects (paper/repo), not remembered
 - [ ] Document compiled; caption states mechanism once; no em-dashes
 
 ---

@@ -76,6 +76,13 @@ and steal its vocabulary. If the text says "binding affinity," the figure says
 that, not "potency." Two vocabularies for one idea on one page reads as two
 authors.
 
+**For a named algorithm or model, ground the figure in its canonical definition**
+(paper, repo, standard reference) — not the slide prose or a remembered summary.
+Check that the figure shows the objects the algorithm is *defined* by: if a
+method's whole idea is a stochastic weight average, the figure must show that
+average, not just the trajectories around it. A figure that illustrates an
+algorithm but omits its defining object is a diagram of something else.
+
 Compute real numbers. Fit the actual model, compute the actual curve. A
 hand-drawn approximation of a statistical object will eventually be wrong in a
 way a reader notices, and this matters most in teaching material, because

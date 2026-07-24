@@ -365,7 +365,12 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0):
     small = sorted({(pt, s) for pt, s in sizes if pt < TYPE_FLOOR_PT})
     mn = min(pt for pt, _ in sizes)
     if not small:
-        return True, f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
+        detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
+        if placed_frac < 0.35:
+            return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
+                           " — labels may be too small to read; author at the"
+                           " width it ships at")
+        return True, detail
     return False, (f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: {small[:4]}"
                    "  <- cut words, do not shrink type")
 
