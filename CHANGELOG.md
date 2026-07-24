@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Context-surface ink stops a standing WARN
+
+- **Ink coverage accepts `context_axes`.** A filled contourf backdrop (loss
+  landscape, terrain) saturated 100% of the axes pixels, triggering a standing
+  ink WARN on every such figure — the "advisory everyone learns to ignore." New
+  `audit(fig, context_axes=[ax])` declaration tells the checker the fill is a
+  context surface, not data-ink. The pixel buffer is split into two clusters via
+  2-means on color; the larger cluster (the surface) is subtracted from the ink
+  count, so only marks *on top* of the backdrop are measured. A terrain panel
+  with a few sparse marks now PASSes instead of WARNing. Existing heatmap
+  behavior is unchanged (no `context_axes` → same as before).
+
 ### Two false-signal fixes, no new gates
 
 - **Contour dash warns on auto-dashed negative levels.** A monochrome contour
