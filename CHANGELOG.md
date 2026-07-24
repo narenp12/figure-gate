@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### The series-color and label gates learn the figure's structure
+
+The new gates above read a flat bag of hues and text, and a bag throws away the
+structure the author encoded — which panel a hue lives in, what kind of artist
+drew it, whether a piece of text is a direct label or a legend key. Four figures
+that were mechanically correct got failed for it. Each fix gives the harvester
+back one piece of that structure.
+
+- **Series color is scoped per panel.** The comparison, the hue count and the
+  adjacent-versus-all-pairs mode are now asked of one axes at a time. A
+  figure-wide harvest gated hues that never share a frame — a flow-chart node in
+  one panel measured against a regression curve in another — and let a single
+  scatter flip every line-only panel into the stricter all-pairs regime. The
+  panel is the unit a reader separates hues within.
+- **One series drawn several ways is one identity.** The wrap check — one hue,
+  two labels — is narrowed to labels on artists of the *same kind*. A cycler that
+  wraps reuses one artist type; a posterior shown as a credible band, its mean
+  line and its observed points is three kinds in one hue, one series shown three
+  ways. Two lines in one hue with two labels is still the wrap it always caught.
+- **Label attribution ignores legend entries.** A legend is a lookup key placed
+  away from the curves by design, so judging its entries by proximity to those
+  curves could only ever fail. They slipped the `t.axes is ax` guard because a
+  legend child's `.axes` is the parent axes; they are now dropped explicitly.
+- **Ordinal ramps on marks belong in a colormap** (guidance). A ramp is built to
+  violate the categorical floor, and a `scatter(c=[rgba, …])` list reads as that
+  many independent hues. The style guide now says to draw it
+  `scatter(c=values, cmap=ListedColormap(ramp))`, which the harvester already
+  exempts as a value encoding — the intent lands in the code instead of a flat
+  bag of hues.
+
 ### Five new gates, and the two scripts finally speak
 
 The motivating failure, reproduced end to end: a figure drawn on matplotlib's

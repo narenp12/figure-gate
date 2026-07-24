@@ -360,6 +360,67 @@ def test_grid_and_reference_ink_are_not_counted_as_series_hues():
     assert "1 data hue" in dict((n, d) for n, _, d in rows)["Series color"]
 
 
+def test_series_color_scopes_the_comparison_to_a_panel():
+    """Two hues in different panels never sit side by side for a reader, so
+    gating them against each other is a defect the reader can't see. The
+    figure-wide harvest did exactly that: a flow-chart node in panel a measured
+    against a regression curve in panel b. Each panel here separates internally;
+    only the cross-panel pair is close, and that pair is not a comparison."""
+    # Ordered so the close cross-panel pair (blue vs teal) is consecutive in the
+    # figure-wide harvest -- otherwise adjacent mode never compares them and the
+    # old figure-wide code passes for the wrong reason.
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
+    a.plot([0, 1], [1, 0], color="#d55e00", label="Acquisition")  # orange
+    a.plot([0, 1], [0, 1], color="#0072b2", label="GP mean")      # blue
+    b.plot([0, 1], [0, 1], color="#2c738e", label="DMTA node")    # teal, ~dE 6 vs blue
+    b.plot([0, 1], [1, 0], color="#cc79a7", label="Assay")        # pink
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is True
+
+
+def test_a_scatter_in_one_panel_does_not_force_all_pairs_on_another():
+    """`_compares_all_pairs` returned True if *any* axes held a scatter, which
+    flipped line-only panels into the stricter regime too. The six theme slots
+    clear adjacent separation (what lines need) but not all-pairs; a scatter two
+    panels over must not be what fails them."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
+    for i, c in enumerate(OKABE):
+        a.plot([0, 1], [i, i + 1], color=c)          # six lines: adjacent-legal
+    b.scatter([0, 1], [0, 1], color=OKABE[0])        # one scatter, one hue
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is True
+
+
+def test_one_series_drawn_as_band_line_and_points_is_one_identity():
+    """A posterior shown as a credible band, its mean line and its observed
+    points is one series in one hue, drawn three ways -- each artist legitimately
+    labelled. The wrap check keyed on 'distinct labels sharing a hue', which
+    can't tell that from an actual cycler wrap. A wrap reuses one artist type;
+    this is three kinds, so it is not a wrap."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.fill_between([0, 1], [0, 0], [1, 1], color=OKABE[3], alpha=0.3,
+                    label="95% credible band")
+    ax.plot([0, 1], [0.5, 0.6], color=OKABE[3], label="Posterior mean")
+    ax.scatter([0.2, 0.8], [0.3, 0.7], color=OKABE[3], label="Observations")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is True
+
+
+def test_two_lines_in_one_hue_still_read_as_a_wrapped_cycler():
+    """The narrowing must not blunt the check it narrows: two *lines* in one hue
+    with two labels is the wrap the gate exists to catch. Same kind, two
+    identities -- still a failure."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], color=OKABE[0], label="Baseline")
+    ax.plot([0, 1], [1, 0], color=OKABE[0], label="Tuned")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is False
+
+
 # --- dual axis --------------------------------------------------------------
 
 def test_dual_axis_catches_twinx_carrying_its_own_data():
@@ -527,6 +588,23 @@ def test_label_attribution_ignores_text_that_names_no_series():
     ax.plot([0, 5, 10], [1.0] * 3, color=OKABE[0], label="Alpha")
     ax.plot([0, 5, 10], [1.4] * 3, color=OKABE[1], label="Beta")
     ax.annotate("n = 300", (5, 1.2), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
+def test_label_attribution_ignores_legend_entries():
+    """A legend is a lookup key placed *away* from the curves by design, so
+    judging its entries by proximity to those curves can only ever fail. The
+    entries' strings match the series labels and a legend child's `.axes` is the
+    parent axes, so the `t.axes is ax` guard let them through -- a figure that
+    keeps its legend got failed by the attribution check for doing so."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    # Own curves sit low-left and low-right; the legend rides the upper-right
+    # corner, so each entry is nearer the *other* curve than its own.
+    ax.plot([0, 2, 4], [0.0, 0.2, 0.0], color=OKABE[0], label="Small eta")
+    ax.plot([6, 8, 10], [0.0, 0.2, 0.0], color=OKABE[1], label="Large eta")
+    ax.legend(loc="upper center")
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Label attribution"] is True

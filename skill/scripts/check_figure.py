@@ -21,7 +21,7 @@ Checks
     5. Redundancy      - shared-axis panels do not repeat a tick label column
     6. Type size       - every rendered string clears the floor once scaled
     7. Ink coverage    - the data region is neither empty nor packed
-    8. Series color    - the drawn hues separate under color blindness
+    8. Series color    - the hues in each panel separate under color blindness
     9. Dual axis       - no second y scale carrying data of its own
    10. Style sheet     - figure.mplstyle is the one actually in effect
    11. Form            - no pie, no 3D, no truncated bar baseline
@@ -388,19 +388,46 @@ def _colors_of(value):
     return []
 
 
-def _data_colors(fig):
-    """`(hex, label)` for every color on the figure that carries a categorical
-    identity. `label` is None for an artist matplotlib named itself.
+def _artist_kind(artist):
+    """A coarse artist family: a line, a scatter's marks, or a filled area.
+
+    The wrap check needs it. A cycler that wraps reuses one artist *type* - two
+    lines, two scatters - and hands them different labels. One series shown as a
+    band and its mean line and its points is three types in one hue, which is
+    the opposite: one identity, several artists. Kind tells them apart."""
+    from matplotlib.lines import Line2D
+    from matplotlib.collections import PathCollection
+    if isinstance(artist, Line2D):
+        return "line"
+    if isinstance(artist, PathCollection):
+        return "marks"
+    return "area"          # bars, fill_between polys, other patches
+
+
+def _data_colors_by_axes(fig):
+    """`{axes: [(hex, label, kind), ...]}` - the categorical colors on the
+    figure, kept apart by the panel they were drawn in and tagged with the kind
+    of artist that drew them. `label` is None for an artist matplotlib named
+    itself.
+
+    Structure the old figure-wide bag threw away. The panel is the unit a reader
+    compares a hue within: two hues in different panels never sit side by side,
+    so pooling every axes into one set gated a flow-chart node in one panel
+    against a regression curve in another. The kind lets one identity drawn as
+    several artist types in one hue read as one series, not a wrapped cycler.
 
     Harvested narrowly on purpose. Two exclusions do the work:
 
     - an artist with a colormap attached (`get_array()` is not None) encodes a
       *value*, not an identity - a heatmap or a scatter colored by magnitude is
-      a continuous encoding and answers to the viridis rule instead
+      a continuous encoding and answers to the viridis rule instead. This is
+      also the escape hatch for an ordinal ramp: draw it `c=values, cmap=...`,
+      never as a pre-evaluated RGBA list, and it is read as the value it is.
     - the ink tokens, per `INK_TOKENS` above
     """
-    out = []
+    out = {}
     for ax in fig.axes:
+        items = []
         for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
             if not artist.get_visible():
                 continue
@@ -408,6 +435,7 @@ def _data_colors(fig):
                 continue
             raw = str(artist.get_label() or "")
             label = raw if raw and not raw.startswith("_") else None
+            kind = _artist_kind(artist)
             for getter in ("get_color", "get_facecolor", "get_edgecolor"):
                 fn = getattr(artist, getter, None)
                 if fn is None:
@@ -419,20 +447,31 @@ def _data_colors(fig):
                 for c in _colors_of(value):
                     h = _hex(c)
                     if h and h not in INK_TOKENS:
-                        out.append((h, label))
+                        items.append((h, label, kind))
+        if items:
+            out[ax] = items
     return out
 
 
-def _compares_all_pairs(fig):
-    """Which separation mode the figure needs. `check_palette.py` has to ask for
+def _data_colors(fig):
+    """Flat `(hex, label)` across the whole figure, for the checks that only
+    need the bag of identified hues and not the panel each lives in."""
+    return [(h, label) for items in _data_colors_by_axes(fig).values()
+            for h, label, _ in items]
+
+
+def _axes_all_pairs(ax):
+    """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
     drawn as; a built figure does say. Scatter puts every series next to every
     other, so every pair has to separate. Lines and bars only ever put
     neighbours next to each other, and gating all pairs there would fail
-    palettes the guide explicitly sanctions."""
+    palettes the guide explicitly sanctions.
+
+    Asked per axes, not per figure: a scatter in one panel does not make a
+    line-only panel two panels over answer to the stricter rule."""
     from matplotlib.collections import PathCollection
-    return any(isinstance(c, PathCollection)
-               for ax in fig.axes for c in ax.collections)
+    return any(isinstance(c, PathCollection) for c in ax.collections)
 
 
 def check_series_color(fig):
@@ -449,41 +488,53 @@ def check_series_color(fig):
     are deliberately *not* applied to harvested colors. A black or gray series
     is legal - a reference curve, a control group - and failing it is precisely
     the noise that teaches people to skim past the row.
+
+    Scoped per panel. The comparison, the hue count and the all-pairs mode are
+    all asked of one axes at a time, because the panel is the unit a reader
+    separates hues within - a figure-wide bag gated hues that never share a
+    frame against each other.
     """
-    harvested = _data_colors(fig)
-    if not harvested:
+    by_ax = _data_colors_by_axes(fig)
+    if not by_ax:
         return True, "no categorical series colors"
 
-    distinct = list(dict.fromkeys(h for h, _ in harvested))
-    plural = "s" if len(distinct) != 1 else ""
+    all_distinct = list(dict.fromkeys(
+        h for items in by_ax.values() for h, _, _ in items))
+    plural = "s" if len(all_distinct) != 1 else ""
     fails, notes = [], []
+    cp = None
+    try:
+        import check_palette as cp
+    except ImportError:
+        notes.append("check_palette.py is not importable beside this file, "
+                     "so separation went unchecked")
 
-    if len(distinct) > MAX_SERIES_HUES:
-        fails.append(f"{len(distinct)} distinct data hues, theme has "
-                     f"{MAX_SERIES_HUES}  <- fold the tail into 'Other' or facet")
+    for ax, items in by_ax.items():
+        distinct = list(dict.fromkeys(h for h, _, _ in items))
 
-    # One hue carrying two identities is what a seventh series looks like once
-    # the cycler wraps: matplotlib reuses slot 1 without complaint and the
-    # legend confidently lists both. Keyed on the label text rather than a count,
-    # so one entity drawn as several artists in one color stays legal.
-    identities = {}
-    for h, label in harvested:
-        if label:
-            identities.setdefault(h, set()).add(label)
-    for h, labels in sorted(identities.items()):
-        if len(labels) > 1:
-            fails.append(f"{h} carries two identities {sorted(labels)}"
-                         "  <- the color cycle wrapped")
+        if len(distinct) > MAX_SERIES_HUES:
+            fails.append(f"{len(distinct)} distinct data hues in one panel, "
+                         f"theme has {MAX_SERIES_HUES}  <- fold the tail into "
+                         "'Other' or facet")
 
-    if len(distinct) >= 2:
-        try:
-            import check_palette as cp
-        except ImportError:
-            notes.append("check_palette.py is not importable beside this file, "
-                         "so separation went unchecked")
-        else:
-            mode = "all-pairs" if _compares_all_pairs(fig) else "adjacent"
-            rows, _ = cp.check(distinct, all_pairs=(mode == "all-pairs"))
+        # One hue carrying two identities is what a seventh series looks like
+        # once the cycler wraps: matplotlib reuses slot 1 without complaint and
+        # the legend confidently lists both. Narrowed to labels on artists of the
+        # *same kind*: a wrap reuses one artist type, whereas a band, its mean
+        # line and its points in one hue is one series shown three ways, each
+        # legitimately labelled. Keyed on kind, that reads as one identity.
+        by_hue_kind = {}
+        for h, label, kind in items:
+            if label:
+                by_hue_kind.setdefault((h, kind), set()).add(label)
+        for (h, kind), labels in sorted(by_hue_kind.items()):
+            if len(labels) > 1:
+                fails.append(f"{h} carries {len(labels)} identities "
+                             f"{sorted(labels)} on {kind} artists"
+                             "  <- the color cycle wrapped")
+
+        if len(distinct) >= 2 and cp is not None:
+            rows, _ = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
             for name, status, detail in rows:
                 if not name.startswith(("CVD separation", "Normal-vision floor")):
                     continue
@@ -492,7 +543,7 @@ def check_series_color(fig):
                 else:
                     notes.append(detail.split("  <-")[0].strip())
 
-    head = f"{len(distinct)} data hue{plural}"
+    head = f"{len(all_distinct)} data hue{plural}"
     if fails:
         return False, f"{head}: " + "; ".join(fails)
     return True, f"{head}: " + ("; ".join(notes) if notes else "nothing to compare")
@@ -619,6 +670,26 @@ def _polyline_px(line, ax):
     return np.vstack(out)
 
 
+def _legend_text_ids(fig):
+    """Ids of every Text that belongs to a legend, figure-level or axes-level.
+
+    A legend is a lookup key placed *away* from the curves by design, so its
+    entries can never pass a proximity check - and they slip past the `t.axes is
+    ax` guard, because a legend child's `.axes` resolves to the parent axes. The
+    attribution check has to drop them explicitly or it fails every figure that
+    keeps a legend."""
+    ids = set()
+    legends = list(fig.legends)
+    for ax in fig.axes:
+        lg = ax.get_legend()
+        if lg is not None:
+            legends.append(lg)
+    for lg in legends:
+        for t in lg.get_texts():
+            ids.add(id(t))
+    return ids
+
+
 def _box_distance(bb, pts):
     """Shortest distance from a text's box to any point on a polyline, in px.
     Zero when the stroke passes under the text."""
@@ -650,6 +721,7 @@ def check_label_attribution(fig, r):
     points away.
     """
     bad, checked = [], 0
+    legend_ids = _legend_text_ids(fig)
     for ax in fig.axes:
         px = {}
         for line in ax.lines:
@@ -664,7 +736,7 @@ def check_label_attribution(fig, r):
         for line in px:
             owners.setdefault(str(line.get_label()), []).append(line)
         for t, bb in _texts(fig, r):
-            if t.axes is not ax:
+            if t.axes is not ax or id(t) in legend_ids:
                 continue
             match = owners.get(str(t.get_text()).strip())
             if not match or len(match) != 1:

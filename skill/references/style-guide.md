@@ -152,6 +152,17 @@ ends at `#fde725`, 1.23:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` 
 evenly (ΔL ratio < 2×), and narrow to `t ∈ [0.00, 0.38]` when the figure also carries
 status green (viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`).
 
+**On marks, hand the ramp to a colormap, not a list of colors.** An ordinal ramp is
+built to violate the categorical separation floor — its steps are meant to be close, and
+there can be many. `check_figure.py` reads a scatter drawn `scatter(c=[rgba, rgba, …])` as
+that many independent categorical identities and fails it against the ΔE floor, because a
+pre-evaluated RGBA list carries no signal that the steps are ordered. Draw it
+`scatter(c=values, cmap=ListedColormap(ramp))` (or with a `Normalize`) instead: the gate
+reads that as the value encoding it is and exempts it, and the intent is now in the code
+rather than lost in a flat bag of hues. A ramp drawn as standalone *lines* has no colormap
+to hand it to — keep those tiers few and evenly stepped, and validate with
+`--ordinal`, since the composition gate measures them against the categorical floor.
+
 ### Diverging: `RdBu`, as shipped
 
 ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b` / `#2065ab` clear every
