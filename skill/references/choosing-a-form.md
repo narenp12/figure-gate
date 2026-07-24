@@ -117,6 +117,32 @@ which is task 2 done once per panel.
 Panels share their axis furniture — one tick column, one axis label. `check_figure.py`
 gates that separately as Axis redundancy.
 
+### Figure-family (small-multiple) consistency checklist
+
+Every panel in a multi-panel figure was chosen for a reason the read declares, and the
+same reason constrains how much the panels may differ. These are read-only — no script
+decides them:
+
+- **Same context surface, or deliberately different.** A filled-terrain backdrop in one
+  panel and white space in another reads as two different kinds of figure, not two
+  instances of the same thing. If the surface must differ (e.g. a posterior over one
+  variable vs another), say so once and keep the colormap identical.
+- **Shared reference points go in the same place.** If panel A draws a dashed circle at
+  the optimum, panel B draws it at the same data coordinate, not at whatever the panel's
+  limits happen to center on — unless the figure's point is that the second panel has no
+  optimum, in which case the dashed circle is the distinctive absence.
+- **Emphasis and scale stay comparable.** One panel at 10× the other's zoom asserts the
+  tenth panel matters more. If it does, the difference should be explicit in the read
+  and the scale bars should say so. If it does not, keep the limits comparable.
+- **A consistent marker grammar.** A circle is an observation, a triangle is a prediction,
+  a cross is an extremum — and the mapping is the same across every panel that shares
+  that kind of mark.
+- **Each panel's distinctive mark is actually present.** The one panel in a row-that
+  should have a credible band, does. If the model has no credible interval, the figure
+  can either omit the empty panel or draw one and label it "not applicable" — but a
+  missing band beside three panels that have one reads as an oversight rather than a
+  statement about the model. Name the omission in the caption, explicitly.
+
 ## Stacked bars have one honest series
 
 Only the bottom band of a stacked bar sits on a common baseline. Every band above it
