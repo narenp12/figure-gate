@@ -19,9 +19,10 @@ Checks
     2. Text collision  - no two text bounding boxes overlap
     3. Contrast stack  - something is at full opacity; alpha levels are few
     4. Mark ratio      - largest / smallest mark area within MARK_RATIO_MAX
-    5. Redundancy      - shared-axis panels do not repeat a tick label column
-    6. Type size       - every rendered string clears the floor once scaled
-    7. Ink coverage    - the data region is neither empty nor packed
+    5. Overplotting    - scatter marks do not merge into an unreadable mass
+    6. Redundancy      - shared-axis panels do not repeat a tick label column
+    7. Type size       - every rendered string clears the floor once scaled
+    8. Ink coverage    - the data region is neither empty nor packed
     8. Series color    - the hues in each panel separate under color blindness
     9. Dual axis       - no second y scale carrying data of its own
    10. Style sheet     - figure.mplstyle is the one actually in effect
@@ -251,6 +252,60 @@ def check_mark_ratio(fig):
             f"largest/smallest mark area {ratio:.1f}x  (s={lo:.0f} to {hi:.0f})"
             + ("" if ratio <= MARK_RATIO_MAX
                else f"  <- cap at {MARK_RATIO_MAX}x"))
+
+
+def check_overplotting(fig):
+    """Warn when scatter points overlap into an unreadable mass.
+
+    For each PathCollection with offsets (a scatter), estimates the fraction of
+    points whose nearest neighbour in display pixels is within one marker
+    radius. Above the threshold the marks merge into a blob — thin the count,
+    use hollow markers, add transparency, or switch to hexbin.
+    """
+    import numpy as np
+
+    OVERPLOT_THRESHOLD = 0.5
+    dpi = fig.dpi
+
+    bad = []
+    for i, ax in enumerate(fig.axes):
+        for j, coll in enumerate(ax.collections):
+            try:
+                offsets = coll.get_offsets()
+            except Exception:
+                continue
+            if offsets.size < 2:
+                continue
+            try:
+                xy = ax.transData.transform(offsets)
+            except Exception:
+                continue
+            sizes = getattr(coll, "get_sizes", lambda: [])()
+            if len(sizes) == 0:
+                continue
+            sizes = np.asarray(sizes, dtype=float)
+            if sizes.size == 1:
+                sizes = np.full(len(offsets), sizes[0])
+            radius_px = np.sqrt(sizes / np.pi) * dpi / 72.0
+
+            n = len(xy)
+            overlap = 0
+            for k in range(n):
+                dist = np.hypot(xy[:, 0] - xy[k, 0],
+                                xy[:, 1] - xy[k, 1])
+                dist[k] = np.inf
+                if dist.min() < radius_px[k]:
+                    overlap += 1
+            frac = overlap / n
+            if frac > OVERPLOT_THRESHOLD:
+                bad.append((i, j, frac))
+
+    if not bad:
+        return True, "no scatter overplotting"
+    detail = "; ".join(f"ax{i}.col{j} {f:.0%}" for i, j, f in bad)
+    return "warn", (f"overplotting: {detail} — marks merge into blob; "
+                    "thin counts, use hollow markers, add transparency, "
+                    "or switch to hexbin")
 
 
 def check_redundancy(fig, r):
@@ -917,6 +972,7 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None):
         ("Text collision", *check_collisions(fig, r)),
         ("Contrast stack", *check_contrast_stack(fig)),
         ("Mark ratio", *check_mark_ratio(fig)),
+        ("Overplotting", *check_overplotting(fig)),
         ("Axis redundancy", *check_redundancy(fig, r)),
         ("Type size", *check_type_size(fig, r, scale, placed_frac)),
         ("Ink coverage", *check_ink(fig, context_axes)),

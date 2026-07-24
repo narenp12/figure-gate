@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Overplotting / mark-density WARN
+
+- **`check_overplotting` detects scatter marks that merge into a blob.** For
+  each scatter (`PathCollection` with offsets), estimates the fraction of points
+  whose nearest neighbour in display pixels is within one marker radius — points
+  that visually overlap. Above ~50% overlap the WARN fires: reduce counts, use
+  hollow markers, add transparency, or switch to hexbin. The 0.5 threshold keeps
+  the entire existing corpus clean (all well-separated scatters pass). A WARN,
+  not a FAIL — dense marks are legitimate for some forms (e.g. a swarm plot).
+
 ### Context-surface ink stops a standing WARN
 
 - **Ink coverage accepts `context_axes`.** A filled contourf backdrop (loss
