@@ -30,8 +30,12 @@ Issues = "https://github.com/narenp12/figure-gate/issues"
 check-palette = "check_palette:main"
 check-figure = "check_figure:main"
 
+# scipy is optional and only ever a speed-up: `check_overplotting` uses a KD-tree
+# when it is importable and an O(n^2) numpy path when it is not. The README
+# promises three files and no install, and a hard scipy import broke that.
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+fast = ["scipy>=1.6"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.0", "scipy>=1.6"]
 
 [build-system]
 requires = ["hatchling"]
@@ -47,4 +51,9 @@ filterwarnings = [
     # A missing font family is a real defect in a figure, but in CI the runner
     # simply has no serif installed and the fallback is correct behaviour.
     "ignore:findfont:UserWarning",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
 ]

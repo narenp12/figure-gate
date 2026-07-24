@@ -11,23 +11,31 @@ a test rather than in a design review.
     from check_figure import audit
     ok, rows = audit(fig)
     ok, rows = audit(fig, context_axes=[ax])   # contourf background is not ink
+    ok, rows = audit(fig, venue="neurips")     # measure type against \textwidth
 
     python check_figure.py            # self-test on a deliberately bad figure
+    python check_figure.py --venues   # the content widths it knows
 
 Checks
-    1. Clipping        - no text extends past the canvas
-    2. Text collision  - no two text bounding boxes overlap
-    3. Contrast stack  - something is at full opacity; alpha levels are few
-    4. Mark ratio      - largest / smallest mark area within MARK_RATIO_MAX
-    5. Overplotting    - scatter marks do not merge into an unreadable mass
-    6. Redundancy      - shared-axis panels do not repeat a tick label column
-    7. Type size       - every rendered string clears the floor once scaled
-    8. Ink coverage    - the data region is neither empty nor packed
-    8. Series color    - the hues in each panel separate under color blindness
-    9. Dual axis       - no second y scale carrying data of its own
-   10. Style sheet     - figure.mplstyle is the one actually in effect
-   11. Form            - no pie, no 3D, no truncated bar baseline
-   12. Identity        - series are not told apart by color alone
+    1. Clipping          - no text extends past the canvas
+    2. Text collision    - no two text bounding boxes overlap
+    3. Text readability  - no data ink crosses a label; text clears WCAG on the
+                           backdrop it actually got
+    4. Contrast stack    - something is at full opacity; alpha levels are few
+    5. Mark ratio        - largest / smallest mark area within MARK_RATIO_MAX
+    6. Overplotting      - scatter marks do not merge into an unreadable mass
+    7. Redundancy        - shared-axis panels do not repeat a tick label column
+    8. Type size         - every rendered string clears the floor once scaled
+    9. Ink coverage      - the data region is neither empty nor packed
+   10. Series color      - the hues in each panel separate under color blindness
+   11. Dual axis         - no second y scale carrying data of its own
+   12. Form              - no pie, no 3D, no truncated bar baseline
+   13. Identity          - series are not told apart by color alone
+   14. Label attribution - each label is nearest the curve it names
+   15. Style sheet       - figure.mplstyle is the one actually in effect
+   16. Contour dash      - dashing is not spent on a signed contour's negatives
+   17. Fonts             - Type 42 embedding; the named face is installed
+   18. Alt text          - the figure carries a description
 """
 
 import itertools
@@ -47,15 +55,62 @@ MAX_SERIES_HUES = 6
 # `ax.patches` beside the data - reference rules, annotation boxes, spine-colored
 # strokes - and none of them carries a categorical identity, so counting them as
 # a data hue would fail figures for the color of their own furniture.
-INK_TOKENS = {"#000000", "#52514e", "#898781",     # ink primary/secondary/muted
+INK_TOKENS = {"#000000", "#52514e", "#777570",     # ink primary/secondary/muted
+              "#898781",                           # muted, pre-4.5:1 spelling
               "#e1e0d9", "#c3c2b7", "#ffffff"}     # grid, axis, surface
 
 # Two axes are the same frame when their bounds agree this closely. An inset or
 # a colorbar never does; `twinx`/`twiny` always does.
 FRAME_TOL = 1e-3
 
+# A label is correctly attributed when its own curve is at least this many times
+# closer than the next nearest curve. A ratio rather than an absolute distance
+# because the judgement the reader makes is comparative: "is this label nearer
+# that curve or this one?"
+LABEL_MARGIN = 2.0
+
+# --- text readability --------------------------------------------------------
+# Data ink inside a label's box, as a fraction of that box. Calibrated against
+# a lw=1.6 curve at 150 dpi: crossing a label horizontally is ~14% of the box,
+# a single vertical spike ~4%, and a label on clean ground with gridlines behind
+# it measures 0.
+TEXT_CLUTTER_MAX = 0.03
+# Distance, in 0-255 RGB, at which a pixel stops being explainable as a blend of
+# the label's surface with the figure's furniture. Well above subpixel and gamma
+# noise, well below any two distinguishable hues.
+TEXT_BLEND_TOL = 26.0
+# A mark is an edge; ground is whatever varies slowly. These set where the line
+# between the two falls: how wide a neighbourhood a pixel is compared against,
+# and how far it has to sit from that neighbourhood's average to be a mark. The
+# window is wider than a 1.6pt hairline at 150 dpi (~3px) so a hairline stands
+# clear of its own average, and narrow enough that a viridis ramp does not.
+TEXT_EDGE_WINDOW = 9
+TEXT_EDGE_TOL = 14.0
+# A backdrop color has to cover at least this much of a label's box before it
+# can set the contrast verdict. Without a floor, one stray antialiased pixel on
+# a field decides whether the label is legible.
+TEXT_BACKDROP_MIN_SHARE = 0.10
+# Below this many pixels a text box is a glyph or two and the fractions computed
+# off it are noise.
+TEXT_FOOTPRINT_MIN_PX = 60
+# WCAG 2.1 text thresholds. A glyph stem is thinner than a mark, so text does
+# not get the 3:1 the mark gates use; large text (>=18pt, or >=14pt bold, ON
+# PAGE) does.
+TEXT_CONTRAST_MIN = 4.5
+TEXT_CONTRAST_MIN_LARGE = 3.0
+
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
+#
+# Stricter than every journal that publishes a number: Nature's floor is 5pt,
+# Science asks 5-7pt for labels and 6-8pt for axes, PNAS 6-8pt with nothing
+# under 2mm printed. Those are the sizes at which a string is still *possible*
+# to read. 7.5 is the size at which it is comfortable, and it is cheap to hold
+# because the fix is nearly always cutting words rather than shrinking type.
 TYPE_FLOOR_PT = 7.5
+
+# Stroke floor, in points ON THE PAGE. SIAM's instructions for authors: "lines
+# one point or thicker; thinner lines may break up or disappear."
+LINE_FLOOR_PT = 1.0
 
 # SET THIS PER PROJECT: the usable width, in points, of the page the figure
 # lands in. Render one page, place a full-width figure, measure it. Within ~5%
@@ -71,8 +126,46 @@ TYPE_FLOOR_PT = 7.5
 # printed and this whole calculation disappear.
 CONTENT_WIDTH_PT = None
 
+# `\the\textwidth` and `\the\columnwidth`, read out of the class and style files
+# these venues ship. The measure-it-yourself instruction above is the honest
+# general answer and it is also the step people skip, so the common cases are
+# here already. Pass one as `venue=` rather than editing CONTENT_WIDTH_PT.
+#
+# VERIFY BEFORE TRUSTING for anything that matters: put `\the\textwidth` in your
+# own document and read the log. Style files get revised between years, a
+# `geometry` package call in the preamble silently overrides all of this, and a
+# figure certified against the wrong width is certified at the wrong type size.
+VENUE_WIDTH_PT = {
+    "neurips": 397.48,             # \textwidth, neurips_*.sty (5.5in)
+    "iclr": 397.48,                # \textwidth, iclr*_conference.sty
+    "icml": 487.82,                # \textwidth, icml*.sty (two-column page)
+    "icml-column": 234.88,         # \columnwidth
+    "acl": 455.24,                 # \textwidth, acl.sty (16cm)
+    "acl-column": 219.08,          # \columnwidth (7.7cm)
+    "ieee": 516.0,                 # \textwidth, IEEEtran
+    "ieee-column": 252.0,          # \columnwidth, IEEEtran
+    "nature": 518.74,              # double column, 183mm
+    "nature-column": 252.28,       # single column, 89mm
+    "article-letter": 345.0,       # \textwidth, article 10pt letterpaper
+    "article-a4": 418.25,          # \textwidth, article 10pt a4paper
+}
 
-def page_scale(fig, placed_frac=1.0):
+
+def content_width_pt(venue=None):
+    """The usable page width to measure against, in points."""
+    if venue is None:
+        return CONTENT_WIDTH_PT
+    try:
+        return VENUE_WIDTH_PT[venue]
+    except KeyError:
+        raise KeyError(
+            f"unknown venue {venue!r}. Known: "
+            f"{', '.join(sorted(VENUE_WIDTH_PT))}. For anything else, put "
+            "\\the\\textwidth in the document, read the log, and set "
+            "CONTENT_WIDTH_PT to what it says.") from None
+
+
+def page_scale(fig, placed_frac=1.0, venue=None):
     """Scale from authored inches to points on the page.
 
     `placed_frac` is the fraction of the content width the figure is placed at,
@@ -81,29 +174,38 @@ def page_scale(fig, placed_frac=1.0):
     full width, and a half-width figure is certified at twice the type size it
     actually ships at - which is the wrong direction for a legibility gate to
     be wrong in.
+
+    `venue` names a row of `VENUE_WIDTH_PT` and overrides `CONTENT_WIDTH_PT` for
+    this call, which is the usual way in: the width is a property of the
+    document, not of the checkout.
     """
-    if CONTENT_WIDTH_PT is None:
+    width = content_width_pt(venue)
+    if width is None:
         if placed_frac != 1.0:
             raise ValueError(
-                "placed_frac requires CONTENT_WIDTH_PT to be set. With it None "
-                "the checker assumes you authored the figure at the width it "
-                "is placed at, which already makes the scale 1.0; a fractional "
-                "placement contradicts that. Set CONTENT_WIDTH_PT, or author "
-                "at the placed width and drop placed_frac.")
+                "placed_frac requires a content width. With CONTENT_WIDTH_PT "
+                "None and no venue= the checker assumes you authored the "
+                "figure at the width it is placed at, which already makes the "
+                "scale 1.0; a fractional placement contradicts that. Pass "
+                "venue=, set CONTENT_WIDTH_PT, or author at the placed width "
+                "and drop placed_frac.")
         return 1.0
-    return CONTENT_WIDTH_PT * placed_frac / (fig.get_size_inches()[0] * 72)
+    return width * placed_frac / (fig.get_size_inches()[0] * 72)
 
 
 def _renderer(fig):
-    """Text extents need a renderer that can measure. The SVG canvas cannot, so
-    swap in an Agg one when that is what the figure was built under."""
+    """Return (renderer, canvas). Canvas is an Agg canvas with drawn buffer.
+
+    Text extents need a renderer that can measure. The SVG canvas cannot, so
+    swap in an Agg one when that is what the figure was built under.
+    Reused across checks so check_ink does not render a second time."""
     if hasattr(fig.canvas, "get_renderer"):
         fig.canvas.draw()
-        return fig.canvas.get_renderer()
+        return fig.canvas.get_renderer(), fig.canvas
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     canvas = FigureCanvasAgg(fig)
     canvas.draw()
-    return canvas.get_renderer()
+    return canvas.get_renderer(), canvas
 
 
 def _texts(fig, r):
@@ -194,6 +296,305 @@ def check_collisions(fig, r):
             else f"overlapping: {hits[:4]}")
 
 
+def _halo(t):
+    """(color, linewidth) of a stroke path effect, when the text wears casing.
+
+    Casing — the cartographic term for a contrasting outline around a label —
+    is what lets a label sit over busy ground at all. Reading it off the artist
+    rather than guessing from the pixels keeps the two clauses below separable:
+    whether the halo *should* have worked, and whether it *did*.
+    """
+    from matplotlib import patheffects as pe
+    for effect in (t.get_path_effects() or ()):
+        if not isinstance(effect, pe.Stroke):     # withStroke subclasses Stroke
+            continue
+        gc = getattr(effect, "_gc", {}) or {}
+        fg = gc.get("foreground")
+        if fg is not None:
+            return fg, float(gc.get("linewidth", 0.0) or 0.0)
+    return None, 0.0
+
+
+def _furniture(fig):
+    """Colors a label is allowed to sit on, read off the figure that drew them.
+
+    Casing exists precisely so a gridline can pass behind a label; the axis rule
+    and the tick marks are the same kind of thing. Data ink is not furniture,
+    which is the whole distinction this list draws.
+
+    Harvested from the artists rather than from `INK_TOKENS` for two reasons.
+    The token set contains the text ink itself, and a black reference line
+    crossing a black label is a defect rather than furniture. And a project that
+    swapped the style sheet's grid color would otherwise have every gridline in
+    every figure counted as data passing through its labels — the check would
+    fire hardest on exactly the people who customised it.
+    """
+    from matplotlib.colors import to_rgb
+    out = {tuple(to_rgb(fig.get_facecolor()))}
+    for ax in fig.axes:
+        out.add(tuple(to_rgb(ax.get_facecolor())))
+        for axis in (ax.xaxis, ax.yaxis):
+            for line in axis.get_gridlines():
+                out.add(tuple(to_rgb(line.get_color())))
+            for tick in axis.get_ticklines():
+                out.add(tuple(to_rgb(tick.get_color())))
+        for spine in ax.spines.values():
+            out.add(tuple(to_rgb(spine.get_edgecolor())))
+    return [tuple(c * 255.0 for c in rgb) for rgb in out]
+
+
+def _near_any(pixels, anchors, tol):
+    """Which of an (N, 3) block of pixels a blend of `anchors` explains.
+
+    Antialiasing puts pixels on the straight line between two colors that meet,
+    so the test is distance to the nearest *segment* joining a pair of anchors,
+    not distance to the nearest anchor. Without that, the halfway pixel where a
+    gridline meets the page reads as a third color and every gridline in the
+    figure counts as foreign ink.
+    """
+    import numpy as np
+    pix = pixels.astype(float)
+    best = np.full(len(pix), np.inf)
+    for a, b in itertools.combinations_with_replacement(anchors, 2):
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        seg = b - a
+        span = float(seg @ seg)
+        if span < 1.0:
+            d = np.linalg.norm(pix - a, axis=1)
+        else:
+            u = np.clip(((pix - a) @ seg) / span, 0.0, 1.0)
+            d = np.linalg.norm(pix - (a + u[:, None] * seg), axis=1)
+        np.minimum(best, d, out=best)
+    return best <= tol
+
+
+def _box_blur(field, size):
+    """Moving average over an (H, W, 3) block, edges extended.
+
+    `scipy.ndimage.uniform_filter` does this and is what the first version
+    called. Written out in numpy instead so `check_figure.py` stays a file you
+    can copy next to your figures with nothing but matplotlib installed —
+    the promise in the README is three files and no install, and a hard scipy
+    import quietly broke it. Separable and cumulative, so it costs two passes
+    regardless of the window.
+    """
+    import numpy as np
+    half = size // 2
+    out = field.astype(float)
+    for axis in (0, 1):
+        padded = np.concatenate(
+            [np.repeat(out.take([0], axis=axis), half, axis=axis),
+             out,
+             np.repeat(out.take([-1], axis=axis), half, axis=axis)],
+            axis=axis)
+        cum = np.cumsum(padded, axis=axis)
+        zero = np.zeros_like(cum.take([0], axis=axis))
+        cum = np.concatenate([zero, cum], axis=axis)
+        n = out.shape[axis]
+        hi = cum.take(range(size, size + n), axis=axis)
+        lo = cum.take(range(0, n), axis=axis)
+        out = (hi - lo) / size
+    return out
+
+
+def _foreign_ink(block, furniture, tol):
+    """Fraction of a backdrop patch that is a mark rather than ground.
+
+    Ground is whatever varies slowly: the page, a flat fill, a viridis field.
+    A mark is an *edge* — a curve, a marker, an isoline — so the test is each
+    pixel against a local average of its neighbours rather than against the
+    patch's dominant color. Testing against the dominant color was the obvious
+    first version and it failed every annotation on a heatmap, because a smooth
+    ramp differs from its own mode everywhere while being, to a reader, one
+    surface.
+
+    Furniture is exempt at the second step rather than the first: a gridline IS
+    an edge, and casing exists precisely so it can pass behind a label.
+    """
+    import numpy as np
+
+    field = block.astype(float)
+    local = _box_blur(field, TEXT_EDGE_WINDOW)
+    edge = np.linalg.norm(field - local, axis=2) > TEXT_EDGE_TOL
+    if not edge.any():
+        return 0.0
+    pix = field[edge].reshape(-1, 3)
+    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / edge.size
+
+
+def _worst_backdrop(block, fg, min_share):
+    """The backdrop color the text reads worst against, among those covering at
+    least `min_share` of its box.
+
+    A single color is the wrong summary for a field: a label on viridis sits on
+    a range, and both the mean and the mode can clear the threshold while a
+    third of the box does not. A share floor keeps a handful of stray pixels
+    from setting the verdict.
+    """
+    import numpy as np
+    pix = block.reshape(-1, 3)
+    keys, counts = np.unique(pix // 8, axis=0, return_counts=True)
+    worst, ratio = None, float("inf")
+    for key, n in zip(keys, counts):
+        if n / len(pix) < min_share:
+            continue
+        color = pix[((pix // 8) == key).all(axis=1)].mean(axis=0)
+        r = _contrast_255(fg, color)
+        if r < ratio:
+            worst, ratio = color, r
+    if worst is None:
+        return pix.mean(axis=0), _contrast_255(fg, pix.mean(axis=0))
+    return worst, ratio
+
+
+def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
+                           venue=None):
+    """Whether each string can be read where it sits.
+
+    `check_label_attribution` asks which curve a label belongs to. This asks the
+    prior question — whether the label is legible at all — and the two come
+    apart hard: a label printed *on* its own curve is attributed perfectly, and
+    is read through the line crossing its letterforms.
+
+    Both clauses are measured off rendered pixels, because both depend on what
+    happened to land behind the glyphs and no artist knows that about itself.
+    The figure is drawn a second time with every string hidden; that render is
+    the backdrop each label was placed onto.
+
+    *Clutter.* Inside a label's box the backdrop should be one surface. Pixels
+    that no blend of {that surface, the grid, the axis rule} explains are data
+    ink passing through the text — a curve, a marker, a spike between the
+    strokes. Measuring the backdrop rather than the finished render is the whole
+    trick: casing hides the evidence, because a white halo over an orange curve
+    renders as clean white while punching a visible gap through the data. Both
+    halves of that are defects and this sees them as one number.
+
+    Uniform data ink is not clutter. A label on a heatmap cell has the cell as
+    its surface, so it is the contrast clause that governs there, which is the
+    correct division: a flat fill is a background, a curve is not.
+
+    *Contrast.* The text against the backdrop it actually got, at the WCAG text
+    threshold (4.5:1, or 3:1 for large text) rather than the 3:1 mark threshold,
+    because a glyph stem is thinner than a mark. Casing counts: a black label
+    with a white halo on a dark field is read against the halo.
+
+    Tick labels are included. They sit outside the axes on most figures and cost
+    nothing to check there, and on the figures where they do not — an inset, a
+    twinned frame, a label moved inside — that is exactly where they get
+    crossed.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgb
+
+    items = _texts(fig, r)
+    if not items:
+        return True, "no text to read"
+    if canvas is None:
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        canvas = FigureCanvasAgg(fig)
+        canvas.draw()
+
+    # Hiding text changes what constrained_layout has to fit, so the second
+    # render would come back with every artist in a slightly different place and
+    # the backdrop would not line up with the boxes measured against the first.
+    # Pin the layout for the duration; the engine is put back before returning.
+    engine = fig.get_layout_engine()
+    fig.set_layout_engine("none")
+    visible = [t.get_visible() for t, _ in items]
+    try:
+        for t, _ in items:
+            t.set_visible(False)
+        canvas.draw()
+        backdrop = np.asarray(
+            canvas.buffer_rgba())[:, :, :3].astype(np.int16).copy()
+    finally:
+        for (t, _), v in zip(items, visible):
+            t.set_visible(v)
+        canvas.draw()
+        if engine is not None:
+            fig.set_layout_engine(engine)
+
+    if scale is None:
+        scale = page_scale(fig, placed_frac, venue)
+    H, W = backdrop.shape[:2]
+    furniture = _furniture(fig)
+    # Ticks that exist on the axes but never reach the page — a hidden axes, a
+    # location outside the view. `check_clipping` learned about these the same
+    # way this did: by reporting a defect on a schematic that draws no axes and
+    # still carries the tick Text objects matplotlib made for it.
+    ghosts = _ghost_ticks(fig)
+    cluttered, faint, checked = [], [], 0
+
+    for t, bb in items:
+        if id(t) in ghosts:
+            continue
+        xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
+        ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
+        # Agg's origin is top-left, the figure's is bottom-left
+        block = backdrop[slice(H - yb, H - ya), slice(xa, xb)]
+        # Below this the fractions are counting antialiasing, not measuring.
+        if block.size // 3 < TEXT_FOOTPRINT_MIN_PX:
+            continue
+        checked += 1
+
+        fg = np.array(to_rgb(t.get_color())) * 255.0
+        halo_color, _ = _halo(t)
+        name = str(t.get_text())[:22]
+
+        frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL)
+        if frac > TEXT_CLUTTER_MAX:
+            cluttered.append(
+                f"{name!r} sits on data ink over {frac:.0%} of its box"
+                + (" — the casing hides it by erasing the data underneath"
+                   if halo_color else " and wears no casing"))
+
+        pt = t.get_fontsize() * scale
+        weight = t.get_fontweight()
+        bold = (weight in ("bold", "heavy", "black", "extra bold", "semibold")
+                or (isinstance(weight, (int, float)) and weight >= 600))
+        floor = (TEXT_CONTRAST_MIN_LARGE
+                 if pt >= 18.0 or (pt >= 14.0 and bold) else TEXT_CONTRAST_MIN)
+        if halo_color:
+            # Casing replaces the backdrop under the strokes, so that is what
+            # the reader reads against.
+            ratio = _contrast_255(fg, np.array(to_rgb(halo_color)) * 255.0)
+        else:
+            _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE)
+        if ratio < floor:
+            faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
+                         f"(text needs {floor}:1)")
+
+    if not checked:
+        return True, "no text large enough to measure"
+    bad = cluttered + faint
+    if not bad:
+        return True, f"{checked} strings read clean against their backdrop"
+    return False, ("; ".join(bad[:3])
+                   + "  <- move the label to clear ground; casing rescues a "
+                     "gridline, not a curve")
+
+
+def _contrast_255(rgb_a, rgb_b):
+    """WCAG contrast for two 0-255 RGB triples.
+
+    Duplicated from `check_palette.contrast` rather than imported: this file
+    already treats that import as optional (`check_series_color` degrades to a
+    note when it is missing), and a legibility gate that silently stops running
+    when a sibling file is absent is the kind of decoration this repo exists to
+    argue against.
+    """
+    def lin(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    lums = []
+    for rgb in (rgb_a, rgb_b):
+        r, g, b = (lin(float(v)) for v in rgb)
+        lums.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+    hi, lo = max(lums), min(lums)
+    return (hi + 0.05) / (lo + 0.05)
+
+
 def check_contrast_stack(fig):
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy."""
@@ -263,6 +664,10 @@ def check_overplotting(fig):
     use hollow markers, add transparency, or switch to hexbin.
     """
     import numpy as np
+    try:
+        from scipy.spatial import cKDTree
+    except ImportError:                      # optional, see `_box_blur`
+        cKDTree = None
 
     OVERPLOT_THRESHOLD = 0.5
     dpi = fig.dpi
@@ -289,13 +694,22 @@ def check_overplotting(fig):
             radius_px = np.sqrt(sizes / np.pi) * dpi / 72.0
 
             n = len(xy)
-            overlap = 0
-            for k in range(n):
-                dist = np.hypot(xy[:, 0] - xy[k, 0],
-                                xy[:, 1] - xy[k, 1])
-                dist[k] = np.inf
-                if dist.min() < radius_px[k]:
-                    overlap += 1
+            if n < 2:
+                continue
+            if cKDTree is not None:
+                dists, _ = cKDTree(xy).query(xy, k=2)
+                if dists.ndim < 2:
+                    continue
+                nn_dist = dists[:, 1]
+            else:
+                # Same nearest-neighbour distance, O(n^2). Only reached where
+                # scipy is absent, and only for the scatters this check looks
+                # at, so the cost lands on figures that already draw n points.
+                d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                             xy[:, 1][:, None] - xy[None, :, 1])
+                np.fill_diagonal(d, np.inf)
+                nn_dist = d.min(axis=1)
+            overlap = int((nn_dist < radius_px).sum())
             frac = overlap / n
             if frac > OVERPLOT_THRESHOLD:
                 bad.append((i, j, frac))
@@ -347,7 +761,7 @@ def check_redundancy(fig, r):
     return False, "; ".join(bits) + "  <- use sharex/sharey"
 
 
-def check_type_size(fig, r, scale=None, placed_frac=1.0):
+def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
     """Every rendered string clears the legibility floor once the figure is
     scaled into the document.
 
@@ -356,7 +770,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0):
     a helper. Reading `get_fontsize()` off the artists that actually rendered
     reports what is on the page instead of what is in the source.
     """
-    scale = page_scale(fig, placed_frac) if scale is None else scale
+    scale = page_scale(fig, placed_frac, venue) if scale is None else scale
     ghosts = _ghost_ticks(fig)
     sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
              for t, _ in _texts(fig, r) if id(t) not in ghosts]
@@ -375,7 +789,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0):
                    "  <- cut words, do not shrink type")
 
 
-def check_ink(fig, context_axes=None):
+def check_ink(fig, context_axes=None, canvas=None):
     """Ink as a fraction of each plotting area, measured off the rendered
     pixels rather than estimated from artist properties.
 
@@ -390,12 +804,15 @@ def check_ink(fig, context_axes=None):
     into two clusters (k-means with k=2) and removing the larger cluster (the
     surface). A figure with a filled terrain plus a few sparse marks will PASS
     rather than WARN.
+
+    Pass `canvas` — an already-drawn Agg canvas — to avoid a second render.
     """
     import numpy as np
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-    canvas = FigureCanvasAgg(fig)
-    canvas.draw()
+    if canvas is None:
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        canvas = FigureCanvasAgg(fig)
+        canvas.draw()
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
     bg = buf[0, 0]
@@ -408,6 +825,12 @@ def check_ink(fig, context_axes=None):
 
     rows = []
     for i, ax in enumerate(fig.axes):
+        # A colorbar is a solid ramp by construction: 100% ink, always, on
+        # every figure that has one. Measuring it means every heatmap in the
+        # world stands at WARN for the one axes in it whose density is not a
+        # choice anybody made. matplotlib labels the axes it creates.
+        if ax.get_label() == "<colorbar>":
+            continue
         bb = ax.get_window_extent(renderer=canvas.get_renderer())
         x0, x1 = int(max(bb.x0, 0)), int(min(bb.x1, buf.shape[1]))
         y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
@@ -496,7 +919,13 @@ def _artist_kind(artist):
     from matplotlib.lines import Line2D
     from matplotlib.collections import PathCollection
     if isinstance(artist, Line2D):
-        return "line"
+        # `plot(..., linestyle="none", marker="o")` is a Line2D that draws no
+        # line. Calling it one made a path and its own start marker, in one
+        # hue, read as a wrapped cycler handing two identities to one color —
+        # which is the exact case this function exists to tell apart.
+        stroke = str(artist.get_linestyle()).strip().lower()
+        drawn = stroke not in ("none", "", " ") and artist.get_linewidth() > 0
+        return "line" if drawn else "marks"
     if isinstance(artist, PathCollection):
         return "marks"
     return "area"          # bars, fill_between polys, other patches
@@ -534,6 +963,7 @@ def _data_colors_by_axes(fig):
             raw = str(artist.get_label() or "")
             label = raw if raw and not raw.startswith("_") else None
             kind = _artist_kind(artist)
+            seen = set()
             for getter in ("get_color", "get_facecolor", "get_edgecolor"):
                 fn = getattr(artist, getter, None)
                 if fn is None:
@@ -544,7 +974,8 @@ def _data_colors_by_axes(fig):
                     continue
                 for c in _colors_of(value):
                     h = _hex(c)
-                    if h and h not in INK_TOKENS:
+                    if h and h not in INK_TOKENS and h not in seen:
+                        seen.add(h)
                         items.append((h, label, kind))
         if items:
             out[ax] = items
@@ -596,9 +1027,6 @@ def check_series_color(fig):
     if not by_ax:
         return True, "no categorical series colors"
 
-    all_distinct = list(dict.fromkeys(
-        h for items in by_ax.values() for h, _, _ in items))
-    plural = "s" if len(all_distinct) != 1 else ""
     fails, notes = [], []
     cp = None
     try:
@@ -641,7 +1069,10 @@ def check_series_color(fig):
                 else:
                     notes.append(detail.split("  <-")[0].strip())
 
-    head = f"{len(all_distinct)} data hue{plural}"
+    max_per_panel = max(
+        (len(list(dict.fromkeys(h for h, _, _ in items)))
+         for items in by_ax.values()), default=0)
+    head = f"up to {max_per_panel} data hues per panel"
     if fails:
         return False, f"{head}: " + "; ".join(fails)
     return True, f"{head}: " + ("; ".join(notes) if notes else "nothing to compare")
@@ -741,9 +1172,6 @@ def check_identity_channel(fig):
                     "blue are under 3:1 on white, where that step is hardest")
 
 
-LABEL_MARGIN = 2.0
-
-
 def _polyline_px(line, ax):
     """A line's vertices in display space, densified so no gap exceeds 2px.
 
@@ -792,6 +1220,8 @@ def _box_distance(bb, pts):
     """Shortest distance from a text's box to any point on a polyline, in px.
     Zero when the stroke passes under the text."""
     import numpy as np
+    if len(pts) == 0:
+        return float('inf')
     dx = np.maximum.reduce([bb.x0 - pts[:, 0], pts[:, 0] - bb.x1,
                             np.zeros(len(pts))])
     dy = np.maximum.reduce([bb.y0 - pts[:, 1], pts[:, 1] - bb.y1,
@@ -820,6 +1250,7 @@ def check_label_attribution(fig, r):
     """
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig)
+    all_texts = _texts(fig, r)
     for ax in fig.axes:
         px = {}
         for line in ax.lines:
@@ -830,23 +1261,33 @@ def check_label_attribution(fig, r):
                 px[line] = p
         if len(px) < 2:
             continue
+
+        lines_list = list(px.keys())
         owners = {}
-        for line in px:
-            owners.setdefault(str(line.get_label()), []).append(line)
-        for t, bb in _texts(fig, r):
+        for i, line in enumerate(lines_list):
+            owners.setdefault(str(line.get_label()).strip(), []).append(i)
+
+        for t, bb in all_texts:
             if t.axes is not ax or id(t) in legend_ids:
                 continue
             match = owners.get(str(t.get_text()).strip())
             if not match or len(match) != 1:
                 continue
-            own = match[0]
+            own_line = lines_list[match[0]]
             checked += 1
             # A floor on the own-curve distance: without it a label printed
-            # directly on its line divides by ~zero, and every other line in the
-            # figure reads as infinitely far.
-            d_own = max(_box_distance(bb, px[own]), 0.5)
+            # directly on its line divides by ~zero, and every other line in
+            # the figure reads as infinitely far.
+            d_own = max(_box_distance(bb, px[own_line]), 0.5)
+            # The minimum over every OTHER curve, box-to-polyline. A KD-tree
+            # over the pooled points was tried here for speed and was wrong:
+            # it returns the nearest *points*, so for a label sitting close to
+            # its own dense curve all the near points belong to that curve, no
+            # other curve is ever reached, and `d_other` stays infinite. Which
+            # is to say it passed every label it was closest to — the common
+            # case, and the one the gate exists for.
             d_other = min(_box_distance(bb, p)
-                          for line, p in px.items() if line is not own)
+                          for line, p in px.items() if line is not own_line)
             if d_other < LABEL_MARGIN * d_own:
                 bad.append(f"{str(t.get_text())[:22]!r} is {d_own:.0f}px from "
                            f"its own curve and {d_other:.0f}px from another")
@@ -932,6 +1373,190 @@ def check_contour_dash(fig):
     return "warn", "; ".join(warned)
 
 
+def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
+    """Every drawn stroke against the printer's floor, measured ON THE PAGE.
+
+    SIAM states it plainly in its instructions for authors: illustrations must
+    use lines one point or thicker, because thinner lines break up or disappear.
+    It is the same failure as the type floor and it has the same cause — a
+    stroke authored at 0.8pt in a 9-inch figure placed at 5.5 inches prints at
+    0.49pt — so it is measured the same way, through `page_scale`.
+
+    Furniture is held to a lower floor than data. A gridline that drops out at
+    the printer costs the reader a reference; a data curve that drops out costs
+    them the finding. The sheet ships the grid at 0.7pt deliberately, and
+    failing it against the data floor would be failing the sheet's own design.
+    """
+    from matplotlib.lines import Line2D
+    from matplotlib.collections import LineCollection
+
+    if scale is None:
+        scale = page_scale(fig, placed_frac, venue)
+
+    thin, widths = [], []
+    for ax in fig.axes:
+        # A colorbar's dividers ship at 0.4pt and are matplotlib's, not
+        # anybody's design decision — the same reason `check_ink` skips this
+        # axes entirely.
+        if ax.get_label() == "<colorbar>":
+            continue
+        gridlines = {id(g) for axis in (ax.xaxis, ax.yaxis)
+                     for g in axis.get_gridlines()}
+        for artist in list(ax.lines) + list(ax.collections):
+            if not artist.get_visible() or id(artist) in gridlines:
+                continue
+            if isinstance(artist, Line2D):
+                stroke = str(artist.get_linestyle()).strip().lower()
+                if stroke in ("none", "", " "):
+                    continue
+                raw = [artist.get_linewidth()]
+            elif isinstance(artist, LineCollection):
+                raw = list(artist.get_linewidth())
+            elif getattr(artist, "filled", None) is False:
+                # An unfilled ContourSet is strokes. A *filled* one is bands
+                # whose linewidth is the seam between two fills, which no
+                # reader is being asked to see.
+                raw = list(artist.get_linewidth())
+            else:
+                continue
+            for w in raw:
+                on_page = float(w) * scale
+                if on_page <= 0:
+                    continue
+                widths.append(on_page)
+                if on_page < LINE_FLOOR_PT:
+                    name = str(artist.get_label() or "")
+                    thin.append(f"{name if name and not name.startswith('_') else 'a stroke'}"
+                                f" at {on_page:.2f}pt")
+
+    if not widths:
+        return True, "no strokes to measure"
+    if not thin:
+        return True, (f"{len(widths)} strokes, thinnest {min(widths):.2f}pt on "
+                      f"page (floor {LINE_FLOOR_PT})")
+    seen = list(dict.fromkeys(thin))
+    return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
+                   f"{seen[:4]}  <- SIAM: lines thinner than one point break up "
+                   "or disappear in print")
+
+
+def check_fonts(fig):
+    """Two silent failures between the figure on screen and the file you submit.
+
+    *Type 3.* Matplotlib defaults `pdf.fonttype` and `ps.fonttype` to 3. IEEE,
+    ACM and Elsevier all reject submissions carrying Type 3 fonts, and IEEE PDF
+    eXpress fails the upload outright. Nothing warns you: the figure renders
+    identically, and the paper bounces at the latest and most expensive possible
+    moment. Type 42 embeds TrueType outlines instead. `figure.mplstyle` sets it;
+    this catches the project that did not copy the sheet, and the notebook that
+    called `rcParams.update` afterwards.
+
+    *Silent substitution.* When none of the faces named in `font.<family>` is
+    installed, matplotlib falls back to its own default and logs nothing at
+    default verbosity. The guide calls the typeface the single largest visual
+    lever in the whole method, so a figure set in DejaVu because someone named
+    "Times New Roman" on a machine that does not have it is the lever quietly
+    disengaged. Falling back *within* the named list is not flagged — that is
+    what a fallback list is for, and the sheet ships one on purpose.
+
+    A warning rather than a gate, for the same reason `check_style_sheet` is:
+    both read the *global* rcParams rather than anything the figure carries, so
+    neither can tell a figure built under someone else's settings from a figure
+    built under none. A figure that will only ever be a PNG in a README is also
+    genuinely unaffected by the PDF font type. What is gated instead is the
+    thing this repo controls — the shipped `figure.mplstyle` declares 42, and
+    the suite fails if that line ever goes missing.
+    """
+    import matplotlib as mpl
+    from matplotlib.font_manager import FontProperties, findfont, get_font
+
+    notes = []
+    type3 = [k for k in ("pdf.fonttype", "ps.fonttype")
+             if int(mpl.rcParams[k]) == 3]
+    if type3:
+        notes.append(f"{' and '.join(type3)} = 3 (Type 3)  <- IEEE PDF eXpress "
+                     "rejects the upload and ACM/Elsevier reject the "
+                     "submission; set both to 42")
+
+    family = mpl.rcParams["font.family"]
+    generic = family[0] if isinstance(family, (list, tuple)) else family
+    wanted = list(mpl.rcParams.get(f"font.{generic}", []))
+    if wanted:
+        try:
+            got = get_font(findfont(FontProperties(family=generic))).family_name
+        except Exception:
+            got = None
+        if got is not None and not any(got.lower() == w.lower() for w in wanted):
+            notes.append(f"asked for {wanted[:3]}, rendering in {got!r} — none "
+                         "of the named faces is installed on this machine")
+
+    if notes:
+        return "warn", "; ".join(notes)
+    return True, f"Type 42 embedding, {generic} face resolves within the list"
+
+
+ALT_TEXT_ATTR = "_figure_gate_alt"
+# Under this many characters a description is naming the figure, not describing
+# it. "Validation loss" is a title; the alt text has to carry what the reader
+# would have taken from looking.
+ALT_TEXT_MIN_CHARS = 60
+
+
+def describe(fig, text):
+    """Attach a text description to a figure, for readers who cannot see it.
+
+    Across 100,000 public Jupyter notebooks, 99.81% of programmatically
+    generated images shipped with no alt text at all, and the overwhelming
+    majority of them were matplotlib. Matplotlib has no field for this, so the
+    description is stashed on the figure and handed to `savefig`:
+
+        describe(fig, "Validation loss against training epoch for three "
+                      "optimisers. All three fall; the Bayesian run reaches "
+                      "0.05 by epoch 6, the baseline is still at 0.25 at 12.")
+        fig.savefig(path, metadata=alt_metadata(fig))
+
+    Say what the reader would have taken from looking, not what the figure is
+    made of. "A line chart with three lines" describes the file; the numbers
+    and the direction describe the finding.
+    """
+    setattr(fig, ALT_TEXT_ATTR, str(text))
+    return fig
+
+
+def alt_metadata(fig):
+    """The `metadata=` dict for `savefig`, carrying whatever `describe` set.
+
+    PNG, PDF and SVG each keep a description field and matplotlib writes to all
+    three from this key, so the text survives into the file rather than living
+    only in the build script.
+    """
+    text = getattr(fig, ALT_TEXT_ATTR, None)
+    return {"Description": text} if text else {}
+
+
+def check_alt_text(fig):
+    """Whether the figure carries a description for a reader who cannot see it.
+
+    A warning rather than a gate, and deliberately: on a paper the description
+    frequently *is* the caption, and the caption lives in the .tex file where
+    this cannot see it. Hard-failing every figure in that entirely reasonable
+    setup is how a row becomes something everyone learns to skip, which is worse
+    than not having it. Where there is no caption — a notebook, a README, a
+    slide, a web page — nothing else is carrying this and the row is the only
+    thing that will say so.
+    """
+    text = str(getattr(fig, ALT_TEXT_ATTR, "") or "").strip()
+    if not text:
+        return "warn", ("no description attached  <- describe(fig, \"...\") "
+                        "and pass alt_metadata(fig) to savefig; if the "
+                        "document's caption carries it, this row is discharged")
+    if len(text) < ALT_TEXT_MIN_CHARS:
+        return "warn", (f"description is {len(text)} characters — that is a "
+                        "title, not a description of what the reader would "
+                        "have seen")
+    return True, f"described in {len(text)} characters"
+
+
 def check_style_sheet(fig):
     """Every key in the sheet against the rcParams that are actually in effect.
 
@@ -970,17 +1595,20 @@ def check_style_sheet(fig):
                     "in the sheet was written with a leading #")
 
 
-def audit(fig, scale=None, placed_frac=1.0, context_axes=None):
-    r = _renderer(fig)
+def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
+    r, canvas = _renderer(fig)
     rows = [
         ("Clipping", *check_clipping(fig, r)),
         ("Text collision", *check_collisions(fig, r)),
+        ("Text readability",
+         *check_text_readability(fig, r, canvas, scale, placed_frac, venue)),
         ("Contrast stack", *check_contrast_stack(fig)),
         ("Mark ratio", *check_mark_ratio(fig)),
         ("Overplotting", *check_overplotting(fig)),
         ("Axis redundancy", *check_redundancy(fig, r)),
-        ("Type size", *check_type_size(fig, r, scale, placed_frac)),
-        ("Ink coverage", *check_ink(fig, context_axes)),
+        ("Type size", *check_type_size(fig, r, scale, placed_frac, venue)),
+        ("Line weight", *check_line_weight(fig, scale, placed_frac, venue)),
+        ("Ink coverage", *check_ink(fig, context_axes, canvas)),
         ("Series color", *check_series_color(fig)),
         ("Dual axis", *check_dual_axis(fig)),
         ("Form", *check_form(fig)),
@@ -988,14 +1616,17 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None):
         ("Label attribution", *check_label_attribution(fig, r)),
         ("Style sheet", *check_style_sheet(fig)),
         ("Contour dash", *check_contour_dash(fig)),
+        ("Fonts", *check_fonts(fig)),
+        ("Alt text", *check_alt_text(fig)),
     ]
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.
     return all(s is not False for _, s, _ in rows), rows
 
 
-def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None):
-    ok, rows = audit(fig, scale, placed_frac, context_axes)
+def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
+           venue=None):
+    ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False
     for label, status, detail in rows:
@@ -1034,12 +1665,23 @@ def main():
         import matplotlib
     except ImportError:
         raise SystemExit(
-            "check_figure.py needs matplotlib (numpy comes with it):\n"
+            "check_figure.py needs matplotlib (numpy comes with it; scipy is "
+            "optional and only a speed-up):\n"
             "    pip install matplotlib\n\n"
             "The composition RULES are library-agnostic and written up in the "
             "style guide; only this automated check is matplotlib-specific. On "
             "another plotting stack, apply the rules by hand or port the "
             "checks - each one reads geometry any library can report.")
+    import sys
+    if "--venues" in sys.argv:
+        print("\nContent widths, in points. Pass one as venue= to audit().")
+        print("Verify against `\\the\\textwidth` in your own document before "
+              "trusting one for anything that matters.\n")
+        for name, pt in sorted(VENUE_WIDTH_PT.items()):
+            print(f"  {name:<16} {pt:>7.2f} pt   ({pt / 72:.2f} in)")
+        print()
+        return
+
     matplotlib.use("agg")
     composed = report(self_test_figure(), "self-test (expected: FAIL)")
     if composed:

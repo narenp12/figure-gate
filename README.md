@@ -16,7 +16,11 @@ python check_figure.py              # self-test on a deliberately broken figure
 
 ![Example figure](examples/demo.png)
 
-*(`python examples/demo.py` — the whole method in 40 lines.)*
+*(`python examples/demo.py` — the whole method in 40 lines. `python
+examples/gallery.py` is the harder half: a shared-axis grid, a filled field
+with a colorbar, an axis-free schematic, three statistical forms, a log-log
+convergence plot with a slope triangle, and a dense attractor. Writing those
+found five defects in the checks themselves.)*
 
 ## What it catches
 
@@ -38,10 +42,12 @@ from any language or toolchain.
 |---|---|
 | Clipping | text runs past the canvas |
 | Text collision | two labels overlap |
+| Text readability | data ink crosses a label's glyphs, or text misses WCAG on the backdrop it actually got |
 | Contrast stack | nothing is opaque, or transparency has too many levels |
 | Mark ratio | one mark is so large it reads as ornament |
 | Axis redundancy | panels on a shared scale repeat their axis furniture |
 | Type size | a string lands under 7.5pt *on the printed page* |
+| Line weight | a stroke lands under 1pt on the printed page (SIAM's floor) |
 | Ink coverage | a panel is empty or saturated *(advisory)* |
 | Series color | the hues actually drawn collapse under color blindness |
 | Dual axis | a second y scale carries data of its own |
@@ -49,6 +55,8 @@ from any language or toolchain.
 | Identity channel | series are told apart by hue alone *(advisory)* |
 | Label attribution | a direct label sits nearer some other series than the one it names |
 | Style sheet | `figure.mplstyle` is not the one in effect *(advisory)* |
+| Fonts | PDF/PS export is Type 3, or no named typeface is installed *(advisory)* |
+| Alt text | the figure carries no description for a reader who cannot see it *(advisory)* |
 
 **Series color is the one that ties the two scripts together.** They used to be
 unable to speak: `check_palette.py` judged a list of hex strings someone
@@ -68,11 +76,30 @@ The check derives the scale per figure and measures what actually renders, so
 sizes set through rcParams or by a helper are caught too. Placing at a fraction
 of the content width? Say so — `audit(fig, placed_frac=0.48)` mirrors
 `\includegraphics[width=0.48\textwidth]`, and without it a half-width figure is
-certified at twice the type size it ships at.
+certified at twice the type size it ships at. If your document is a venue the
+table knows, skip the measuring: `audit(fig, venue="neurips")`, and
+`python check_figure.py --venues` lists them.
+
+## Where this sits
+
+Prescriptive style sheets already exist and are good:
+[SciencePlots](https://github.com/garrettj403/SciencePlots) and LovelyPlots for
+journal looks, [tueplots](https://github.com/pnkraemer/tueplots) and mpl_sizes
+for exact conference sizing. Accessibility tooling exists too:
+[matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text,
+Chart4Blind converts a chart image into an accessible one, contrast reporters
+check colors in isolation.
+
+None of them verifies a built figure. That is the gap this fills — a style
+sheet says what to do, and this says whether it happened, in a test, on the
+figure's own artists. The two are complementary: use a style sheet, then gate
+it.
 
 ## Install
 
-Nothing to install. Copy three files into your project:
+Copy three files into your project. `check_palette.py` is standard library
+only; `check_figure.py` needs matplotlib. scipy is optional and only a
+speed-up.
 
 ```bash
 git clone https://github.com/narenp12/figure-gate
@@ -87,7 +114,8 @@ Then set two things and nothing else:
 2. `CONTENT_WIDTH_PT` at the top of `check_figure.py` → the usable width, in
    points, of the page the figure lands in. Leave it `None` if you author each
    figure at the width it's placed at, which makes the scale 1.0 and the whole
-   calculation disappear.
+   calculation disappear — or skip it entirely and pass `audit(fig,
+   venue="neurips")` for one of the twelve venues the table already knows.
 
 ### As a Claude Code skill
 

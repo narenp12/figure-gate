@@ -220,6 +220,30 @@ tinted page.
 
 4.5:1, or 3:1 at ≥14pt bold. `from check_palette import contrast; contrast("#471365", "#ffffff")`.
 
+`check_text_readability` enforces this against the backdrop each string *actually* got,
+measured off the rendered pixels — which is the only way to know, because the backdrop is
+whatever happened to be drawn under the label and no artist knows that about itself.
+
+### Direct labels: the alignment is the decision
+
+A label is a box, not a point. On a curve with any slope, `ha="center"` is the one
+alignment that puts both ends of the box back down on the line: it clears the curve at
+the anchor and nowhere else, because across the label's own width the curve has moved
+further than the offset holding the text up. This shipped in `examples/demo.py` for
+months. Every check passed; all three labels sat on their own curves and their casing
+punched visible white gaps through the data.
+
+- Align toward the side the curve is **leaving**. Descending curve: above it, clear
+  ground runs right (`ha="left"`); below it, clear ground runs left (`ha="right"`).
+- Anchor on the extreme of the data across the label's own span, not its value at one
+  point. Sampled noise routinely spikes further than any sane offset.
+- Casing (`pe.withStroke`) rescues a 0.7pt gridline behind a label. It does not rescue a
+  1.6pt curve — there it only hides the collision by deleting the data underneath, which
+  is why the gate measures the backdrop rather than the finished render.
+- When a panel has no clear ground anywhere — a filled field crossed by isolines is the
+  usual case — take the labels off the field entirely. `examples/gallery.py` is the one
+  figure in this repo that uses a legend, and that is the reason.
+
 ### Standing rules
 
 - Text wears ink, never the series color.
@@ -241,13 +265,37 @@ figure) puts every label at or below 6pt on the page, regardless of what the scr
 `check_figure.py` warns when `placed_frac < 0.35`, but the right thing is to change the
 placement or the figure, not to shrink the type further.
 
-Set `CONTENT_WIDTH_PT` once in `check_figure.py`. The script derives the scale per figure
-and fails any string under 7.5pt on page. Per-figure is the point: a 14in figure on a
-750pt slide shrinks to 0.74×, a 8.6in one is 1.21×, and the same 10pt label is fine in
-one and illegible in the other.
+Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of the twelve
+the table already knows (`python check_figure.py --venues`). The script derives the scale
+per figure and fails any string under 7.5pt on page. Per-figure is the point: a 14in
+figure on a 750pt slide shrinks to 0.74×, a 8.6in one is 1.21×, and the same 10pt label
+is fine in one and illegible in the other.
+
+**7.5pt is stricter than any journal that publishes a number** — Nature 5pt, Science 5–7pt
+for labels and 6–8pt for axes, PNAS 6–8pt with nothing under 2mm printed. Those are the
+sizes at which a string is still *possible* to read. 7.5 is where it is comfortable, and
+it costs nothing to hold, because the fix is nearly always cutting words.
 
 If text does not fit, cut it: "Acquisition function ranks the candidate molecules" →
 "Rank every candidate."
+
+**Strokes have the same problem and the same arithmetic.** SIAM's instructions for
+authors: lines one point or thicker, because thinner lines break up or disappear in print.
+A 0.8pt stroke in a 9in figure placed at 5.5in prints at 0.49pt, so `check_line_weight`
+measures on the page through the same `page_scale`. Gridlines are held to a lower floor
+than data deliberately — a gridline that drops out costs a reference, a curve that drops
+out costs the finding.
+
+**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress rejects the
+upload; ACM and Elsevier reject the submission. The figure renders identically either way,
+so nothing tells you until the latest and most expensive possible moment.
+`figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
+
+**Describe the figure.** Across 100,000 public notebooks, 99.81% of generated images
+shipped with no alt text, nearly all of them matplotlib. `describe(fig, ...)` then
+`savefig(path, metadata=alt_metadata(fig))`. Say what the reader would have taken from
+looking — the numbers and the direction — not what the figure is made of. "A line chart
+with three lines" describes the file.
 
 ---
 

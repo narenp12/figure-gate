@@ -45,3 +45,18 @@ def test_the_fallback_matches_the_builtin_where_the_builtin_exists():
     end = source.index("]", start) + 1
     literal = eval(source[start + len("OKABE_ITO = "):end])   # noqa: S307
     assert literal == [to_hex(colormaps["okabe_ito"](i)) for i in range(8)]
+
+
+GALLERY = Path(__file__).resolve().parent.parent / "examples" / "gallery.py"
+
+
+def test_the_gallery_runs_and_every_figure_passes():
+    """The harder half of the evidence. `demo.py` is one panel and three
+    curves; a gate that only ever runs on that has not been tried. These six
+    put a shared-axis grid, a filled field with a colorbar, an axis-free
+    schematic, three statistical forms, a log-log convergence plot and a dense
+    attractor through the same audit."""
+    result = subprocess.run([sys.executable, str(GALLERY)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
+    assert result.stdout.count("PASS  gallery-") == 6, result.stdout[-4000:]

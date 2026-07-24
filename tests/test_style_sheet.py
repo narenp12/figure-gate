@@ -179,3 +179,26 @@ def test_type_sizes_clear_the_floor_at_scale_one():
               "ytick.labelsize", "legend.fontsize")}
     small = {k: v for k, v in sizes.items() if float(v) < cf.TYPE_FLOOR_PT}
     assert not small, small
+
+
+def test_the_sheet_embeds_fonts_as_type_42():
+    """Matplotlib defaults to Type 3 and IEEE PDF eXpress rejects the upload.
+    `check_fonts` can only warn about this, because it reads global rcParams
+    rather than anything a figure carries — so the hard gate lives here, on the
+    one artifact this repo actually controls."""
+    p = parsed()
+    assert int(p["pdf.fonttype"]) == 42
+    assert int(p["ps.fonttype"]) == 42
+
+
+def test_tick_labels_clear_the_wcag_text_threshold():
+    """Tick labels are text and take 4.5:1, not the 3:1 a mark gets. The muted
+    ink token shipped here at 3.59:1 until the readability check failed the
+    sheet's own ticks on every figure in the repo."""
+    import check_figure as cf
+    import check_palette as cp
+    p = parsed()
+    surface = mpl.colors.to_hex(p["axes.facecolor"])
+    for key in ("xtick.color", "ytick.color"):
+        ratio = cp.contrast(mpl.colors.to_hex(p[key]), surface)
+        assert ratio >= cf.TEXT_CONTRAST_MIN, (key, round(ratio, 2))

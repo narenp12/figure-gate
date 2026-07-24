@@ -720,3 +720,384 @@ def test_overplotting_clean_on_spread_scatter():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Overplotting"] is True
+
+
+# --- overplotting boundary conditions ---------------------------------------
+
+def test_overplotting_threshold_is_strict_greater_than():
+    """Exactly 50% overlapping points should pass (frac > 0.5, not >=)."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 0, 50, -50], [0, 0.01, 50, -50], s=100)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_overplotting_single_point_is_skipped():
+    """Fewer than 2 offsets: no pairwise distance to compute."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0.5], [0.5], s=200)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_overplotting_all_points_overlap():
+    """Every point on top of every other: fraction should be 1.0."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0.5] * 10, [0.5] * 10, s=100)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_overplotting_two_points_overlap():
+    """2 of 3 overlapping = 0.67 > 0.5, should warn."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 0, 100], [0, 0, 100], s=100)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_overplotting_empty_sizes_is_skipped():
+    """A PathCollection with no sizes should be skipped (len(sizes) == 0)."""
+    from matplotlib.collections import PathCollection
+    from matplotlib.path import Path
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    coll = PathCollection(
+        [Path([(0, 0), (1, 1)])],
+        sizes=np.array([]),
+        offsets=np.column_stack([[1, 2, 3], [1, 2, 3]]),
+        offset_transform=ax.transData)
+    ax.add_collection(coll)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+# --- multi-panel attribution ------------------------------------------------
+
+def test_label_attribution_is_scoped_per_panel():
+    """Labels in one panel must not be judged against curves in another panel.
+    Panel A has two close curves; panel B has a label naming B's own curve
+    that sits nearer A's curve in absolute space. That must not fail."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
+    a.plot([0, 5, 10], [0, 2, 0], color=OKABE[0], label="Alpha")
+    a.plot([0, 5, 10], [0, 3, 0], color=OKABE[1], label="Beta")
+    b.plot([0, 5, 10], [10, 10, 10], color=OKABE[2], label="Gamma")
+    b.annotate("Gamma", (5, 10), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
+def test_label_attribution_in_one_panel_does_not_break_another():
+    """A misattached label in panel A must not stop panel B from being
+    checked. Both panels have two curves; panel A's label is misattached
+    and should fail, panel B's label is correct."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
+    a.plot([0, 5, 10], [0, 2, 0], color=OKABE[0], label="Alpha")
+    a.plot([0, 5, 10], [0, 3, 0], color=OKABE[1], label="Beta")
+    a.annotate("Alpha", (5, 2.8), ha="center", va="center")
+    b.plot([0, 5, 10], [10, 10, 10], color=OKABE[2], label="Gamma")
+    b.plot([0, 5, 10], [8, 8, 8], color=OKABE[3], label="Delta")
+    b.annotate("Gamma", (5, 10), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is False
+
+
+# --- _legend_text_ids -------------------------------------------------------
+
+def test_legend_text_ids_returns_only_legend_texts():
+    """Direct unit test for _legend_text_ids: only legend text IDs, not
+    axis label IDs."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], label="Signal")
+    ax.set_xlabel("Time")
+    ax.legend()
+    ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert isinstance(ids, set)
+    ax_label_ids = {id(t) for t in ax.get_xticklabels() + ax.get_yticklabels()}
+    assert not ids & ax_label_ids, "legend texts should not include tick labels"
+    assert len(ids) >= 1, "should contain at least one legend text"
+
+
+def test_legend_text_ids_handles_figure_level_legend():
+    """fig.legend() creates a figure-level legend; _legend_text_ids must
+    include its texts."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], label="Signal")
+    ax.plot([1, 0], [0, 1], label="Noise")
+    fig.legend()
+    ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert len(ids) >= 2, "figure-level legend should have 2+ entries"
+
+
+def test_legend_text_ids_empty_when_no_legend():
+    """No legends on the figure means an empty set."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], label="Signal")
+    ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert ids == set()
+
+
+# --- text readability -------------------------------------------------------
+
+def test_readability_catches_a_label_printed_on_its_own_curve():
+    """The defect that motivated the check: a direct label sitting on the line
+    it names. Attribution is perfect — it is nearest its own curve by a mile —
+    and the curve runs straight through the letterforms."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    x = np.linspace(0, 10, 400)
+    y = np.exp(-0.2 * x)
+    ax.plot(x, y, color=OKABE[0], lw=1.6)
+    at = 200
+    ax.annotate("Baseline", (x[at], y[at]), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is False
+    assert gates(rows)["Label attribution"] is True
+
+
+def test_casing_does_not_launder_a_label_sitting_on_a_curve():
+    """A white halo makes the finished render look clean by punching a gap
+    through the data. Measuring the backdrop instead of the render is what
+    stops the casing from hiding the collision it caused."""
+    import numpy as np
+    from matplotlib import patheffects as pe
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    x = np.linspace(0, 10, 400)
+    y = np.exp(-0.2 * x)
+    ax.plot(x, y, color=OKABE[0], lw=1.6)
+    ax.annotate("Baseline", (x[200], y[200]), ha="center", va="center",
+                path_effects=[pe.withStroke(linewidth=3.0, foreground="white")])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is False
+
+
+def test_readability_passes_a_label_on_clear_ground():
+    """Same figure, label moved off the line. Gridlines still pass behind it."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    x = np.linspace(0, 10, 400)
+    y = np.exp(-0.2 * x)
+    ax.plot(x, y, color=OKABE[0], lw=1.6)
+    ax.annotate("Baseline", (x[200], y[200] + 0.35), ha="left", va="bottom")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is True
+
+
+def test_readability_does_not_fire_on_a_gridline_behind_a_label():
+    """Casing exists so a gridline can pass behind a label. Furniture is read
+    off the figure's own gridlines, so a project that changed the grid color
+    does not get every label failed."""
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    ax.grid(True, color="#c9c9c9", linewidth=1.2)
+    ax.plot([0, 1], [0, 1], color=OKABE[0])
+    ax.text(0.5, 0.2, "Annotation on the grid", ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is True
+
+
+def test_readability_catches_faint_text_on_the_page():
+    """WCAG's text threshold, not the 3:1 a mark gets: a glyph stem is thinner
+    than a mark, so text that clears the mark gate can still be unreadable."""
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], color=OKABE[0])
+    ax.text(0.5, 0.5, "Barely there", color="#aaaaaa", ha="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is False
+
+
+def test_uniform_fill_under_a_label_is_a_background_not_clutter():
+    """A label on a heatmap cell has the cell as its surface. Only the contrast
+    clause governs there, which is the correct division: a flat fill is a
+    background, a curve is not."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.set_facecolor("#0072b2")
+    ax.plot([0, 1], [0, 1], color="white")
+    ax.text(0.5, 0.2, "On the fill", color="white", ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is True
+
+
+# --- fonts ------------------------------------------------------------------
+
+def test_fonts_warns_on_type_3_and_does_not_gate():
+    """Type 3 is read off global rcParams, not off anything the figure carries,
+    so it cannot tell another project's settings from none — the same reason
+    the style-sheet row is advisory."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    with plt.rc_context({"pdf.fonttype": 3, "ps.fonttype": 3}):
+        ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Fonts"] == "warn"
+    assert ok
+
+
+def test_fonts_passes_on_type_42():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    with plt.rc_context({"pdf.fonttype": 42, "ps.fonttype": 42}):
+        ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Fonts"] is True
+
+
+def test_fonts_warns_when_no_named_face_is_installed():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    with plt.rc_context({"pdf.fonttype": 42, "ps.fonttype": 42,
+                         "font.family": "serif",
+                         "font.serif": ["No Such Face Anywhere"]}):
+        ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Fonts"] == "warn"
+
+
+# --- alt text ---------------------------------------------------------------
+
+def test_alt_text_warns_when_absent(clean):
+    ok, rows = cf.audit(clean)
+    assert gates(rows)["Alt text"] == "warn"
+    assert ok, "a missing description is advisory: the caption may carry it"
+
+
+def test_alt_text_warns_on_a_title_masquerading_as_a_description(clean):
+    cf.describe(clean, "Validation loss")
+    ok, rows = cf.audit(clean)
+    assert gates(rows)["Alt text"] == "warn"
+
+
+def test_alt_text_passes_on_a_real_description(clean):
+    cf.describe(clean, "Validation loss against training epoch for three "
+                       "optimisers. All three fall; the Bayesian run reaches "
+                       "0.05 by epoch 6 while the baseline is still at 0.25.")
+    ok, rows = cf.audit(clean)
+    assert gates(rows)["Alt text"] is True
+
+
+def test_alt_metadata_is_what_savefig_wants(clean):
+    assert cf.alt_metadata(clean) == {}
+    cf.describe(clean, "x" * 80)
+    assert cf.alt_metadata(clean) == {"Description": "x" * 80}
+
+
+# --- venue widths -----------------------------------------------------------
+
+def test_venue_overrides_the_module_level_width():
+    """A 7in figure on NeurIPS' 397.48pt textwidth shrinks to 0.79x, and the
+    type floor moves with it."""
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    scale = cf.page_scale(fig, venue="neurips")
+    plt.close(fig)
+    assert scale == pytest.approx(397.48 / (7 * 72), rel=1e-6)
+
+
+def test_unknown_venue_names_the_ones_it_knows():
+    with pytest.raises(KeyError) as exc:
+        cf.content_width_pt("nurips")
+    assert "neurips" in str(exc.value)
+
+
+def test_venue_and_placed_frac_compose():
+    fig, ax = plt.subplots(figsize=(3.2, 2.4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    scale = cf.page_scale(fig, placed_frac=0.48, venue="acl")
+    plt.close(fig)
+    assert scale == pytest.approx(455.24 * 0.48 / (3.2 * 72), rel=1e-6)
+
+
+def test_placed_frac_without_any_width_still_refuses():
+    """The guard that predates the venue table has to keep holding: a
+    fractional placement with no width to measure against is a contradiction,
+    not a default."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    with pytest.raises(ValueError, match="placed_frac"):
+        cf.page_scale(fig, placed_frac=0.5)
+    plt.close(fig)
+
+
+# --- label attribution: the case a KD-tree silently passed -------------------
+
+def test_label_attribution_catches_a_label_in_the_corridor():
+    """The regression that motivated dropping the KD-tree. A label in the
+    corridor between two curves, nearer its own but inside LABEL_MARGIN.
+
+    Querying the k nearest *points* passes this: every near point belongs to
+    the label's own curve, so no other curve is ever reached and the comparison
+    distance stays infinite. Which is to say the gate passed every label whose
+    own curve was nearest — which is nearly all of them, and exactly the
+    population it was written to judge."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    x = np.linspace(0, 10, 600)
+    ax.plot(x, np.zeros_like(x), color=OKABE[0], label="Alpha")
+    ax.plot(x, np.ones_like(x), color=OKABE[1], label="Beta")
+    # Nearer Alpha, but not by the factor of two the gate asks for: 0.4 to its
+    # own curve against 0.6 to Beta. Alpha is dense, so every one of the k
+    # nearest POINTS to the label belongs to it and a point-wise query never
+    # reaches Beta at all.
+    ax.annotate("Alpha", (5, 0.4), ha="center", va="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is False
+
+
+def test_label_attribution_still_passes_a_well_separated_label():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    x = np.linspace(0, 10, 600)
+    ax.plot(x, np.full_like(x, 1.0), color=OKABE[0], label="Alpha")
+    ax.plot(x, np.full_like(x, 5.0), color=OKABE[1], label="Beta")
+    ax.annotate("Alpha", (5, 1.0), textcoords="offset points",
+                xytext=(0, -8), ha="center", va="top")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+
+# --- no hard scipy dependency -----------------------------------------------
+
+def test_the_checker_runs_with_scipy_unimportable(monkeypatch, clean):
+    """The README promises three files and no install. A hard scipy import
+    quietly broke that, so the one place it is still used has a numpy path."""
+    import builtins
+    real_import = builtins.__import__
+
+    def no_scipy(name, *args, **kwargs):
+        if name.split(".")[0] == "scipy":
+            raise ImportError("scipy is not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_scipy)
+    ok, rows = cf.audit(clean)
+    assert ok, [r for r in rows if r[1] is not True]
+
+
+def test_box_blur_matches_scipy_uniform_filter():
+    """The numpy replacement has to be the same filter, not a similar one."""
+    ndimage = pytest.importorskip("scipy.ndimage")
+    import numpy as np
+    rng = np.random.default_rng(3)
+    field = rng.uniform(0, 255, (23, 31, 3))
+    mine = cf._box_blur(field, 9)
+    theirs = np.dstack([ndimage.uniform_filter(field[:, :, c], size=9,
+                                               mode="nearest")
+                        for c in range(3)])
+    assert np.allclose(mine, theirs, atol=1e-9)

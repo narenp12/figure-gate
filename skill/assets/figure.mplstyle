@@ -72,8 +72,14 @@ axes.facecolor:     white
 text.color:         000000
 axes.labelcolor:    52514e
 axes.edgecolor:     c3c2b7
-xtick.color:        898781
-ytick.color:        898781
+# Tick labels are text and take the WCAG *text* threshold, 4.5:1, not the 3:1
+# a mark gets - a glyph stem is thinner than a mark. The muted ink token
+# 898781 measures 3.59:1 on white and shipped here until the readability check
+# was written and failed the sheet's own ticks on every figure in the repo.
+# 777570 is 4.6:1 and still sits below the 7.94:1 axis label, so the hierarchy
+# axis label > tick label > grid survives the correction.
+xtick.color:        777570
+ytick.color:        777570
 
 # --- structure: journal figure, not dashboard -------------------------------
 axes.spines.top:    False
@@ -97,6 +103,16 @@ axes.linewidth:         0.8
 patch.linewidth:        0.7
 legend.handlelength:    1.6
 errorbar.capsize:       2.5
+
+# --- font embedding ---------------------------------------------------------
+# Matplotlib's default is Type 3, and IEEE, ACM and Elsevier all reject a
+# submission whose PDF carries Type 3 fonts - IEEE PDF eXpress fails the upload
+# outright. Type 42 (TrueType) embeds the outlines instead. It is two lines, it
+# costs nothing, and nothing in matplotlib warns you: the figure looks identical
+# on your screen and the paper bounces at submission, which is the latest and
+# most expensive moment for a defect this cheap to find.
+pdf.fonttype:       42
+ps.fonttype:        42
 
 # --- output -----------------------------------------------------------------
 # The method says render a PNG and look at it. At matplotlib's default 100 dpi

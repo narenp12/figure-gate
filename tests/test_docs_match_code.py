@@ -60,8 +60,10 @@ def test_the_dagger_matches_the_number(hex_color, quoted):
     marked ‡ alone even though it is also under 3:1. Yellow is the only slot
     where the two overlap.
     """
-    line = next(l for l in GUIDE.read_text().splitlines()
-                if f"`{hex_color}`" in l and l.startswith("|"))
+    line = next((l for l in GUIDE.read_text().splitlines()
+                 if f"`{hex_color}`" in l and l.startswith("|")), None)
+    if line is None:
+        pytest.fail(f"`{hex_color}` not found in guide table")
     if "‡" in line:
         pytest.skip("held out of line use entirely; ‡ supersedes †")
     marked = "†" in line

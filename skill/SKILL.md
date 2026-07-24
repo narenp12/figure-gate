@@ -147,6 +147,25 @@ the composition rules no script can infer for you:
 - Ordinal emphasis is a lightness ramp, not a transparency stack — a ramp keeps
   every mark opaque; ten alpha steps produce ten kinds of haze.
 
+**A direct label is a box, not a point, and the alignment is the whole
+decision.** On a curve with any slope, `ha="center"` is the one alignment that
+puts both ends of the label back down on the line: it clears the curve at the
+anchor and nowhere else, because across the label's own width the curve has
+moved further than the offset holding the text up. Pick the side the curve is
+leaving:
+
+```python
+# descending curve: clear ground above it runs RIGHT, below it runs LEFT
+ha = "left" if above else "right"
+```
+
+Anchor on the extreme of the data across the label's span, not on its value at
+one point — sampled noise routinely spikes further than any sane offset. And
+casing (`path_effects=[pe.withStroke(...)]`) rescues a 0.7pt gridline behind a
+label; it does not rescue a 1.6pt curve, where it only hides the collision by
+erasing the data. `check_text_readability` measures the backdrop rather than the
+finished render for exactly that reason.
+
 **6. Run both validators.** They answer different questions, and passing one
 says nothing about the other.
 
@@ -158,16 +177,31 @@ python check_palette.py "#471365,#2c718e,#44bf70" --ordinal     # ordered ramp
 ```
 
 ```python
-from check_figure import report, audit
-report(fig, "my-figure")     # PASS/WARN/FAIL per check
-ok, rows = audit(fig)        # same, programmatically
+from check_figure import report, audit, describe, alt_metadata
+report(fig, "my-figure")             # PASS/WARN/FAIL per check
+ok, rows = audit(fig)                # same, programmatically
+ok, rows = audit(fig, venue="neurips")   # measure type against \textwidth
 ```
 
-`check_figure.py` gates clipping, text collision, alpha stacking, mark ratio,
-axis redundancy, type size, ink coverage, series color, dual axes, form, the
-identity channel, and whether the style sheet is the one actually in effect.
-`check_palette.py` gates lightness band, chroma floor, colorblind separation,
-normal-vision separation, and contrast against the surface.
+**Describe the figure for a reader who cannot see it.** Across 100,000 public
+notebooks, 99.81% of generated images shipped with no alt text, nearly all of
+them matplotlib. Say what the reader would have taken from looking — the
+numbers and the direction — not what the figure is made of:
+
+```python
+describe(fig, "Validation loss against epoch for three optimisers. All three "
+              "fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is "
+              "still at 0.25 at 12.")
+fig.savefig(path, metadata=alt_metadata(fig))
+```
+
+`check_figure.py` gates clipping, text collision, text readability, alpha
+stacking, mark ratio, overplotting, axis redundancy, type size, line weight, ink
+coverage, series color, dual axes, form, the identity channel, label
+attribution, font embedding, alt text, and whether the style sheet is the one
+actually in effect. `check_palette.py` gates lightness band, chroma floor,
+colorblind separation, normal-vision separation, and contrast against the
+surface.
 
 The two used to be unable to speak: `check_palette.py` judged a list of hexes
 someone remembered to paste into a terminal, and `check_figure.py` never looked
@@ -284,6 +318,31 @@ audit(fig, placed_frac=0.48)     # \includegraphics[width=0.48\textwidth]
 
 The kwarg mirrors the call site on purpose — you never know your scale, but you
 always know what you wrote in the document.
+
+**Skip the measuring when the venue is a known one.** `audit(fig,
+venue="neurips")` measures against that class file's `\textwidth`;
+`python check_figure.py --venues` lists what it knows. Verify against
+`\the\textwidth` in your own document before trusting one for anything that
+matters — a `geometry` call in the preamble silently overrides all of it.
+
+7.5pt is stricter than every journal that publishes a number (Nature 5pt,
+Science 5–7pt for labels, PNAS 6–8pt with nothing under 2mm printed). Those are
+the sizes at which a string is still *possible* to read; 7.5 is where it is
+comfortable, and it is cheap to hold because the fix is nearly always cutting
+words.
+
+**Strokes have a floor too, and it is 1pt on the page.** SIAM states it in its
+instructions for authors: lines thinner than one point break up or disappear in
+print. Same arithmetic as the type floor — a 0.8pt stroke in a 9-inch figure
+placed at 5.5 inches prints at 0.49pt — so `check_line_weight` runs it through
+the same `page_scale`. Gridlines are held to a lower floor than data: a
+gridline that drops out costs the reader a reference, a curve that drops out
+costs them the finding.
+
+**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3, and IEEE
+PDF eXpress rejects the upload while ACM and Elsevier reject the submission.
+`figure.mplstyle` sets it; nothing else warns you, because the figure renders
+identically and the paper bounces at the latest possible moment.
 
 **If text does not fit, cut the text.** "Acquisition function ranks the candidate
 molecules" becomes "Rank every candidate." The caption carries the rest.

@@ -2,6 +2,122 @@
 
 ## Unreleased
 
+### Text readability — the gate the demo needed
+
+- **`check_text_readability` measures whether each string can be read where it
+  sits.** Two clauses, both off rendered pixels. *Clutter*: the figure is drawn
+  a second time with every string hidden, and that render is the backdrop each
+  label was placed onto; pixels inside a label's box that no blend of {its
+  surface, the grid, the axis rule} explains are data ink passing through the
+  text. *Contrast*: the text against the backdrop it actually got, at the WCAG
+  **text** threshold (4.5:1, or 3:1 large) rather than the 3:1 a mark gets,
+  because a glyph stem is thinner than a mark.
+- **Measuring the backdrop rather than the finished render is the point.**
+  Casing hides the evidence: a white halo over an orange curve renders as clean
+  white while punching a visible gap through the data. Both halves of that are
+  defects and this reads them as one number.
+- **Clutter is an *edge*, not a deviation from the dominant color.** The first
+  version tested each pixel against the box's modal color and failed every
+  annotation ever placed on a heatmap, because a smooth ramp differs from its
+  own mode everywhere while being, to a reader, one surface. Now each pixel is
+  tested against a local average of its neighbours, so a viridis field is
+  ground and a hairline is a mark.
+- **It found the sheet's own ticks.** `xtick.color`/`ytick.color` shipped at
+  `898781`, which is 3.59:1 on white — under the text threshold on every figure
+  in the repo. Now `777570` at 4.6:1, still below the 7.94:1 axis label, so the
+  hierarchy axis label > tick label > grid survives.
+- **`examples/demo.py` was the first thing it failed.** All three direct labels
+  sat *on* their own curves — `'Baseline'` on data ink over 17% of its box —
+  while `check_label_attribution` passed them, correctly, because a label
+  printed on its own line is attributed perfectly. The cause was alignment:
+  `ha="center"` clears a sloped curve at the anchor and puts both ends of the
+  box back down on the line. Fixed by aligning toward the side the curve is
+  leaving, and by anchoring on the extreme of the noise across the label's own
+  span rather than on one point.
+
+### Research-standard gates
+
+- **`check_line_weight`: 1pt on the page, per SIAM's instructions for authors**
+  ("lines one point or thicker; thinner lines may break up or disappear").
+  Measured through `page_scale` like the type floor, since it is the same
+  failure. Gridlines are held to a lower floor than data on purpose.
+- **`check_fonts`: Type 42 embedding, and the face you named.** matplotlib
+  defaults `pdf.fonttype`/`ps.fonttype` to 3; IEEE PDF eXpress rejects the
+  upload and ACM/Elsevier reject the submission, with nothing warning you
+  because the figure renders identically. Also warns when none of the faces in
+  `font.<family>` is installed and matplotlib has silently substituted its own.
+  Advisory, because it reads global rcParams rather than anything the figure
+  carries — the hard gate is on the shipped sheet, in the test suite.
+- **`figure.mplstyle` now sets `pdf.fonttype: 42` and `ps.fonttype: 42`.**
+
+### Venue content widths
+
+- **`audit(fig, venue="neurips")`** replaces hand-measuring `CONTENT_WIDTH_PT`
+  for twelve known venues (NeurIPS, ICLR, ICML, ACL, IEEE, Nature, LaTeX
+  `article`, and the column widths of the two-column ones). `python
+  check_figure.py --venues` lists them. `CONTENT_WIDTH_PT` still works and still
+  wins for anything not in the table.
+
+### Alt text
+
+- **`describe(fig, ...)` / `alt_metadata(fig)` / `check_alt_text`.** Across
+  100,000 public Jupyter notebooks, 99.81% of programmatically generated images
+  shipped with no alt text, nearly all matplotlib. `alt_metadata` produces the
+  `metadata=` dict for `savefig`, so the description survives into the PNG, PDF
+  or SVG. Advisory: on a paper the description frequently *is* the caption, and
+  the caption lives where this cannot see it.
+
+### `check_label_attribution` was passing nearly everything
+
+- **Fixed a regression that had disabled the gate in its common case.** The
+  comparison distance had been changed from "the minimum over every other curve"
+  to a KD-tree query for the *k* nearest pooled points. For a label sitting near
+  its own dense curve, every one of those points belongs to that curve, no other
+  curve is ever reached, and `d_other` stays infinite — so the gate passed every
+  label whose own curve was nearest, which is nearly all of them. Back to the
+  explicit minimum, with a regression test for a label in the corridor between
+  two curves.
+- **It found a real defect the moment it worked.** `gallery-convergence.png` had
+  its direct labels past the right-hand end of each curve, 29px from their own
+  and 35px from a neighbour's: a label outside the data is not resolved by
+  proximity to anything. Moved to the left of the panel where the log-log fan is
+  three decades wide.
+
+### No hard scipy dependency
+
+- The README promises three files and no install, and a hard `scipy` import had
+  quietly broken it. `scipy.ndimage.uniform_filter` is replaced by a separable
+  cumulative-sum box blur in numpy; `scipy.spatial.KDTree` is gone from label
+  attribution entirely; `check_overplotting` uses `cKDTree` when it is
+  importable and an O(n²) numpy path when it is not. scipy is now an optional
+  `fast` extra. Tested with the import forced to fail.
+
+### `examples/gallery.py` — six harder figures
+
+- Small multiples on shared scales; a filled field with isolines and a colorbar;
+  an axis-free schematic; the three forms `choosing-a-form.md` argues for; a
+  log-log convergence plot with a slope triangle; a dense orbit diagram. Each is
+  audited, and CI fails if any figure fails.
+- **Writing them found six defects in the checks themselves**, which is what
+  they are for:
+  - the readability gate reported a schematic's tick labels, which
+    `ax.axis("off")` means never reach the page — it now skips `_ghost_ticks`
+    the way `check_clipping` already did;
+  - `check_ink` measured colorbar axes, which are a solid ramp by construction,
+    so every figure with a colorbar stood at WARN for the one axes in it whose
+    density nobody chose;
+  - `check_line_weight` measured a colorbar's own 0.4pt dividers;
+  - `_artist_kind` called `plot(..., linestyle="none", marker="o")` a line, so a
+    path and its own start marker in one hue read as a wrapped color cycle;
+  - the clutter metric failed every heatmap annotation, as above;
+  - `check_label_attribution` was passing nearly everything, as above.
+- **And two defects in the figures that no gate caught**, which is what step 7
+  of the procedure is for: the schematic's feedback loop ran off the bottom of
+  the canvas (`connectionstyle="bar"` drops by a *fraction* of the span, so a
+  wide loop went fifteen units below an axes that stops at zero), and the
+  convergence plot's slope triangle sat in the only corner its direct labels
+  could use. Both were obvious in the PNG and invisible to every check.
+
 ### Overplotting / mark-density WARN
 
 - **`check_overplotting` detects scatter marks that merge into a blob.** For

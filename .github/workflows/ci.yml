@@ -41,8 +41,6 @@ jobs:
         python: ["3.9", "3.11", "3.13"]
         matplotlib: ["latest"]
         include:
-          # The declared floor. If this breaks, the README is wrong and should
-          # be corrected rather than the pin quietly raised.
           - python: "3.9"
             matplotlib: "3.8.4"
     steps:
@@ -50,21 +48,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Install
         run: |
-          python -m pip install --upgrade pip
+          uv pip install --system pytest pytest-xdist
           if [ "${{ matrix.matplotlib }}" = "latest" ]; then
-            pip install matplotlib pytest
+            uv pip install --system matplotlib
           else
-            pip install "matplotlib==${{ matrix.matplotlib }}" pytest
+            uv pip install --system "matplotlib==${{ matrix.matplotlib }}"
           fi
-      - run: pytest -q
+      - run: pytest -n auto -q
 
-      # Every check in this repo insists that a gate nobody has watched fail is
-      # decoration. Applying that to the repo itself: the self-test must reject
-      # its own deliberately broken figure.
       - name: The checker rejects a deliberately bad figure
         run: python skill/scripts/check_figure.py
+
+      - name: Every gallery figure passes its own audit
+        run: python examples/gallery.py
 
       - name: The example builds and passes its own gates
         run: python examples/demo.py
@@ -93,10 +95,6 @@ jobs:
               sys.exit(f"unexpected skill name: {meta['name']!r}")
           print(f"ok: {meta['name']} ({len(meta['description'])} char description)")
           PY
-      # A reference SKILL.md points at and the repository does not carry is a
-      # dead end for whoever follows it, and nothing else notices: the skill
-      # still loads, the suite still passes. Every path named in the procedure
-      # belongs on this list.
       - name: Files the skill references actually exist
         run: |
           test -f skill/assets/figure.mplstyle
@@ -104,10 +102,6 @@ jobs:
           test -f skill/scripts/check_figure.py
           test -f skill/references/style-guide.md
           test -f skill/references/choosing-a-form.md
-
-      # The list above is only as good as its maintenance, and it was already
-      # stale once. Read the paths out of SKILL.md instead of trusting anyone to
-      # remember, so adding a reference without shipping it fails here.
       - name: Every path SKILL.md names resolves
         run: |
           python - <<'PY'
