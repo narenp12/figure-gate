@@ -643,6 +643,38 @@ def test_style_sheet_row_passes_when_the_sheet_is_the_one_in_effect():
     assert gates(rows)["Style sheet"] is True
 
 
+# --- contour dash ---------------------------------------------------------
+
+
+def test_contour_dash_warns_on_negative_levels():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    X, Y = np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
+    Z = -(X**2 + Y**2)
+    ax.contour(X, Y, Z, colors="black")     # monochrome: negative levels auto-dash
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] == "warn"
+    assert ok
+
+
+def test_contour_dash_passes_with_explicit_solid_linestyle():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    X, Y = np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
+    Z = -(X**2 + Y**2)
+    ax.contour(X, Y, Z, linestyles="solid")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] is True
+
+
+def test_contour_dash_does_not_fire_on_clean_figure(clean):
+    ok, rows = cf.audit(clean)
+    plt.close(clean)
+    assert gates(rows).get("Contour dash", True) is True
+
+
 def test_ink_coverage_warns_and_does_not_gate():
     """A heatmap legitimately measures near 1.0. Failing on that would train
     everyone to ignore the row, which is worse than not having it."""
