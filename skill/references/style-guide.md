@@ -29,6 +29,9 @@ palette, whether the figure is composed, and whether the type clears the page.
 
 Every rule here was earned by a specific failure. Nothing is taste-by-assertion.
 
+**Contour:** pass `linestyles="solid"` to `contour` on signed data — negative levels auto-dash via matplotlib default, and dashing means projected/unobserved here.
+
+---
 ---
 
 ## Fast path

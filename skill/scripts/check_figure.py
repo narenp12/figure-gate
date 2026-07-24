@@ -777,6 +777,63 @@ def _style_sheet():
     return None
 
 
+def _is_dashed_linestyle(ls):
+    """True if a linestyle value is not solid.
+
+    Accepts strings ('dashed', '--', '-.', ':') and (offset, dashes) tuples.
+    """
+    if isinstance(ls, str):
+        return ls.lower() not in ("solid", "-", "", "none")
+    if isinstance(ls, (tuple, list)):
+        if len(ls) < 2:
+            return False
+        dashes = ls[1]
+        return dashes is not None and bool(dashes)
+    return False
+
+
+def check_contour_dash(fig):
+    """Negative-level contours auto-dash via matplotlib default.
+
+    In a monochrome contour, `rcParams["contour.negative_linestyle"]` is
+    "dashed" by default, so negative-Z contours ship dashed isolines nobody
+    chose. The skill's own convention is dashing = unobserved / projected /
+    threshold, making this a silent semantic error every existing gate misses.
+
+    Non-monochrome (colored) contours are always solid and unaffected.
+    """
+    from matplotlib.contour import ContourSet
+
+    warned = []
+    for i, ax in enumerate(fig.axes):
+        for c in ax.collections:
+            if not isinstance(c, ContourSet):
+                continue
+            levels = getattr(c, "levels", None)
+            if levels is None or len(levels) == 0:
+                continue
+            if not all(l <= 0 for l in levels):
+                continue
+            if not getattr(c, "monochrome", False):
+                continue
+            nl = getattr(c, "negative_linestyles", None)
+            if nl is None:
+                continue
+            # negative_linestyles may be a scalar (string or tuple) or a list;
+            # handle both. If it's a list, any non-solid entry triggers.
+            styles = nl if isinstance(nl, (tuple, list)) else [nl]
+            if any(_is_dashed_linestyle(s) for s in styles):
+                warned.append(
+                    f"ax{i}: negative-level contours auto-dashed — dashing "
+                    "reads as projected/unobserved here; pass "
+                    'linestyles="solid" to contour on signed data')
+                break
+
+    if not warned:
+        return True, "no auto-dashed negative contours"
+    return "warn", "; ".join(warned)
+
+
 def check_style_sheet(fig):
     """Every key in the sheet against the rcParams that are actually in effect.
 
@@ -831,6 +888,7 @@ def audit(fig, scale=None, placed_frac=1.0):
         ("Identity channel", *check_identity_channel(fig)),
         ("Label attribution", *check_label_attribution(fig, r)),
         ("Style sheet", *check_style_sheet(fig)),
+        ("Contour dash", *check_contour_dash(fig)),
     ]
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.

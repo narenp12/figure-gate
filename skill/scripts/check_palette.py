@@ -8,10 +8,16 @@ and contrast against the surface.
     python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
     python check_palette.py "#471365,#2c718e,#44bf70" --ordinal
     python check_palette.py "#E69F00,#56B4E9" --surface "#f4f1ea"
+    python check_palette.py "#0072B2,#52514e" --ink "#52514e"
 
 Separations are OKLab dE x100. Adjacent mode checks consecutive pairs only,
 which is what lines, bars and stacked marks need. `--pairs all` checks every
 pair, which is what scatter, bubble and small multiples need.
+
+Ink/neutral hexes passed with `--ink` are exempt from the lightness-band and
+chroma-floor checks (an ink token is not a series hue, so the chroma rule should
+not apply). They are still counted for CVD/normal separation and contrast against
+the surface, mirroring `check_figure`'s own `INK_TOKENS` intent.
 """
 
 import argparse
@@ -90,7 +96,7 @@ NORMAL_FLOOR = 15.0       # hard floor; no secondary encoding excuses this
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 
-def check(colors, surface="#ffffff", all_pairs=False, ordinal=False):
+def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozenset()):
     lin = [hex_to_linear(c) for c in colors]
     lab = [linear_to_oklab(v) for v in lin]
     rows, ok = [], True
@@ -119,13 +125,24 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False):
                      f"largest/smallest dL {ratio:.2f}" if gaps else "single step"))
         return rows, all(r[1] for r in rows)
 
-    band = [c for c, v in zip(colors, lab) if not (L_MIN <= v[0] <= L_MAX)]
+    ink_set = set(ink) if isinstance(ink, frozenset) else set(ink)
+    band = [c for c, v in zip(colors, lab)
+            if c not in ink_set and not (L_MIN <= v[0] <= L_MAX)]
+    n_exempt_band = sum(1 for c in colors if c in ink_set and
+                        not (L_MIN <= linear_to_oklab(hex_to_linear(c))[0] <= L_MAX))
     rows.append(("Lightness band", not band,
-                 f"all {len(colors)} inside L {L_MIN}-{L_MAX}" if not band else f"outside: {band}"))
+                 f"all {len(colors)} inside L {L_MIN}-{L_MAX}" if not band
+                 else f"outside: {band}"
+                 + (f" ({n_exempt_band} ink tokens exempted)" if n_exempt_band else "")))
 
-    chroma = [c for c, v in zip(colors, lab) if math.hypot(v[1], v[2]) < CHROMA_MIN]
+    chroma = [c for c, v in zip(colors, lab)
+              if c not in ink_set and math.hypot(v[1], v[2]) < CHROMA_MIN]
+    n_exempt_chroma = sum(1 for c in colors if c in ink_set and
+                          math.hypot(*linear_to_oklab(hex_to_linear(c))[1:]) < CHROMA_MIN)
     rows.append(("Chroma floor", not chroma,
-                 f"all {len(colors)} >= {CHROMA_MIN}" if not chroma else f"too gray: {chroma}"))
+                 f"all {len(colors)} >= {CHROMA_MIN}" if not chroma
+                 else f"too gray: {chroma}"
+                 + (f" ({n_exempt_chroma} ink tokens exempted)" if n_exempt_chroma else "")))
 
     pairs = (list(itertools.combinations(range(len(colors)), 2)) if all_pairs
              else [(i, i + 1) for i in range(len(colors) - 1)])
@@ -185,10 +202,14 @@ def main():
     ap.add_argument("--surface", default="#ffffff", help="background the marks sit on")
     ap.add_argument("--pairs", choices=["adjacent", "all"], default="adjacent")
     ap.add_argument("--ordinal", action="store_true", help="ordered one-hue ramp")
+    ap.add_argument(
+        "--ink", default="",
+        help="comma-separated ink/neutral hexes (exempt from chroma and lightness rules)")
     a = ap.parse_args()
 
     colors = [c.strip() for c in a.colors.split(",") if c.strip()]
-    rows, ok = check(colors, a.surface, a.pairs == "all", a.ordinal)
+    ink_set = frozenset(c.strip() for c in a.ink.split(",") if c.strip())
+    rows, ok = check(colors, a.surface, a.pairs == "all", a.ordinal, ink_set)
 
     kind = "ordinal ramp" if a.ordinal else "categorical"
     print(f"\nPalette ({kind}, surface {a.surface}): {len(colors)} slots")

@@ -162,6 +162,33 @@ def test_uneven_steps_fail_even_when_monotone():
     assert gates(rows)["Step uniformity"] is False
 
 
+# --- ink flag ---------------------------------------------------------------
+
+
+def test_palette_ink_exempts_from_chroma_floor():
+    rows, ok = cp.check(["#0072B2", "#52514e"], ink={"#52514e"})
+    assert gates(rows)["Chroma floor"] is True
+
+
+def test_palette_ink_exempts_from_lightness_band():
+    rows, ok = cp.check(["#0072B2", "#ffffff"], ink={"#ffffff"})
+    assert gates(rows)["Lightness band"] is True
+
+
+def test_palette_without_ink_still_fails_chroma_floor():
+    rows, ok = cp.check(["#0072B2", "#52514e"])
+    assert gates(rows)["Chroma floor"] is False
+
+
+def test_palette_separation_rows_unchanged_by_ink_flag():
+    rows_with, ok_with = cp.check(["#0072B2", "#52514e", "#009E73"],
+                                   ink={"#52514e"})
+    rows_without, ok_without = cp.check(["#0072B2", "#52514e", "#009E73"])
+    for name in ("CVD separation (adjacent)", "Normal-vision floor (adjacent)",
+                 "Contrast vs surface"):
+        assert gates(rows_with)[name] == gates(rows_without)[name], name
+
+
 # --- CLI --------------------------------------------------------------------
 
 def test_cli_exit_codes(tmp_path):

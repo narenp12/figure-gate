@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Two false-signal fixes, no new gates
+
+- **Contour dash warns on auto-dashed negative levels.** A monochrome contour
+  with all-negative Z ships dashed isolines via matplotlib default
+  (`contour.negative_linestyle`). The skill's own convention is dashing =
+  unobserved / projected / threshold, so this is a silent semantic error no
+  existing gate saw. New `check_contour_dash` warns; pass `linestyles="solid"`
+  on signed data. Style guide note added.
+- **`check_palette.py` learns `--ink`.** Ink/neutral hexes were flagged by the
+  chroma-floor and lightness-band rows, but an ink token is not a series hue.
+  New `--ink "#52514e,#898781"` flag exempts listed hexes from those checks
+  while keeping them in CVD/normal separation and contrast-vs-surface coverage.
+  Mirrors `check_figure`'s `INK_TOKENS`.
+
 ### The series-color and label gates learn the figure's structure
 
 The new gates above read a flat bag of hues and text, and a bag throws away the
