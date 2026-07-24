@@ -10,6 +10,7 @@ a test rather than in a design review.
 
     from check_figure import audit
     ok, rows = audit(fig)
+    ok, rows = audit(fig, context_axes=[ax])   # contourf background is not ink
 
     python check_figure.py            # self-test on a deliberately bad figure
 
@@ -314,7 +315,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0):
                    "  <- cut words, do not shrink type")
 
 
-def check_ink(fig):
+def check_ink(fig, context_axes=None):
     """Ink as a fraction of each plotting area, measured off the rendered
     pixels rather than estimated from artist properties.
 
@@ -322,6 +323,13 @@ def check_ink(fig):
     panel with no ground left in it. Reported per-axes, and advisory only: the
     right density genuinely depends on the form, so this flags panels worth a
     second look rather than declaring them wrong.
+
+    Pass `context_axes` — a list of Axes whose fill is a context surface (e.g. a
+    contourf landscape) rather than data-ink. For those axes, the ink fraction
+    measures only marks ON TOP of the surface by separating the pixel values
+    into two clusters (k-means with k=2) and removing the larger cluster (the
+    surface). A figure with a filled terrain plus a few sparse marks will PASS
+    rather than WARN.
     """
     import numpy as np
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -334,6 +342,10 @@ def check_ink(fig):
     # anything more than a few levels off the page color counts as ink
     ink_mask = (np.abs(buf - bg).sum(axis=2) > 24)
 
+    if context_axes is None:
+        context_axes = []
+    context_ids = frozenset(id(ax) for ax in context_axes)
+
     rows = []
     for i, ax in enumerate(fig.axes):
         bb = ax.get_window_extent(renderer=canvas.get_renderer())
@@ -343,7 +355,33 @@ def check_ink(fig):
         sub = ink_mask[h - y1:h - y0, x0:x1]
         if sub.size == 0:
             continue
-        frac = float(sub.mean())
+
+        if id(ax) in context_ids:
+            # Separate surface pixels from mark pixels via 2-means on color.
+            sub_buf = buf[h - y1:h - y0, x0:x1].astype(float)
+            flat = sub_buf.reshape(-1, 3)
+            m1 = flat.mean(axis=0)
+            # init second centroid offset so they diverge
+            m2 = m1 + 30.0
+            for _ in range(12):
+                d1 = np.abs(flat - m1).sum(axis=1)
+                d2 = np.abs(flat - m2).sum(axis=1)
+                c1 = d1 <= d2
+                c2 = ~c1
+                if c1.sum() == 0 or c2.sum() == 0:
+                    break
+                nm1 = flat[c1].mean(axis=0)
+                nm2 = flat[c2].mean(axis=0)
+                if (np.abs(nm1 - m1).sum() < 0.5
+                        and np.abs(nm2 - m2).sum() < 0.5):
+                    break
+                m1, m2 = nm1, nm2
+            surf = c1 if c1.sum() > c2.sum() else c2
+            surf_mask = surf.reshape(sub.shape)
+            # Ink = pixels in the ink_mask AND not in the surface cluster
+            frac = float((sub & ~surf_mask).mean())
+        else:
+            frac = float(sub.mean())
         rows.append((i, frac, INK_MIN <= frac <= INK_MAX))
 
     if not rows:
@@ -872,7 +910,7 @@ def check_style_sheet(fig):
                     "in the sheet was written with a leading #")
 
 
-def audit(fig, scale=None, placed_frac=1.0):
+def audit(fig, scale=None, placed_frac=1.0, context_axes=None):
     r = _renderer(fig)
     rows = [
         ("Clipping", *check_clipping(fig, r)),
@@ -881,7 +919,7 @@ def audit(fig, scale=None, placed_frac=1.0):
         ("Mark ratio", *check_mark_ratio(fig)),
         ("Axis redundancy", *check_redundancy(fig, r)),
         ("Type size", *check_type_size(fig, r, scale, placed_frac)),
-        ("Ink coverage", *check_ink(fig)),
+        ("Ink coverage", *check_ink(fig, context_axes)),
         ("Series color", *check_series_color(fig)),
         ("Dual axis", *check_dual_axis(fig)),
         ("Form", *check_form(fig)),
@@ -895,8 +933,8 @@ def audit(fig, scale=None, placed_frac=1.0):
     return all(s is not False for _, s, _ in rows), rows
 
 
-def report(fig, name="", scale=None, placed_frac=1.0):
-    ok, rows = audit(fig, scale, placed_frac)
+def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None):
+    ok, rows = audit(fig, scale, placed_frac, context_axes)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False
     for label, status, detail in rows:

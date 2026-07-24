@@ -684,3 +684,17 @@ def test_ink_coverage_warns_and_does_not_gate():
     plt.close(fig)
     assert gates(rows)["Ink coverage"] in (True, "warn")
     assert ok
+
+
+def test_context_ink_does_not_warn():
+    """A contourf backdrop should not trigger the ink WARN when declared as
+    a context surface."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    X, Y = np.meshgrid(np.linspace(0, 10, 50), np.linspace(0, 10, 50))
+    Z = np.sin(X) * np.cos(Y)
+    ax.contourf(X, Y, Z, levels=20, cmap="viridis")
+    ax.scatter([2, 4, 6, 8], [2, 4, 6, 8], c="red", s=30)
+    ok, rows = cf.audit(fig, context_axes=[ax])
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] is True
