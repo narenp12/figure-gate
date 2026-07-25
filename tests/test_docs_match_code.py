@@ -22,6 +22,7 @@ from conftest import SKILL
 import check_palette as cp
 
 GUIDE = SKILL / "references" / "style-guide.md"
+README = SKILL.parent / "README.md"
 SURFACE = "#ffffff"
 
 # | 2 | orange | `#E69F00` | 2.25 † | series |
@@ -79,6 +80,64 @@ def test_the_guide_does_not_quote_a_retired_surface():
     not what anything renders, so a reappearance means the drift came back."""
     assert "fcfcfb" not in GUIDE.read_text().lower().replace(
         "`#fcfcfb`, a", ""), "the retired surface is quoted again"
+
+
+# --- the gate roster ---------------------------------------------------------
+# Same failure as the contrast table, one level up: the list of gates is written
+# out in three places and only one of them executes. `check_overplotting` and
+# `check_contour_dash` shipped with tests and were never added to the README
+# table; `check_line_weight` was never added to the module docstring. Nobody
+# noticed, because a roster in prose cannot fall out of date loudly.
+
+DOCSTRING_ROW = re.compile(r"^\s*\d+\.\s+(.+?)\s+-\s")
+# | Clipping | text runs past the canvas |
+README_ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*[^|]+\|\s*$")
+
+
+def audit_gate_names():
+    """The only executable roster: what `audit` actually returns a row for."""
+    import matplotlib.pyplot as plt
+
+    import check_figure as cf
+
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    try:
+        _, rows = cf.audit(fig)
+    finally:
+        plt.close(fig)
+    return [name for name, _, _ in rows]
+
+
+def docstring_gate_names():
+    import check_figure as cf
+
+    body = cf.__doc__.split("Checks, in the order `audit` runs them", 1)[1]
+    return [m.group(1) for m in map(DOCSTRING_ROW.match, body.splitlines()) if m]
+
+
+def readme_gate_names():
+    lines = README.read_text().splitlines()
+    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    names = []
+    for line in lines[start:]:
+        m = README_ROW.match(line)
+        if m:
+            names.append(m.group(1))
+        elif names and not line.startswith("|"):
+            break
+    # drop the header row and the |---|---| separator, which both match
+    return [n for n in names if n not in {"Gate", "---"}]
+
+
+def test_the_module_docstring_lists_every_gate_in_order():
+    assert docstring_gate_names() == audit_gate_names()
+
+
+def test_the_readme_table_lists_every_gate_in_order():
+    stripped = [n.replace("*(advisory)*", "").strip()
+                for n in readme_gate_names()]
+    assert stripped == audit_gate_names()
 
 
 def test_validator_default_surface_is_what_the_style_sheet_renders():

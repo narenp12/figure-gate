@@ -137,11 +137,11 @@ decides them:
 - **A consistent marker grammar.** A circle is an observation, a triangle is a prediction,
   a cross is an extremum — and the mapping is the same across every panel that shares
   that kind of mark.
-- **Each panel's distinctive mark is actually present.** The one panel in a row-that
-  should have a credible band, does. If the model has no credible interval, the figure
-  can either omit the empty panel or draw one and label it "not applicable" — but a
-  missing band beside three panels that have one reads as an oversight rather than a
-  statement about the model. Name the omission in the caption, explicitly.
+- **Each panel's distinctive mark is actually present.** If three panels in a row carry
+  a credible band, the fourth carries one too — or the caption says why it cannot. A
+  missing band beside three that have one reads as an oversight rather than as a
+  statement about the model, so either draw it, label the panel "not applicable", or
+  name the omission in the caption.
 
 ## Stacked bars have one honest series
 

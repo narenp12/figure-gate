@@ -45,6 +45,7 @@ from any language or toolchain.
 | Text readability | data ink crosses a label's glyphs, or text misses WCAG on the backdrop it actually got |
 | Contrast stack | nothing is opaque, or transparency has too many levels |
 | Mark ratio | one mark is so large it reads as ornament |
+| Overplotting | a scatter is dense enough that the marks merge into a blob |
 | Axis redundancy | panels on a shared scale repeat their axis furniture |
 | Type size | a string lands under 7.5pt *on the printed page* |
 | Line weight | a stroke lands under 1pt on the printed page (SIAM's floor) |
@@ -55,6 +56,7 @@ from any language or toolchain.
 | Identity channel | series are told apart by hue alone *(advisory)* |
 | Label attribution | a direct label sits nearer some other series than the one it names |
 | Style sheet | `figure.mplstyle` is not the one in effect *(advisory)* |
+| Contour dash | a signed contour spends dashing on its negative levels |
 | Fonts | PDF/PS export is Type 3, or no named typeface is installed *(advisory)* |
 | Alt text | the figure carries no description for a reader who cannot see it *(advisory)* |
 

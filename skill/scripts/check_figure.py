@@ -16,7 +16,7 @@ a test rather than in a design review.
     python check_figure.py            # self-test on a deliberately bad figure
     python check_figure.py --venues   # the content widths it knows
 
-Checks
+Checks, in the order `audit` runs them
     1. Clipping          - no text extends past the canvas
     2. Text collision    - no two text bounding boxes overlap
     3. Text readability  - no data ink crosses a label; text clears WCAG on the
@@ -24,18 +24,19 @@ Checks
     4. Contrast stack    - something is at full opacity; alpha levels are few
     5. Mark ratio        - largest / smallest mark area within MARK_RATIO_MAX
     6. Overplotting      - scatter marks do not merge into an unreadable mass
-    7. Redundancy        - shared-axis panels do not repeat a tick label column
+    7. Axis redundancy   - shared-axis panels do not repeat a tick label column
     8. Type size         - every rendered string clears the floor once scaled
-    9. Ink coverage      - the data region is neither empty nor packed
-   10. Series color      - the hues in each panel separate under color blindness
-   11. Dual axis         - no second y scale carrying data of its own
-   12. Form              - no pie, no 3D, no truncated bar baseline
-   13. Identity          - series are not told apart by color alone
-   14. Label attribution - each label is nearest the curve it names
-   15. Style sheet       - figure.mplstyle is the one actually in effect
-   16. Contour dash      - dashing is not spent on a signed contour's negatives
-   17. Fonts             - Type 42 embedding; the named face is installed
-   18. Alt text          - the figure carries a description
+    9. Line weight       - every stroke clears LINE_FLOOR_PT once scaled
+   10. Ink coverage      - the data region is neither empty nor packed
+   11. Series color      - the hues in each panel separate under color blindness
+   12. Dual axis         - no second y scale carrying data of its own
+   13. Form              - no pie, no 3D, no truncated bar baseline
+   14. Identity channel  - series are not told apart by color alone
+   15. Label attribution - each label is nearest the curve it names
+   16. Style sheet       - figure.mplstyle is the one actually in effect
+   17. Contour dash      - dashing is not spent on a signed contour's negatives
+   18. Fonts             - Type 42 embedding; the named face is installed
+   19. Alt text          - the figure carries a description
 """
 
 import itertools

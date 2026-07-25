@@ -16,7 +16,7 @@ Ships with one style sheet and two validators:
 |---|---|---|---|
 | `figure.mplstyle` | `assets/` | matplotlib | visual defaults as a style sheet |
 | `check_palette.py` | `scripts/` | Python 3.8+, stdlib only | color gates, any toolchain |
-| `check_figure.py` | `scripts/` | Python 3.8+, matplotlib | composition + type-size gates |
+| `check_figure.py` | `scripts/` | Python 3.9+, matplotlib 3.8+ | composition + type-size gates |
 
 Copy all three into the project (conventionally `diagrams/`), where they sit beside each
 other as the guide assumes. Only `check_figure.py` is coupled to matplotlib; the
@@ -29,9 +29,6 @@ palette, whether the figure is composed, and whether the type clears the page.
 
 Every rule here was earned by a specific failure. Nothing is taste-by-assertion.
 
-**Contour:** pass `linestyles="solid"` to `contour` on signed data — negative levels auto-dash via matplotlib default, and dashing means projected/unobserved here.
-
----
 ---
 
 ## Fast path
@@ -136,7 +133,7 @@ and reddish purple was listed as needing a direct label when on white it clears
 every number against `contrast()`, so it cannot drift again. On a genuinely
 tinted page, pass `--surface`.
 
-Two slots held out: yellow at 1.29:1 genuinely vanishes as a hairline (fills only). Black
+Two slots held out: yellow at 1.32:1 genuinely vanishes as a hairline (fills only). Black
 is a preference (keeps "ink" unambiguous), not a measurement — take it as a series color
 if you want.
 
@@ -161,7 +158,7 @@ ax.pcolormesh(X, Y, Z, cmap="viridis")    # continuous — as shipped
 
 **Window only for discrete tiers drawn as standalone lines/marks.** Full-range viridis
 ends at `#fde725`, 1.23:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
-`ordinal()` from the appendix or `generate_diagrams.py`. Two things to get right: sample
+`ordinal()` from the appendix. Two things to get right: sample
 evenly (ΔL ratio < 2×), and narrow to `t ∈ [0.00, 0.38]` when the figure also carries
 status green (viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`).
 
@@ -250,6 +247,10 @@ punched visible white gaps through the data.
 - Status colors are status only.
 - Color follows the entity, not its rank.
 - Sequential is monotone in lightness, evenly stepped. Never jet.
+- Dashing means unobserved, projected, or threshold — nothing else. Pass
+  `linestyles="solid"` to `contour` on signed data, because matplotlib dashes
+  negative levels by default and that reads here as a hedge the contour is not
+  making.
 
 ---
 
