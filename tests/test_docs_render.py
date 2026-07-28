@@ -22,11 +22,13 @@ and runs this file in the docs workflow, where a docs regression belongs.
 """
 
 import http.server
+import os
 import re
 import shutil
 import socket
 import socketserver
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -40,6 +42,10 @@ from test_docs_site import CSS, SLATES, nav_targets, scheme_link_colors
 
 ROOT = SKILL.parent
 SITE = ROOT / "site"
+
+# Set by the nested run at the bottom of this file, and read by the test that
+# starts it, so that run does not start one of its own.
+NESTED = "FIGURE_GATE_DOCS_GROUP_BLOCKED"
 
 
 def playwright_api():
@@ -58,6 +64,29 @@ def playwright_api():
         pytest.skip("playwright is in the docs-test group; the figure gates "
                     "do not need it. `uv sync --group docs-test`")
     return api
+
+
+def file_lock():
+    """`playwright_api()`'s twin, for the other docs-test dependency.
+
+    Its own function, and called unconditionally, because the first version of
+    this import was neither. `built_site` did a bare `from filelock import
+    FileLock` on the path xdist workers take, so the file that promises to skip
+    when the docs group is absent instead raised ModuleNotFoundError at fixture
+    setup and turned every `pytest -n auto` job red -- on a test that had only
+    just started depending on the fixture.
+
+    Unconditional even where the lock is not used -- the single-worker path
+    needs no lock at all -- because a dependency that only bites under `-n auto`
+    gives `pytest` and the documented `pytest -n auto` different skip sets, and
+    a gate whose behaviour depends on how it was invoked is not a gate.
+    """
+    try:
+        from filelock import FileLock
+    except ImportError:
+        pytest.skip("filelock is in the docs-test group; the figure gates "
+                    "do not need it. `uv sync --group docs-test`")
+    return FileLock
 
 # WCAG 2.2 AA for text. Deliberately not the 3:1 series floor the figures are
 # held to -- a link is text being read, not a mark being told apart from its
@@ -129,15 +158,15 @@ def built_site(tmp_path_factory, worker_id):
     worker shares -- with a marker file so the workers that lose the race wait
     for the build rather than repeat it.
     """
+    # Before the `master` branch below, not inside the worker path that needs
+    # it: this is the fixture's declaration of what it costs to use, and every
+    # test that asks for a built site now inherits the skip from one place.
+    # Asking after the branch is what shipped -- see `file_lock()`.
+    FileLock = file_lock()
+
     if worker_id == "master":
         _build_the_site()
         return SITE
-
-    # Imported here rather than at the top for the same reason as playwright:
-    # a module-level import of a docs-test dependency turns "this file skips"
-    # into "this file fails to collect", and the README's test count is held to
-    # what pytest collects.
-    from filelock import FileLock
 
     shared = tmp_path_factory.getbasetemp().parent
     with FileLock(str(shared / "zensical-build.lock")):
@@ -473,3 +502,57 @@ def test_no_filter_is_applied_to_gallery_figures():
             f"palette.css applies {bad} - a filter on a gallery figure changes "
             "the colors the gates certified. Frame the white instead of "
             "recoloring the figure.")
+
+
+# --- this file skips, it does not error ---------------------------------------
+
+BLOCKER = """
+import sys
+
+
+class Blocker:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in {"filelock", "playwright"}:
+            raise ImportError(f"{name} is blocked for this run")
+        return None
+
+
+sys.meta_path.insert(0, Blocker())
+"""
+
+
+@pytest.mark.skipif(os.environ.get(NESTED) is not None,
+                    reason="this is the nested run; it does not start another")
+def test_this_file_skips_rather_than_errors_without_the_docs_group(tmp_path):
+    """The docstring at the top of this file, made executable.
+
+    It has claimed since it was written that the file is "skipped, not failed,
+    when the browser or the site builder is missing" -- and that claim shipped
+    false. Everything that needed a browser went through `playwright_api()` and
+    skipped; the one test that needed only a built site went straight to
+    `built_site`, hit an unguarded `from filelock import FileLock`, and errored
+    on all four `pytest` jobs in the matrix.
+
+    So this asks rather than asserts: run this file in a subprocess with both
+    docs-test distributions unimportable, and require a clean exit. Reading the
+    source for guarded imports would pass a file where a fixture forgot to call
+    one, which is the defect that happened.
+
+    Cheap because it is supposed to be: with nothing importable, nothing builds
+    the site or launches a browser, and a run that does take minutes has failed
+    the point of the test as surely as a red one.
+    """
+    (tmp_path / "sitecustomize.py").write_text(BLOCKER)
+    env = dict(os.environ, PYTHONPATH=str(tmp_path), **{NESTED: "1"})
+
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", str(Path(__file__).resolve()),
+         "-q", "-p", "no:cacheprovider"],
+        cwd=ROOT, capture_output=True, text=True, env=env)
+
+    assert "no tests ran" not in run.stdout, (
+        "the nested run collected nothing, so its clean exit says nothing "
+        f"about this file:\n{run.stdout}\n{run.stderr}")
+    assert run.returncode == 0, (
+        "without the docs-test group this file must skip, not error. It "
+        f"exited {run.returncode}:\n{run.stdout}\n{run.stderr}")
