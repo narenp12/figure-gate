@@ -237,4 +237,4 @@ the real failure that motivated it. See [CONTRIBUTING.md](https://github.com/nar
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/narenp12/figure-gate/blob/main/LICENSE).
