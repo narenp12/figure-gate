@@ -195,15 +195,35 @@ def page_scale(fig, placed_frac=1.0, venue=None):
 
 
 def _renderer(fig):
-    """Return (renderer, canvas). Canvas is an Agg canvas with drawn buffer.
+    """Return (renderer, canvas): an Agg canvas at the authored dpi, drawn.
 
-    Text extents need a renderer that can measure. The SVG canvas cannot, so
-    swap in an Agg one when that is what the figure was built under.
-    Reused across checks so check_ink does not render a second time."""
-    if hasattr(fig.canvas, "get_renderer"):
-        fig.canvas.draw()
-        return fig.canvas.get_renderer(), fig.canvas
+    Text extents need a renderer that can measure, and the SVG canvas cannot,
+    so measuring on Agg is the baseline. Measuring there *unconditionally* is
+    what keeps the verdict off the machine it ran on.
+
+    A HiDPI GUI backend — macosx on a Retina display, Qt on a scaled desktop —
+    sets `fig.dpi` to the authored dpi times the display's device pixel ratio
+    when the figure is created. Two things then go wrong at once. Text window
+    extents come back in physical pixels while `canvas.get_width_height()`
+    reports logical ones, so the clipping check measures 2x coordinates against
+    a 1x bound and calls the right half of every figure clipped. And every
+    threshold below that is calibrated in pixels — the edge window, the
+    footprint floor — covers half the distance it was calibrated for.
+
+    Putting the figure back on `_original_dpi` fixes both. That attribute is
+    private but is set unconditionally in `Figure.__init__`, and it is the only
+    record of the authored value once a HiDPI canvas has overwritten `fig.dpi`.
+
+    Note this rebinds `fig.canvas`: a figure that has been audited is no longer
+    attached to its GUI canvas and will not show in a window. `check_ink` and
+    `check_text_readability` already did this; it is now unconditional.
+
+    Reused across checks so check_ink does not render a second time.
+    """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
+    original = getattr(fig, "_original_dpi", fig.dpi)
+    if fig.dpi != original:
+        fig.dpi = original
     canvas = FigureCanvasAgg(fig)
     canvas.draw()
     return canvas.get_renderer(), canvas

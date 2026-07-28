@@ -42,6 +42,65 @@ def test_clipping_catches_text_off_canvas():
     assert gates(rows)["Clipping"] is False
 
 
+def hidpi(fig):
+    """Make `fig` look like it was built under a HiDPI GUI backend.
+
+    A Retina macosx canvas, or Qt on a scaled desktop, sets `fig.dpi` to the
+    authored dpi times the display's device pixel ratio at creation time and
+    reports `get_width_height()` back in logical pixels. Those two lines are the
+    whole of it, so the condition reproduces here without a display — which
+    matters, because conftest pins Agg and so does every gallery script, and
+    that is exactly why this class of bug survived a green suite.
+    """
+    fig.canvas._device_pixel_ratio = 2
+    fig.dpi = 2 * fig._original_dpi
+    return fig
+
+
+def test_a_clean_figure_passes_on_a_hidpi_canvas(clean):
+    """The regression: text extents come back in physical pixels, the canvas
+    reports its width in logical ones, and the clipping check called every
+    label past the midpoint clipped. A figure's verdict is a property of the
+    figure, not of the display the checker happened to run on."""
+    ok, rows = cf.audit(hidpi(clean))
+    assert ok, [r for r in rows if r[1] is not True]
+
+
+def test_hidpi_does_not_move_any_verdict():
+    """Clipping was the loud half. The quiet half is that every threshold
+    calibrated in pixels — the edge window, the footprint floor — covers half
+    the distance it was calibrated for once dpi has been doubled underneath it.
+    Same figure, both canvases, every row identical including the messages."""
+    def build():
+        fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+        ax.plot([0, 1, 2, 3], [0, 1, 0.5, 2], lw=1.6)
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Signal")
+        return fig
+
+    normal = build()
+    _, normal_rows = cf.audit(normal)
+    plt.close(normal)
+
+    retina = hidpi(build())
+    _, retina_rows = cf.audit(retina)
+    plt.close(retina)
+
+    assert retina_rows == normal_rows
+
+
+def test_hidpi_figure_is_measured_at_its_authored_dpi():
+    """The dpi the figure was authored at is the one the page gets. Leaving the
+    doubled value in place would put the checker a factor of two away from
+    every pixel constant at the top of the file."""
+    fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    authored = fig.dpi
+    cf.audit(hidpi(fig))
+    assert fig.dpi == authored
+    plt.close(fig)
+
+
 def test_collision_catches_two_labels_in_the_same_place():
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.text(0.5, 0.5, "first label", ha="center")
