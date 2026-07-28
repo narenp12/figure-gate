@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Stated rather than inherited, so the repository default can change without
+# quietly handing a write token to a job that only runs tests.
+permissions:
+  contents: read
+
 jobs:
   # The README claims check_palette.py runs on Python 3.8+ with nothing
   # installed. That claim is load-bearing -- it is why the file is usable from a
