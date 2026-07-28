@@ -45,7 +45,6 @@ check-figure = "check_figure:main"
 # promises three files and no install, and a hard scipy import broke that.
 [project.optional-dependencies]
 fast = ["scipy>=1.6"]
-dev = ["pytest>=7.0", "pytest-xdist>=3.0", "scipy>=1.6"]
 
 # The floor is load-bearing, not hygiene: `license = "MIT"` and `license-files`
 # are PEP 639, and hatchling only emits them as Metadata-Version 2.4 from 1.26.
@@ -90,7 +89,12 @@ filterwarnings = [
     "ignore:findfont:UserWarning",
 ]
 
+# A dependency group, not an extra: `Provides-Extra: dev` is published metadata,
+# so an extra puts a `figure-gate[dev]` on the project page that means nothing to
+# anyone installing the package. Groups stay in the repository.
 [dependency-groups]
 dev = [
+    "pytest>=7.0",
     "pytest-xdist>=3.8.0",
+    "scipy>=1.6",
 ]

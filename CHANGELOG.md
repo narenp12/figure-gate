@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 — 2026-07-27
+
+First release on PyPI. Everything below is the work that preceded it; the
+package exists so a version can be pinned instead of a file vendored, and
+changes nothing about how the scripts run.
 
 ### Four gates that were measuring the wrong thing
 
