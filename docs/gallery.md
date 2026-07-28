@@ -41,7 +41,7 @@ is checked rather than written once and forgotten.
 
 <figure markdown="span">
   ![Three panels. (a) Binding fraction for 14 controls and 14 treated samples, every point shown: the treated group is bimodal, which a box plot would hide. (b) Twelve paired before-and-after measurements as a slope graph: eleven of twelve rise. (c) A reliability diagram: observed frequency sits below the diagonal across the whole range, so the model is overconfident.](images/gallery-forms.png)
-  <figcaption>The three forms <a href="../choosing-a-form/">choosing-a-form.md</a> argues for, drawn as it argues for them. Panel (a) is the case a script cannot decide: a box plot here clears every mechanical gate and still hides both the n of 14 and the bimodality, which are the finding.</figcaption>
+  <figcaption>The three forms <a href="choosing-a-form/">choosing-a-form.md</a> argues for, drawn as it argues for them. Panel (a) is the case a script cannot decide: a box plot here clears every mechanical gate and still hides both the n of 14 and the bimodality, which are the finding.</figcaption>
 </figure>
 
 ## Log-log, with a slope triangle

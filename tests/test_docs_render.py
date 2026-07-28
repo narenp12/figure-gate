@@ -23,6 +23,7 @@ and runs this file in the docs workflow, where a docs regression belongs.
 
 import http.server
 import os
+import posixpath
 import re
 import shutil
 import socket
@@ -30,6 +31,7 @@ import socketserver
 import subprocess
 import sys
 import threading
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -38,7 +40,7 @@ from conftest import SKILL
 
 import check_palette as cp
 
-from test_docs_site import CSS, SLATES, nav_targets, scheme_link_colors
+from test_docs_site import CONFIG, CSS, SLATES, nav_targets, scheme_link_colors
 
 ROOT = SKILL.parent
 SITE = ROOT / "site"
@@ -481,6 +483,72 @@ def test_no_built_heading_holds_a_code_span_marker(built_site):
     assert not offenders, (
         "rendered heading(s) contain a backtick, so a code span did not close "
         "and the text after it became a heading:\n" + "\n".join(offenders))
+
+
+# --- links land on the deploy base --------------------------------------------
+
+def deploy_base():
+    """The path `site_url` publishes under, `/figure-gate/`.
+
+    Read from the config rather than written here, and it is the whole reason
+    this check exists: on a project Pages site every page hangs one directory
+    below the domain root, so a link with one `../` too many resolves to
+    `narenp12.github.io/choosing-a-form/` -- off the site, 404, and identical to
+    a correct link in every local preview served at `/`.
+    """
+    match = re.search(r'^site_url\s*=\s*"([^"]+)"', CONFIG.read_text(), re.M)
+    assert match, "zensical.toml no longer states a site_url"
+    path = urllib.parse.urlparse(match.group(1)).path
+    return path if path.endswith("/") else path + "/"
+
+
+def test_the_deploy_base_is_a_subdirectory():
+    """Guard on the guard above. If `site_url` ever moved to a domain root the
+    test below would still pass every link it was given while checking nothing,
+    because escaping a base of `/` is not possible."""
+    assert deploy_base() != "/", (
+        "site_url now publishes at a domain root, so the link test below can no "
+        "longer catch a link that walks off the site. Point it at something "
+        "else before deleting this.")
+
+
+def test_every_internal_link_resolves_under_the_deploy_base(built_site):
+    """Every href in the built HTML, resolved the way a browser resolves it.
+
+    `--strict` fails on a broken link between *markdown* pages and says nothing
+    about an `<a href>` written by hand in a raw HTML block -- which is how the
+    gallery's figcaption shipped `../../choosing-a-form/` from a source that
+    reads `../choosing-a-form/`: paths in raw HTML are resolved against the
+    docs directory and then rewritten relative to the output page, so the `../`
+    that looks right in the source is applied twice.
+
+    Checked against the base, not just for existence: `posixpath.normpath`
+    clamps at `/`, so a link that walks off the site normalises to a path that
+    exists and the naive version of this test passes.
+    """
+    base = deploy_base()
+    offenders = []
+    for page in sorted(built_site.rglob("*.html")):
+        relative = page.relative_to(built_site)
+        directory = "" if relative.parent == Path(".") else f"{relative.parent}/"
+        here = base + directory
+        for href in re.findall(r'href="([^"]+)"', page.read_text()):
+            if href.startswith(("http://", "https://", "#", "mailto:", "data:")):
+                continue
+            target = posixpath.normpath(posixpath.join(here, href))
+            if href.endswith("/") or href in (".", ".."):
+                target += "/"
+            if not (target + "/").startswith(base):
+                offenders.append(f"  {relative}: {href} -> {target} (off the site)")
+                continue
+            landing = built_site / target[len(base):]
+            if target.endswith("/"):
+                landing = landing / "index.html"
+            if not landing.exists():
+                offenders.append(f"  {relative}: {href} -> {target} (404)")
+    assert not offenders, (
+        f"link(s) in the built site do not resolve under {base}:\n"
+        + "\n".join(offenders))
 
 
 # --- the figures are not recolored --------------------------------------------
