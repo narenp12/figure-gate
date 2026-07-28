@@ -1,5 +1,8 @@
 # figure-gate
 
+[![CI](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/figure-gate)](https://pypi.org/project/figure-gate/)
+
 **A style sheet says what to do. figure-gate says whether it happened.**
 
 Two validators and a matplotlib style sheet that check a *built* figure — its
@@ -13,17 +16,20 @@ bad, but it can't be good while failing any of those. Those three are
 checkable, so check them instead of squinting.
 
 ```bash
-python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
-python check_figure.py              # self-test on a broken figure
+git clone https://github.com/narenp12/figure-gate && cd figure-gate
+python skill/scripts/check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
+python skill/scripts/check_figure.py     # self-test on a broken figure
 ```
 
-![Example figure](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
+![Validation loss against training epoch for three optimisers. All three curves
+fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is still at 0.25 at
+epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
-*`python examples/demo.py` — the whole method in 40 lines. `python
-examples/gallery.py` is the harder half: a shared-axis grid, a filled field with
-a colorbar, an axis-free schematic, three statistical forms, a log-log
-convergence plot with a slope triangle, and a dense attractor. Writing those
-found five defects in the checks themselves.*
+*`python examples/demo.py` — the whole method in one file, every decision in it
+commented with the failure it avoids. `python examples/gallery.py` is the harder
+half: a shared-axis grid, a filled field with a colorbar, an axis-free schematic,
+three statistical forms, a log-log convergence plot with a slope triangle, and a
+dense attractor. Writing those found five defects in the checks themselves.*
 
 ## Why this exists
 
@@ -218,15 +224,15 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 ## Requirements
 
-- `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8–3.13.
-  Copied, it runs on 3.8; installed from PyPI it does not, because the package
-  carries `check_figure.py` too and that needs 3.9.
+- `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8, 3.9,
+  3.11 and 3.13. Copied, it runs on 3.8; installed from PyPI it does not,
+  because the package carries `check_figure.py` too and that needs 3.9.
 - `check_figure.py` — Python 3.9+, matplotlib 3.8+.
 - `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the palette
   is eight hex strings; they're listed in the style guide.
 
-CI runs the palette checker with no `pip install` at all, on 3.8, 3.9, 3.11 and
-3.13, because "standard library only" is a load-bearing claim.
+Those are the versions CI runs the palette checker on, with no `pip install` at
+all, because "standard library only" is a load-bearing claim.
 
 ## Contributing
 
