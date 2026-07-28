@@ -206,10 +206,10 @@ full dict.
 `check_figure.py` gates clipping, text collision, text readability, alpha
 stacking, mark ratio, overplotting, axis redundancy, type size, line weight, ink
 coverage, series color, dual axes, form, the identity channel, label
-attribution, font embedding, alt text, and whether the style sheet is the one
-actually in effect. `check_palette.py` gates lightness band, chroma floor,
-colorblind separation, normal-vision separation, and contrast against the
-surface.
+attribution, whether the style sheet is the one actually in effect, contour
+dash, font embedding, and alt text — in that order. `check_palette.py` gates
+lightness band, chroma floor, colorblind separation, normal-vision separation,
+and contrast against the surface.
 
 The two used to be unable to speak: `check_palette.py` judged a list of hexes
 someone remembered to paste into a terminal, and `check_figure.py` never looked
@@ -276,10 +276,12 @@ genuinely vanishes as a hairline — use it as a fill with a dark edge or not at
 all.
 
 **Grayscale is a separate question and Okabe-Ito does not solve it.** The
-canonical first two, orange and sky blue, differ by ΔL 0.011 — invisible once
-desaturated, and the single worst pair in the set. When the figure must survive
-a photocopier, select by luminance instead (orange + blue, ΔL 0.264), say so,
-and add a second channel: dash pattern or marker shape.
+canonical first two, orange and sky blue, separate by relative luminance 0.011
+(`#E69F00` vs `#56B4E9`) — invisible once desaturated, and the single worst pair
+in the set. When the figure must survive a photocopier, select by luminance
+instead — relative luminance 0.264 (`#E69F00` vs `#0072B2`) — say so, and add a
+second channel: dash pattern or marker shape. WCAG relative luminance, not the
+OKLab ΔE the separation gates use, because that is what a desaturation keeps.
 
 **Status colors come from the same palette** — `good #009E73`, `warning
 #E69F00`, `critical #D55E00` — always shipped with an icon or label. An
@@ -292,7 +294,7 @@ given figure, never both.
 neighbours and the colorbar, never against the page, so its light end carries no
 contrast obligation and windowing it only throws range away. The one exception:
 *discrete tiers drawn as standalone lines or marks* do stand alone against the
-page, and full-range viridis ends at `#fde725`, 1.23:1, invisible as a hairline
+page, and full-range viridis ends at `#fde725`, 1.26:1, invisible as a hairline
 — sample `t ∈ [0.05, 0.70]`, evenly.
 
 **Categorical or ordinal is the decision that matters,** and the intuitive

@@ -69,6 +69,6 @@ than only that they can pass.
 And the figure from the README, which is the method in miniature:
 
 <figure markdown="span">
-  ![Validation loss against training epoch for three optimisers. All three curves fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is still at 0.25 at epoch 12.](images/demo.png)
+  ![Validation loss against training epoch for three optimisers over 12 epochs. All three fall; the Bayesian run reaches 0.05 by epoch 6, while the baseline is still at 0.25 at epoch 12.](images/demo.png)
   <figcaption><code>python examples/demo.py</code> — every decision commented against the failure it avoids.</figcaption>
 </figure>

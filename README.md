@@ -20,9 +20,9 @@ python skill/scripts/check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
 python skill/scripts/check_figure.py     # self-test on a broken figure
 ```
 
-![Validation loss against training epoch for three optimisers. All three curves
-fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is still at 0.25 at
-epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
+![Validation loss against training epoch for three optimisers over 12 epochs.
+All three fall; the Bayesian run reaches 0.05 by epoch 6, while the baseline is
+still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
 *`python examples/demo.py` builds that figure and audits it, with every
 decision commented against the failure it avoids. `python examples/gallery.py`
@@ -278,7 +278,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 268 tests, and
+**Gates are tested for their ability to fail.** The suite is 286 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

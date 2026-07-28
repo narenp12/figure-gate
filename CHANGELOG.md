@@ -109,9 +109,9 @@ Documentation only. No code, no thresholds, no packaging change — the wheel
 built from this commit is byte-identical in what it ships.
 
 - **A docs site**, [Zensical](https://zensical.org), published to GitHub Pages
-  from `.github/workflows/docs.yml`. It exists because `style-guide.md` is 367
-  lines of reference material whose only affordance on GitHub was scrolling,
-  and the thing people do with it is look one threshold up.
+  from `.github/workflows/docs.yml`. It exists because `style-guide.md` is a
+  long reference document whose only affordance on GitHub was scrolling, and
+  the thing people do with it is look one threshold up.
 
   Every page except the gallery is a **symlink** to the file that already
   existed. That is not tidiness: `test_docs_match_code.py` reads
@@ -164,6 +164,66 @@ built from this commit is byte-identical in what it ships.
   a number in prose spreading rather than being corrected. Fixed to six, and
   `test_docs_match_code.py` now asserts the three places that state the count
   agree with each other.
+
+### An audit of the documentation, and what it found
+
+Every number, roster and code sample in the published documents, read against
+the code that produces it. Five drifts, all the same species as the ones above,
+and each now has the executable link it was missing.
+
+- **The style guide still taught the `alt_metadata` call this release fixes.**
+  `savefig(path, metadata=alt_metadata(fig))` — the form that warns on every PDF
+  save and that SVG rejects. `SKILL.md` and both examples were corrected when
+  the fix landed; `style-guide.md` was not, so the release note announcing the
+  fix would have shipped beside a document still teaching the break. Every
+  document that teaches the call is now checked for the pathless form. The
+  CHANGELOG is excluded, because it quotes the broken call deliberately.
+
+- **`SKILL.md`'s prose roster listed eighteen of the nineteen gates**, omitting
+  `Contour dash`, from the commit that added that gate until this one. This is
+  the fourth roster of the same list, and the only one nothing read — the README
+  table and the module docstring have been checked against `audit` for two
+  releases. Prose does not use the gate's own label, so the join is written down
+  as a map, and the map is asserted complete against `audit`: a twentieth gate
+  cannot be added to the code and to two rosters while quietly skipping this
+  one. Order is checked too, and the roster now runs in the order `audit` does.
+
+- **Full-range viridis was quoted at 1.23:1, which is its ratio on `#fcfcfb`** —
+  the surface retired three releases ago. On white, which is what
+  `figure.mplstyle` renders, it is 1.26:1. Fourth instance of the retired-surface
+  bug, and the reason the existing guard for it cannot only be a grep for the
+  string: this ratio was in a sentence, not in the table the row-by-row check
+  reads. Both documents now have the hex checked against where viridis actually
+  ends and the ratio against `contrast()`.
+
+- **The grayscale separations were labelled ΔL and are not.** `ΔL 0.011` and
+  `ΔL 0.264` are WCAG relative luminance, which is the right channel for a
+  question about desaturation and the wrong label in a document that states
+  OKLab ΔE ×100 as its unit. In OKLab the same pairs are 0.018 and 0.221 — the
+  ordering survives, the numbers do not, and a reader who recomputes concludes
+  the guide has drifted. Nothing was wrong except the unit, which is enough.
+  Both documents now name the unit and both pairs carry their hexes, so all four
+  numbers are checked against `relative_luminance()`; the aside giving the OKLab
+  equivalents is checked against `linear_to_oklab()`, because it is two more
+  numbers in prose and this file is about not shipping those.
+
+- **`demo.png`'s alt text on the site was not the string the figure carries.**
+  `docs/gallery.md` states outright that every alt text on the page is what was
+  passed to `describe(fig, ...)`, which is what makes the page's alt text
+  checked rather than written once and forgotten. True of the six gallery
+  figures — exactly, verified — and false of the demo, whose alt had been
+  paraphrased in the README and copied into the site from there. A claim that
+  the documentation is generated from the code, written in prose, about
+  documentation that was not. The seven alt texts are now asserted to be exactly
+  the seven descriptions the examples attach.
+
+Every gate added here was run against the defect it was written for: the drift
+reintroduced, the gate confirmed red, the file restored. The CHANGELOG entry for
+the docs site also claimed `style-guide.md` was 367 lines when it was 386 — that
+number is gone rather than corrected, since it would drift again the next time
+the guide grows.
+
+Suite: 268 → 286 tests.
 
 ## 0.1.4 — 2026-07-28
 

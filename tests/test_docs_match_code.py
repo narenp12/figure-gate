@@ -451,3 +451,342 @@ def test_the_three_sources_agree_on_the_defect_count():
     assert len(set(claims.values())) == 1, (
         f"the sources disagree: {claims}. gallery.py enumerates its six by "
         "name, so it is the one to trust.")
+
+
+# --- the fourth roster, the one in prose -------------------------------------
+# The roster tests above cover the README table and the module docstring.
+# `SKILL.md` names every gate a third time, in a sentence, and nothing read it:
+# it listed eighteen of the nineteen, omitting `Contour dash`, from the commit
+# that added the gate until this one. Same failure as the other two rosters, in
+# the file an agent actually loads.
+#
+# Prose does not use the gate's label, so the join has to be written down. It is
+# asserted complete against `audit` rather than trusted, which is what stops a
+# twentieth gate from being added to the code and to two rosters but not this
+# one - the map goes stale loudly.
+
+SKILL_MD = SKILL / "SKILL.md"
+
+FIGURE_PROSE = {
+    "Clipping": "clipping",
+    "Text collision": "text collision",
+    "Text readability": "text readability",
+    "Contrast stack": "alpha stacking",
+    "Mark ratio": "mark ratio",
+    "Overplotting": "overplotting",
+    "Axis redundancy": "axis redundancy",
+    "Type size": "type size",
+    "Line weight": "line weight",
+    "Ink coverage": "ink coverage",
+    "Series color": "series color",
+    "Dual axis": "dual axes",
+    "Form": "form",
+    "Identity channel": "the identity channel",
+    "Label attribution": "label attribution",
+    "Style sheet": "whether the style sheet is the one actually in effect",
+    "Contour dash": "contour dash",
+    "Fonts": "font embedding",
+    "Alt text": "alt text",
+}
+
+PALETTE_PROSE = {
+    "Lightness band": "lightness band",
+    "Chroma floor": "chroma floor",
+    "CVD separation (adjacent)": "colorblind separation",
+    "Normal-vision floor (adjacent)": "normal-vision separation",
+    "Contrast vs surface": "contrast against the surface",
+}
+
+
+def roster_paragraph():
+    """The one paragraph in SKILL.md that lists both rosters.
+
+    Found by holding both openings at once, because neither is unique on its
+    own: "`check_figure.py` gates the mechanical subset" appears earlier, in the
+    section on choosing a form, and anchoring on the first match read the roster
+    out of that sentence instead - a parser that matched three words of prose
+    and reported that eighteen gates were missing from it.
+    """
+    blocks = [" ".join(b.split())
+              for b in re.split(r"\n\s*\n", SKILL_MD.read_text())]
+    hits = [b for b in blocks if "`check_palette.py` gates " in b
+            and "`check_figure.py` gates " in b]
+    assert len(hits) == 1, (
+        f"expected one paragraph in SKILL.md listing both rosters, found "
+        f"{len(hits)} - the section was rewritten and this parser needs "
+        "updating with it")
+    return hits[0]
+
+
+def prose_roster(script):
+    """One script's list, out of that paragraph.
+
+    Bounded by the next `check_*.py` mention rather than by a full stop: the
+    sentence opens with a filename, so splitting on "." cuts it in half at the
+    first word.
+    """
+    paragraph = roster_paragraph()
+    opening = f"`{script}` gates "
+    rest = paragraph[paragraph.index(opening) + len(opening):]
+    end = rest.find("`check_")
+    return rest if end == -1 else rest[:end]
+
+
+def palette_gate_names():
+    """The executable palette roster, in the order `check` returns it."""
+    rows, _ = cp.check(SERIES_SLOTS[:3])
+    return [name for name, _, _ in rows]
+
+
+@pytest.mark.parametrize("script,names,prose", [
+    ("check_figure.py", audit_gate_names, FIGURE_PROSE),
+    ("check_palette.py", palette_gate_names, PALETTE_PROSE),
+])
+def test_the_prose_map_covers_exactly_the_gates_that_exist(script, names, prose):
+    """Asserted before the tests below draw conclusions from the map. A map
+    missing a gate would otherwise let that gate go unmentioned in the prose
+    and unnoticed here - which is precisely how `Contour dash` was lost."""
+    assert set(prose) == set(names()), (
+        f"the {script} prose map is out of date with the roster {script} "
+        f"actually returns: {sorted(set(names()) ^ set(prose))}")
+
+
+@pytest.mark.parametrize("script,names,prose", [
+    ("check_figure.py", audit_gate_names, FIGURE_PROSE),
+    ("check_palette.py", palette_gate_names, PALETTE_PROSE),
+])
+def test_the_skill_prose_names_every_gate_in_order(script, names, prose):
+    sentence = prose_roster(script)
+    positions = {}
+    for gate in names():
+        phrase = prose[gate]
+        found = re.search(rf"\b{re.escape(phrase)}\b", sentence)
+        assert found, (
+            f"SKILL.md's {script} sentence does not name {gate!r} "
+            f"(looked for {phrase!r})")
+        positions[gate] = found.start()
+
+    ordered = sorted(positions, key=positions.get)
+    assert ordered == names(), (
+        f"SKILL.md lists the {script} gates in a different order than "
+        f"{script} returns them:\n  prose: {ordered}\n  code:  {names()}")
+
+
+# --- quoted contrast ratios outside the palette table ------------------------
+# The contrast table is checked row by row. A ratio written into a sentence was
+# not, and one had been computed against `#fcfcfb` - the surface retired three
+# releases ago - since before that retirement: full-range viridis was quoted at
+# 1.23:1, which is its ratio on `#fcfcfb`. On white, which is what the sheet
+# renders, it is 1.26:1. Fourth instance of the retired-surface bug, and the
+# reason the guard for it cannot just be a grep for the string "fcfcfb".
+
+VIRIDIS_CLAIM = re.compile(
+    r"viridis\s+ends\s+at\s+`(#[0-9A-Fa-f]{6})`,\s*([\d.]+):1", re.I)
+
+
+def viridis_claims():
+    return {path.name: VIRIDIS_CLAIM.search(" ".join(path.read_text().split()))
+            for path in (GUIDE, SKILL_MD)}
+
+
+def test_both_documents_still_quote_the_viridis_endpoint():
+    missing = [name for name, m in viridis_claims().items() if not m]
+    assert not missing, (
+        f"{missing} no longer state the viridis endpoint in the form this test "
+        "reads - the sentence was rewritten and this test needs updating")
+
+
+@pytest.mark.parametrize("name", ["style-guide.md", "SKILL.md"])
+def test_the_quoted_viridis_endpoint_is_the_real_one(name):
+    """Both halves of the claim: that the hex is where viridis actually ends,
+    and that the ratio is that hex against the surface the sheet renders."""
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+
+    hex_color, quoted = viridis_claims()[name].groups()
+    assert hex_color.lower() == to_hex(colormaps["viridis"](1.0)).lower(), (
+        f"{name} says viridis ends at {hex_color}, matplotlib says "
+        f"{to_hex(colormaps['viridis'](1.0))}")
+    computed = cp.contrast(hex_color, SURFACE)
+    assert computed == pytest.approx(float(quoted), abs=0.01), (
+        f"{name} quotes {quoted}:1 for {hex_color}; against {SURFACE} it is "
+        f"{computed:.2f}:1 (it is {cp.contrast(hex_color, '#fcfcfb'):.2f}:1 "
+        "against the retired #fcfcfb surface, which is where 1.23 came from)")
+
+
+# --- the grayscale numbers are in a different unit ---------------------------
+# `ΔL 0.011` read as the OKLab lightness the rest of the guide measures in, and
+# it is not: it is WCAG relative luminance, which is the right channel for a
+# question about desaturation and the wrong label for a document whose stated
+# unit is OKLab ΔE ×100. In OKLab the same pairs are 0.018 and 0.221. Nothing
+# was wrong except the unit, which is enough - a reader recomputing it concludes
+# the guide drifted. Both documents now name the unit, and both are checked.
+
+LUMINANCE_CLAIM = re.compile(
+    r"relative luminance ([\d.]+) \(`(#[0-9A-Fa-f]{6})` vs `(#[0-9A-Fa-f]{6})`\)")
+
+
+def luminance_claims():
+    out = []
+    for path in (GUIDE, SKILL_MD):
+        for m in LUMINANCE_CLAIM.finditer(" ".join(path.read_text().split())):
+            out.append((path.name, float(m.group(1)), m.group(2), m.group(3)))
+    return out
+
+
+def test_both_documents_still_state_the_grayscale_separations():
+    found = {name for name, *_ in luminance_claims()}
+    assert found == {"style-guide.md", "SKILL.md"}, (
+        f"only {sorted(found)} state a relative-luminance separation in the "
+        "form this test reads")
+    assert len(luminance_claims()) == 4, (
+        f"expected two pairs in each document, matched {len(luminance_claims())}")
+
+
+@pytest.mark.parametrize("name,quoted,a,b", luminance_claims())
+def test_quoted_relative_luminance_matches_computed(name, quoted, a, b):
+    computed = abs(cp.relative_luminance(cp.hex_to_linear(a))
+                   - cp.relative_luminance(cp.hex_to_linear(b)))
+    assert computed == pytest.approx(quoted, abs=0.001), (
+        f"{name}: {a} vs {b} quoted at {quoted}, relative_luminance() gives "
+        f"{computed:.3f}")
+
+
+OKLAB_ASIDE = re.compile(
+    r"In OKLab lightness the same two pairs are ([\d.]+) and ([\d.]+)")
+
+
+def test_the_oklab_aside_quotes_the_oklab_numbers():
+    """The sentence that disambiguates the unit quotes the other convention's
+    values, which makes it two more numbers in prose - the species this whole
+    file exists for. It states them so a reader who recomputed in OKLab and got
+    a different answer can see their own arithmetic rather than suspect the
+    guide, so it is worth keeping and worth checking.
+    """
+    written = OKLAB_ASIDE.search(" ".join(GUIDE.read_text().split()))
+    assert written, ("the guide no longer states the OKLab equivalents in the "
+                     "form this test reads")
+
+    pairs = [(a, b) for name, _, a, b in luminance_claims()
+             if name == "style-guide.md"]
+    assert len(pairs) == 2, f"expected two pairs in the guide, found {pairs}"
+
+    for quoted, (a, b) in zip(written.groups(), pairs):
+        computed = abs(cp.linear_to_oklab(cp.hex_to_linear(a))[0]
+                       - cp.linear_to_oklab(cp.hex_to_linear(b))[0])
+        assert computed == pytest.approx(float(quoted), abs=0.001), (
+            f"the guide says {a} vs {b} is {quoted} in OKLab lightness; "
+            f"linear_to_oklab() gives {computed:.3f}")
+
+
+def test_the_guide_says_which_unit_the_grayscale_numbers_are_in():
+    """The fix for the original defect, held in place. Without the sentence
+    naming the unit, the numbers are correct and unreadable: the guide states
+    OKLab ΔE ×100 as its convention everywhere else."""
+    for path in (GUIDE, SKILL_MD):
+        text = " ".join(path.read_text().split())
+        assert re.search(r"relative luminance[^.]*OKLab", text), (
+            f"{path.name} quotes relative-luminance separations without saying "
+            "they are not the OKLab unit the rest of the document uses")
+
+
+# --- the alt text on the site is the alt text the figure carries -------------
+# `docs/gallery.md` states outright that every alt text on the page is the
+# string passed to `describe(fig, ...)`, which is what makes the page's alt text
+# checked rather than written once and forgotten. It was true of the six gallery
+# figures and false of `demo.png`, whose alt had been paraphrased in the README
+# and copied into the site from there. A claim that the docs are generated from
+# the code, made in prose, about docs that are not.
+
+DEMO = README.parent / "examples" / "demo.py"
+
+MARKDOWN_IMAGE = re.compile(r"!\[([^\]]+)\]\((?:[^)]*/)?([\w.-]+\.png)\)")
+
+
+def described_strings():
+    """Every alt text the examples actually attach to a figure.
+
+    Two call shapes, and both are read rather than one being assumed:
+    `demo.py` calls `describe(fig, "...")` with the literal inline, and
+    `gallery.py` routes it through `finish(fig, name, "...")`, which calls
+    `describe` with a name the AST cannot resolve to a string.
+    """
+    import ast
+
+    out = []
+    for path in (DEMO, GALLERY):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = getattr(node.func, "attr", None) or getattr(
+                node.func, "id", None)
+            index = {"describe": 1, "finish": 2}.get(func)
+            if index is None or len(node.args) <= index:
+                continue
+            try:
+                value = ast.literal_eval(node.args[index])
+            except ValueError:
+                continue
+            if isinstance(value, str):
+                out.append(" ".join(value.split()))
+    return out
+
+
+def site_alt_texts():
+    return {" ".join(alt.split()): image for alt, image
+            in MARKDOWN_IMAGE.findall(DOCS_GALLERY.read_text())}
+
+
+def test_the_examples_still_describe_every_figure():
+    """Seven figures, seven descriptions. A refactor that changes the call
+    shape would otherwise leave this file comparing the site against a shorter
+    list and finding no disagreement."""
+    assert len(described_strings()) == 7, (
+        f"read {len(described_strings())} descriptions out of demo.py and "
+        "gallery.py, expected 7 - the call shape changed and "
+        "described_strings() needs updating with it")
+
+
+def test_the_gallery_page_shows_every_figures_own_alt_text():
+    assert set(site_alt_texts()) == set(described_strings()), (
+        "docs/gallery.md says every alt text on the page is the string the "
+        "figure carries. Not on the page but described: "
+        f"{sorted(set(described_strings()) - set(site_alt_texts()))}. On the "
+        "page but described by nothing: "
+        f"{sorted(set(site_alt_texts()) - set(described_strings()))}")
+
+
+def test_the_readme_shows_the_demo_figures_own_alt_text():
+    """The README is where the paraphrase entered, and it is the copy PyPI
+    renders, so it is checked separately from the page it was copied into."""
+    alts = [" ".join(alt.split())
+            for alt, image in MARKDOWN_IMAGE.findall(README.read_text())]
+    assert alts, "the README no longer embeds an image with alt text"
+    for alt in alts:
+        assert alt in described_strings(), (
+            f"the README's alt text is not one any example attaches:\n"
+            f"  README: {alt}")
+
+
+# --- the call the docs teach ------------------------------------------------
+# `alt_metadata(fig)` without the path warns on every PDF save and returns the
+# wrong key for SVG. It was corrected in SKILL.md and in both examples and left
+# standing in the style guide, so the release note announcing the fix shipped
+# beside a document still teaching the break. The CHANGELOG is excluded: it
+# quotes the broken form deliberately, as the history of it.
+
+TEACHING_DOCS = [README, SKILL_MD, GUIDE, DOCS_GALLERY,
+                 SKILL / "references" / "choosing-a-form.md",
+                 README.parent / "CONTRIBUTING.md"]
+
+
+def test_no_document_teaches_the_pathless_alt_metadata_call():
+    bad = []
+    for path in TEACHING_DOCS:
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if re.search(r"metadata\s*=\s*alt_metadata\(\s*\w+\s*\)", line):
+                bad.append(f"{path.name}:{number}")
+    assert not bad, (
+        f"{bad} pass alt_metadata a figure and no path. That returns "
+        "'Description', which matplotlib warns about on every PDF save and "
+        "which SVG rejects outright - pass the path too")

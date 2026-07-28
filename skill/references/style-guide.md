@@ -152,9 +152,15 @@ nobody had run. `tests/test_docs_match_code.py` now derives it by asking
 `check_palette.check(..., all_pairs=True)` for the largest count that passes, so the
 constant below and this sentence cannot drift from the validator again.
 
-**Grayscale:** Okabe-Ito does not solve it. Orange+sky blue (canonical first two) are
-ΔL 0.011, invisible when desaturated. Take orange+blue (ΔL 0.264) and add a second
-channel when it must survive a photocopier.
+**Grayscale:** Okabe-Ito does not solve it. Orange and sky blue, the canonical first
+two, separate by relative luminance 0.011 (`#E69F00` vs `#56B4E9`) and are invisible
+once desaturated. Take orange and blue instead — relative luminance 0.264 (`#E69F00`
+vs `#0072B2`) — and add a second channel when it must survive a photocopier.
+
+The unit is WCAG relative luminance here, not the OKLab ΔE ×100 the separation gates
+use, because that is the channel a desaturation keeps. In OKLab lightness the same two
+pairs are 0.018 and 0.221: the ordering is the same, the numbers are not, and a reader
+who recomputes one convention against the other concludes the guide has drifted.
 
 ### Sequential: viridis, as shipped
 
@@ -165,7 +171,7 @@ ax.pcolormesh(X, Y, Z, cmap="viridis")    # continuous — as shipped
 ```
 
 **Window only for discrete tiers drawn as standalone lines/marks.** Full-range viridis
-ends at `#fde725`, 1.23:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
+ends at `#fde725`, 1.26:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
 `ordinal()` from the appendix. Two things to get right: sample
 evenly (ΔL ratio < 2×), and narrow to `t ∈ [0.00, 0.38]` when the figure also carries
 status green (viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`).
@@ -311,7 +317,8 @@ so nothing tells you until the latest and most expensive possible moment.
 
 **Describe the figure.** Across 100,000 public notebooks, 99.81% of generated images
 shipped with no alt text, nearly all of them matplotlib. `describe(fig, ...)` then
-`savefig(path, metadata=alt_metadata(fig))`. Say what the reader would have taken from
+`savefig(path, metadata=alt_metadata(fig, path))` — the path a second time, so the call
+can pick the key that format has. Say what the reader would have taken from
 looking — the numbers and the direction — not what the figure is made of. "A line chart
 with three lines" describes the file.
 
