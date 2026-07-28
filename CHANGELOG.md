@@ -2,6 +2,109 @@
 
 ## Unreleased
 
+### An audit of the gates, and what it found
+
+Two of the nineteen rows were not measuring what they claimed, and four
+documented numbers were not the numbers the code computes. All six are the same
+species — a claim nobody had run — which is what the rest of this file is about,
+so each fix ships with the executable link that keeps it true.
+
+- **The contour-dash gate never fired on signed data.** It required *every*
+  level to be non-positive, which is the one shape a genuinely signed field
+  never has: `contour` over data spanning zero draws levels either side, and
+  matplotlib dashes the negative half. A `sin(x)cos(y)` field shipped four
+  dashed isolines and the gate reported "no auto-dashed negative contours". The
+  only test it had drew `-(x² + y²)`, non-positive throughout — the one shape
+  that met the condition — so the hole was invisible from inside the suite.
+
+  The rule is now "any negative level", and it is asked of the strokes the set
+  actually drew rather than of `negative_linestyles`, which is what the gate
+  should have read from the start. Six tests cover it: the signed field, the
+  signed field drawn solid, all-negative both ways, all-positive, colormapped,
+  and filled.
+
+- **Two rows were documented as able to fail, and cannot.** `Overplotting` and
+  `Contour dash` return only `True` or `"warn"`, but the README table gave both
+  a "Fails when" and the prose counted five advisory rows against an actual
+  seven. `ADVISORY_GATES` in `check_figure.py` is now the one list; the table's
+  tags, the count in the prose, and the claim that none of those functions has a
+  returning-`False` path are all tested against it.
+
+- **`check_mark_ratio` measured two mark kinds in different units.** Scatter
+  `s` is an area in pt²; `markersize` is a diameter, and squaring it gives the
+  bounding square rather than the disc — 4/π = 1.27× too large. On a figure
+  drawing one kind the bias cancels in the ratio and nothing shows. On one
+  mixing `scatter` with `plot(marker=...)`, two marks of identical drawn area
+  reported 1.3×, which against a 5.0 threshold fails a legal figure at a true
+  3.9× and passes a bad one at 6.4×.
+
+- **`alt_metadata` warned on every PDF save, and crashed on every jpeg.** The
+  documented call — the one in `SKILL.md`, in the README and in both examples —
+  is `savefig(path, metadata=alt_metadata(fig))`, and what each format does
+  with that turned out to be four different things, three of them undocumented:
+
+  | Format | `Description` | `Subject` |
+  |---|---|---|
+  | png | lands in a tEXt chunk | lands |
+  | pdf | **warns**, info dictionary is closed (PDF 1.7 §14.3.3) | lands |
+  | svg / svgz | lands in Dublin Core | **raises** |
+  | ps / eps | accepted, carried nowhere | carried nowhere |
+  | jpg, webp, tif, raw, pgf | **raises** | **raises** |
+
+  So the key cannot be one value, and for the bottom row it cannot be a value at
+  all: matplotlib's guard is `elif metadata is not None: raise`, which rejects
+  `{}` exactly as hard as a full dict. `savefig(path, metadata={})` on a jpeg
+  was already a traceback before any of this — a figure with no description
+  attached hit it too.
+
+  `alt_metadata(fig, path)` now reads the suffix and returns the key that
+  format has, or `None` — `savefig`'s own default for the argument — for the
+  ones that have none. Called without a path, or with a buffer whose format
+  cannot be read, it returns `Description` as every earlier version did. An open
+  file is asked for its `name`. The table is not written from memory: the suite
+  saves a real figure in every format it names and asserts no warning and the
+  text present in the bytes, and saves in every format it excludes and asserts
+  the call survives.
+
+- **The guide's ink table credited the sheet with a token it does not ship.**
+  Muted ink was listed as `#898781`, which `figure.mplstyle` stopped setting
+  when `check_text_readability` failed the sheet's own tick labels against it at
+  3.59:1 — under the 4.5:1 a glyph stem needs. It is `#777570`. The old spelling
+  stays in `INK_TOKENS` so figures built on the old sheet still read it as
+  furniture. Every hex the table credits to the sheet is now resolved against
+  the sheet through `rc_params_from_file`, so the table cannot quote a value the
+  sheet does not define. Third instance of this exact failure, after the
+  contrast column and the retired `#fcfcfb` surface.
+
+- **"Only the first four slots clear all-pairs" was off by one.** Five clear it,
+  at ΔE 11.2 under deuteranopia against a target of 8; six is the first count
+  that fails, at 7.9 (`#009E73` vs `#CC79A7`). Four was a number nobody had run,
+  stated in three documents and the appendix constant as though it were a
+  measurement. The limit is now derived in the suite by asking
+  `check_palette.check(..., all_pairs=True)` for the largest passing count, and
+  the prose and the constant are held to it.
+
+- **`_halo` reads a matplotlib internal and failed silently.** `Stroke` keeps
+  its kwargs in a private `_gc` and there is no public accessor; the fallback
+  returned "no casing", which would have meant every cased label in every figure
+  being judged against the raw backdrop the casing exists to survive — correct
+  work failing, with nothing saying why. It now tries any other dict attribute
+  carrying a `foreground`, and a direct test makes an upstream rename a red
+  suite rather than a quiet regression.
+
+- Smaller, same shape: `--venues` no longer requires matplotlib to print a table
+  of numbers; the dual-axis message says "two data scales" rather than "two y
+  scales", since `twiny` lands there on the same argument; the appendix's
+  `ordinal()` no longer divides by zero at `n=1`; and the scipy-optional test
+  now compares the KD-tree and numpy nearest-neighbour paths against each other
+  on a figure that actually has a scatter — the old one audited a figure with
+  none, proving the import was soft but never that the fallback computes the
+  same thing.
+
+Suite: 224 → 268 tests.
+
+### Docs site
+
 Documentation only. No code, no thresholds, no packaging change — the wheel
 built from this commit is byte-identical in what it ships.
 

@@ -64,7 +64,11 @@ def finish(fig, name, description, **audit_kw):
     written out so you can look at what failed."""
     cf.describe(fig, description)
     ok = cf.report(fig, name, **audit_kw)
-    fig.savefig(HERE / f"{name}.png", metadata=cf.alt_metadata(fig))
+    out = HERE / f"{name}.png"
+    # `alt_metadata` takes the path so it can pick a key the format has. PNG
+    # takes `Description`; PDF's info dictionary does not have one, and asking
+    # for it there makes matplotlib warn on every save.
+    fig.savefig(out, metadata=cf.alt_metadata(fig, out))
     plt.close(fig)
     results.append((name, ok))
 

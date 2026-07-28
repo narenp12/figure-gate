@@ -62,13 +62,46 @@ def test_the_dagger_matches_the_number(hex_color, quoted):
     hairline use altogether has no direct-label obligation to carry, so it is
     marked ‡ alone even though it is also under 3:1. Yellow is the only slot
     where the two overlap.
+
+    That branch used to `pytest.skip`, which left the one row with a marker
+    collision as the one row whose marker nothing checked -- the suite reported
+    a permanent 1 skipped and the ‡ was taken on trust. A skip is not a weaker
+    assertion, it is the absence of one. So ‡ now asserts its own claim: the hue
+    really is outside the band, and it does not also wear the † it supersedes.
+
+    The converse is scoped to the role column rather than applied to every
+    unmarked row, because black is out of the band at L 0.000 and carries no ‡
+    on purpose. It is held out as the ink token, which the guide states as a
+    preference and not a measurement -- so "unmarked" means "in band" only for
+    the rows offered as series hues, which is also the only place
+    `check_palette` gates the band.
     """
     line = next((l for l in GUIDE.read_text().splitlines()
                  if f"`{hex_color}`" in l and l.startswith("|")), None)
     if line is None:
         pytest.fail(f"`{hex_color}` not found in guide table")
+    role = line.strip().strip("|").split("|")[-1].strip()
+
+    lightness = cp.linear_to_oklab(cp.hex_to_linear(hex_color))[0]
+    in_band = cp.L_MIN <= lightness <= cp.L_MAX
     if "‡" in line:
-        pytest.skip("held out of line use entirely; ‡ supersedes †")
+        assert not in_band, (
+            f"{hex_color} is marked ‡ (outside the lightness band) at OKLab L "
+            f"{lightness:.3f}, which is inside {cp.L_MIN}-{cp.L_MAX}")
+        assert "†" not in line, (
+            f"{hex_color} carries both markers. ‡ supersedes †: a hue held out "
+            "of line and hairline use has no direct-label obligation left to "
+            "carry, so the row states one rule, not two")
+        assert role != "series", (
+            f"{hex_color} is offered as a series hue and marked ‡. The ‡ is "
+            "what holds a hue out of line use; a row cannot do both")
+        return
+
+    if role == "series":
+        assert in_band, (
+            f"{hex_color} is offered as a series hue at OKLab L "
+            f"{lightness:.3f}, outside the {cp.L_MIN}-{cp.L_MAX} band, and the "
+            "row carries no ‡ to say so")
     marked = "†" in line
     below = cp.contrast(hex_color, SURFACE) < cp.CONTRAST_MIN
     assert marked == below, (
@@ -182,6 +215,200 @@ def test_the_readme_test_count_is_the_real_one():
     assert claimed, ("the README no longer states a test count in the form "
                      "this test reads")
     assert int(claimed.group(1)) == collected_test_count()
+
+
+# --- which rows can actually fail --------------------------------------------
+# The roster test above proved the README names every gate. It said nothing
+# about what each one is allowed to return, and the table was wrong there in
+# both directions: `Overplotting` and `Contour dash` were given a "Fails when"
+# neither can do -- both return only True or "warn" -- and the prose counted
+# five advisory rows against an actual seven. `ADVISORY_GATES` in
+# check_figure.py is now the one list, and these hold the docs to it.
+
+def readme_advisory_names():
+    """Gates the README table marks *(advisory)*, from the same parse the
+    roster test uses, so the two cannot disagree about which rows exist."""
+    lines = README.read_text().splitlines()
+    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    out = []
+    for line in lines[start:]:
+        if line.startswith("|"):
+            cells = line.strip().strip("|").split("|")
+            if "*(advisory)*" in line:
+                out.append(cells[0].strip())
+        elif out:
+            break
+    return set(out)
+
+
+def test_the_readme_marks_exactly_the_advisory_gates():
+    import check_figure as cf
+
+    assert readme_advisory_names() == set(cf.ADVISORY_GATES)
+
+
+def test_the_readme_states_the_advisory_count_it_marks():
+    """The number in the prose and the tags in the table are the same claim
+    written twice, which is how one of them came to be wrong."""
+    import check_figure as cf
+
+    words = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
+    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", README.read_text())
+    assert claimed, ("the README no longer states an advisory count in the "
+                     "form this test reads")
+    word = claimed.group(1).lower()
+    assert word in words, f"unreadable advisory count {word!r}"
+    assert words[word] == len(cf.ADVISORY_GATES)
+
+
+def test_every_advisory_gate_is_a_gate_that_exists():
+    import check_figure as cf
+
+    assert set(cf.ADVISORY_GATES) <= set(audit_gate_names())
+
+
+def test_no_advisory_gate_ever_returns_false():
+    """The claim `ADVISORY_GATES` makes, asked of the code rather than trusted.
+
+    A gate moved into the set by mistake -- or one that grows a hard failure
+    later without being moved out -- is a README that promises a row cannot
+    fail a build while it can.
+
+    This is a heuristic and worth naming as one: it reads return statements out
+    of the source and looks for the shapes that can evaluate False. It cannot
+    see a False routed through a variable or a helper, so it catches the
+    obvious regression rather than proving the negative. The per-gate tests in
+    `test_figure.py` are what actually pin each row's behaviour; this is the
+    cheap tripwire over the set as a whole.
+    """
+    import inspect
+
+    import check_figure as cf
+
+    by_gate = {
+        "Overplotting": cf.check_overplotting,
+        "Ink coverage": cf.check_ink,
+        "Identity channel": cf.check_identity_channel,
+        "Style sheet": cf.check_style_sheet,
+        "Contour dash": cf.check_contour_dash,
+        "Fonts": cf.check_fonts,
+        "Alt text": cf.check_alt_text,
+    }
+    assert set(by_gate) == set(cf.ADVISORY_GATES), (
+        "this mapping is out of date with ADVISORY_GATES")
+    for name, fn in by_gate.items():
+        returns = re.findall(r"return\s+(.+)", inspect.getsource(fn))
+        bad = [r for r in returns if r.startswith(("False", "(False", "ok,",
+                                                   "(ok", "not "))]
+        assert not bad, f"{name} has a returning-False path: {bad}"
+
+
+# --- the ink tokens the guide hands you --------------------------------------
+# Same failure as the contrast table and the retired surface, a third time: the
+# guide's ink table listed muted ink as `#898781`, which the sheet stopped
+# shipping when `check_text_readability` failed the sheet's own tick labels
+# against it at 3.59:1. The table said "Defined in figure.mplstyle" beside a
+# value figure.mplstyle does not define.
+
+INK_TABLE_ROW = re.compile(r"^\|[^|]+\|([^|]*`#[0-9A-Fa-f]{6}`[^|]*)\|\s*"
+                           r"`figure\.mplstyle`\s*\|")
+
+
+def guide_ink_hexes():
+    out = []
+    for line in GUIDE.read_text().splitlines():
+        m = INK_TABLE_ROW.match(line)
+        if m:
+            out.extend(h.lower() for h in
+                       re.findall(r"`(#[0-9A-Fa-f]{6})`", m.group(1)))
+    return out
+
+
+def sheet_hexes():
+    """Every colour the style sheet actually sets, as normalised hex.
+
+    Read through `rc_params_from_file` rather than grepped, because the sheet
+    spells white as `white` and its hexes bare (a leading `#` is a comment in
+    that format).
+    """
+    import matplotlib as mpl
+    from matplotlib.colors import to_hex
+
+    from conftest import STYLE_SHEET
+
+    out = set()
+    for value in mpl.rc_params_from_file(
+            STYLE_SHEET, use_default_template=False).values():
+        for item in (value if isinstance(value, (list, tuple)) else [value]):
+            try:
+                out.add(to_hex(item).lower())
+            except (ValueError, TypeError):
+                continue
+    return out
+
+
+def test_the_ink_table_is_still_parseable():
+    assert len(guide_ink_hexes()) == 6, (
+        f"expected the 6 ink/furniture tokens, matched {guide_ink_hexes()}")
+
+
+@pytest.mark.parametrize("hex_color", guide_ink_hexes())
+def test_every_token_the_guide_credits_to_the_sheet_is_in_the_sheet(hex_color):
+    assert hex_color in sheet_hexes(), (
+        f"{hex_color} is listed as defined in figure.mplstyle, which sets "
+        f"{sorted(sheet_hexes())}")
+
+
+# --- the all-pairs limit -----------------------------------------------------
+# "Only the first four slots clear all-pairs" was in three documents and the
+# appendix constant, and no one had run it: five clear it at dE 11.2 against a
+# target of 8, and six is the first count that fails. A recommendation stated
+# as a measurement has to be the measurement.
+
+SERIES_SLOTS = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7"]
+
+
+def largest_all_pairs_count():
+    """The most slots, taken in order, that clear every gate in all-pairs mode."""
+    best = 1
+    for n in range(2, len(SERIES_SLOTS) + 1):
+        _, ok = cp.check(SERIES_SLOTS[:n], all_pairs=True)
+        if not ok:
+            break
+        best = n
+    return best
+
+
+def test_the_series_slots_are_the_ones_the_style_sheet_cycles():
+    """If the sheet's cycle changes, the number below is about a palette
+    nothing draws."""
+    import matplotlib as mpl
+
+    from conftest import STYLE_SHEET
+
+    cycle = mpl.rc_params_from_file(
+        STYLE_SHEET, use_default_template=False)["axes.prop_cycle"]
+    assert [c.lower() for c in cycle.by_key()["color"]] == \
+        [c.lower() for c in SERIES_SLOTS]
+
+
+def test_the_guide_quotes_the_all_pairs_limit_it_measures():
+    written = re.search(r"MAX_SERIES, MAX_SERIES_ALL_PAIRS = (\d+), (\d+)",
+                        GUIDE.read_text())
+    assert written, "the appendix no longer states the constants in this form"
+    assert int(written.group(2)) == largest_all_pairs_count()
+
+
+def test_the_prose_agrees_with_the_appendix_constant():
+    """Two documents say the limit in words. Both have been wrong."""
+    words = {"three": 3, "four": 4, "five": 5, "six": 6}
+    limit = largest_all_pairs_count()
+    for path in (GUIDE, SKILL / "SKILL.md"):
+        found = re.findall(r"first[- ](\w+) slots? clear", path.read_text())
+        assert found, f"{path.name} no longer states the limit in words"
+        for word in found:
+            assert words.get(word.lower()) == limit, (
+                f"{path.name} says 'first {word}', measured {limit}")
 
 
 def test_validator_default_surface_is_what_the_style_sheet_renders():

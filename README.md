@@ -77,7 +77,7 @@ this order.
 | Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
-| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points have a nearest neighbour inside one marker radius |
+| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points have a nearest neighbour inside one marker radius *(advisory)* |
 | Axis redundancy | shared scale | panels on a shared scale repeat tick labels or axis titles |
 | Type size | `TYPE_FLOOR_PT = 7.5` | a string renders under 7.5pt *on the printed page* |
 | Line weight | `LINE_FLOOR_PT = 1.0` | a stroke renders under 1pt on the printed page (SIAM's floor) |
@@ -88,7 +88,7 @@ this order.
 | Identity channel | — | two or more series, no legend and no text in the axes *(advisory)* |
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest other series is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
-| Contour dash | — | a signed contour set dashes its negative levels |
+| Contour dash | — | a signed contour set dashes its negative levels *(advisory)* |
 | Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 
@@ -270,12 +270,15 @@ for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
 poles clear every gate in `check_palette.py` unmodified, and a windowed custom
 ramp discarded 35% of viridis for no measured gain.
 
-**WARN is not FAIL.** Five rows are advisory. A sub-3:1 hue is legal when it
-carries a direct label; a heatmap panel legitimately measures 0.98 ink
-coverage. Failing those would train people to ignore the row, and an ignored
-gate is worth less than no gate.
+**WARN is not FAIL.** Seven of the 19 rows are advisory — they can return
+`"warn"` but never `False` — and `ADVISORY_GATES` in `check_figure.py` is the
+list. A sub-3:1 hue is legal when it carries a direct label; a heatmap panel
+legitimately measures 0.98 ink coverage. Failing those would train people to
+ignore the row, and an ignored gate is worth less than no gate. Type size is
+the one row that does both: it fails under the floor, and warns on a figure
+placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 224 tests, and
+**Gates are tested for their ability to fail.** The suite is 268 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

@@ -40,6 +40,7 @@ Checks, in the order `audit` runs them
 """
 
 import itertools
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -57,6 +58,31 @@ OVERPLOT_THRESHOLD = 0.5
 # seventh: a generated hue is indistinguishable from an existing slot under
 # simulated color blindness. Until now that claim was prose only.
 MAX_SERIES_HUES = 6
+
+# Rows `audit` can return "warn" for and never False. They are the checks whose
+# verdict depends on something the script cannot see: whether the document's
+# caption already carries the description, whether the saturated panel is a
+# heatmap, whether the figure was built under another project's sheet. Failing
+# on a guess there is how a row becomes one everyone skims past.
+#
+# Up here with the thresholds rather than beside `audit`, because the README
+# says every constant worth knowing about is a module-level one you can read,
+# and this is the one that says which rows can stop a build.
+#
+# A constant rather than a sentence in the README, because "which rows are
+# advisory" was stated in prose in two places and was wrong in both: the table
+# gave Overplotting and Contour dash a "Fails when" they cannot do, and the
+# count said five against an actual seven. `tests/test_docs_match_code.py`
+# reads this set and holds the prose to it.
+ADVISORY_GATES = frozenset({
+    "Overplotting",
+    "Ink coverage",
+    "Identity channel",
+    "Style sheet",
+    "Contour dash",
+    "Fonts",
+    "Alt text",
+})
 
 # Ink and furniture from `figure.mplstyle`. These land in `ax.lines` and
 # `ax.patches` beside the data - reference rules, annotation boxes, spine-colored
@@ -364,15 +390,29 @@ def _halo(t):
     is what lets a label sit over busy ground at all. Reading it off the artist
     rather than guessing from the pixels keeps the two clauses below separable:
     whether the halo *should* have worked, and whether it *did*.
+
+    `Stroke` keeps its kwargs in a private `_gc` dict and matplotlib exposes no
+    public accessor. That is a dependency on an internal name, so it fails the
+    way internals do — silently, returning no halo, at which point every cased
+    label in every figure gets judged against the raw backdrop it was cased to
+    survive, and correct work starts failing. Any other dict attribute carrying
+    a `foreground` is tried before giving up, and `test_halo_reads_withstroke`
+    exists to make a rename a red suite rather than a quiet regression.
     """
     from matplotlib import patheffects as pe
     for effect in (t.get_path_effects() or ()):
         if not isinstance(effect, pe.Stroke):     # withStroke subclasses Stroke
             continue
-        gc = getattr(effect, "_gc", {}) or {}
-        fg = gc.get("foreground")
-        if fg is not None:
-            return fg, float(gc.get("linewidth", 0.0) or 0.0)
+        # `_gc` first by name, then any other dict the effect carries. Scanning
+        # `vars` covers `_gc` too, so the named lookup is only there to fix the
+        # order: the attribute matplotlib actually uses wins over a same-shaped
+        # one that happens to be declared earlier.
+        for gc in (getattr(effect, "_gc", None), *vars(effect).values()):
+            if not isinstance(gc, dict):
+                continue
+            fg = gc.get("foreground")
+            if fg is not None:
+                return fg, float(gc.get("linewidth", 0.0) or 0.0)
     return None, 0.0
 
 
@@ -694,9 +734,17 @@ def check_mark_ratio(fig):
     reading as an ornament stuck on top of the plot.
 
     Reads scatter sizes (already an area in pt^2) and line markers (a diameter
-    in points, so squared to match). Bars and other patches are deliberately
-    NOT counted: a bar thirty times another bar is the encoding working, not a
-    defect. This gate is about marks whose size is not carrying the value.
+    in points, converted to the area of the disc it draws). Bars and other
+    patches are deliberately NOT counted: a bar thirty times another bar is the
+    encoding working, not a defect. This gate is about marks whose size is not
+    carrying the value.
+
+    The conversion used to be `markersize ** 2`, which is the bounding square
+    rather than the mark, and it is 4/pi = 1.27x too large. On a figure drawing
+    only one artist type the bias cancels in the ratio and nothing shows; on one
+    mixing `scatter` with `plot(marker=...)` it does not, and two marks of
+    identical drawn area reported 1.3x. Against a 5.0 threshold that is enough
+    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x.
     """
     worst = None
     for ax in fig.axes:
@@ -709,7 +757,7 @@ def check_mark_ratio(fig):
                 continue
             ms = float(ln.get_markersize())
             if ms > 0:
-                sizes.append(ms ** 2)
+                sizes.append((ms / 2.0) ** 2 * math.pi)
         if len(sizes) < 2:
             continue
         ratio = max(sizes) / min(sizes)
@@ -1208,8 +1256,11 @@ def check_dual_axis(fig):
             pairs.append(f"ax{i}+ax{j}")
     if not pairs:
         return True, "one data scale per frame"
-    return False, (f"two y scales sharing a frame: {', '.join(pairs)}  <- the "
-                   "crossing point is set by the limits, not the data. Two "
+    # "two scales", not "two y scales": `twiny` lands here on exactly the same
+    # argument, and naming the wrong axis sends the reader looking for a defect
+    # on the one that is fine.
+    return False, (f"two data scales sharing a frame: {', '.join(pairs)}  <- "
+                   "the crossing point is set by the limits, not the data. Two "
                    "panels, small multiples, or index both to a common base")
 
 
@@ -1437,6 +1488,44 @@ def _is_dashed_linestyle(ls):
     return False
 
 
+def _negative_levels_are_dashed(cs):
+    """Whether a ContourSet ships its negative levels dashed.
+
+    Asked of the strokes the set actually drew — `get_linestyle()` returns one
+    (offset, dashes) per level, and a `dashes` of None is solid — rather than
+    inferred from `negative_linestyles`. The artist is the thing that decides,
+    and reading it is what keeps this gate honest about the case matplotlib
+    silently handles for you.
+
+    Falls back to the configured `negative_linestyles` when the drawn styles do
+    not line up one-per-level (matplotlib broadcasts a single entry, and older
+    versions did so more often), so the gate degrades to the previous, coarser
+    reading rather than to no reading at all.
+    """
+    levels = getattr(cs, "levels", None)
+    if levels is None or len(levels) == 0:
+        return False
+    negative = [i for i, lv in enumerate(levels) if lv < 0]
+    if not negative:
+        return False
+
+    try:
+        drawn = list(cs.get_linestyle())
+    except (AttributeError, TypeError):
+        drawn = []
+    if len(drawn) == len(levels):
+        return any(_is_dashed_linestyle(drawn[i]) for i in negative)
+
+    if not getattr(cs, "monochrome", False):
+        return False
+    nl = getattr(cs, "negative_linestyles", None)
+    if nl is None:
+        return False
+    # A scalar (string or tuple) or a list; any non-solid entry triggers.
+    styles = nl if isinstance(nl, list) else [nl]
+    return any(_is_dashed_linestyle(s) for s in styles)
+
+
 def check_contour_dash(fig):
     """Negative-level contours auto-dash via matplotlib default.
 
@@ -1446,6 +1535,14 @@ def check_contour_dash(fig):
     threshold, making this a silent semantic error every existing gate misses.
 
     Non-monochrome (colored) contours are always solid and unaffected.
+
+    The condition used to be that EVERY level was non-positive, which is the
+    one shape a genuinely signed field never has: `contour` over data spanning
+    zero draws levels either side of it, matplotlib dashes the negative half,
+    and the gate skipped the figure entirely. It fired only on data that is
+    non-positive throughout — which is what the original test drew, so the hole
+    was invisible from inside the suite. The rule is now "any negative level",
+    asked of the drawn strokes.
     """
     from matplotlib.contour import ContourSet
 
@@ -1454,20 +1551,7 @@ def check_contour_dash(fig):
         for c in ax.collections:
             if not isinstance(c, ContourSet):
                 continue
-            levels = getattr(c, "levels", None)
-            if levels is None or len(levels) == 0:
-                continue
-            if not all(l <= 0 for l in levels):
-                continue
-            if not getattr(c, "monochrome", False):
-                continue
-            nl = getattr(c, "negative_linestyles", None)
-            if nl is None:
-                continue
-            # negative_linestyles may be a scalar (string or tuple) or a list;
-            # handle both. If it's a list, any non-solid entry triggers.
-            styles = nl if isinstance(nl, (tuple, list)) else [nl]
-            if any(_is_dashed_linestyle(s) for s in styles):
+            if _negative_levels_are_dashed(c):
                 warned.append(
                     f"ax{i}: negative-level contours auto-dashed — dashing "
                     "reads as projected/unobserved here; pass "
@@ -1619,7 +1703,7 @@ def describe(fig, text):
         describe(fig, "Validation loss against training epoch for three "
                       "optimisers. All three fall; the Bayesian run reaches "
                       "0.05 by epoch 6, the baseline is still at 0.25 at 12.")
-        fig.savefig(path, metadata=alt_metadata(fig))
+        fig.savefig(path, metadata=alt_metadata(fig, path))
 
     Say what the reader would have taken from looking, not what the figure is
     made of. "A line chart with three lines" describes the file; the numbers
@@ -1629,15 +1713,92 @@ def describe(fig, text):
     return fig
 
 
-def alt_metadata(fig):
+# What each output format does with a description, measured rather than
+# assumed. `test_alt_metadata_matches_what_each_format_accepts` saves a real
+# figure in every format named here and checks the result, because three of
+# these five behaviours are ones no documentation states:
+#
+#   png            any key, lands in a tEXt chunk
+#   pdf            a closed info dictionary (PDF 1.7 §14.3.3). `Description` is
+#                  not in it: matplotlib warns "Unknown infodict keyword" on
+#                  every save. `Subject` is the slot that carries a description
+#   svg / svgz     a Dublin Core subset. `Description` lands -- and `Subject`
+#                  RAISES ValueError, so the pdf spelling cannot just be used
+#                  everywhere
+#   ps / eps       accepts the kwarg and carries nothing into the file
+#   jpg and the
+#   other rasters  `metadata=` RAISES ValueError for any key at all
+#
+# That last row is why this is a table and not a default: the documented call
+# is `savefig(path, metadata=alt_metadata(fig, path))`, and handing a non-empty
+# dict to a jpeg save turns the happy path into a traceback.
+ALT_TEXT_KEY_BY_SUFFIX = {
+    ".png": "Description",
+    ".pdf": "Subject",
+    ".svg": "Description",
+    ".svgz": "Description",
+}
+ALT_TEXT_KEY_DEFAULT = "Description"
+# Formats that either drop the description or reject the kwarg outright. Named
+# rather than inferred from "not in the table above", so that an unrecognised
+# suffix keeps the old behaviour instead of silently losing the description.
+ALT_TEXT_UNSUPPORTED_SUFFIXES = frozenset({
+    ".ps", ".eps",                                    # carried nowhere
+    ".jpg", ".jpeg", ".webp", ".tif", ".tiff",        # raise on any key
+    ".raw", ".rgba", ".pgf",
+})
+
+
+def _savefig_suffix(path):
+    """The lowercased suffix of a savefig target, or None when there is not one.
+
+    `savefig` also takes an open file or a buffer. An open file knows the name
+    it was opened under; a `BytesIO` does not, and its format lives in a
+    `format=` kwarg this function never sees. None means "no format to read",
+    which the caller treats the same as being passed no path at all.
+    """
+    import os
+
+    name = getattr(path, "name", path)
+    if not isinstance(name, (str, os.PathLike)):
+        return None
+    return Path(os.fspath(name)).suffix.lower() or None
+
+
+def alt_metadata(fig, path=None):
     """The `metadata=` dict for `savefig`, carrying whatever `describe` set.
 
-    PNG, PDF and SVG each keep a description field and matplotlib writes to all
-    three from this key, so the text survives into the file rather than living
-    only in the build script.
+    Pass the same `path` you are about to save to, so the description lands in
+    a field the target format actually has:
+
+        fig.savefig(path, metadata=alt_metadata(fig, path))
+
+    PNG, PDF and SVG all keep a description and none of them agrees with the
+    others about what to call it, so the key is chosen from the suffix.
+
+    For a format that carries no description -- ps, or any of the rasters --
+    this returns `None` rather than an empty dict, and the difference is not
+    cosmetic. matplotlib's guard is `elif metadata is not None: raise`, so an
+    empty dict is rejected exactly as hard as a full one; `savefig(path,
+    metadata={})` on a jpeg is a traceback. `None` is `savefig`'s own default
+    for the argument and the only value those formats accept.
+
+    Called without a path, or with a buffer whose format cannot be read, it
+    returns `Description`. That is right for PNG and SVG and is what every
+    earlier version returned unconditionally.
     """
+    # Before the empty-description check, because a format that rejects the
+    # kwarg rejects `{}` too -- the figure having nothing to say does not make
+    # the jpeg save survive.
+    suffix = _savefig_suffix(path) if path is not None else None
+    if suffix in ALT_TEXT_UNSUPPORTED_SUFFIXES:
+        return None
     text = getattr(fig, ALT_TEXT_ATTR, None)
-    return {"Description": text} if text else {}
+    if not text:
+        return {}
+    if suffix is None:
+        return {ALT_TEXT_KEY_DEFAULT: text}
+    return {ALT_TEXT_KEY_BY_SUFFIX.get(suffix, ALT_TEXT_KEY_DEFAULT): text}
 
 
 def check_alt_text(fig):
@@ -1654,7 +1815,7 @@ def check_alt_text(fig):
     text = str(getattr(fig, ALT_TEXT_ATTR, "") or "").strip()
     if not text:
         return "warn", ("no description attached  <- describe(fig, \"...\") "
-                        "and pass alt_metadata(fig) to savefig; if the "
+                        "and pass alt_metadata(fig, path) to savefig; if the "
                         "document's caption carries it, this row is discharged")
     if len(text) < ALT_TEXT_MIN_CHARS:
         return "warn", (f"description is {len(text)} characters — that is a "
@@ -1771,6 +1932,19 @@ def self_test_figure():
 def main():
     """Run the self-test. Exits 0 when the gate correctly rejects a bad figure,
     so `check-figure` in a build verifies the checker itself is still working."""
+    import sys
+    # Before the matplotlib import, not after: `--venues` prints a dict of
+    # numbers and needs nothing installed to do it. Asking for it on a machine
+    # without matplotlib used to hit the install message instead.
+    if "--venues" in sys.argv:
+        print("\nContent widths, in points. Pass one as venue= to audit().")
+        print("Verify against `\\the\\textwidth` in your own document before "
+              "trusting one for anything that matters.\n")
+        for name, pt in sorted(VENUE_WIDTH_PT.items()):
+            print(f"  {name:<16} {pt:>7.2f} pt   ({pt / 72:.2f} in)")
+        print()
+        return
+
     try:
         import matplotlib
     except ImportError:
@@ -1782,15 +1956,6 @@ def main():
             "style guide; only this automated check is matplotlib-specific. On "
             "another plotting stack, apply the rules by hand or port the "
             "checks - each one reads geometry any library can report.")
-    import sys
-    if "--venues" in sys.argv:
-        print("\nContent widths, in points. Pass one as venue= to audit().")
-        print("Verify against `\\the\\textwidth` in your own document before "
-              "trusting one for anything that matters.\n")
-        for name, pt in sorted(VENUE_WIDTH_PT.items()):
-            print(f"  {name:<16} {pt:>7.2f} pt   ({pt / 72:.2f} in)")
-        print()
-        return
 
     matplotlib.use("agg")
     composed = report(self_test_figure(), "self-test (expected: FAIL)")

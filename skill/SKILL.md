@@ -192,8 +192,16 @@ numbers and the direction — not what the figure is made of:
 describe(fig, "Validation loss against epoch for three optimisers. All three "
               "fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is "
               "still at 0.25 at 12.")
-fig.savefig(path, metadata=alt_metadata(fig))
+fig.savefig(path, metadata=alt_metadata(fig, path))
 ```
+
+Pass `path` to `alt_metadata` as well as to `savefig`. PNG, PDF and SVG all keep
+a description and none of them calls it the same thing: PDF's info dictionary
+has no `Description` and matplotlib warns on every save, while SVG *raises* on
+PDF's `Subject`. With the path it picks the right one. For a format with no
+description field — ps, or any of the rasters — it returns `None`, which is the
+only value `savefig` accepts there; a jpeg rejects `metadata={}` as hard as a
+full dict.
 
 `check_figure.py` gates clipping, text collision, text readability, alpha
 stacking, mark ratio, overplotting, axis redundancy, type size, line weight, ink
@@ -249,9 +257,11 @@ structure, red is training") is how a palette that looks fine measures ΔE 3.2
 under protanopia. The in-order rule exists to keep that from happening.
 
 Two limits worth knowing: scatter and small multiples compare *every* series
-against every other, and only the first four slots clear that — past four, fold
-the tail into "Other" or facet. And there is no seventh series hue; a generated
-one is indistinguishable from an existing slot under simulated color blindness.
+against every other, and only the first five slots clear that — the sixth drops
+the worst pair to ΔE 7.9 under deuteranopia, under the target of 8, so past five
+fold the tail into "Other" or facet. And there is no seventh series hue; a
+generated one is indistinguishable from an existing slot under simulated color
+blindness.
 
 `figure.mplstyle` now sets `axes.prop_cycle` to the six series slots, so a
 figure built on the sheet is on the right palette without anyone remembering to

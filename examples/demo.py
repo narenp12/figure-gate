@@ -143,7 +143,8 @@ passed = cf.report(fig, "demo")
 # No dpi or bbox here on purpose: both come from the style sheet, which is the
 # point of having one. `bbox_inches="tight"` in particular would change the
 # saved width and quietly invalidate the type-size check that just ran.
-fig.savefig(HERE / "demo.png", metadata=cf.alt_metadata(fig))
+out = HERE / "demo.png"
+fig.savefig(out, metadata=cf.alt_metadata(fig, out))
 plt.close(fig)
 
 print(f"wrote {HERE / 'demo.png'}")

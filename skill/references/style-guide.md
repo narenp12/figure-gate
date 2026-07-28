@@ -139,10 +139,18 @@ if you want.
 
 The remaining six, in canonical order: `#E69F00 #56B4E9 #009E73 #0072B2 #D55E00 #CC79A7`
 
-Adjacent CVD ΔE 16.6, adjacent normal-vision ΔE 16.4, first-four all-pairs ΔE 11.5/18.4.
+Adjacent CVD ΔE 16.6, adjacent normal-vision ΔE 16.4, first-five all-pairs ΔE 11.2/15.6.
 
 **Take slots in order.** One → orange. Three → orange, sky blue, bluish green. Never
-cherry-pick by meaning. Two limits: first four clear all-pairs; there is no seventh hue.
+cherry-pick by meaning. Two limits: the first five slots clear all-pairs; there is no
+seventh hue.
+
+The all-pairs limit was written as four for a long time and the measurement does not
+support it: five slots come to ΔE 11.2 under deuteranopia against a target of 8, and
+six is the first count that fails, at 7.9 (`#009E73` vs `#CC79A7`). Four was a number
+nobody had run. `tests/test_docs_match_code.py` now derives it by asking
+`check_palette.check(..., all_pairs=True)` for the largest count that passes, so the
+constant below and this sentence cannot drift from the validator again.
 
 **Grayscale:** Okabe-Ito does not solve it. Orange+sky blue (canonical first two) are
 ΔL 0.011, invisible when desaturated. Take orange+blue (ΔL 0.264) and add a second
@@ -182,8 +190,17 @@ gate. Midpoint is `#f6f7f7`. Never a hue at the midpoint; never two cool poles.
 
 | Token | Hex | Defined in |
 |---|---|---|
-| Ink primary / secondary / muted | `#000000` / `#52514e` / `#898781` | `figure.mplstyle` |
+| Ink primary / secondary / muted | `#000000` / `#52514e` / `#777570` | `figure.mplstyle` |
 | Grid / axis / surface | `#e1e0d9` / `#c3c2b7` / `#ffffff` | `figure.mplstyle` |
+
+Muted ink was `#898781` until `check_text_readability` was written and failed the
+sheet's own tick labels on every figure in the repo: it measures 3.59:1 on white,
+under the 4.5:1 a glyph stem needs. `#777570` is 4.6:1 and still sits below the
+7.94:1 axis label, so the hierarchy survives the correction. The old spelling
+stays in `check_figure.py`'s `INK_TOKENS` so that figures built on the old sheet
+are still read as furniture; it is not a token to reach for. `tests/test_docs_match_code.py`
+now resolves every hex in this table against the sheet, so the table cannot quote
+a token the sheet does not ship.
 
 Status, drawn from the palette, always with icon or label:
 
@@ -343,7 +360,7 @@ _OKABE = colormaps["okabe_ito"]
 # 0 black 1 #E69F00 2 #56B4E9 3 #009E73 4 #F0E442 5 #0072B2 6 #D55E00 7 #CC79A7
 
 SERIES = [_OKABE(i) for i in (1, 2, 3, 5, 6, 7)]
-MAX_SERIES, MAX_SERIES_ALL_PAIRS = 6, 4
+MAX_SERIES, MAX_SERIES_ALL_PAIRS = 6, 5
 
 STATUS = {"good": _OKABE(3), "warning": _OKABE(1), "critical": _OKABE(6)}
 NEUTRAL_BACKDROP = ["#ffffff", "#e6e5de", "#c3c2b7", "#95938b"]
@@ -361,6 +378,8 @@ def series(n):
 def ordinal(n, window=VIRIDIS_WINDOW):
     lo, hi = window
     vir = colormaps["viridis"]
+    if n < 2:                      # one step has no gap to space; n=1 divided by zero
+        return [to_hex(vir(lo))] * n
     return [to_hex(vir(lo + (hi - lo) * i / (n - 1))) for i in range(n)]
 ```
 

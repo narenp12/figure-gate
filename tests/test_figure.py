@@ -152,6 +152,33 @@ def test_mark_ratio_sees_line_markers_not_only_scatter():
     assert gates(rows)["Mark ratio"] is False
 
 
+def test_mark_ratio_measures_both_mark_kinds_in_the_same_unit():
+    """`scatter(s=...)` is an area in pt^2; `plot(markersize=...)` is a
+    diameter in points. Squaring the diameter gives the bounding square rather
+    than the disc, which is 4/pi = 1.27x too large — invisible on a figure
+    drawing one kind, because the bias cancels in the ratio, and a standing 27%
+    error on any figure mixing the two.
+
+    The figure is sized so the two formulas straddle the threshold: the marks
+    are truly 4.0x apart in drawn area, which is legal, and 5.09x apart under
+    the old squaring, which is not. So this asserts the verdict rather than a
+    substring of the message -- a test matching "1.0x" in the detail string
+    passes or fails on the format spec, and would have to be rewritten the next
+    time anyone changes how the row is phrased.
+    """
+    import math
+    area = 40.0                                  # scatter s, already pt^2
+    diameter = math.sqrt(16.0 * area / math.pi)  # a disc of exactly 4x that
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.scatter([1, 2], [1, 2], s=area)
+    ax.plot([1, 2], [2, 1], marker="o", markersize=diameter, linestyle="none")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Mark ratio"] is True, (
+        "4.0x apart in drawn area is inside MARK_RATIO_MAX; only the bounding "
+        "square puts it over")
+
+
 def test_mark_ratio_ignores_bar_height():
     """A bar thirty times another bar is the encoding working. Counting patch
     area here would fail every honest bar chart, and a gate that fires on
@@ -705,12 +732,36 @@ def test_style_sheet_row_passes_when_the_sheet_is_the_one_in_effect():
 # --- contour dash ---------------------------------------------------------
 
 
+def _grid():
+    import numpy as np
+    return np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
+
+
+def test_contour_dash_warns_on_a_signed_field():
+    """The case the gate is named for, and the one it used to miss entirely.
+
+    The condition was that EVERY level be non-positive, which a genuinely
+    signed field never satisfies: `contour` over data spanning zero draws levels
+    either side of it and matplotlib dashes the negative half. The only test
+    this gate had drew `-(X**2 + Y**2)` — non-positive throughout, the one shape
+    that met the condition — so a gate that fired on nothing real looked green.
+    """
+    import numpy as np
+    X, Y = _grid()
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    cs = ax.contour(X, Y, np.sin(X) * np.cos(Y), colors="black")
+    assert min(cs.levels) < 0 < max(cs.levels), "the field has to span zero"
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] == "warn"
+    assert ok
+
+
 def test_contour_dash_warns_on_negative_levels():
     import numpy as np
+    X, Y = _grid()
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-    X, Y = np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
-    Z = -(X**2 + Y**2)
-    ax.contour(X, Y, Z, colors="black")     # monochrome: negative levels auto-dash
+    ax.contour(X, Y, -(X**2 + Y**2), colors="black")   # monochrome: auto-dash
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Contour dash"] == "warn"
@@ -719,10 +770,57 @@ def test_contour_dash_warns_on_negative_levels():
 
 def test_contour_dash_passes_with_explicit_solid_linestyle():
     import numpy as np
+    X, Y = _grid()
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-    X, Y = np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
-    Z = -(X**2 + Y**2)
-    ax.contour(X, Y, Z, linestyles="solid")
+    ax.contour(X, Y, -(X**2 + Y**2), linestyles="solid")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] is True
+
+
+def test_contour_dash_passes_on_a_signed_field_drawn_solid():
+    """The fix the warning tells you to make has to actually clear the row."""
+    import numpy as np
+    X, Y = _grid()
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.contour(X, Y, np.sin(X) * np.cos(Y), colors="black", linestyles="solid")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] is True
+
+
+def test_contour_dash_does_not_fire_without_a_negative_level():
+    """Nothing is dashed when there is nothing negative to dash, so widening
+    the condition to 'any negative level' must not start firing on ordinary
+    positive-valued fields."""
+    import numpy as np
+    X, Y = _grid()
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    cs = ax.contour(X, Y, X**2 + Y**2 + 1.0, colors="black")
+    assert min(cs.levels) > 0
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] is True
+
+
+def test_contour_dash_does_not_fire_on_a_colormapped_contour():
+    """A non-monochrome contour is solid at every level: matplotlib only
+    applies `negative_linestyles` when one color is doing all the work."""
+    import numpy as np
+    X, Y = _grid()
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.contour(X, Y, np.sin(X) * np.cos(Y), cmap="viridis")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] is True
+
+
+def test_contour_dash_does_not_fire_on_a_filled_contour():
+    """`contourf` draws bands, not isolines. There is no stroke to be dashed."""
+    import numpy as np
+    X, Y = _grid()
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.contourf(X, Y, np.sin(X) * np.cos(Y), cmap="viridis")
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Contour dash"] is True
@@ -925,6 +1023,34 @@ def test_readability_catches_a_label_printed_on_its_own_curve():
     assert gates(rows)["Label attribution"] is True
 
 
+def test_halo_reads_withstroke():
+    """`_halo` reads `Stroke._gc`, a matplotlib internal with no public
+    accessor, and returns `(None, 0.0)` when it cannot find it.
+
+    That fallback is the dangerous shape: a rename upstream would not raise,
+    it would silently mean 'this label wears no casing', and every cased label
+    in every figure would then be judged against the raw backdrop the casing
+    exists to survive. Correct work would start failing and nothing would say
+    why. Asserting the read directly turns a matplotlib upgrade that moves the
+    attribute into a red suite here instead.
+    """
+    from matplotlib import patheffects as pe
+    fig, ax = plt.subplots()
+    t = ax.text(0.5, 0.5, "cased",
+                path_effects=[pe.withStroke(linewidth=3.0, foreground="white")])
+    color, width = cf._halo(t)
+    plt.close(fig)
+    assert color == "white", "the casing colour did not come back off the artist"
+    assert width == 3.0
+
+
+def test_halo_is_none_without_a_stroke_effect():
+    fig, ax = plt.subplots()
+    t = ax.text(0.5, 0.5, "bare")
+    assert cf._halo(t) == (None, 0.0)
+    plt.close(fig)
+
+
 def test_casing_does_not_launder_a_label_sitting_on_a_curve():
     """A white halo makes the finished render look clean by punching a gap
     through the data. Measuring the backdrop instead of the render is what
@@ -1055,6 +1181,118 @@ def test_alt_metadata_is_what_savefig_wants(clean):
     assert cf.alt_metadata(clean) == {"Description": "x" * 80}
 
 
+def test_alt_metadata_uses_a_key_the_pdf_format_has(clean):
+    """PDF's info dictionary is a closed set and `Description` is not in it."""
+    cf.describe(clean, "x" * 80)
+    assert cf.alt_metadata(clean, "out.pdf") == {"Subject": "x" * 80}
+    assert cf.alt_metadata(clean, "OUT.PDF") == {"Subject": "x" * 80}
+    for other in ("out.png", "out.svg"):
+        assert cf.alt_metadata(clean, other) == {"Description": "x" * 80}
+
+
+def test_alt_metadata_is_none_for_a_format_that_carries_nothing(clean):
+    """jpeg and the other rasters reject `metadata=` outright, and matplotlib's
+    guard is `is not None` -- so an empty dict raises exactly as hard as a full
+    one. `None` is the only value the documented call can survive there, with
+    or without a description attached."""
+    for suffix in sorted(cf.ALT_TEXT_UNSUPPORTED_SUFFIXES):
+        assert cf.alt_metadata(clean, f"out{suffix}") is None, suffix
+    cf.describe(clean, "x" * 80)
+    for suffix in sorted(cf.ALT_TEXT_UNSUPPORTED_SUFFIXES):
+        assert cf.alt_metadata(clean, f"out{suffix}") is None, suffix
+
+
+def test_alt_metadata_falls_back_when_there_is_no_readable_format(clean):
+    """A buffer keeps its format in a `savefig` kwarg this never sees, so the
+    only honest answer is the one every earlier version always gave."""
+    import io
+    cf.describe(clean, "x" * 80)
+    assert cf.alt_metadata(clean, io.BytesIO()) == {"Description": "x" * 80}
+    assert cf.alt_metadata(clean, "out") == {"Description": "x" * 80}
+    assert cf.alt_metadata(clean) == {"Description": "x" * 80}
+
+
+def test_alt_metadata_reads_the_name_of_an_open_file(clean, tmp_path):
+    """`savefig` takes an open file, and an open file knows its own path."""
+    cf.describe(clean, "x" * 80)
+    with open(tmp_path / "fig.pdf", "wb") as fh:
+        assert cf.alt_metadata(clean, fh) == {"Subject": "x" * 80}
+
+
+@pytest.mark.parametrize("suffix", sorted(cf.ALT_TEXT_KEY_BY_SUFFIX))
+def test_alt_metadata_matches_what_each_format_accepts(clean, tmp_path, suffix):
+    """The format table, saved for real in every format it names.
+
+    Three of its rows are behaviours nothing documents: PDF warns on
+    `Description`, SVG *raises* on `Subject`, and the rasters raise on any key.
+    A table of those written from memory is a table that rots, so this asks
+    matplotlib instead -- no warning, and the text present in the bytes.
+    """
+    import warnings
+    cf.describe(clean, "x" * 80)
+    path = tmp_path / f"fig{suffix}"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        clean.savefig(path, metadata=cf.alt_metadata(clean, path))
+    assert not caught, [str(w.message) for w in caught]
+    blob = path.read_bytes()
+    if suffix == ".svgz":
+        import gzip
+        blob = gzip.decompress(blob)
+    assert b"x" * 80 in blob, f"{suffix} did not carry the description"
+
+
+@pytest.mark.parametrize(
+    "suffix", sorted(cf.ALT_TEXT_UNSUPPORTED_SUFFIXES - {".pgf"}))
+def test_saving_an_unsupported_format_does_not_raise(clean, tmp_path, suffix):
+    """The other half of the table: the documented call has to survive a format
+    that has nowhere to put a description."""
+    pytest.importorskip("PIL")          # matplotlib routes the rasters through it
+    cf.describe(clean, "x" * 80)
+    path = tmp_path / f"fig{suffix}"
+    clean.savefig(path, metadata=cf.alt_metadata(clean, path))
+    assert path.is_file()
+
+
+def test_pgf_rejects_the_metadata_kwarg_at_any_value(clean, tmp_path):
+    """The one format `alt_metadata` cannot rescue, asserted rather than skipped.
+
+    Every other entry in the unsupported set accepts `metadata=None` — which is
+    why returning None is the fix. The PGF backend does not take the argument at
+    all, so `savefig(path, metadata=anything)` raises there no matter what this
+    module returns, and `savefig(path)` is the only call that works.
+
+    Stated as a test because a skip would assert nothing: if matplotlib gives
+    PGF the kwarg later, this goes red and the row comes out of the table.
+    """
+    pytest.importorskip("matplotlib.backends.backend_pgf")
+    cf.describe(clean, "x" * 80)
+    path = tmp_path / "fig.pgf"
+    assert cf.alt_metadata(clean, path) is None
+    with pytest.raises(TypeError):
+        clean.savefig(path, metadata=None)
+
+
+@pytest.mark.parametrize("suffix", ["png", "pdf", "svg"])
+def test_saving_with_alt_metadata_is_warning_free(clean, tmp_path, suffix):
+    """The documented call, run for real, in each format the guide names.
+
+    `metadata={"Description": ...}` made matplotlib warn "Unknown infodict
+    keyword" on every PDF save — the one format a paper figure ships as — while
+    writing a key no reader looks for. A warning on the happy path is how a
+    documented workflow teaches people it is doing something wrong.
+    """
+    import warnings
+    cf.describe(clean, "x" * 80)
+    path = tmp_path / f"fig.{suffix}"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        clean.savefig(path, metadata=cf.alt_metadata(clean, path))
+    assert not [w for w in caught if "infodict" in str(w.message)], (
+        [str(w.message) for w in caught])
+    assert b"x" * 80 in path.read_bytes(), "the description did not reach the file"
+
+
 # --- venue widths -----------------------------------------------------------
 
 def test_venue_overrides_the_module_level_width():
@@ -1133,9 +1371,7 @@ def test_label_attribution_still_passes_a_well_separated_label():
 
 # --- no hard scipy dependency -----------------------------------------------
 
-def test_the_checker_runs_with_scipy_unimportable(monkeypatch, clean):
-    """The README promises three files and no install. A hard scipy import
-    quietly broke that, so the one place it is still used has a numpy path."""
+def _without_scipy(monkeypatch):
     import builtins
     real_import = builtins.__import__
 
@@ -1145,8 +1381,44 @@ def test_the_checker_runs_with_scipy_unimportable(monkeypatch, clean):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", no_scipy)
+
+
+def test_the_checker_runs_with_scipy_unimportable(monkeypatch, clean):
+    """The README promises three files and no install. A hard scipy import
+    quietly broke that, so the one place it is still used has a numpy path."""
+    _without_scipy(monkeypatch)
     ok, rows = cf.audit(clean)
     assert ok, [r for r in rows if r[1] is not True]
+
+
+def test_overplotting_agrees_with_and_without_scipy(monkeypatch):
+    """Both branches, same verdict.
+
+    `clean` draws no scatter, so the test above never reached the KD-tree at
+    all: it proved the import was soft, not that the fallback computes the same
+    nearest-neighbour distance. Which branch runs is a property of the machine
+    — CI installs no scipy, a dev checkout does — so without this, one of the
+    two paths is only ever exercised somewhere nobody is looking.
+    """
+    def dense():
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.scatter([0.5] * 8 + [3.0], [0.5] * 8 + [3.0], s=120)
+        return fig
+
+    pytest.importorskip("scipy.spatial")
+    fig = dense()
+    with_scipy = cf.check_overplotting(fig)
+    plt.close(fig)
+
+    _without_scipy(monkeypatch)
+    fig = dense()
+    without_scipy = cf.check_overplotting(fig)
+    plt.close(fig)
+
+    assert with_scipy[0] == "warn", with_scipy
+    assert without_scipy == with_scipy, (
+        f"the numpy path disagrees with the KD-tree: {without_scipy} vs "
+        f"{with_scipy}")
 
 
 def test_box_blur_matches_scipy_uniform_filter():
