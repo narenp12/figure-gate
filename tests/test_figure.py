@@ -1040,7 +1040,7 @@ def test_halo_reads_withstroke():
                 path_effects=[pe.withStroke(linewidth=3.0, foreground="white")])
     color, width = cf._halo(t)
     plt.close(fig)
-    assert color == "white", "the casing colour did not come back off the artist"
+    assert color == "white", "the casing color did not come back off the artist"
     assert width == 3.0
 
 

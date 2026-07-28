@@ -40,6 +40,7 @@ from conftest import SKILL
 
 import check_palette as cp
 
+from test_docs_match_code import swatch_pairs
 from test_docs_site import CONFIG, CSS, SLATES, nav_targets, scheme_link_colors
 
 ROOT = SKILL.parent
@@ -286,6 +287,32 @@ PROBE = r"""
     });
   });
 
+  // Palette swatches. The square is `::before` on the code span holding the
+  // hex, so the element in `items` above is the hex text and the square is the
+  // thing measured here: that it is painted the color its own element spells
+  // out, and that it has area and a frame, which for a white or near-white
+  // swatch is the whole of its visibility.
+  //
+  // `getComputedStyle(el, '::before')` reports used values for a rendered
+  // pseudo-element, so `width` is the laid-out px rather than the declared em.
+  // There is no `getBoundingClientRect` for a pseudo-element to disagree with.
+  //
+  // `surface(el)` would composite the square against itself and report it
+  // correct whatever the stylesheet did, so the background behind it is the
+  // code span's own, taken from `el` upward.
+  const swatches = [...document.querySelectorAll('code.sw')].map(el => {
+    const before = getComputedStyle(el, '::before');
+    return {
+      declared: getComputedStyle(el).getPropertyValue('--c').trim(),
+      painted: hex(over(parse(before.backgroundColor) || {r:0,g:0,b:0,a:0},
+                        surface(el))),
+      labels: el.textContent.trim(),
+      width: parseFloat(before.width) || 0,
+      height: parseFloat(before.height) || 0,
+      border: parseFloat(before.borderTopWidth) || 0,
+    };
+  });
+
   const cs = getComputedStyle(document.body);
   return {
     scheme: document.body.getAttribute('data-md-color-scheme'),
@@ -294,6 +321,7 @@ PROBE = r"""
     accent: cs.getPropertyValue('--md-accent-fg-color').trim(),
     page_bg: hex(parse(cs.backgroundColor)),
     items,
+    swatches,
   };
 }
 """
@@ -457,13 +485,95 @@ def test_the_page_background_is_the_surface_the_stylesheet_measured(
             "not draw.")
 
 
+# --- the swatches are painted the hex they label ------------------------------
+# `test_docs_match_code.py` checks that a swatch's inline `--c` matches the hex
+# its code span spells out. That is arithmetic on two strings in one file, and it
+# is the half this project has already been caught believing: the same file's
+# link colors were correct in the stylesheet and reaching nothing on the page for
+# a whole release.
+#
+# A swatch fails more quietly than a link did. A link that loses its color is
+# still a link; a square that loses its fill is a square of page color sitting
+# beside a hex, which on the light page is what `#ffffff` is supposed to look
+# like. So the fill is measured, in both schemes, against the hex the reader can
+# see next to it -- not against the inline style, which is the copy under test.
+
+GUIDE_PATH = "/style-guide/"
+
+
+def guide_swatches(rendered, mode):
+    return rendered[(mode, GUIDE_PATH)]["swatches"]
+
+
+def test_the_style_guide_is_among_the_pages_measured():
+    """The swatch tests all index one page. If the nav renames it they would
+    raise KeyError, which reports a missing dictionary key rather than the fact
+    that the palette tables are no longer being looked at."""
+    assert GUIDE_PATH in page_paths(), (
+        f"{GUIDE_PATH} is not in {page_paths()} - the page carrying the palette "
+        "tables moved, and the swatch tests below are pointed at nothing")
+
+
+@pytest.mark.parametrize("mode", sorted(SCHEMES))
+def test_every_swatch_in_the_guide_reached_the_page(rendered, mode):
+    """Count first, colors second. The swatches are an `attr_list` attribute
+    list; drop that extension from `zensical.toml` and every one of them becomes
+    literal `{ .sw style="..." }` text at once, with no `code.sw` left for a
+    per-swatch assertion to iterate over. An empty loop is green."""
+    got = len(guide_swatches(rendered, mode))
+    want = len(swatch_pairs())
+    assert got == want, (
+        f"the guide's source declares {want} swatch(es); {got} rendered on "
+        f"{GUIDE_PATH} in {mode} mode. They are written as `attr_list` "
+        "attribute lists - check that extension is still enabled.")
+
+
+@pytest.mark.parametrize("mode", sorted(SCHEMES))
+def test_every_swatch_paints_the_hex_it_labels(rendered, mode):
+    bad = [f"  labelled {sw['labels']}, painted {sw['painted']}"
+           + ("  (its --c did not resolve, so `background: var(--c)` is invalid "
+              "and the square is showing the page)" if not sw["declared"] else "")
+           for sw in guide_swatches(rendered, mode)
+           if sw["painted"].lower() != sw["labels"].lower()]
+    assert not bad, (
+        f"{len(bad)} swatch(es) on {GUIDE_PATH} in {mode} mode are not the "
+        f"color they label:\n" + "\n".join(bad))
+
+
+@pytest.mark.parametrize("mode", sorted(SCHEMES))
+def test_every_swatch_has_area_and_a_frame(rendered, mode):
+    """Both halves of "a reader can see it".
+
+    A `::before` with `content: ""` and no box is 0x0 and paints the right color
+    over no pixels, which the fill test above cannot tell from a correct swatch.
+    And the frame is not trim: `#ffffff` is in the surface row of the ink table,
+    so on the light page the frame is the entire difference between a swatch and
+    nothing at all.
+
+    The floor is a real size rather than "not zero", because the borders alone
+    give a collapsed swatch a few pixels of box: with the fill rule removed and
+    only the dark-mode frame left, every swatch measured 4px wide and passed a
+    `> 0` test while showing the reader nothing. The declared 0.85em is 11px at
+    the smallest type on the page, so 8 is under every correct swatch and over
+    every collapsed one.
+    """
+    bad = [f"  {sw['labels']}: {sw['width']:.1f}x{sw['height']:.1f}px, "
+           f"{sw['border']:.1f}px border"
+           for sw in guide_swatches(rendered, mode)
+           if sw["width"] < 8 or sw["height"] < 8 or sw["border"] < 1]
+    assert not bad, (
+        f"{len(bad)} swatch(es) on {GUIDE_PATH} in {mode} mode have no area or "
+        "no frame, so they are not visible whatever color they are:\n"
+        + "\n".join(bad))
+
+
 # --- headings are headings ----------------------------------------------------
 
 def test_no_built_heading_holds_a_code_span_marker(built_site):
     """The symptom, checked where the cause cannot be seen.
 
     `test_docs_site.py` lints the markdown for a `#` in column one, which is
-    what produced this: two pages had a hex colour wrapped onto the second line
+    what produced this: two pages had a hex color wrapped onto the second line
     of a code span, and Python-Markdown -- which splits blocks before it parses
     inline spans -- made each one an <h1> holding the rest of the sentence, with
     a permalink `¶` mid-paragraph and a line of prose in the table of contents.

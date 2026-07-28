@@ -178,6 +178,42 @@ built from this commit is byte-identical in what it ships.
   `test_docs_match_code.py` now asserts the three places that state the count
   agree with each other.
 
+- **The palette sections now paint the hue beside the hex.** Twenty-two
+  swatches: the Okabe-Ito table, the ink/furniture table, the achromatic
+  backdrop ramp, the `RdBu` poles and midpoint, and the viridis endpoint. Every
+  other cell in those tables is recomputable — a contrast ratio goes back
+  through `contrast()` — and the hue is not. The Hue column had been answering
+  it with the word "vermillion".
+
+  Each one is `::before` on the code span holding the hex, written as an
+  `attr_list` attribute list, and it restates that hex in an inline `--c`. The
+  first version was a sibling `<span>`, which put a soft wrap opportunity
+  between the square and the value it labels: the diverging poles wrapped, and
+  the page shipped a red square at the end of one line with `#b1182b` at the
+  start of the next. Generated content cannot be orphaned from the element that
+  generates it.
+
+  The restated hex is gated at both ends. `test_docs_match_code.py` reads the
+  source and asserts the declared color is the hex the code span spells out, and
+  that no palette row is missing a swatch. `test_docs_render.py` renders the
+  page in both schemes and asserts the browser paints the hex the reader can
+  see — compared against the code span's text, not against the inline style,
+  which is the copy under test. It also asserts area and a frame: a `::before`
+  with no box paints the right color over no pixels, and `#ffffff` is the
+  surface row of the ink table, so on the light page the frame is the entire
+  difference between a swatch and nothing at all.
+
+  Neither end is sufficient alone. A source check cannot see a stylesheet that
+  reaches nothing, which this site shipped for a release; a browser cannot see a
+  square confidently painted the wrong color in both copies at once. Both first
+  drafts here failed to their own species of that: the size test floored at "not
+  zero", which a collapsed swatch clears on 4px of border, and dark mode drew
+  its white mat in border rather than `box-shadow`, taking a third of the hue
+  with it and turning slot 1 from black into an outline. The mat is there
+  because the column beside it is headed "Contrast `#ffffff`". Orange at 2.25:1
+  looks emphatic on a near-black page; the mat is the surface that number is
+  about.
+
 ### An audit of the documentation, and what it found
 
 Every number, roster and code sample in the published documents, read against

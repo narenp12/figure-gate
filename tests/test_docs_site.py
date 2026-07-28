@@ -129,7 +129,7 @@ def accidental_headings(text):
     """Lines that Python-Markdown will make a heading out of by accident.
 
     A real ATX heading is `#` through `######` followed by a space. Anything
-    else in column one -- `#E69F00`, `#2ca02c` -- is a hex colour, or the tail
+    else in column one -- `#E69F00`, `#2ca02c` -- is a hex color, or the tail
     of a wrapped code span, about to become an <h1>. Fenced blocks are skipped:
     inside them a leading `#` is a comment and stays one.
     """
