@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.1.2 — 2026-07-28
+
+- **The audit no longer depends on the display it ran on.** A HiDPI GUI backend
+  — macosx on a Retina display, Qt on a scaled desktop — sets `fig.dpi` to the
+  authored dpi times the display's device pixel ratio when the figure is
+  created, and `_renderer` kept that canvas whenever it could measure text. So
+  the checker ran at 2× on exactly the machines figures get authored on.
+
+  Two things went wrong at once. Text window extents come back in physical
+  pixels while `canvas.get_width_height()` reports logical ones, so
+  `check_clipping` compared 2× coordinates against a 1× bound and called every
+  label past the midpoint clipped — a full-width figure with tick labels failed
+  a gate it should pass, which is the wrong direction for a gate to be wrong in.
+  And every threshold calibrated in pixels — `TEXT_EDGE_WINDOW = 9`, measured
+  against a 1.6pt hairline at 150 dpi — covered half the distance it was
+  calibrated for. Ink coverage read 0.05 under macosx and 0.04 under Agg on the
+  same figure.
+
+  `_renderer` now resets `fig.dpi` to the authored value and builds the Agg
+  canvas unconditionally, so a figure's verdict is a property of the figure.
+  One consequence worth knowing: an audited figure is no longer attached to its
+  GUI canvas and will not show in a window. `check_ink` and
+  `check_text_readability` already rebound `fig.canvas`; it is now unconditional.
+
+- **The tests can see this class of bug now.** They could not before, because
+  `conftest` pins Agg and so does every script in `examples/` — which is why a
+  real bug sat behind a green suite and a green CI. The new tests simulate a
+  HiDPI canvas instead of requiring a display, and one of them asserts every
+  audit row is identical at 1× and 2×, messages included.
+
+- **The README gate roster is being read again.** The 0.1.1 README rewrite added
+  a Threshold column to the `check_figure.py` table, and the test that checks
+  that table against what `audit()` returns matched rows by shape. It matched
+  nothing, and compared an empty list against 19 gates. It now reads the first
+  cell whatever the column count, and asserts it read something at all — the
+  guard the contrast table has had all along.
+
 ## 0.1.1 — 2026-07-27
 
 - Releases are signed. 0.1.0 went out through `uv publish`, which despite
