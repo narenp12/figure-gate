@@ -33,7 +33,7 @@
 }
 
 /* Light: blue at 5.19:1 on white. */
-[data-md-color-scheme="default"] {
+:root[data-md-color-scheme="default"] {
   --md-primary-fg-color: var(--fg-blue);
   --md-primary-fg-color--light: var(--fg-sky);
   --md-primary-fg-color--dark: #005b8f;
@@ -43,7 +43,7 @@
 
 /* Dark: sky, at 6.98:1 on classic and 8.48:1 on modern. Blue would be 3.10
    and 3.77, under the floor on both. */
-[data-md-color-scheme="slate"] {
+:root[data-md-color-scheme="slate"] {
   --md-primary-fg-color: var(--fg-blue);
   --md-primary-fg-color--light: var(--fg-sky);
   --md-primary-fg-color--dark: #005b8f;
