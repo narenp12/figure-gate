@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/figure-gate)](https://pypi.org/project/figure-gate/)
+[![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
 
 **Two scripts that read a built matplotlib figure and report which gates it
 fails.** `audit(fig)` returns `(ok, rows)` — 19 rows, one per gate, each a
@@ -274,7 +275,7 @@ carries a direct label; a heatmap panel legitimately measures 0.98 ink
 coverage. Failing those would train people to ignore the row, and an ignored
 gate is worth less than no gate.
 
-**Gates are tested for their ability to fail.** The suite is 178 tests, and
+**Gates are tested for their ability to fail.** The suite is 221 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+Documentation only. No code, no thresholds, no packaging change — the wheel
+built from this commit is byte-identical in what it ships.
+
+- **A docs site**, [Zensical](https://zensical.org), published to GitHub Pages
+  from `.github/workflows/docs.yml`. It exists because `style-guide.md` is 367
+  lines of reference material whose only affordance on GitHub was scrolling,
+  and the thing people do with it is look one threshold up.
+
+  Every page except the gallery is a **symlink** to the file that already
+  existed. That is not tidiness: `test_docs_match_code.py` reads
+  `skill/references/style-guide.md` and asserts its contrast table against
+  `contrast()`, and it can only keep doing that if the page the site serves *is*
+  that file. A `docs/` of hand-maintained copies would pass the entire suite
+  while publishing numbers that had drifted — the failure that file already
+  exists to prevent, one level further out. `test_docs_site.py` asserts no page
+  has quietly become a copy.
+
+- **The theme's two link colors are a measurement, not a preference.** Okabe-Ito
+  blue `#0072B2` is 5.19:1 on white but 3.10:1 and 3.77:1 on the two dark
+  backgrounds Zensical ships (`classic` at `hsl(225, 15%, 14%)` = `#1e2129`,
+  `modern` at `hsl(225, 15%, 5%)` = `#0b0c0f` — both blue-tinted, neither
+  neutral). Body-text links need WCAG's 4.5:1, not the 3:1 floor series colors
+  are held to, so dark mode takes sky `#56B4E9` at 6.98:1 and 8.48:1 instead.
+  One hue for both would have shipped a site about colorblind-safe figures whose
+  own dark-mode links miss the floor. Every number is recomputed by the test
+  suite against a background derived from HSL rather than pasted, for the same
+  reason every other quoted number here is executable.
+
+  Both variants are measured, not just the configured one. `variant` is a
+  one-line edit, and a measurement that is true until someone flips a line is
+  the failure this project is about.
+
+- **Strictness is a flag, not a setting.** The docs build runs on pull requests
+  as `zensical build --strict`, so a symlink left dangling by a file moving
+  under `skill/` fails the build instead of publishing a 404. Zensical will read
+  a leftover `mkdocs.yml` and silently ignore its `strict: true`, so
+  `test_docs_site.py` asserts there is no `mkdocs.yml` in the repository — the
+  first build of this site was exactly that config, and it exited 0 on a broken
+  link.
+
+  Zensical is 0.0.x, so the docs dependency is pinned `>=0.0.51,<0.1` rather
+  than floored. Nothing else in the project depends on it; the checkers are not
+  involved in building the site.
+
 ## 0.1.4 — 2026-07-28
 
 One dead gate on the install path, and the missing way to point a live one at

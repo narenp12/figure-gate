@@ -1,0 +1,93 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A second push while a deploy is in flight should replace it, not queue behind
+# it -- but never cancel one mid-upload, which leaves Pages serving a partial
+# site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # Runs on pull requests too, and that is the point: `--strict` turns a page
+  # whose symlink went dangling, or a nav entry pointing at a moved file, into
+  # a failed build here rather than a 404 in production. The build is the
+  # check; the deploy below just takes what it produced.
+  #
+  # The flag is not optional and cannot move into the config. Zensical has no
+  # `strict` setting -- MkDocs did, and Zensical reads a `mkdocs.yml` without
+  # honouring that key, which is how a migrated project quietly stops failing.
+  # `test_docs_site.py` asserts no `mkdocs.yml` is left in the repository.
+  build:
+    name: The site builds in strict mode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      # Every page under docs/ is a symlink into skill/ or the repository root.
+      # actions/checkout restores them as symlinks, so this is a cheap way to
+      # find out that it did before the build reports a confusing missing-file.
+      - name: Every docs/ symlink resolves in a fresh checkout
+        run: |
+          uv run --no-project python - <<'PY'
+          import pathlib, sys
+          dangling = [str(p) for p in pathlib.Path("docs").rglob("*")
+                      if p.is_symlink() and not p.exists()]
+          for p in sorted(pathlib.Path("docs").rglob("*")):
+              if p.is_symlink():
+                  print(("  ok " if p.exists() else "MISS ") + str(p))
+          if dangling:
+              sys.exit(f"dangling symlinks under docs/: {dangling}")
+          PY
+
+      - name: Build
+        run: uv run --no-project --with "zensical>=0.0.51,<0.1" zensical build --strict
+
+      # The gallery is symlinks to examples/*.png. If one is missing the page
+      # still builds and ships broken images, so check the bytes arrived.
+      - name: Every gallery image is in the built site
+        run: |
+          uv run --no-project python - <<'PY'
+          import pathlib, sys
+          site = pathlib.Path("site/images")
+          missing = [p.name for p in pathlib.Path("examples").glob("*.png")
+                     if not (site / p.name).is_file()
+                     or (site / p.name).stat().st_size == 0]
+          if missing:
+              sys.exit(f"images missing or empty in the built site: {missing}")
+          print(f"{len(list(site.glob('*.png')))} images built")
+          PY
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Publish to GitHub Pages
+    # Main only. A pull request builds the site to prove it builds; it does not
+    # get to publish it.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

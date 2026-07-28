@@ -1,0 +1,73 @@
+/* Okabe-Ito, because a site about colorblind-safe figures that themed itself
+   on an arbitrary hue would be making the argument badly.
+
+   The two link colors are different on purpose, and the numbers are the
+   reason. Measured with this project's own `contrast()` against the surface
+   each one is actually drawn on. There are three surfaces, not two: Zensical
+   ships two theme variants and their dark backgrounds differ, `modern` at
+   hsl(225, 15%, 5%) and `classic` — the Material for MkDocs look — at
+   hsl(225, 15%, 14%). Neither is neutral; both are blue-tinted.
+
+                        on white   slate classic   slate modern
+                                      #1e2129        #0b0c0f
+     #0072B2 (blue)       5.19:1       3.10:1          3.77:1
+     #56B4E9 (sky)        2.31:1       6.98:1          8.48:1
+
+   Body-text links need 4.5:1 (WCAG AA), not the 3:1 floor a figure's series
+   colors are held to — a link is text being read, not a mark being told apart
+   from its neighbour. Blue clears 4.5 on white and misses it on both dark
+   backgrounds, so dark mode takes sky instead. Using one hue for both would
+   have shipped a site about colorblind-safe figures whose own dark-mode links
+   miss the floor the project exists to enforce.
+
+   `zensical.toml` selects the variant, so the choice is one line away from
+   changing. Quoting the variant actually in use and no other would make this
+   comment true until someone flipped that line and false silently afterwards,
+   which is the failure mode the whole project is about. Both columns are
+   recomputed by `tests/test_docs_site.py`, and the floor is asserted against
+   the worse of the two. */
+
+:root {
+  --fg-blue: #0072b2;
+  --fg-sky: #56b4e9;
+  --fg-orange: #e69f00;
+}
+
+/* Light: blue at 5.19:1 on white. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--fg-blue);
+  --md-primary-fg-color--light: var(--fg-sky);
+  --md-primary-fg-color--dark: #005b8f;
+  --md-accent-fg-color: var(--fg-blue);
+  --md-typeset-a-color: var(--fg-blue);
+}
+
+/* Dark: sky, at 6.98:1 on classic and 8.48:1 on modern. Blue would be 3.10
+   and 3.77, under the floor on both. */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--fg-blue);
+  --md-primary-fg-color--light: var(--fg-sky);
+  --md-primary-fg-color--dark: #005b8f;
+  --md-accent-fg-color: var(--fg-sky);
+  --md-typeset-a-color: var(--fg-sky);
+}
+
+/* The header sits on blue with white text: 5.19:1, the same measurement. */
+.md-header {
+  color: #ffffff;
+}
+
+/* Gallery figures are wide and detailed; let them use the full column and
+   carry their caption as visible text rather than only as alt. */
+.md-typeset figure img {
+  max-width: 100%;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset figure figcaption {
+  max-width: 42rem;
+  margin: 0.4rem auto 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--md-default-fg-color--light);
+}

@@ -32,6 +32,7 @@ dependencies = ["matplotlib>=3.8"]
 
 [project.urls]
 Homepage = "https://github.com/narenp12/figure-gate"
+Documentation = "https://narenp12.github.io/figure-gate/"
 Source = "https://github.com/narenp12/figure-gate"
 Issues = "https://github.com/narenp12/figure-gate/issues"
 Changelog = "https://github.com/narenp12/figure-gate/blob/main/CHANGELOG.md"
@@ -95,3 +96,18 @@ dev = [
     "pytest-xdist>=3.8.0",
     "scipy>=1.6",
 ]
+
+# Separate from dev: the docs build needs nothing the tests need and the tests
+# need nothing it needs, so `uv sync --group dev` on a test runner should not
+# pull a theme.
+#
+# Pinned to a minor, not floored: Zensical is 0.0.x, so the usual reading of a
+# lower bound -- "anything newer is compatible" -- does not hold.
+#
+# The marker is load-bearing, not hygiene. Zensical needs Python 3.10; this
+# project supports 3.9, and `check_palette.py` supports 3.8, which is a claim
+# CI runs a whole job to keep true. Without the marker uv resolves this group
+# across the project's full Python range and fails outright -- and the tempting
+# fix, raising `requires-python`, would narrow the library's support because of
+# a tool that only builds a website.
+docs = ["zensical>=0.0.51,<0.1; python_version >= '3.10'"]

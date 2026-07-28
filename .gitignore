@@ -8,6 +8,7 @@ uv.lock
 *.egg-info/
 dist/
 build/
+site/
 .DS_Store
 
 # Agent state, not project state.
