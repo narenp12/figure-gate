@@ -263,6 +263,32 @@ def _ghost_ticks(fig):
     return ids
 
 
+def _polar_radial_ticks(fig):
+    """Radial tick labels on polar axes.
+
+    matplotlib places these inside the disc, because on a polar plot there is
+    no outside to place them in — `set_rlabel_position` moves them to a
+    different angle, never off the data. So a curve running under '0.8' is not
+    a composition mistake anybody made, and the advice this gate gives ("move
+    the label to clear ground") names a move that does not exist.
+
+    Exempted from both clauses, which is further than it first looked like it
+    needed to go. Exempting clutter alone left the contrast clause failing
+    eight of eight ordinary polar plots built on this project's own style
+    sheet, at 2.0:1 against a curve the radial axis crosses by construction. A
+    gate the bundled sheet cannot satisfy is measuring the projection, not the
+    figure.
+
+    The count is reported rather than dropped, so the author knows these
+    strings went unjudged instead of assuming they passed.
+    """
+    ids = set()
+    for ax in fig.axes:
+        if getattr(ax, "name", "") == "polar":
+            ids.update(id(t) for t in ax.get_yticklabels())
+    return ids
+
+
 def _overlap(a, b):
     dx = min(a.x1, b.x1) - max(a.x0, b.x0)
     dy = min(a.y1, b.y1) - max(a.y0, b.y0)
@@ -524,10 +550,14 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
     # way this did: by reporting a defect on a schematic that draws no axes and
     # still carries the tick Text objects matplotlib made for it.
     ghosts = _ghost_ticks(fig)
-    cluttered, faint, checked = [], [], 0
+    radial = _polar_radial_ticks(fig)
+    cluttered, faint, checked, unjudged = [], [], 0, 0
 
     for t, bb in items:
         if id(t) in ghosts:
+            continue
+        if id(t) in radial:
+            unjudged += 1
             continue
         xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
         ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
@@ -565,11 +595,15 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
             faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
                          f"(text needs {floor}:1)")
 
+    skipped = (f"; {unjudged} polar radial labels not judged (matplotlib "
+               "places them on the data and offers nowhere else to put them)"
+               if unjudged else "")
     if not checked:
-        return True, "no text large enough to measure"
+        return True, "no text large enough to measure" + skipped
     bad = cluttered + faint
     if not bad:
-        return True, f"{checked} strings read clean against their backdrop"
+        return True, (f"{checked} strings read clean against their backdrop"
+                      + skipped)
     return False, ("; ".join(bad[:3])
                    + "  <- move the label to clear ground; casing rescues a "
                      "gridline, not a curve")
@@ -734,6 +768,12 @@ def check_redundancy(fig, r):
         ss = ax.get_subplotspec()
         if ss is None:
             continue
+        # A panel at `axis("off")` shows no furniture to duplicate. Its tick
+        # Text objects still exist and still carry their strings, which is how
+        # three image panels with no visible axis at all came to be told to
+        # "use sharex/sharey" — advice with nothing to act on.
+        if not ax.axison:
+            continue
         r_, c_ = ss.rowspan.start, ss.colspan.start
         rows.setdefault(r_, []).append(ax)
         cols.setdefault(c_, []).append(ax)
@@ -751,7 +791,8 @@ def check_redundancy(fig, r):
     dup_ticks = 0
     for _, axes in rows.items():
         cols_seen = Counter(
-            tuple(t.get_text() for t in a.get_yticklabels() if t.get_text())
+            tuple(t.get_text() for t in a.get_yticklabels()
+                  if t.get_text() and t.get_visible())
             for a in axes)
         dup_ticks += sum(n - 1 for v, n in cols_seen.items() if v and n > 1)
 
@@ -788,6 +829,25 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
         return True, detail
     return False, (f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: {small[:4]}"
                    "  <- cut words, do not shrink type")
+
+
+def _axes_drew_anything(ax):
+    """Whether anything was drawn into this axes.
+
+    Deliberately broader than `_has_data`, which asks whether an axes carries
+    *data* and is what the dual-axis gate needs. This one asks whether the
+    panel was used at all, so a table or a lone annotation counts. Naming it
+    `_has_data` shadowed the other and sent the ink gate the wrong answer.
+
+    Every container matplotlib puts drawn content in, checked rather than
+    guessed at: a blank axes has all of them at zero, and a panel holding only
+    an annotation or only a bar still reports through one of them. `ax.patch`
+    is the background and is deliberately not consulted -- it exists on the
+    blank axes too.
+    """
+    return any(len(getattr(ax, name, ())) for name in
+               ("lines", "collections", "patches", "images", "texts",
+                "tables", "artists"))
 
 
 def check_ink(fig, context_axes=None, canvas=None):
@@ -866,7 +926,12 @@ def check_ink(fig, context_axes=None, canvas=None):
             frac = float((sub & ~surf_mask).mean())
         else:
             frac = float(sub.mean())
-        rows.append((i, frac, INK_MIN <= frac <= INK_MAX))
+        # An empty panel is structural, not a low number. The frame and the
+        # tick marks of a blank axes measure about 0.03 on their own, over the
+        # 0.02 floor, so the blank subplot in a grid -- the case that actually
+        # ships -- read as merely sparse. Ask whether anything was drawn.
+        rows.append((i, frac,
+                     _axes_drew_anything(ax) and INK_MIN <= frac <= INK_MAX))
 
     if not rows:
         return True, "no measurable axes"

@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+### Four gates that were measuring the wrong thing
+
+Found by running the checker over ordinary matplotlib figures nobody built for
+it — the corpus check CONTRIBUTING asks for, applied to the checker itself
+rather than to a new gate.
+
+- **Polar radial tick labels are no longer judged by `check_text_readability`.**
+  Every ordinary polar plot failed. matplotlib places radial labels inside the
+  disc and `set_rlabel_position` only moves them to another angle, so "move the
+  label to clear ground" named a move that does not exist. The first fix
+  exempted only the clutter clause and was not enough: the contrast clause went
+  on failing **eight of eight** polar plots built on this project's own
+  `figure.mplstyle`, at 2.0:1 against a curve the radial axis crosses by
+  construction. A gate the bundled sheet cannot satisfy is measuring the
+  projection, not the figure. Both clauses now skip these labels and the row
+  reports how many went unjudged, so the author is told rather than left to
+  assume they passed. Author-placed text on a polar axes is still judged.
+
+- **`check_redundancy` no longer reads furniture that never renders.** Three
+  `imshow` panels at `axis("off")` were told to "use sharex/sharey" on the
+  strength of the tick `Text` objects matplotlib keeps for an axis it is not
+  drawing. Axes with `axison` false are skipped, and the tick clause now counts
+  only visible labels.
+
+- **`check_ink` can see an empty panel again.** The README has always claimed
+  the row catches "a panel is empty", and the pixel fraction could not: a blank
+  axes measures about 0.03 from its frame and ticks alone, over the 0.02 floor.
+  The blank subplot in a grid — the case that actually ships in papers — read as
+  merely sparse. Emptiness is now structural: was anything drawn into this axes.
+  The fraction clause is unchanged and still governs sparse and saturated
+  panels.
+
+- **`check_line_weight` has tests.** It shipped with none, which is the one
+  thing CONTRIBUTING says a gate may not do. Four now: a hairline fails, a
+  legal stroke passes, a 1.2pt stroke fails once placement thins it to 0.6pt on
+  the page, and the grid is not held to the data floor. The gate was correct —
+  it had simply never been watched work.
+
+Also fixed while adding the emptiness check: the new helper was called
+`_has_data`, which is already the name of the dual-axis helper defined later in
+the file. The later definition silently won, and the ink gate spent one round
+asking the wrong question — a panel holding only a table read as empty. Renamed
+`_axes_drew_anything`, with a test for the table case.
+
 ### Text readability — the gate the demo needed
 
 - **`check_text_readability` measures whether each string can be read where it
