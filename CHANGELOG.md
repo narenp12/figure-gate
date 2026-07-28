@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.4 — 2026-07-28
+
+One dead gate on the install path, and the missing way to point a live one at
+your own sheet. Nothing about the thresholds changed.
+
+- **The wheel ships `figure.mplstyle`.** It ships beside `check_figure.py`,
+  which is the first location `_style_sheet` probes. Through 0.1.3 the wheel
+  carried `skill/scripts` and nothing else, so on `uv add figure-gate` there was
+  no sheet anywhere the checker looks: the style-sheet row read *"no
+  figure.mplstyle beside this script, nothing to compare"* and returned a pass
+  — for a figure drawn on stock matplotlib with `plt.style.use` forgotten
+  entirely, which is the first failure the check's own docstring names. The gate
+  is advisory, so nothing was wrongly certified composed; it simply did nothing
+  on the path the README advertises. No code changed, only the build config.
+
+- **`STYLE_SHEET` is a module-level constant.** The sheet is meant to be edited
+  per document, so a project whose sheet lives somewhere other than beside the
+  checker needs a way to say so, and until now that way was patching a private
+  function. `None` keeps the existing behaviour: beside the script, then
+  `assets/` next to it. A path that is set and does not exist reports a warn
+  naming it, rather than falling back to a sheet the project did not ask for.
+
+- **The install path is tested, and tested twice over.** `tests/` builds the
+  layout the wheel produces and runs the checker inside it, with the checkout's
+  `assets/` off the import path — the copy-based tests could never have caught
+  this, because from a checkout the sheet is always one directory up. And CI
+  now builds the real wheel, installs it, and asserts the gate fires on a stock
+  figure and clears once the shipped sheet is applied; a mapping in
+  `pyproject.toml` is not evidence about what the build emits.
+
+- **The README's test count is checked against pytest.** It was wrong at 0.1.2
+  and hand-corrected at 0.1.3, which is the same fix twice. A test now reads the
+  number out of the README and compares it to a fresh collection, so the next
+  drift fails rather than ships. The count is 178.
+
 ## 0.1.3 — 2026-07-28
 
 Mostly the README. 0.1.2's fix shipped without the project page explaining the
