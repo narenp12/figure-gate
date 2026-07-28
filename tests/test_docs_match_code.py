@@ -90,8 +90,6 @@ def test_the_guide_does_not_quote_a_retired_surface():
 # noticed, because a roster in prose cannot fall out of date loudly.
 
 DOCSTRING_ROW = re.compile(r"^\s*\d+\.\s+(.+?)\s+-\s")
-# | Clipping | text runs past the canvas |
-README_ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*[^|]+\|\s*$")
 
 
 def audit_gate_names():
@@ -117,17 +115,33 @@ def docstring_gate_names():
 
 
 def readme_gate_names():
+    """First column of the gate table, however many columns it has.
+
+    The gate name has always been the first cell; the columns beside it have
+    not been stable. Matching the row shape with a regex meant a README rewrite
+    that added a Threshold column turned this parser into one that matched zero
+    rows — a roster check that reads nothing and compares it against 19 gates.
+    Splitting on the delimiter instead makes the column count irrelevant.
+    """
     lines = README.read_text().splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     names = []
     for line in lines[start:]:
-        m = README_ROW.match(line)
-        if m:
-            names.append(m.group(1))
-        elif names and not line.startswith("|"):
+        if line.startswith("|"):
+            names.append(line.strip().strip("|").split("|")[0].strip())
+        elif names:
             break
     # drop the header row and the |---|---| separator, which both match
-    return [n for n in names if n not in {"Gate", "---"}]
+    return [n for n in names if n != "Gate" and set(n) != {"-"}]
+
+
+def test_the_readme_table_is_still_parseable():
+    """The failure this file exists to prevent, in its own machinery: a parser
+    that matches nothing reports agreement with nothing. Assert the roster was
+    actually read before any test draws a conclusion from its contents."""
+    assert readme_gate_names(), (
+        "matched no rows in the README gate table - the table moved or changed "
+        "shape and readme_gate_names() needs updating with it")
 
 
 def test_the_module_docstring_lists_every_gate_in_order():
