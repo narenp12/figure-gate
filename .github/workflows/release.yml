@@ -69,4 +69,7 @@ jobs:
           name: dist
           path: dist/
       - uses: astral-sh/setup-uv@v5
-      - run: uv publish
+      # --check-url makes a re-run idempotent: a job that died partway through
+      # an upload can be retried without tripping over the files it already
+      # landed, which matters because the version cannot be re-cut.
+      - run: uv publish --check-url https://pypi.org/simple/

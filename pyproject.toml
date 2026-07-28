@@ -73,6 +73,15 @@ exclude = [
     ".DS_Store",
 ]
 
+# A rehearsal index, not a source of packages: `explicit` keeps it out of
+# dependency resolution entirely, so it can only ever be reached by naming it
+# with `uv publish --index testpypi`.
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
