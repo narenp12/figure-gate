@@ -67,6 +67,8 @@ jobs:
           else
             uv pip install --system "matplotlib==${{ matrix.matplotlib }}"
           fi
+      - name: Install TeX (for PGF test that tests the real backend)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq texlive-xetex
       - run: pytest -n auto -q
 
       - name: The checker rejects a deliberately bad figure
