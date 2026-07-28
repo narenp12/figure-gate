@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-07-27
 
 - Releases are signed. 0.1.0 went out through `uv publish`, which despite
   offering `--no-attestations` uploaded no provenance at all — PyPI's integrity
