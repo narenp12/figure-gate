@@ -17,7 +17,7 @@ python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
 python check_figure.py              # self-test on a deliberately broken figure
 ```
 
-![Example figure](examples/demo.png)
+![Example figure](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
 *`python examples/demo.py` — the whole method in 40 lines. `python
 examples/gallery.py` is the harder half: a shared-axis grid, a filled field with
@@ -102,6 +102,17 @@ cp figure-gate/skill/assets/figure.mplstyle       your-project/diagrams/
 cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
 cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
 ```
+
+If you would rather pin a version than vendor a file, the same two checkers
+install from PyPI and expose themselves as `check-palette` and `check-figure`:
+
+```bash
+uv add figure-gate          # or: uv tool install figure-gate
+```
+
+It changes nothing about how the scripts work. Copying is still the default,
+because a vendored checker is one you can read and edit alongside the figures it
+gates.
 
 Then set two things and nothing else:
 
@@ -198,10 +209,10 @@ keeps its defaults — with every other test still green.
 
 The full reasoning, including the measurements behind each threshold and the
 rules that were tried and reverted, is in
-[`skill/references/style-guide.md`](skill/references/style-guide.md).
+[`skill/references/style-guide.md`](https://github.com/narenp12/figure-gate/blob/main/skill/references/style-guide.md).
 
 Which *form* the data wants — the decision the styling rules cannot rescue — is
-in [`skill/references/choosing-a-form.md`](skill/references/choosing-a-form.md).
+in [`skill/references/choosing-a-form.md`](https://github.com/narenp12/figure-gate/blob/main/skill/references/choosing-a-form.md).
 It is built on Cleveland & McGill's ordering of the elementary perceptual tasks,
 and only its mechanical subset is gated: a script can rule out a pie or a cut bar
 baseline, but it cannot tell you a box plot is hiding an n of 8.
@@ -221,7 +232,7 @@ CI runs the palette checker with no `pip install` at all, on 3.8, 3.9, 3.11 and
 New gates are welcome, and the bar is the one the project holds itself to: a
 gate ships with a test proving it fails on a figure with that defect, a test
 proving it doesn't over-fire on the nearest legitimate case, and a note naming
-the real failure that motivated it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+the real failure that motivated it. See [CONTRIBUTING.md](https://github.com/narenp12/figure-gate/blob/main/CONTRIBUTING.md).
 
 ## License
 
