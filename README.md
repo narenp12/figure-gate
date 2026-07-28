@@ -3,17 +3,14 @@
 [![CI](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/figure-gate)](https://pypi.org/project/figure-gate/)
 
-**A style sheet says what to do. figure-gate says whether it happened.**
+**Two scripts that read a built matplotlib figure and report which gates it
+fails.** `audit(fig)` returns `(ok, rows)` — 19 rows, one per gate, each a
+`(label, status, detail)` triple where `status` is `True`, `False`, or
+`"warn"`. `check(colors)` does the same for a palette in 5 rows. Every
+threshold is a module-level constant you can read and change.
 
-Two validators and a matplotlib style sheet that check a *built* figure — its
-own artists, at the size it actually prints — for colorblind-safe color,
-composition, and legible type. Plus an
-[Agent Skill](https://code.claude.com/docs/en/skills) wrapper so Claude Code
-applies the same method.
-
-The premise: a figure can be correct, legible and colorblind-safe and still be
-bad, but it can't be good while failing any of those. Those three are
-checkable, so check them instead of squinting.
+There is also an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper
+that applies the same checks when Claude Code builds a figure.
 
 ```bash
 git clone https://github.com/narenp12/figure-gate && cd figure-gate
@@ -25,82 +22,100 @@ python skill/scripts/check_figure.py     # self-test on a broken figure
 fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is still at 0.25 at
 epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
-*`python examples/demo.py` — the whole method in one file, every decision in it
-commented with the failure it avoids. `python examples/gallery.py` is the harder
-half: a shared-axis grid, a filled field with a colorbar, an axis-free schematic,
-three statistical forms, a log-log convergence plot with a slope triangle, and a
-dense attractor. Writing those found five defects in the checks themselves.*
+*`python examples/demo.py` builds that figure and audits it, with every
+decision commented against the failure it avoids. `python examples/gallery.py`
+covers the harder forms: a shared-axis grid, a filled field with a colorbar, an
+axis-free schematic, three statistical forms, a log-log convergence plot with a
+slope triangle, and a dense attractor. Writing those six found five defects in
+the checks themselves.*
 
-## Why this exists
+## Why the two scripts talk to each other
 
 A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
-passed every composition check clean — while `check_palette.py` rated that
-cycle's orange and green at ΔE 1.4 under protanopia. One hue, to that reader.
-The two scripts had no way to speak to each other.
+returned 19 passing rows from the composition checks. `check_palette.py` rated
+that same cycle's orange and green at dE 1.4 under protanopia — one hue to that
+reader, against a floor of 8. The composition checker had no access to the
+colors it was drawing.
 
-They do now. `check_series_color` reads the hues off the figure's own artists
-and puts them through the palette gates, working out from the marks whether the
-figure needs adjacent separation (lines, bars) or all pairs (scatter).
+`check_series_color` closes that. It reads the hues off the figure's own
+artists, decides from the mark types whether the figure needs adjacent
+separation (lines, bars) or all-pairs separation (scatter), and runs them
+through the palette gates. That is row 11 of the 19.
 
-## What it catches
+## What each gate measures
 
-**`check_palette.py`** — standard library only, takes hex strings, so it works
-from any language or toolchain.
+**`check_palette.py`** — takes hex strings on the command line or via
+`check()`, imports nothing outside the standard library. Distances are OKLab
+dE x100.
 
-| Gate | Fails when |
-|---|---|
-| Lightness band | a hue is too light or too dark to read as a mark |
-| Chroma floor | a "color" is effectively gray |
-| CVD separation | two hues collapse under protanopia or deuteranopia |
-| Normal-vision floor | two hues are hard to tell apart even in full color |
-| Contrast vs surface | a hue is under 3:1 on the page *(advisory)* |
-| Ordinal ramp | an ordered ramp is non-monotone, unevenly stepped, or ends too light |
+| Gate | Threshold | Fails when |
+|---|---|---|
+| Lightness band | `L_MIN, L_MAX = 0.43, 0.77` | OKLab lightness outside the band |
+| Chroma floor | `CHROMA_MIN = 0.10` | OKLab chroma below it — the color reads as gray |
+| CVD separation | `CVD_TARGET = 8.0` | two hues under 8 dE in protan or deutan simulation |
+| Normal-vision floor | `NORMAL_FLOOR = 15.0` | two hues under 15 dE in full color |
+| Contrast vs surface | `CONTRAST_MIN = 3.0` | a hue under 3:1 on the page *(advisory)* |
 
-**`check_figure.py`** — reads a built matplotlib figure's own artists.
+`--ordinal` swaps those five rows for four that apply to a ramp: lightness
+monotone, adjacent dL gap, light-end contrast, and step uniformity
+(largest/smallest dL). Protanopia and deuteranopia are gated, together about 8%
+of males. Tritan separation is measured and printed in the detail string but
+not gated: prevalence is around 0.01%, and the Vienot matrix used here is
+validated only for the red-green forms, so the number is indicative rather than
+decisive.
 
-| Gate | Fails when |
-|---|---|
-| Clipping | text runs past the canvas |
-| Text collision | two labels overlap |
-| Text readability | data ink crosses a label's glyphs, or text misses WCAG on the backdrop it actually got |
-| Contrast stack | nothing is opaque, or transparency has too many levels |
-| Mark ratio | one mark is so large it reads as ornament |
-| Overplotting | a scatter is dense enough that the marks merge into a blob |
-| Axis redundancy | panels on a shared scale repeat their axis furniture |
-| Type size | a string lands under 7.5pt *on the printed page* |
-| Line weight | a stroke lands under 1pt on the printed page (SIAM's floor) |
-| Ink coverage | a panel is empty or saturated *(advisory)* |
-| Series color | the hues actually drawn collapse under color blindness |
-| Dual axis | a second y scale carries data of its own |
-| Form | pie, 3D, or bars on a truncated baseline |
-| Identity channel | series are told apart by hue alone *(advisory)* |
-| Label attribution | a direct label sits nearer some other series than the one it names |
-| Style sheet | `figure.mplstyle` is not the one in effect *(advisory)* |
-| Contour dash | a signed contour spends dashing on its negative levels |
-| Fonts | PDF/PS export is Type 3, or no named typeface is installed *(advisory)* |
-| Alt text | the figure carries no description for a reader who cannot see it *(advisory)* |
+**`check_figure.py`** — renders the figure through an Agg canvas and measures
+the result. `audit()` returns these 19 rows in this order.
 
-Thresholds cite a standard where one exists — SIAM's "one point or thicker",
-WCAG 4.5:1 for text, Nature/Science/PNAS type floors — and the rest were
-measured. `references/style-guide.md` names the real failure beside each rule.
+| Gate | Threshold | Fails when |
+|---|---|---|
+| Clipping | canvas bounds | a text artist's bbox extends past the canvas |
+| Text collision | bbox overlap | two text bboxes overlap, tick labels on a shared axis exempted |
+| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
+| Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels |
+| Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
+| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points have a nearest neighbour inside one marker radius |
+| Axis redundancy | shared scale | panels on a shared scale repeat tick labels or axis titles |
+| Type size | `TYPE_FLOOR_PT = 7.5` | a string renders under 7.5pt *on the printed page* |
+| Line weight | `LINE_FLOOR_PT = 1.0` | a stroke renders under 1pt on the printed page (SIAM's floor) |
+| Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
+| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
+| Dual axis | — | a `twinx` second scale carries data of its own |
+| Form | — | pie, 3D, or bars on a truncated baseline |
+| Identity channel | — | two or more series, no legend and no text in the axes *(advisory)* |
+| Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest other series is closer than 2x its distance to the one it names |
+| Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
+| Contour dash | — | a signed contour set dashes its negative levels |
+| Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
+| Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 
-### The one people are surprised by
+Thresholds cite a published floor where one exists — SIAM's one point, WCAG's
+4.5:1, the Nature/Science/PNAS type minima. The rest were measured, and
+`skill/references/style-guide.md` records the measurement and the figure that
+motivated each one.
 
-A figure authored at 14 inches and placed on a 750pt slide shrinks to 0.74×, so
-a 9pt label arrives at 6.7pt — fine on your monitor, unreadable from the back of
-a lecture hall. The type gate derives the scale per figure and measures what
-actually renders, so sizes set through rcParams or by a helper are caught too.
+### The gate that catches people
 
-Placing at a fraction of the content width? Say so — `audit(fig,
-placed_frac=0.48)` mirrors `\includegraphics[width=0.48\textwidth]`, and without
-it a half-width figure is certified at twice the type size it ships at. If your
-document is a venue the table knows, skip the measuring: `audit(fig,
-venue="neurips")`, and `python check_figure.py --venues` lists all twelve.
+Type size is measured on the printed page, not on the canvas. A figure authored
+at 14 inches (1008pt) and placed on a 750pt slide renders at 750/1008 = 0.74x,
+so a 9pt label arrives at 6.7pt — under the 7.5pt floor, and under it by an
+amount no one notices on a monitor. `page_scale` derives that ratio per figure
+and the type gate measures what renders, so sizes set through rcParams or by a
+helper are caught along with the ones set inline.
+
+Placing at a fraction of the content width changes the ratio again:
+`audit(fig, placed_frac=0.48)` mirrors `\includegraphics[width=0.48\textwidth]`,
+and without it a half-width figure is certified at twice the type size it
+ships at. For a venue in the table, `audit(fig, venue="neurips")` supplies the
+width; `python check_figure.py --venues` prints all twelve with their content
+widths in points.
 
 ## Install
 
-Copy three files into your project. `check_palette.py` is standard library only;
-`check_figure.py` needs matplotlib. scipy is optional and only a speed-up.
+Copy three files. `check_palette.py` needs only the standard library;
+`check_figure.py` needs matplotlib; scipy is optional and changes only speed
+(`check_overplotting` uses a KD-tree when scipy imports and an O(n^2) numpy
+path when it does not).
 
 ```bash
 git clone https://github.com/narenp12/figure-gate
@@ -109,23 +124,23 @@ cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
 cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
 ```
 
-Or pin a version instead of vendoring a file. Same two checkers, installed as
-`check-palette` and `check-figure`:
+Installing instead of vendoring pins a version and puts the same two checkers
+on PATH as `check-palette` and `check-figure`:
 
 ```bash
 uv add figure-gate          # or: uv tool install figure-gate
 ```
 
-Copying stays the default: a vendored checker is one you can read and edit
-beside the figures it gates.
+Copying is the default because a vendored checker is one you can read and edit
+beside the figures it gates, and the thresholds are meant to be edited.
 
-Then set two things and nothing else:
+Two settings need your document's values:
 
-1. `font.serif` in `figure.mplstyle` → your document's body typeface.
-2. `CONTENT_WIDTH_PT` at the top of `check_figure.py` → the usable width, in
-   points, of the page the figure lands in. Leave it `None` if you author each
-   figure at the width it's placed at, which makes the scale 1.0 and the whole
-   calculation disappear — or skip it and pass `venue=` instead.
+1. `font.serif` in `figure.mplstyle` — your document's body typeface.
+2. `CONTENT_WIDTH_PT` at the top of `check_figure.py` — the usable width of the
+   page, in points. Left `None`, the scale is 1.0 and the page calculation does
+   nothing, which is correct if you author each figure at the width it is
+   placed at. `venue=` overrides it per call.
 
 ### As a Claude Code skill
 
@@ -133,34 +148,47 @@ Then set two things and nothing else:
 cp -r figure-gate/skill ~/.claude/skills/research-figures
 ```
 
-Claude then applies the method when you ask for a figure for a paper or deck.
+Claude then runs these checks when you ask for a figure for a paper or a deck.
 `skill/SKILL.md` is the workflow; `skill/references/style-guide.md` is the
-reasoning behind every threshold.
+measurement behind each threshold.
 
 ## Use it
 
 ```python
 from pathlib import Path
+
+import numpy as np
+import matplotlib
+matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
+from check_figure import report
+
 plt.style.use(str(Path(__file__).parent / "figure.mplstyle"))
+
+x = np.linspace(0, 12, 300)
+y = np.exp(-0.12 * x)
 
 okabe = colormaps["okabe_ito"]          # matplotlib >= 3.11
 fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
-ax.plot(x, y, color=okabe(1), label="Baseline")  # widths from the sheet
+ax.plot(x, y, color=okabe(1))           # line width comes from the sheet
 
-from check_figure import report
-report(fig, "my-figure")
+report(fig, "my-figure")                # prints 19 rows, returns True if ok
 ```
 
-Resolve the style sheet relative to the *file*, not the working directory —
-`plt.style.use("figure.mplstyle")` breaks the moment a test runner or build
-script invokes it from elsewhere.
+Two details that are load-bearing. The style sheet is resolved relative to
+`__file__`, because `plt.style.use("figure.mplstyle")` resolves against the
+working directory and breaks the first time a test runner or build script
+invokes the module from elsewhere. And the backend is set explicitly: the
+checks measure rendered geometry, and the examples in this repository all call
+`matplotlib.use("agg")` before importing pyplot for that reason.
 
-Wire it into your build so a broken figure fails CI:
+`audit` is the same checks without the printing, which is what a test wants:
 
 ```python
+from check_figure import audit
+
 @pytest.mark.parametrize("name", sorted(FIGURES))
 def test_figure_is_composed(name):
     ok, rows = audit(build(name))
@@ -177,49 +205,50 @@ for exact conference sizing. Accessibility tooling exists too:
 Chart4Blind converts a chart image into an accessible one, contrast reporters
 check colors in isolation.
 
-None of them verifies a built figure. That is the gap this fills, and it makes
-the two complementary: use a style sheet, then gate it.
+Each of those acts before or beside the figure. None of them reads the built
+result and reports what it fails, which is the only thing here — so a style
+sheet and this are complementary: set defaults with one, verify them with the
+other.
 
-## What it doesn't do
+## What it does not do
 
-It won't tell you the figure is worth making. Every check here is an
-*elimination* gate — each forbids one enumerated failure, and none of them ever
-looks at the figure as a whole. A figure that passes has been judged not-bad in
-exactly the ways someone thought to write down, which is not the same as good.
-Render a PNG and look at it. The checker can't see that an arrow points at the
-wrong thing, that reading order runs backwards, or that a label is true of the
-concept and false of the curve beside it.
+Every check is an elimination gate: each one forbids a single enumerated
+failure, and none looks at the figure as a whole. 19 passing rows means the
+figure avoids 19 named defects. It does not mean the figure is good, and the
+checker cannot see that an arrow points at the wrong object, that reading order
+runs backwards, or that a label is true of the concept and false of the curve
+beside it. Render it and look at it.
 
-It also isn't for interactive web charts. Dashboards have different constraints
-(hover, responsive reflow, dark mode) and most of the rules here don't transfer.
+The rules also do not transfer to interactive web charts, where hover,
+responsive reflow and dark mode change most of the constraints.
 
 ## Design notes
 
 **Use what matplotlib ships.** viridis for sequential, `RdBu` for diverging,
-`okabe_ito` for categorical, style sheets for defaults, `constrained_layout` for
-layout. Earlier versions of this hand-rolled all four and every one was worse.
-`RdBu`'s poles clear every gate in `check_palette.py` unmodified; a windowed
-custom ramp threw away 35% of viridis for no benefit.
+`okabe_ito` for categorical, style sheets for defaults, `constrained_layout`
+for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
+poles clear every gate in `check_palette.py` unmodified, and a windowed custom
+ramp discarded 35% of viridis for no measured gain.
 
-**WARN is not FAIL.** A sub-3:1 hue is legal if it carries a direct label; a
-heatmap panel legitimately measures 0.98 ink coverage. Failing those would train
-everyone to ignore the row, and a gate people learn to skip is worse than no
-gate.
+**WARN is not FAIL.** Five rows are advisory. A sub-3:1 hue is legal when it
+carries a direct label; a heatmap panel legitimately measures 0.98 ink
+coverage. Failing those would train people to ignore the row, and an ignored
+gate is worth less than no gate.
 
-**Gates get tested for their ability to fail.** `tests/` asserts that each check
-catches a figure with exactly that one defect, and that the style sheet's colors
-actually apply. That last one exists because `#` starts a comment in matplotlib's
-style format, so `grid.color: #e1e0d9` silently parses as empty and matplotlib
-keeps its defaults — with every other test still green.
+**Gates are tested for their ability to fail.** The suite is 166 tests, and
+each check has one asserting it catches a figure with exactly that defect. The
+style sheet has its own tests because `#` starts a comment in matplotlib's
+style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
+its default, and every other test stays green.
 
-The full reasoning, including the measurements behind each threshold and the
-rules that were tried and reverted, is in
+The full reasoning — measurements behind each threshold, and the rules that
+were tried and reverted — is in
 [`skill/references/style-guide.md`](https://github.com/narenp12/figure-gate/blob/main/skill/references/style-guide.md).
 
-Which *form* the data wants — the decision the styling rules cannot rescue — is
-in [`skill/references/choosing-a-form.md`](https://github.com/narenp12/figure-gate/blob/main/skill/references/choosing-a-form.md).
-It is built on Cleveland & McGill's ordering of the elementary perceptual tasks,
-and only its mechanical subset is gated: a script can rule out a pie or a cut bar
+Which *form* the data wants is the decision no styling rule rescues, and it is
+in [`skill/references/choosing-a-form.md`](https://github.com/narenp12/figure-gate/blob/main/skill/references/choosing-a-form.md),
+built on Cleveland & McGill's ordering of the elementary perceptual tasks. Only
+its mechanical subset is gated: a script can rule out a pie or a truncated bar
 baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 ## Requirements
@@ -228,18 +257,21 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
   3.11 and 3.13. Copied, it runs on 3.8; installed from PyPI it does not,
   because the package carries `check_figure.py` too and that needs 3.9.
 - `check_figure.py` — Python 3.9+, matplotlib 3.8+.
-- `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the palette
-  is eight hex strings; they're listed in the style guide.
+- `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the
+  palette is eight hex strings, listed in the style guide.
 
 Those are the versions CI runs the palette checker on, with no `pip install` at
-all, because "standard library only" is a load-bearing claim.
+all, because "standard library only" is a load-bearing claim. The test job runs
+against the current matplotlib and pins one row to 3.8.4, so a break in either
+direction shows up.
 
 ## Contributing
 
-New gates are welcome, and the bar is the one the project holds itself to: a
-gate ships with a test proving it fails on a figure with that defect, a test
-proving it doesn't over-fire on the nearest legitimate case, and a note naming
-the real failure that motivated it. See [CONTRIBUTING.md](https://github.com/narenp12/figure-gate/blob/main/CONTRIBUTING.md).
+New gates are welcome at the bar the project holds itself to: a test proving
+the gate fails on a figure with that defect, a test proving it does not
+over-fire on the nearest legitimate case, and a note naming the real failure
+that motivated it. See [CONTRIBUTING.md](https://github.com/narenp12/figure-gate/blob/main/CONTRIBUTING.md)
+and [SECURITY.md](https://github.com/narenp12/figure-gate/blob/main/SECURITY.md).
 
 ## License
 
