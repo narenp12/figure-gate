@@ -14,6 +14,8 @@ someone notices in a year.
 """
 
 import re
+import subprocess
+import sys
 
 import pytest
 
@@ -152,6 +154,34 @@ def test_the_readme_table_lists_every_gate_in_order():
     stripped = [n.replace("*(advisory)*", "").strip()
                 for n in readme_gate_names()]
     assert stripped == audit_gate_names()
+
+
+def collected_test_count():
+    """The size of the suite, asked of pytest in a subprocess.
+
+    Not `request.session.testscollected`: the documented command here is
+    `pytest -n auto`, where each xdist worker collects a slice and no worker
+    can see the total. A fresh collection is the only number that is the
+    suite's.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", str(README.parent / "tests"),
+         "--collect-only", "-q", "-p", "no:cacheprovider"],
+        capture_output=True, text=True, cwd=README.parent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(r"(\d+) tests? collected", result.stdout)
+    assert match, result.stdout
+    return int(match.group(1))
+
+
+def test_the_readme_test_count_is_the_real_one():
+    """A number in prose is not executable -- the same reason the rest of this
+    file exists. 0.1.3 shipped a README claiming 166 tests against a suite of
+    171, and the only thing that catches that is asking pytest."""
+    claimed = re.search(r"The suite is (\d+) tests", README.read_text())
+    assert claimed, ("the README no longer states a test count in the form "
+                     "this test reads")
+    assert int(claimed.group(1)) == collected_test_count()
 
 
 def test_validator_default_surface_is_what_the_style_sheet_renders():
