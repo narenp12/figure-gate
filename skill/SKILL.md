@@ -283,12 +283,12 @@ instead — relative luminance 0.264 (`#E69F00` vs `#0072B2`) — say so, and ad
 second channel: dash pattern or marker shape. WCAG relative luminance, not the
 OKLab ΔE the separation gates use, because that is what a desaturation keeps.
 
-**Status colors come from the same palette** — `good #009E73`, `warning
-#E69F00`, `critical #D55E00` — always shipped with an icon or label. An
-independent status set lands in near-misses rather than matches, and a reader
-cannot tell whether two nearly-identical reds mean two things or one. Status is
-a role, not a reservation: a hue can be a series color or a status color in a
-given figure, never both.
+**Status colors come from the same palette** —
+`good #009E73`, `warning #E69F00`, `critical #D55E00` — always shipped with an
+icon or label. An independent status set lands in near-misses rather than
+matches, and a reader cannot tell whether two nearly-identical reds mean two
+things or one. Status is a role, not a reservation: a hue can be a series color
+or a status color in a given figure, never both.
 
 **Sequential is `cmap="viridis"` as shipped.** A filled cell is read against its
 neighbours and the colorbar, never against the page, so its light end carries no

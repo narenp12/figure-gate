@@ -573,9 +573,9 @@ back one piece of that structure.
 The motivating failure, reproduced end to end: a figure drawn on matplotlib's
 default `tab10` cycle with a `twinx` second y axis passed every check in
 `check_figure.py` and printed `-> COMPOSED`. The same three hues through
-`check_palette.py` reported `CVD separation (adjacent) worst #ff7f0e vs
-#2ca02c dE 1.4 (protan)` — one hue to a protanopic reader. Two scripts in one
-project, and nothing connected them.
+`check_palette.py` reported
+`CVD separation (adjacent) worst #ff7f0e vs #2ca02c dE 1.4 (protan)` — one hue
+to a protanopic reader. Two scripts in one project, and nothing connected them.
 
 - **`figure.mplstyle` sets `axes.prop_cycle`** to the six Okabe-Ito series slots,
   in canonical order. Until now the sheet set every visual default except the one

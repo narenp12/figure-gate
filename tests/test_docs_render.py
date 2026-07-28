@@ -426,6 +426,34 @@ def test_the_page_background_is_the_surface_the_stylesheet_measured(
             "not draw.")
 
 
+# --- headings are headings ----------------------------------------------------
+
+def test_no_built_heading_holds_a_code_span_marker(built_site):
+    """The symptom, checked where the cause cannot be seen.
+
+    `test_docs_site.py` lints the markdown for a `#` in column one, which is
+    what produced this: two pages had a hex colour wrapped onto the second line
+    of a code span, and Python-Markdown -- which splits blocks before it parses
+    inline spans -- made each one an <h1> holding the rest of the sentence, with
+    a permalink `¶` mid-paragraph and a line of prose in the table of contents.
+
+    That lint knows the one cause it was written for. A backtick surviving into
+    rendered heading text means some span did not close, whatever opened it, so
+    this reads the built HTML instead of the source and does not care why.
+    """
+    offenders = []
+    for page in sorted(built_site.rglob("index.html")):
+        for inner in re.findall(r"<h[1-6][^>]*>(.*?)</h[1-6]>",
+                                page.read_text(), re.S):
+            body = re.sub(r"<[^>]+>", "", inner)
+            if "`" in body:
+                offenders.append(
+                    f"  {page.relative_to(built_site)}: {body.strip()[:80]}")
+    assert not offenders, (
+        "rendered heading(s) contain a backtick, so a code span did not close "
+        "and the text after it became a heading:\n" + "\n".join(offenders))
+
+
 # --- the figures are not recolored --------------------------------------------
 
 def test_no_filter_is_applied_to_gallery_figures():

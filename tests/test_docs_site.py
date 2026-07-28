@@ -106,6 +106,53 @@ def test_no_page_has_become_a_copy():
         "single copy, or added to AUTHORED if they are genuinely site-only")
 
 
+# --- a `#` in column one is a heading, whatever it was meant to be ------------
+# Python-Markdown splits blocks before it parses inline spans, so a line that
+# begins with `#` becomes an ATX heading even when it is plainly the middle of a
+# sentence -- or, as here, the middle of a wrapped `code span`. Two pages shipped
+# that way: `#E69F00`, and `#2ca02c` in the changelog, both the second line of a
+# hex pair inside backticks. Each rendered as an <h1> holding the rest of the
+# sentence, left an unclosed backtick in the paragraph above, added a permalink
+# `¶` mid-sentence, and put a line of prose in the table of contents.
+#
+# `--strict` does not fail on it: nothing is broken, a heading was simply
+# invented. It is the same defect as everything else this file guards -- prose
+# that does not say what it renders -- so it is checked rather than watched for.
+
+
+def source_pages():
+    """The markdown the site serves, resolved through the symlinks."""
+    return sorted((p, p.resolve()) for p in DOCS.rglob("*.md"))
+
+
+def accidental_headings(text):
+    """Lines that Python-Markdown will make a heading out of by accident.
+
+    A real ATX heading is `#` through `######` followed by a space. Anything
+    else in column one -- `#E69F00`, `#2ca02c` -- is a hex colour, or the tail
+    of a wrapped code span, about to become an <h1>. Fenced blocks are skipped:
+    inside them a leading `#` is a comment and stays one.
+    """
+    out, fenced = [], False
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("#") and not re.match(r"#{1,6} ", line):
+            out.append((number, line))
+    return out
+
+
+@pytest.mark.parametrize("page,target", source_pages(),
+                         ids=lambda v: getattr(v, "name", v))
+def test_no_line_becomes_a_heading_by_accident(page, target):
+    bad = accidental_headings(target.read_text())
+    report = "\n".join(f"  {target.name}:{n}: {line}" for n, line in bad)
+    assert not bad, (
+        f"{len(bad)} line(s) start with `#` but are not headings, so the "
+        f"build will turn each into one:\n{report}\n"
+        "Re-wrap the paragraph so the `#` is not in column one.")
+
+
 def test_the_build_is_not_left_configured_for_mkdocs():
     """Zensical reads a `mkdocs.yml` if it finds one, and prefers it to nothing
     -- but `strict: true` is a MkDocs key it silently ignores, so a leftover
