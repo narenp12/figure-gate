@@ -1,12 +1,6 @@
 name: Release
 
-# Publishing is tag-driven and gated on the same tests CI runs, so a release can
-# only ever be cut from a commit whose gates pass. Trusted publishing means no
-# API token lives in this repository: PyPI verifies the OIDC identity of this
-# workflow instead.
-# workflow_dispatch builds and tests but cannot publish -- see the guard on the
-# publish job. It exists so a release can be rehearsed against a branch without
-# the run being able to reach the index.
+# Only a tag releases. Dispatch builds and tests without reaching the index.
 on:
   push:
     tags: ["v*"]
@@ -40,8 +34,7 @@ jobs:
       - run: uv python install 3.13
       - run: uv build
 
-      # The tag is the version of record. If it disagrees with pyproject.toml,
-      # stop here rather than publish a release whose number is a lie.
+      # A release number that disagrees with the project is worse than no release.
       - name: Tag matches project version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -60,10 +53,8 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    # Without this the workflow_dispatch trigger is a publish button: the
-    # version check above is skipped when there is no tag, so a manual run from
-    # any branch would push whatever version pyproject.toml happened to carry.
-    # The tag is the only thing allowed to release.
+    # The version check above is skipped when there is no tag, so without this
+    # guard workflow_dispatch is a publish button.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment:
@@ -77,7 +68,5 @@ jobs:
           name: dist
           path: dist/
       - uses: astral-sh/setup-uv@v9
-      # --check-url makes a re-run idempotent: a job that died partway through
-      # an upload can be retried without tripping over the files it already
-      # landed, which matters because the version cannot be re-cut.
+      # --check-url lets a half-finished upload be retried rather than re-cut.
       - run: uv publish --check-url https://pypi.org/simple/

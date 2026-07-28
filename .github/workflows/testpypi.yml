@@ -1,13 +1,8 @@
 name: Rehearse release on TestPyPI
 
-# The point of this workflow is to see the rendered project page -- the README,
-# the broken-image risk, the metadata -- before a version number is spent on the
-# real index, where it can never be reused. It is manual only: a rehearsal that
-# fires on a tag would race the real release.
-#
-# TestPyPI is just as unforgiving about version reuse, so a second rehearsal of
-# the same version needs a bump. `uv version --bump patch` locally, or publish a
-# `.devN` suffix you never intend to tag.
+# Renders the project page before a version is spent on the real index. Manual
+# only, so it cannot race the release. TestPyPI refuses version reuse too, so a
+# second rehearsal needs a bump or a `.devN` suffix you never tag.
 on:
   workflow_dispatch:
 
@@ -25,8 +20,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # `uv publish --index` reads the index definition out of pyproject.toml,
-      # so this job needs the checkout that the real release job does not.
+      # `uv publish --index` reads the index out of pyproject.toml, hence checkout.
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9
         with:

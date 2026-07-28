@@ -103,16 +103,15 @@ cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
 cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
 ```
 
-If you would rather pin a version than vendor a file, the same two checkers
-install from PyPI and expose themselves as `check-palette` and `check-figure`:
+Or pin a version instead of vendoring a file. Same two checkers, installed as
+`check-palette` and `check-figure`:
 
 ```bash
 uv add figure-gate          # or: uv tool install figure-gate
 ```
 
-It changes nothing about how the scripts work. Copying is still the default,
-because a vendored checker is one you can read and edit alongside the figures it
-gates.
+Copying stays the default: a vendored checker is one you can read and edit
+beside the figures it gates.
 
 Then set two things and nothing else:
 
@@ -220,6 +219,8 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
 ## Requirements
 
 - `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8–3.13.
+  Copied, it runs on 3.8; installed from PyPI it does not, because the package
+  carries `check_figure.py` too and that needs 3.9.
 - `check_figure.py` — Python 3.9+, matplotlib 3.8+.
 - `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the palette
   is eight hex strings; they're listed in the style guide.

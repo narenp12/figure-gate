@@ -58,10 +58,9 @@ build-backend = "hatchling.build"
 only-include = ["skill/scripts"]
 sources = ["skill/scripts"]
 
-# The sdist is the auditable copy: it keeps the skill, the tests and the
-# examples, because the tests are what make the thresholds checkable by someone
-# who did not write them. It drops the agent scratch directories, which are
-# local tooling state and mean nothing to anyone downloading the package.
+# Keeps the skill, the tests and the examples -- the tests are what make the
+# thresholds checkable by someone who did not write them. Drops agent scratch
+# state, which means nothing outside this checkout.
 [tool.hatch.build.targets.sdist]
 exclude = [
     "/.claude",
@@ -72,9 +71,8 @@ exclude = [
     ".DS_Store",
 ]
 
-# A rehearsal index, not a source of packages: `explicit` keeps it out of
-# dependency resolution entirely, so it can only ever be reached by naming it
-# with `uv publish --index testpypi`.
+# A rehearsal target, not a source of packages: `explicit` keeps it out of
+# resolution, so only `uv publish --index testpypi` reaches it.
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
@@ -89,9 +87,8 @@ filterwarnings = [
     "ignore:findfont:UserWarning",
 ]
 
-# A dependency group, not an extra: `Provides-Extra: dev` is published metadata,
-# so an extra puts a `figure-gate[dev]` on the project page that means nothing to
-# anyone installing the package. Groups stay in the repository.
+# A group, not an extra: extras are published metadata, and a `figure-gate[dev]`
+# on the project page means nothing to anyone installing a checker.
 [dependency-groups]
 dev = [
     "pytest>=7.0",
