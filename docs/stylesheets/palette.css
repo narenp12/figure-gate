@@ -25,15 +25,33 @@
    comment true until someone flipped that line and false silently afterwards,
    which is the failure mode the whole project is about. Both columns are
    recomputed by `tests/test_docs_site.py`, and the floor is asserted against
-   the worse of the two. */
+   the worse of the two.
+
+   All of that is arithmetic about two hex values, and it stays true whether or
+   not either one reaches the screen — which is a thing that has happened here.
+   `tests/test_docs_render.py` renders the site and measures what is painted. */
 
 :root {
   --fg-blue: #0072b2;
   --fg-sky: #56b4e9;
 }
 
-/* Light: blue at 5.19:1 on white. */
-:root[data-md-color-scheme="default"] {
+/* Bare attribute selectors. The `:root` that looks like it belongs in front of
+   them is a bug, and it shipped.
+
+   Zensical sets `data-md-color-scheme` on `<body>`. `:root` is `<html>`, so
+   `:root[data-md-color-scheme="slate"]` matches zero elements and takes this
+   whole file off the page with it.
+
+   It was added to win a specificity fight that does not exist. With
+   `primary`/`accent` set to "custom" no theme `[data-md-color-primary=...]`
+   rule matches at all, and the theme's `:root` block loses to a declaration on
+   `<body>` by inheritance, not by specificity — there is no contest to lose.
+   Both upstreams document `:root > *` for this, which selects the body.
+
+   `tests/test_docs_render.py` asserts these rules reach the page. */
+
+[data-md-color-scheme="default"] {
   --md-primary-fg-color: var(--fg-blue);
   --md-primary-fg-color--light: var(--fg-sky);
   --md-primary-fg-color--dark: #005b8f;
@@ -43,7 +61,7 @@
 
 /* Dark: sky, at 6.98:1 on classic and 8.48:1 on modern. Blue would be 3.10
    and 3.77, under the floor on both. */
-:root[data-md-color-scheme="slate"] {
+[data-md-color-scheme="slate"] {
   --md-primary-fg-color: var(--fg-blue);
   --md-primary-fg-color--light: var(--fg-sky);
   --md-primary-fg-color--dark: #005b8f;
@@ -51,16 +69,39 @@
   --md-typeset-a-color: var(--fg-sky);
 }
 
-/* The header sits on blue with white text: 5.19:1, the same measurement. */
-.md-header {
-  color: #ffffff;
-}
+/* The header deliberately sets no color here.
+
+   A `.md-header { color: #ffffff }` used to, carried over from the Material
+   look where the header is a solid bar filled with the primary color. `modern`
+   does not fill it — the header is translucent over the page, white at 0.7
+   alpha in light mode — so that rule composited to white on white, 1.00:1, and
+   the site's own name was invisible.
+
+   The theme's own header foreground is right for both variants: 16.07:1 light,
+   19.56:1 dark. Anything put back here has to be measured against the
+   composited surface, not against `--md-primary-fg-color`. */
 
 /* Gallery figures are wide and detailed; let them use the full column and
    carry their caption as visible text rather than only as alt. */
 .md-typeset figure img {
   max-width: 100%;
   border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* The figures are opaque white because they are drawn for paper, which on the
+   dark page is seven bright slabs at 19.56:1.
+
+   Inverting them is not available: a filter moves every Okabe-Ito hue off the
+   palette the gates enforce, and the gallery would stop showing what the
+   checker passed. So the white is framed rather than fought — a mat in the same
+   white, so each figure ends in a margin instead of a torn edge.
+   `--md-default-fg-color--lightest` is a light-on-dark tint and vanishes on
+   that mat, which is why the border here names its own color. */
+[data-md-color-scheme="slate"] .md-typeset figure img {
+  background: #ffffff;
+  padding: 0.6rem;
+  border-color: rgba(0, 0, 0, 0.24);
+  border-radius: 2px;
 }
 
 .md-typeset figure figcaption {

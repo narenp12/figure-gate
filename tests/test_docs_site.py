@@ -190,7 +190,18 @@ def test_the_configured_variant_is_one_the_stylesheet_measured():
 
 
 def scheme_link_colors():
-    text = CSS.read_text()
+    """Declarations only -- the comments are stripped first, and that is
+    load-bearing.
+
+    `quoted_rows()` above reads the comment on purpose; this reads the CSS on
+    purpose, and the two cannot share a source. The scheme regex walks forward
+    from the first `[data-md-color-scheme="slate"]` it finds to the next
+    `--md-typeset-a-color`, so a comment that *names* a selector -- as the one
+    in `palette.css` now does, explaining the `:root` prefix that took the
+    stylesheet off the page -- silently redirects the match into the wrong
+    block and reports both schemes sharing a color.
+    """
+    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
     values = dict(re.findall(r"--(fg-\w+):\s*(#[0-9a-fA-F]{6})", text))
     out = {}
     for scheme in ("default", "slate"):
