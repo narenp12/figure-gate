@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   # The README claims check_palette.py runs on Python 3.8+ with nothing
-  # installed. That claim is load-bearing -- it is why the file is usable from a
-  # non-Python toolchain -- so it gets its own job with no pip install at all,
+  # installed. That claim is why the file is usable from a non-Python
+  # toolchain, so it gets its own job with no pip install at all,
   # rather than being assumed.
   stdlib-only:
     name: check_palette on Python ${{ matrix.python }} (no dependencies)

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.3 — 2026-07-28
+
+Mostly the README. 0.1.2's fix shipped without the project page explaining the
+condition it fixed, and PyPI renders the README from the released sdist, so the
+explanation could not reach the project page without a release of its own.
+
+- **The README documents the HiDPI behaviour**, in a section under "Use it":
+  what a Retina or scaled-display backend does to `fig.dpi`, both ways that went
+  wrong through 0.1.1, and the one consequence a user can trip over — an audited
+  figure is no longer attached to its GUI canvas and will not show in a window.
+  It also names the reason the bug survived: every test and example here pins
+  Agg, so nothing in CI could construct the failing condition.
+
+- **`OVERPLOT_THRESHOLD` is a module-level constant.** The README's opening
+  claim is that every threshold is one you can read and change, and this one was
+  a local inside `check_overplotting` — cited in the gate table by a name that
+  could not be imported. The value is unchanged at 0.5.
+
+- **Two README claims corrected against the code.** The test count said 166 and
+  the suite is 171. And `check()` returns `(rows, ok)` while `audit()` returns
+  `(ok, rows)`; the opening paragraph said check "does the same", which reads as
+  a promise about the tuple order that the code does not keep. The order is now
+  stated. Neither function changed — unpacking is published API.
+
 ## 0.1.2 — 2026-07-28
 
 - **The audit no longer depends on the display it ran on.** A HiDPI GUI backend

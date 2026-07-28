@@ -211,7 +211,7 @@ composition suite clean. **Series color** closes it by reading the hues the
 figure actually drew and putting those through the palette gates, inferring
 adjacent-versus-all-pairs from whether the marks are scatter.
 
-**WARN is not FAIL, and the difference is load-bearing.** A sub-3:1 hue is legal
+**WARN is not FAIL, and the difference matters.** A sub-3:1 hue is legal
 *if* it carries a visible direct label; a saturated panel is fine *if* it is a
 heatmap. Read the row and decide — do not skim past it. A gate everyone learns
 to ignore is worse than no gate, which is why the context-dependent checks warn

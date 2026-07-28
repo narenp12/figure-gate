@@ -6,8 +6,9 @@
 **Two scripts that read a built matplotlib figure and report which gates it
 fails.** `audit(fig)` returns `(ok, rows)` — 19 rows, one per gate, each a
 `(label, status, detail)` triple where `status` is `True`, `False`, or
-`"warn"`. `check(colors)` does the same for a palette in 5 rows. Every
-threshold is a module-level constant you can read and change.
+`"warn"`. `check(colors)` gates a palette the same way in 5 rows, though it
+returns them the other way round, as `(rows, ok)`. Every threshold is a
+module-level constant you can read and change.
 
 There is also an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper
 that applies the same checks when Claude Code builds a figure.
@@ -64,8 +65,9 @@ not gated: prevalence is around 0.01%, and the Vienot matrix used here is
 validated only for the red-green forms, so the number is indicative rather than
 decisive.
 
-**`check_figure.py`** — renders the figure through an Agg canvas and measures
-the result. `audit()` returns these 19 rows in this order.
+**`check_figure.py`** — renders the figure through an Agg canvas, at the dpi it
+was authored at, and measures the result. `audit()` returns these 19 rows in
+this order.
 
 | Gate | Threshold | Fails when |
 |---|---|---|
@@ -177,12 +179,12 @@ ax.plot(x, y, color=okabe(1))           # line width comes from the sheet
 report(fig, "my-figure")                # prints 19 rows, returns True if ok
 ```
 
-Two details that are load-bearing. The style sheet is resolved relative to
+Two details in that block carry weight. The style sheet is resolved relative to
 `__file__`, because `plt.style.use("figure.mplstyle")` resolves against the
 working directory and breaks the first time a test runner or build script
-invokes the module from elsewhere. And the backend is set explicitly: the
-checks measure rendered geometry, and the examples in this repository all call
-`matplotlib.use("agg")` before importing pyplot for that reason.
+invokes the module from elsewhere. And the backend is set explicitly, which is
+what every example in this repository does before importing pyplot — a figure
+built for measurement has no reason to open a window.
 
 `audit` is the same checks without the printing, which is what a test wants:
 
@@ -194,6 +196,33 @@ def test_figure_is_composed(name):
     ok, rows = audit(build(name))
     assert ok, "\n".join(f"{k}: {d}" for k, s, d in rows if not s)
 ```
+
+### Retina, and why the backend used to change the answer
+
+You do not have to set the backend for the numbers to come out right. The
+checker normalises for this itself, and that is worth knowing about because it
+did not always.
+
+A HiDPI GUI backend — macosx on a Retina display, Qt on a scaled desktop — sets
+`fig.dpi` to the authored dpi times the display's device pixel ratio at the
+moment the figure is created. A figure built under one arrives at the checker at
+2×. Through 0.1.1 that meant two wrong answers at once: text extents come back
+in physical pixels while the canvas reports its width in logical ones, so the
+clipping gate compared 2× coordinates against a 1× bound and failed labels that
+fit; and thresholds calibrated in pixels covered half the distance they were
+calibrated for. The same figure passed under Agg and failed under macosx.
+
+Since 0.1.2 the checker resets the figure to its authored dpi and measures on
+Agg regardless of what it was built under, so the verdict is a property of the
+figure rather than of the display. One consequence: an audited figure is no
+longer attached to its GUI canvas and will not show in a window. Audit last, or
+audit a figure you rebuild for the purpose.
+
+The bug is worth reading as a warning about the shape of this project's own test
+suite rather than as a fixed defect. Every test and every example here pins Agg,
+so nothing in CI could construct the failing condition, and it stayed green
+across a release. Tests that all share one assumption cannot see that
+assumption.
 
 ## Where this sits
 
@@ -235,7 +264,7 @@ carries a direct label; a heatmap panel legitimately measures 0.98 ink
 coverage. Failing those would train people to ignore the row, and an ignored
 gate is worth less than no gate.
 
-**Gates are tested for their ability to fail.** The suite is 166 tests, and
+**Gates are tested for their ability to fail.** The suite is 171 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
@@ -261,7 +290,8 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
   palette is eight hex strings, listed in the style guide.
 
 Those are the versions CI runs the palette checker on, with no `pip install` at
-all, because "standard library only" is a load-bearing claim. The test job runs
+all, because "standard library only" is what makes the file usable from a
+non-Python toolchain and a claim nobody tests is a claim. The test job runs
 against the current matplotlib and pins one row to 3.8.4, so a break in either
 direction shows up.
 

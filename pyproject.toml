@@ -1,6 +1,6 @@
 [project]
 name = "figure-gate"
-version = "0.1.2"
+version = "0.1.3"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
@@ -46,7 +46,7 @@ check-figure = "check_figure:main"
 [project.optional-dependencies]
 fast = ["scipy>=1.6"]
 
-# The floor is load-bearing, not hygiene: `license = "MIT"` and `license-files`
+# The floor does real work here, it is not hygiene: `license = "MIT"` and `license-files`
 # are PEP 639, and hatchling only emits them as Metadata-Version 2.4 from 1.26.
 # An unpinned older backend would silently build a package whose licence PyPI
 # cannot read.

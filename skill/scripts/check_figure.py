@@ -46,6 +46,12 @@ from pathlib import Path
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
 INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
+# Share of a scatter's points whose nearest neighbour sits inside one marker
+# radius before the cloud is called an unreadable mass. Up here with its
+# siblings rather than inside `check_overplotting`, because the README's claim
+# is that every threshold is a module-level constant you can read and change,
+# and this was the one that was not.
+OVERPLOT_THRESHOLD = 0.5
 
 # The theme has six categorical slots and the guide's claim is that there is no
 # seventh: a generated hue is indistinguishable from an existing slot under
@@ -723,7 +729,6 @@ def check_overplotting(fig):
     except ImportError:                      # optional, see `_box_blur`
         cKDTree = None
 
-    OVERPLOT_THRESHOLD = 0.5
     dpi = fig.dpi
 
     bad = []
