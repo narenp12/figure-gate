@@ -40,12 +40,6 @@ rather than to a new gate.
   the page, and the grid is not held to the data floor. The gate was correct —
   it had simply never been watched work.
 
-Also fixed while adding the emptiness check: the new helper was called
-`_has_data`, which is already the name of the dual-axis helper defined later in
-the file. The later definition silently won, and the ink gate spent one round
-asking the wrong question — a panel holding only a table read as empty. Renamed
-`_axes_drew_anything`, with a test for the table case.
-
 ### Text readability — the gate the demo needed
 
 - **`check_text_readability` measures whether each string can be read where it

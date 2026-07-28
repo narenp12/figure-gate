@@ -272,14 +272,13 @@ def _polar_radial_ticks(fig):
     a composition mistake anybody made, and the advice this gate gives ("move
     the label to clear ground") names a move that does not exist.
 
-    Exempted from both clauses, which is further than it first looked like it
-    needed to go. Exempting clutter alone left the contrast clause failing
-    eight of eight ordinary polar plots built on this project's own style
-    sheet, at 2.0:1 against a curve the radial axis crosses by construction. A
-    gate the bundled sheet cannot satisfy is measuring the projection, not the
-    figure.
+    Both clauses, not just clutter. Exempting clutter alone still left the
+    contrast clause failing eight of eight ordinary polar plots built on this
+    project's own style sheet, at 2.0:1 against a curve the radial axis crosses
+    by construction. A gate the bundled sheet cannot satisfy is measuring the
+    projection, not the figure.
 
-    The count is reported rather than dropped, so the author knows these
+    The count is reported rather than dropped, so the author is told these
     strings went unjudged instead of assuming they passed.
     """
     ids = set()
@@ -834,16 +833,16 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
 def _axes_drew_anything(ax):
     """Whether anything was drawn into this axes.
 
-    Deliberately broader than `_has_data`, which asks whether an axes carries
-    *data* and is what the dual-axis gate needs. This one asks whether the
-    panel was used at all, so a table or a lone annotation counts. Naming it
-    `_has_data` shadowed the other and sent the ink gate the wrong answer.
+    Not `_has_data`, which is a different question defined further down this
+    file: that one asks whether an axes carries *data*, which is what the
+    dual-axis gate needs. This asks whether the panel was used at all, so a
+    table or a lone annotation counts. The two names are close enough that one
+    shadowed the other once; keep them apart.
 
-    Every container matplotlib puts drawn content in, checked rather than
-    guessed at: a blank axes has all of them at zero, and a panel holding only
-    an annotation or only a bar still reports through one of them. `ax.patch`
-    is the background and is deliberately not consulted -- it exists on the
-    blank axes too.
+    Every container matplotlib puts drawn content in: a blank axes has all of
+    them at zero, and a panel holding only an annotation or only a bar still
+    reports through one of them. `ax.patch` is the background and is
+    deliberately not consulted — it exists on the blank axes too.
     """
     return any(len(getattr(ax, name, ())) for name in
                ("lines", "collections", "patches", "images", "texts",
@@ -928,8 +927,8 @@ def check_ink(fig, context_axes=None, canvas=None):
             frac = float(sub.mean())
         # An empty panel is structural, not a low number. The frame and the
         # tick marks of a blank axes measure about 0.03 on their own, over the
-        # 0.02 floor, so the blank subplot in a grid -- the case that actually
-        # ships -- read as merely sparse. Ask whether anything was drawn.
+        # 0.02 floor, so the blank subplot in a grid — the case that actually
+        # ships — read as merely sparse. Ask whether anything was drawn.
         rows.append((i, frac,
                      _axes_drew_anything(ax) and INK_MIN <= frac <= INK_MAX))
 

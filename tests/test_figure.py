@@ -1154,10 +1154,9 @@ def test_polar_radial_tick_labels_are_not_judged():
     draws; there is no outside to move them to. Failing them told the author to
     "move the label to clear ground", which is not an available move.
 
-    Eight seeds because the first version of this fix exempted only the clutter
-    clause, and the contrast clause went on failing the same figures at 2.0:1 —
-    on plots built with this project's own style sheet. A single example would
-    not have caught that."""
+    Eight seeds, not one. Exempting these labels from the clutter clause alone
+    left the contrast clause failing the same figures at 2.0:1, and a single
+    example passed the whole time it was still broken."""
     import numpy as np
     theta = np.linspace(0, 2 * np.pi, 80)
     for seed in range(8):
