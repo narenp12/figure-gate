@@ -107,16 +107,25 @@ private set: it carries a decade of use and readers who know it recognize it.
 
 | Slot | Hue | Hex | Contrast `#ffffff` | Role |
 |---|---|---|---|---|
-| 1 | black | `#000000` | 21.00 | ink token by convention |
-| 2 | orange | `#E69F00` | 2.25 † | series |
-| 3 | sky blue | `#56B4E9` | 2.31 † | series |
-| 4 | bluish green | `#009E73` | 3.42 | series |
-| 5 | yellow | `#F0E442` | 1.32 ‡ | fills, not hairlines |
-| 6 | blue | `#0072B2` | 5.19 | series |
-| 7 | vermillion | `#D55E00` | 3.87 | series |
-| 8 | reddish purple | `#CC79A7` | 3.06 | series |
+| 1 | black | `#000000`{ .sw style="--c:#000000" } | 21.00 | ink token by convention |
+| 2 | orange | `#E69F00`{ .sw style="--c:#E69F00" } | 2.25 † | series |
+| 3 | sky blue | `#56B4E9`{ .sw style="--c:#56B4E9" } | 2.31 † | series |
+| 4 | bluish green | `#009E73`{ .sw style="--c:#009E73" } | 3.42 | series |
+| 5 | yellow | `#F0E442`{ .sw style="--c:#F0E442" } | 1.32 ‡ | fills, not hairlines |
+| 6 | blue | `#0072B2`{ .sw style="--c:#0072B2" } | 5.19 | series |
+| 7 | vermillion | `#D55E00`{ .sw style="--c:#D55E00" } | 3.87 | series |
+| 8 | reddish purple | `#CC79A7`{ .sw style="--c:#CC79A7" } | 3.06 | series |
 
 † below 3:1 — must carry a visible direct label. ‡ below lightness band.
+
+The hue is the one cell here a reader cannot recompute. "Vermillion" is the Hue
+column attempting it in words; the swatch is the same claim in color. It renders
+on the site only. In the file it is an attribute list on the code span, restating
+the hex that span already holds, and a second copy of a color is how the ink
+table below came to credit the sheet with a token the sheet had stopped shipping.
+So both ends are held: `tests/test_docs_match_code.py` reads the source and
+asserts the pair agrees, `tests/test_docs_render.py` renders the page and asserts
+the browser paints it.
 
 **A legend entry is not a direct label.** The rule was ambiguous on this and
 `examples/demo.py` read it the other way for a while. It is settled the strict
@@ -171,7 +180,7 @@ ax.pcolormesh(X, Y, Z, cmap="viridis")    # continuous — as shipped
 ```
 
 **Window only for discrete tiers drawn as standalone lines/marks.** Full-range viridis
-ends at `#fde725`, 1.26:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
+ends at `#fde725`{ .sw style="--c:#fde725" }, 1.26:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
 `ordinal()` from the appendix. Two things to get right: sample
 evenly (ΔL ratio < 2×), and narrow to `t ∈ [0.00, 0.38]` when the figure also carries
 status green (viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`).
@@ -189,15 +198,16 @@ to hand it to — keep those tiers few and evenly stepped, and validate with
 
 ### Diverging: `RdBu`, as shipped
 
-ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b` / `#2065ab` clear every
-gate. Midpoint is `#f6f7f7`. Never a hue at the midpoint; never two cool poles.
+ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b`{ .sw style="--c:#b1182b" } /
+`#2065ab`{ .sw style="--c:#2065ab" } clear every gate. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
+Never a hue at the midpoint; never two cool poles.
 
 ### Ink, status, backdrop
 
 | Token | Hex | Defined in |
 |---|---|---|
-| Ink primary / secondary / muted | `#000000` / `#52514e` / `#777570` | `figure.mplstyle` |
-| Grid / axis / surface | `#e1e0d9` / `#c3c2b7` / `#ffffff` | `figure.mplstyle` |
+| Ink primary / secondary / muted | `#000000`{ .sw style="--c:#000000" } / `#52514e`{ .sw style="--c:#52514e" } / `#777570`{ .sw style="--c:#777570" } | `figure.mplstyle` |
+| Grid / axis / surface | `#e1e0d9`{ .sw style="--c:#e1e0d9" } / `#c3c2b7`{ .sw style="--c:#c3c2b7" } / `#ffffff`{ .sw style="--c:#ffffff" } | `figure.mplstyle` |
 
 Muted ink was `#898781` until `check_text_readability` was written and failed the
 sheet's own tick labels on every figure in the repo: it measures 3.59:1 on white,
@@ -216,7 +226,8 @@ good #009E73    warning #E69F00    critical #D55E00
 
 Status and series are mutually exclusive roles for a hue within one figure.
 
-Neutral backdrop: `#ffffff → #e6e5de → #c3c2b7 → #95938b`.
+Neutral backdrop: `#ffffff`{ .sw style="--c:#ffffff" } → `#e6e5de`{ .sw style="--c:#e6e5de" }
+→ `#c3c2b7`{ .sw style="--c:#c3c2b7" } → `#95938b`{ .sw style="--c:#95938b" }.
 
 ### Categorical or ordinal?
 

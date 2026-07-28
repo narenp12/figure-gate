@@ -81,6 +81,68 @@
    19.56:1 dark. Anything put back here has to be measured against the
    composited surface, not against `--md-primary-fg-color`. */
 
+/* Palette swatches.
+
+   The style guide states hues as hex. Every number beside them is recomputable
+   — a contrast ratio goes back through `contrast()` — and the hue is not, which
+   left the Hue column answering it with the word "vermillion". So the site
+   paints the square.
+
+   It is `::before` on the code span holding the hex, not a sibling element.
+   The first version was a sibling, and a swatch can be separated from its hex
+   by a line break: the diverging poles wrapped, leaving a red square at the end
+   of one line and `#b1182b` at the start of the next. Generated content cannot
+   be orphaned from the element that generates it, and `nowrap` closes the one
+   break opportunity left, inside the code element itself.
+
+   The hex travels in `--c` rather than in a class per hue. A class per hue
+   would put a third copy of the palette in this file, an editing distance away
+   from the two that already have to agree; `--c` keeps the copy on the element
+   whose text it is a claim about, which is also what lets the tests read the
+   pair as one thing.
+
+   `content-box`, and the dark-mode mat below is drawn as `box-shadow` rather
+   than as a thicker border. One point, twice: either alternative takes its
+   4px out of the color area instead of out of the margin, which at this type
+   size is a third of the hue. The first draft used border, and slot 1 read as
+   an outline with something dark inside rather than as black.
+
+   The border is not decoration. `#ffffff` is the surface row of the ink table
+   and is the page it is drawn on; `#F0E442` is slot 5, at 1.32:1, which at
+   11px is not reliably distinguishable from it. Without a frame both read as a
+   failed image rather than as the hue they assert. `tests/test_docs_render.py`
+   measures that the frame has width, for the same reason it measures the
+   fill. */
+.md-typeset code.sw {
+  white-space: nowrap;
+}
+
+.md-typeset code.sw::before {
+  content: "";
+  display: inline-block;
+  box-sizing: content-box;
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: -0.1em;
+  margin-right: 0.4em;
+  background: var(--c);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+/* Dark mode puts the swatch on a white mat, the same answer the gallery
+   figures got below and for a stronger reason: the column beside it is headed
+   "Contrast #ffffff". Orange at 2.25:1 on white looks emphatic against a
+   near-black page, and a reader taking the square at face value reads the
+   table's central number backwards. The mat is the surface the number is
+   about. It is drawn outside the border rather than in place of it, so the
+   hairline still separates a pale hue from the mat and the mat still separates
+   the hue from the page. The mat needs no edge of its own: it is white on a
+   near-black page. */
+[data-md-color-scheme="slate"] .md-typeset code.sw::before {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
 /* Gallery figures are wide and detailed; let them use the full column and
    carry their caption as visible text rather than only as alt. */
 .md-typeset figure img {

@@ -27,13 +27,21 @@ GUIDE = SKILL / "references" / "style-guide.md"
 README = SKILL.parent / "README.md"
 SURFACE = "#ffffff"
 
-# | 2 | orange | `#E69F00` | 2.25 † | series |
+# | 2 | orange | `#E69F00`{ .sw style="--c:#E69F00" } | 2.25 † | series |
+#
+# The swatch is optional in this pattern and mandatory in the test below. Making
+# it optional here keeps the two questions apart: this regex asks what the guide
+# claims about a hue's contrast, and it should keep answering that if the
+# swatches are ever pulled. `test_every_palette_row_carries_a_swatch` is what
+# makes a row without one a failure rather than a silent hole.
+SWATCH_ATTRS = r'\{ \.sw style="--c:(#[0-9A-Fa-f]{6})" \}'
 ROW = re.compile(
-    r"^\|\s*\d+\s*\|\s*[^|]+\|\s*`(#[0-9A-Fa-f]{6})`\s*\|\s*([\d.]+)\s*[†‡]?\s*\|")
+    r"^\|\s*\d+\s*\|\s*[^|]+\|\s*`(#[0-9A-Fa-f]{6})`(?:" + SWATCH_ATTRS + r")?"
+    r"\s*\|\s*([\d.]+)\s*[†‡]?\s*\|")
 
 
 def table_rows():
-    return [(m.group(1), float(m.group(2)))
+    return [(m.group(1), float(m.group(3)))
             for m in (ROW.match(line) for line in GUIDE.read_text().splitlines())
             if m]
 
@@ -108,6 +116,64 @@ def test_the_dagger_matches_the_number(hex_color, quoted):
         f"{hex_color} at {cp.contrast(hex_color, SURFACE):.2f}:1 is "
         f"{'below' if below else 'at or above'} {cp.CONTRAST_MIN}:1, but the "
         f"table {'marks' if marked else 'does not mark'} it with †")
+
+
+# --- the swatches are the hex they label -------------------------------------
+# A swatch is the guide's only unrecomputable claim: every other cell is a number
+# a reader can put back through `contrast()`, while a swatch asserts "this hex is
+# this hue" with a painted square. It states the hex a second time to do it, in
+# an inline style, and two copies of one color agreeing until someone edits one
+# of them is how the ink table came to credit the style sheet with a token the
+# sheet had stopped shipping.
+#
+# So the copy is checked here and the paint is checked in `test_docs_render.py`.
+# Neither alone is enough: this file cannot see a stylesheet that stopped
+# applying, and a browser cannot see that the square is confidently the wrong
+# color when both copies were changed together but only one of them was meant.
+
+SWATCH = re.compile(SWATCH_ATTRS)
+LABELLED_SWATCH = re.compile(r"`(#[0-9A-Fa-f]{6})`" + SWATCH_ATTRS)
+
+
+def swatch_pairs():
+    """(declared, labelled) for every swatch, as (`--c`, the code span's text).
+
+    The two cannot be separated in the source -- the attribute list belongs to
+    the code span it follows -- so an unpaired swatch is not a state this needs
+    to check for. That is the point of writing them this way; a sibling `<span>`
+    could be orphaned from its hex both in the file and on the rendered line.
+    """
+    return [(m.group(2), m.group(1))
+            for m in LABELLED_SWATCH.finditer(GUIDE.read_text())]
+
+
+def test_the_guide_still_carries_swatches():
+    """`SWATCH_ATTRS` is a literal attribute list. If the syntax is reformatted
+    -- a `{:` prefix, different spacing -- every test parametrized over
+    `swatch_pairs()` silently becomes zero tests."""
+    declared = SWATCH.findall(GUIDE.read_text())
+    assert len(declared) == len(swatch_pairs()) and declared, (
+        f"{len(declared)} `.sw` attribute list(s) in the guide, "
+        f"{len(swatch_pairs())} of them attached to a hex in a code span")
+
+
+@pytest.mark.parametrize("declared,labelled", swatch_pairs())
+def test_the_swatch_color_is_the_hex_it_labels(declared, labelled):
+    assert declared.lower() == labelled.lower(), (
+        f"a swatch is drawn {declared} on `{labelled}`. The square is what a "
+        "reader believes; the hex is what the figure gets.")
+
+
+@pytest.mark.parametrize("hex_color,_quoted", table_rows())
+def test_every_palette_row_carries_a_swatch(hex_color, _quoted):
+    """The Okabe-Ito table is where the swatches earn their place: "vermillion"
+    and "reddish purple" are the guide asking a reader to imagine a color. A row
+    added without one is the omission this catches; `ROW` treats the swatch as
+    optional so that a missing one fails here, by name, instead of dropping the
+    row out of every contrast assertion above."""
+    declared = [d for d, labelled in swatch_pairs()
+                if labelled.lower() == hex_color.lower()]
+    assert declared, f"the {hex_color} row of the palette table has no swatch"
 
 
 def test_the_guide_does_not_quote_a_retired_surface():
@@ -325,7 +391,7 @@ def guide_ink_hexes():
 
 
 def sheet_hexes():
-    """Every colour the style sheet actually sets, as normalised hex.
+    """Every color the style sheet actually sets, as normalised hex.
 
     Read through `rc_params_from_file` rather than grepped, because the sheet
     spells white as `white` and its hexes bare (a leading `#` is a comment in
@@ -580,8 +646,12 @@ def test_the_skill_prose_names_every_gate_in_order(script, names, prose):
 # renders, it is 1.26:1. Fourth instance of the retired-surface bug, and the
 # reason the guard for it cannot just be a grep for the string "fcfcfb".
 
+# The optional swatch is the guide's; SKILL.md states the same endpoint in plain
+# prose and carries none. One pattern reads both, so neither document can state
+# the endpoint in a form this stops matching without the guard below noticing.
 VIRIDIS_CLAIM = re.compile(
-    r"viridis\s+ends\s+at\s+`(#[0-9A-Fa-f]{6})`,\s*([\d.]+):1", re.I)
+    r"viridis\s+ends\s+at\s+`(#[0-9A-Fa-f]{6})`(?:" + SWATCH_ATTRS + r")?"
+    r",\s*([\d.]+):1", re.I)
 
 
 def viridis_claims():
@@ -603,7 +673,11 @@ def test_the_quoted_viridis_endpoint_is_the_real_one(name):
     from matplotlib import colormaps
     from matplotlib.colors import to_hex
 
-    hex_color, quoted = viridis_claims()[name].groups()
+    # Groups, not `.groups()`: the second is the optional swatch, whose
+    # agreement with the first is `test_the_swatch_color_is_the_hex_it_labels`'s
+    # job.
+    match = viridis_claims()[name]
+    hex_color, quoted = match.group(1), match.group(3)
     assert hex_color.lower() == to_hex(colormaps["viridis"](1.0)).lower(), (
         f"{name} says viridis ends at {hex_color}, matplotlib says "
         f"{to_hex(colormaps['viridis'](1.0))}")
