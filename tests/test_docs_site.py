@@ -59,8 +59,22 @@ def test_every_nav_entry_exists(target):
         f"zensical.toml navigates to a missing {target}")
 
 
-@pytest.mark.parametrize(
-    "link", sorted(p.name for p in DOCS.rglob("*") if p.is_symlink()))
+def symlinks():
+    return sorted(p.name for p in DOCS.rglob("*") if p.is_symlink())
+
+
+def test_the_symlinks_were_found():
+    """Both tests below are parametrized over this list, so an empty one does
+    not fail them -- it deletes them. Twelve pages and images point out of
+    `docs/`; if that count drops, either something became a copy (which
+    `test_no_page_has_become_a_copy` catches) or this collection stopped
+    working (which nothing else would)."""
+    assert len(symlinks()) == 12, (
+        f"found {len(symlinks())} symlinks under docs/, expected 12 - if the "
+        "site legitimately gained or lost a page, update this number with it")
+
+
+@pytest.mark.parametrize("link", symlinks())
 def test_every_symlink_resolves(link):
     """`--strict` makes the build fail on a dangling page, but only when
     someone builds. A file moved under `skill/` should fail the test run."""
@@ -70,8 +84,7 @@ def test_every_symlink_resolves(link):
         f"{path.readlink()}, which does not exist")
 
 
-@pytest.mark.parametrize(
-    "link", sorted(p.name for p in DOCS.rglob("*") if p.is_symlink()))
+@pytest.mark.parametrize("link", symlinks())
 def test_symlinks_stay_inside_the_repository(link):
     """An absolute target works on the machine it was made on and nowhere
     else, and a target outside the checkout would publish a file that is not
@@ -86,7 +99,7 @@ def test_no_page_has_become_a_copy():
     """The one that matters. If someone replaces a symlink with a real file to
     fix a rendering nit, the site keeps building and the guide starts drifting
     from the code that computes its numbers."""
-    copies = sorted(p.name for p in DOCS.glob("*.md")
+    copies = sorted(str(p.relative_to(DOCS)) for p in DOCS.rglob("*.md")
                     if not p.is_symlink() and p.name not in AUTHORED)
     assert not copies, (
         f"{copies} are real files under docs/ - they should be symlinks to the "

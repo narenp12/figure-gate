@@ -17,10 +17,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Runs on pull requests too, and that is the point: `--strict` turns a page
-  # whose symlink went dangling, or a nav entry pointing at a moved file, into
-  # a failed build here rather than a 404 in production. The build is the
-  # check; the deploy below just takes what it produced.
+  # Runs on pull requests too, and that is the point: the site is checked
+  # before it is published, not after. The deploy below just takes what this
+  # job produced.
+  #
+  # Three separate checks, because no one of them covers the others:
+  #
+  #   --strict            fails on a broken link BETWEEN pages. It does not
+  #                       fail on a nav entry whose file cannot be read: that
+  #                       page is silently not built, the nav renders a raw
+  #                       `./style-guide.md` href, and the build exits 0. This
+  #                       was measured, not assumed.
+  #   symlink check       runs BEFORE the build, and is the only thing that
+  #                       catches a dangling pointer at all. Every page here is
+  #                       a symlink into skill/ or the repository root.
+  #   nav-page check      runs AFTER, and closes the gap between the two: if a
+  #                       page in the nav produced no HTML, the site would ship
+  #                       a 404 in its own sidebar.
   #
   # The flag is not optional and cannot move into the config. Zensical has no
   # `strict` setting -- MkDocs did, and Zensical reads a `mkdocs.yml` without
@@ -54,6 +67,33 @@ jobs:
 
       - name: Build
         run: uv run --no-project --with "zensical>=0.0.51,<0.1" zensical build --strict
+
+      # The gap `--strict` leaves. A nav entry whose file cannot be read is
+      # dropped from the build with no error and no page, and the sidebar then
+      # links to a path that 404s. Assert every page named in the nav exists as
+      # HTML in the output.
+      - name: Every page in the nav was actually built
+        run: |
+          uv run --no-project python - <<'PY'
+          import pathlib, re, sys
+          config = pathlib.Path("zensical.toml").read_text()
+          nav = re.search(r"^nav = \[(.*?)^\]", config, re.S | re.M)
+          if not nav:
+              sys.exit("could not read the nav out of zensical.toml")
+          pages = re.findall(r'"([^"]+)\.md"', nav.group(1))
+          if not pages:
+              sys.exit("matched no pages in the nav - the parser needs updating")
+          missing = []
+          for page in pages:
+              built = pathlib.Path("site/index.html" if page == "index"
+                                   else f"site/{page}/index.html")
+              print(("  ok " if built.is_file() else "MISS ") + str(built))
+              if not built.is_file():
+                  missing.append(page)
+          if missing:
+              sys.exit(f"in the nav but not built: {missing}")
+          print(f"{len(pages)} nav pages all built")
+          PY
 
       # The gallery is symlinks to examples/*.png. If one is missing the page
       # still builds and ships broken images, so check the bytes arrived.

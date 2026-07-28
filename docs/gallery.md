@@ -7,7 +7,7 @@ attached rather than decoration.
 They exist because `demo.py` — one panel, three curves — is easy for a gate to
 pass, and passing an easy case is the wrong thing for a gate to be good at.
 These are the compositions where the checks have somewhere to hide. Writing
-them found five defects in the checks themselves, and two in the figures that
+them found six defects in the checks themselves, and two in the figures that
 no check caught. Both kinds are named below.
 
 Every alt text on this page is the string the figure itself carries, passed to

@@ -190,3 +190,37 @@ def test_validator_default_surface_is_what_the_style_sheet_renders():
     import inspect
     sig = inspect.signature(cp.check)
     assert sig.parameters["surface"].default == SURFACE
+
+
+# --- the same claim, told three times ----------------------------------------
+# `examples/gallery.py` says writing the six figures found six defects in the
+# checks, and enumerates six. The README said five. Both numbers are prose, so
+# neither could be wrong loudly, and the wrong one had been sitting in the
+# README long enough to be copied into the docs site when that was written -
+# which is how a number in prose spreads rather than gets corrected.
+
+GALLERY = README.parent / "examples" / "gallery.py"
+DOCS_GALLERY = README.parent / "docs" / "gallery.md"
+
+DEFECT_COUNT = re.compile(r"found (\w+) defects? in")
+
+
+def defect_claims():
+    """Every file that states how many defects writing the gallery found."""
+    return {path.name: DEFECT_COUNT.search(path.read_text())
+            for path in (GALLERY, README, DOCS_GALLERY)}
+
+
+def test_every_source_still_states_a_defect_count():
+    """A regex that matches nothing agrees with everything."""
+    missing = [name for name, match in defect_claims().items() if not match]
+    assert not missing, (
+        f"{missing} no longer state a defect count in the form this test "
+        "reads - the sentence was rewritten and this test needs updating")
+
+
+def test_the_three_sources_agree_on_the_defect_count():
+    claims = {name: match.group(1) for name, match in defect_claims().items()}
+    assert len(set(claims.values())) == 1, (
+        f"the sources disagree: {claims}. gallery.py enumerates its six by "
+        "name, so it is the one to trust.")

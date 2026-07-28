@@ -48,6 +48,10 @@ nav = [
 # numbers.
 variant = "modern"
 
+# Unknown names in this list are accepted silently -- a build with
+# "this.feature.does.not.exist" in it exits 0 and says nothing. So a typo here
+# is a setting that does nothing rather than an error, and the only way to know
+# a feature is on is to look at the built page.
 features = [
   "content.code.copy",
   "navigation.top",

@@ -34,17 +34,33 @@ built from this commit is byte-identical in what it ships.
   one-line edit, and a measurement that is true until someone flips a line is
   the failure this project is about.
 
-- **Strictness is a flag, not a setting.** The docs build runs on pull requests
-  as `zensical build --strict`, so a symlink left dangling by a file moving
-  under `skill/` fails the build instead of publishing a 404. Zensical will read
-  a leftover `mkdocs.yml` and silently ignore its `strict: true`, so
-  `test_docs_site.py` asserts there is no `mkdocs.yml` in the repository — the
-  first build of this site was exactly that config, and it exited 0 on a broken
-  link.
+- **Strictness is a flag, and it does less than its name suggests.** The docs
+  build runs on pull requests as `zensical build --strict`, which fails on a
+  broken link between pages. It does *not* fail on a nav entry whose file
+  cannot be read: that page is silently not built, the sidebar renders a raw
+  `./style-guide.md` href, and the build exits 0. Measured, not assumed — every
+  page here is a symlink, so that is the failure most likely to happen.
+
+  Three checks rather than one, then. The symlink check runs before the build
+  and is the only thing that catches a dangling pointer; `--strict` covers
+  links between pages; and a post-build check asserts every page named in the
+  nav produced HTML. `test_docs_site.py` carries the first as a unit test, so a
+  file moved under `skill/` fails `pytest` and not only CI.
+
+  Zensical also reads a leftover `mkdocs.yml` and silently ignores its
+  `strict: true` — the first build of this site was exactly that config — so a
+  test asserts there is no `mkdocs.yml` in the repository.
 
   Zensical is 0.0.x, so the docs dependency is pinned `>=0.0.51,<0.1` rather
   than floored. Nothing else in the project depends on it; the checkers are not
   involved in building the site.
+
+- **The README claimed five defects; `examples/gallery.py` enumerates six.**
+  Both numbers were prose, so neither could be wrong loudly, and the wrong one
+  was old enough to get copied into the docs site while it was being written —
+  a number in prose spreading rather than being corrected. Fixed to six, and
+  `test_docs_match_code.py` now asserts the three places that state the count
+  agree with each other.
 
 ## 0.1.4 — 2026-07-28
 

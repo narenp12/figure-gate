@@ -28,7 +28,7 @@ epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/
 decision commented against the failure it avoids. `python examples/gallery.py`
 covers the harder forms: a shared-axis grid, a filled field with a colorbar, an
 axis-free schematic, three statistical forms, a log-log convergence plot with a
-slope triangle, and a dense attractor. Writing those six found five defects in
+slope triangle, and a dense attractor. Writing those six found six defects in
 the checks themselves.*
 
 ## Why the two scripts talk to each other
@@ -275,7 +275,7 @@ carries a direct label; a heatmap panel legitimately measures 0.98 ink
 coverage. Failing those would train people to ignore the row, and an ignored
 gate is worth less than no gate.
 
-**Gates are tested for their ability to fail.** The suite is 221 tests, and
+**Gates are tested for their ability to fail.** The suite is 224 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
