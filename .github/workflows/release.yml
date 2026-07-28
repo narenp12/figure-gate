@@ -69,6 +69,8 @@ jobs:
         with:
           name: dist
           path: dist/
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-      # --check-url lets a half-finished upload be retried rather than re-cut.
-      - run: uv publish --check-url https://pypi.org/simple/
+      # `uv publish` uploaded 0.1.0 without provenance -- PyPI's integrity
+      # endpoint 404s for it -- so the upload runs through the PyPA action,
+      # which signs the files and attaches a PEP 740 attestation. Nothing else
+      # about the pipeline changes; uv still builds.
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1

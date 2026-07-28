@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Releases are signed. 0.1.0 went out through `uv publish`, which despite
+  offering `--no-attestations` uploaded no provenance at all — PyPI's integrity
+  endpoint 404s for both of its files. The upload now runs through the PyPA
+  action, which attaches a PEP 740 attestation. 0.1.0 cannot be fixed; published
+  files are immutable.
+- The TestPyPI rehearsal uploads the same way the real release does. It did not
+  before, which is why the missing attestations survived a rehearsal.
+
 ## 0.1.0 — 2026-07-27
 
 First release on PyPI. Everything below is the work that preceded it.

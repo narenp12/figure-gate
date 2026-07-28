@@ -71,14 +71,6 @@ exclude = [
     ".DS_Store",
 ]
 
-# A rehearsal target, not a source of packages: `explicit` keeps it out of
-# resolution, so only `uv publish --index testpypi` reaches it.
-[[tool.uv.index]]
-name = "testpypi"
-url = "https://test.pypi.org/simple/"
-publish-url = "https://test.pypi.org/legacy/"
-explicit = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
