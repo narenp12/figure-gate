@@ -9,3 +9,7 @@ uv.lock
 dist/
 build/
 .DS_Store
+
+# Agent state, not project state.
+.claude/
+.codebase-memory/

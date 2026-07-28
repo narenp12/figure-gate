@@ -14,7 +14,7 @@ checkable, so check them instead of squinting.
 
 ```bash
 python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
-python check_figure.py              # self-test on a deliberately broken figure
+python check_figure.py              # self-test on a broken figure
 ```
 
 ![Example figure](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
@@ -142,7 +142,7 @@ plt.style.use(str(Path(__file__).parent / "figure.mplstyle"))
 
 okabe = colormaps["okabe_ito"]          # matplotlib >= 3.11
 fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
-ax.plot(x, y, color=okabe(1), label="Baseline")   # widths come from the sheet
+ax.plot(x, y, color=okabe(1), label="Baseline")  # widths from the sheet
 
 from check_figure import report
 report(fig, "my-figure")
