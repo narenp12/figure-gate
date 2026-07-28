@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-07-28
+
+A minor release rather than a patch, because the gates now answer differently.
+Nothing here is a redefinition — every change is a fix to code that was not
+measuring what it said — but a figure that passed on 0.1.4 can fail on this
+one, and that is the fact a version number is for. Two of the nineteen rows
+changed verdict: `Contour dash` can fire on signed data, which is the only
+shape it never fired on, and `Mark ratio` compares scatter against `plot`
+markers in one unit rather than two, moving the ratio by 4/π. `alt_metadata`
+takes an optional path and keeps its old behaviour without one.
+
+The three sections below are three audits — the gates, the documentation site,
+then the documents themselves — run in that order, each finding the same
+species of defect one level further out.
 
 ### An audit of the gates, and what it found
 
