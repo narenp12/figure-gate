@@ -110,6 +110,23 @@ jobs:
           print(f"{len(list(site.glob('*.png')))} images built")
           PY
 
+      # Everything above proves the pages exist. This proves they are readable.
+      #
+      # The distinction is not academic: a stylesheet whose selectors match
+      # nothing builds clean, passes a test suite that checks the hex values
+      # written in it, and ships a header at 1.00:1. Only rendering catches
+      # that, so Chromium resolves the cascade and composites the translucent
+      # surfaces, and `check_palette.contrast()` -- the figures' own gate --
+      # judges the result. `tests/test_docs_render.py` has the long version.
+      #
+      # On pull requests too, like the rest of this job. A contrast regression
+      # should fail before it is published, not after.
+      - name: Install the browser the contrast gate renders in
+        run: uv run --group docs-test playwright install --with-deps chromium
+
+      - name: The rendered site clears the text contrast floor
+        run: uv run --group docs-test pytest tests/test_docs_render.py -q
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site

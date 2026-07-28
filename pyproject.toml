@@ -111,3 +111,15 @@ dev = [
 # fix, raising `requires-python`, would narrow the library's support because of
 # a tool that only builds a website.
 docs = ["zensical>=0.0.51,<0.1; python_version >= '3.10'"]
+
+# Out of `dev` on purpose: the documented command is
+# `uv run rtk pytest tests/ -n auto -q`, and running the figure gates should not
+# start requiring a 150MB Chromium. Without this group `test_docs_render.py`
+# still collects -- so the README's test count is the same number on every
+# machine -- and skips at run time. CI installs it in the docs job.
+#
+# Same marker as `docs`, and for the same reason.
+docs-test = [
+    "filelock>=3.12 ; python_full_version >= '3.10'",
+    "playwright>=1.40 ; python_full_version >= '3.10'",
+]
