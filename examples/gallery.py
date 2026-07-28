@@ -39,7 +39,6 @@ import numpy as np
 
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
-from matplotlib import colormaps
 from matplotlib.patches import FancyBboxPatch
 
 HERE = Path(__file__).resolve().parent

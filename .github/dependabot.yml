@@ -11,9 +11,11 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci"
-    groups:
-      actions:
-        patterns: ["*"]
+    # Ungrouped, deliberately. The first grouped run (PR #10) proposed one
+    # major number across three unrelated actions and moved setup-uv from the
+    # v9.0.0 pinned in release.yml down to v7.6.0 -- a downgrade, on the
+    # workflow that publishes to PyPI, under twelve green checks. One action
+    # per pull request makes that visible in the title.
 
 # No Python entry. Every dependency here is a floor (`matplotlib>=3.8`,
 # `pytest>=7.0`) and uv.lock is not committed, so there is nothing for
