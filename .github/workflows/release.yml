@@ -74,3 +74,49 @@ jobs:
       # which signs the files and attaches a PEP 740 attestation. Nothing else
       # about the pipeline changes; uv still builds.
       - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+
+  # v0.1.2 and v0.1.3 shipped to PyPI and left no GitHub release, because this
+  # workflow used to end at the step above. The notes are cut from CHANGELOG.md
+  # rather than written here or generated from commits: the changelog is the
+  # place the release is already described, and two hand-maintained copies of
+  # the same prose drift.
+  #
+  # Its own job, not a step in `publish`. Creating a release needs
+  # `contents: write`, and the job above holds `id-token: write` -- the token
+  # that can upload to PyPI as this project. Those two permissions do not need
+  # to be held together and this file's header already says why that matters.
+  github-release:
+    name: Create the GitHub release
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Fail rather than publish an empty release: a release whose notes are
+      # blank is worse than the missing release this job exists to prevent.
+      - name: Cut the notes for this version out of CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+            found
+          ' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          if [ ! -s notes.md ]; then
+            echo "no '## $version' section in CHANGELOG.md" >&2
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "figure-gate $version" \
+            --notes-file notes.md \
+            --verify-tag \
+            --latest
