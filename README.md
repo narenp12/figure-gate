@@ -133,6 +133,11 @@ on PATH as `check-palette` and `check-figure`:
 uv add figure-gate          # or: uv tool install figure-gate
 ```
 
+The install ships `figure.mplstyle` beside the checkers, which is where the
+style-sheet gate looks for it. Without that the gate has nothing to compare and
+reports a pass, including for the figure it exists to catch — one drawn with
+`plt.style.use` forgotten entirely.
+
 Copying is the default because a vendored checker is one you can read and edit
 beside the figures it gates, and the thresholds are meant to be edited.
 
@@ -143,6 +148,11 @@ Two settings need your document's values:
    page, in points. Left `None`, the scale is 1.0 and the page calculation does
    nothing, which is correct if you author each figure at the width it is
    placed at. `venue=` overrides it per call.
+
+If your sheet lives somewhere other than beside `check_figure.py`, set
+`STYLE_SHEET` at the top of it to that path and the style-sheet gate compares
+against yours. Left `None`, it looks beside the script and then in `assets/`
+next to it.
 
 ### As a Claude Code skill
 

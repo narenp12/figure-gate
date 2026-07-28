@@ -119,6 +119,15 @@ TYPE_FLOOR_PT = 7.5
 # one point or thicker; thinner lines may break up or disappear."
 LINE_FLOOR_PT = 1.0
 
+# SET THIS PER PROJECT if your sheet is not beside this file: the path to the
+# `figure.mplstyle` that `check_style_sheet` compares the live rcParams
+# against. A str or a Path; it wins over both locations `_style_sheet` probes.
+#
+# The sheet is meant to be edited per document, so a project that keeps its own
+# somewhere else needs a way to say so, and monkeypatching a private function is
+# not one. None means "look beside this script, then in `assets/` next to it".
+STYLE_SHEET = None
+
 # SET THIS PER PROJECT: the usable width, in points, of the page the figure
 # lands in. Render one page, place a full-width figure, measure it. Within ~5%
 # is fine, since it only sets the type floor.
@@ -1395,9 +1404,16 @@ def check_label_attribution(fig, r):
 # --- the sheet itself -------------------------------------------------------
 
 def _style_sheet():
-    """`figure.mplstyle` as the skill tells you to lay it out (beside this
-    script), and as this repository lays it out (`assets/` next to
-    `scripts/`)."""
+    """`STYLE_SHEET` if the project set one, else `figure.mplstyle` as the skill
+    tells you to lay it out (beside this script), and as this repository lays it
+    out (`assets/` next to `scripts/`).
+
+    A configured path is returned whether or not it exists: a sheet named and
+    missing is a mistake worth a row, not a silent fall-through to a sheet the
+    project did not ask for.
+    """
+    if STYLE_SHEET is not None:
+        return Path(STYLE_SHEET)
     here = Path(__file__).resolve().parent
     for cand in (here / "figure.mplstyle",
                  here.parent / "assets" / "figure.mplstyle"):
@@ -1665,6 +1681,10 @@ def check_style_sheet(fig):
     path = _style_sheet()
     if path is None:
         return True, "no figure.mplstyle beside this script, nothing to compare"
+    if not path.is_file():
+        return "warn", (f"STYLE_SHEET is set to {path}, which is not a file: "
+                        "nothing was compared, and the sheet you meant is not "
+                        "the one in effect either")
     written = mpl.rc_params_from_file(path, use_default_template=False)
     drift = []
     for key, value in written.items():

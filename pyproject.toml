@@ -58,6 +58,14 @@ build-backend = "hatchling.build"
 only-include = ["skill/scripts"]
 sources = ["skill/scripts"]
 
+# The sheet ships beside the scripts, which is the first location `_style_sheet`
+# probes. Without it the style-sheet gate cannot fire on the install path: no
+# sheet is found, so the row reads "nothing to compare" and a figure drawn on
+# stock matplotlib -- the forgotten `plt.style.use` the gate exists to catch --
+# passes it.
+[tool.hatch.build.targets.wheel.force-include]
+"skill/assets/figure.mplstyle" = "figure.mplstyle"
+
 # Keeps the skill, the tests and the examples -- the tests are what make the
 # thresholds checkable by someone who did not write them. Drops agent scratch
 # state, which means nothing outside this checkout.

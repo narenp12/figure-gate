@@ -78,6 +78,63 @@ jobs:
       - name: The example builds and passes its own gates
         run: python examples/demo.py
 
+  # The tests reconstruct the installed layout by copying files. That catches a
+  # dropped force-include in pyproject.toml, but it cannot catch the build
+  # producing something else, and the gap it was written for lived exactly
+  # there: the wheel shipped `skill/scripts` and no style sheet, so gate 16 read
+  # "nothing to compare" -- a pass -- for a figure drawn on stock matplotlib.
+  # So: build the real wheel, install it, and run the gate that used to be dead.
+  package:
+    name: The wheel gates a figure the way the checkout does
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv python install 3.13
+      - run: uv build --wheel
+      - name: The wheel ships figure.mplstyle beside the checkers
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          print("\n".join(sorted(names)))
+          if "figure.mplstyle" not in names:
+              sys.exit(f"{wheel} has no figure.mplstyle at the root, so "
+                       "_style_sheet finds nothing once installed")
+          PY
+      - name: A figure with no plt.style.use fails the gate on the install path
+        run: |
+          # --no-project, so this runs against the installed wheel rather than
+          # the checkout sitting one directory up.
+          uv run --no-project --with "$(echo dist/*.whl)" python - <<'PY'
+          import sys
+          import matplotlib
+          matplotlib.use("agg")
+          import matplotlib.pyplot as plt
+          import check_figure
+
+          sheet = check_figure._style_sheet()
+          if sheet is None or "site-packages" not in str(sheet):
+              sys.exit(f"the checker resolved {sheet!r}, not an installed sheet")
+
+          fig, ax = plt.subplots()
+          ax.plot([0, 1], [0, 1])
+          status, detail = check_figure.check_style_sheet(fig)
+          print("stock matplotlib ->", status, "|", detail)
+          if status != "warn":
+              sys.exit("gate 16 passed a figure drawn on stock matplotlib")
+
+          plt.style.use(str(sheet))
+          status, detail = check_figure.check_style_sheet(fig)
+          print("sheet applied    ->", status, "|", detail)
+          if status is not True:
+              sys.exit("the shipped sheet does not clear its own gate")
+          PY
+
   skill:
     name: Skill metadata is valid
     runs-on: ubuntu-latest
