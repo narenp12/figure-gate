@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  # Actions are pinned by commit in the release and CodeQL workflows, which
+  # means nothing about them updates on its own -- a pinned SHA is frozen until
+  # someone moves it. This is the thing that moves it, and it rewrites the
+  # trailing `# vX.Y.Z` comment along with the SHA.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+# No Python entry. Every dependency here is a floor (`matplotlib>=3.8`,
+# `pytest>=7.0`) and uv.lock is not committed, so there is nothing for
+# Dependabot to raise -- the constraints already admit the newest release.
+# Security alerts still cover those dependencies; they do not need this file.

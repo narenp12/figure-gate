@@ -1,0 +1,50 @@
+name: CodeQL
+
+# The scripts in skill/scripts are meant to be copied into other people's
+# projects, so a defect that only shows up on hostile input is their problem
+# too. CodeQL runs on every change and weekly, because a query pack updated
+# after a merge can find something the merge itself did not.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    permissions:
+      # Writing alerts is the whole point; nothing here needs anything else.
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # `actions` analyses the workflows themselves. It is here because
+        # release.yml interpolates `github.ref_name` into a shell block, and
+        # that class of injection is exactly what the pack looks for.
+        language: [python, actions]
+    steps:
+      # Pinned by commit for the same reason the release workflow is: this job
+      # holds security-events: write, and a tag can be moved.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: ${{ matrix.language }}
+          # Beyond the default pack: this repository is small enough that the
+          # extra query time costs nothing and the noise floor is low.
+          queries: security-and-quality
+
+      # No build step. Everything here is interpreted, and CodeQL's extractors
+      # read the tree directly.
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: "/language:${{ matrix.language }}"

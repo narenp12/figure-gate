@@ -13,3 +13,5 @@ build/
 # Agent state, not project state.
 .claude/
 .codebase-memory/
+CLAUDE.md
+opencode.json
