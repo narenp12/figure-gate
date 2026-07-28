@@ -1,8 +1,11 @@
 # figure-gate
 
-Mechanical gates for figures that go into documents — papers, slides, theses,
-reports. Two validators and a matplotlib style sheet, plus written guides, and
-an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper so Claude Code
+**A style sheet says what to do. figure-gate says whether it happened.**
+
+Two validators and a matplotlib style sheet that check a *built* figure — its
+own artists, at the size it actually prints — for colorblind-safe color,
+composition, and legible type. Plus an
+[Agent Skill](https://code.claude.com/docs/en/skills) wrapper so Claude Code
 applies the same method.
 
 The premise: a figure can be correct, legible and colorblind-safe and still be
@@ -16,11 +19,22 @@ python check_figure.py              # self-test on a deliberately broken figure
 
 ![Example figure](examples/demo.png)
 
-*(`python examples/demo.py` — the whole method in 40 lines. `python
-examples/gallery.py` is the harder half: a shared-axis grid, a filled field
-with a colorbar, an axis-free schematic, three statistical forms, a log-log
+*`python examples/demo.py` — the whole method in 40 lines. `python
+examples/gallery.py` is the harder half: a shared-axis grid, a filled field with
+a colorbar, an axis-free schematic, three statistical forms, a log-log
 convergence plot with a slope triangle, and a dense attractor. Writing those
-found five defects in the checks themselves.)*
+found five defects in the checks themselves.*
+
+## Why this exists
+
+A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
+passed every composition check clean — while `check_palette.py` rated that
+cycle's orange and green at ΔE 1.4 under protanopia. One hue, to that reader.
+The two scripts had no way to speak to each other.
+
+They do now. `check_series_color` reads the hues off the figure's own artists
+and puts them through the palette gates, working out from the marks whether the
+figure needs adjacent separation (lines, bars) or all pairs (scatter).
 
 ## What it catches
 
@@ -34,7 +48,7 @@ from any language or toolchain.
 | CVD separation | two hues collapse under protanopia or deuteranopia |
 | Normal-vision floor | two hues are hard to tell apart even in full color |
 | Contrast vs surface | a hue is under 3:1 on the page *(advisory)* |
-| Ordinal: monotone, even steps, light end | an ordered ramp reads as unordered |
+| Ordinal ramp | an ordered ramp is non-monotone, unevenly stepped, or ends too light |
 
 **`check_figure.py`** — reads a built matplotlib figure's own artists.
 
@@ -60,48 +74,27 @@ from any language or toolchain.
 | Fonts | PDF/PS export is Type 3, or no named typeface is installed *(advisory)* |
 | Alt text | the figure carries no description for a reader who cannot see it *(advisory)* |
 
-**Series color is the one that ties the two scripts together.** They used to be
-unable to speak: `check_palette.py` judged a list of hex strings someone
-remembered to paste into a terminal, and `check_figure.py` never looked at color
-at all. So a figure on matplotlib's default `tab10` cycle — whose orange and
-green measure ΔE 1.4 under protanopia, one hue to that reader — passed the whole
-composition suite clean. The gate now reads the hues off the figure's own
-artists and puts them through the palette gates, working out from the marks
-whether the figure needs adjacent separation (lines, bars) or all pairs
-(scatter). `figure.mplstyle` sets the cycle to Okabe-Ito, so a figure built on
-the sheet starts out right.
+Thresholds cite a standard where one exists — SIAM's "one point or thicker",
+WCAG 4.5:1 for text, Nature/Science/PNAS type floors — and the rest were
+measured. `references/style-guide.md` names the real failure beside each rule.
 
-The type gate is the one people are usually surprised by. A figure authored at
-14 inches and placed on a 750pt slide shrinks to 0.74×, so a 9pt label arrives
-at 6.7pt — fine on your monitor, unreadable from the back of a lecture hall.
-The check derives the scale per figure and measures what actually renders, so
-sizes set through rcParams or by a helper are caught too. Placing at a fraction
-of the content width? Say so — `audit(fig, placed_frac=0.48)` mirrors
-`\includegraphics[width=0.48\textwidth]`, and without it a half-width figure is
-certified at twice the type size it ships at. If your document is a venue the
-table knows, skip the measuring: `audit(fig, venue="neurips")`, and
-`python check_figure.py --venues` lists them.
+### The one people are surprised by
 
-## Where this sits
+A figure authored at 14 inches and placed on a 750pt slide shrinks to 0.74×, so
+a 9pt label arrives at 6.7pt — fine on your monitor, unreadable from the back of
+a lecture hall. The type gate derives the scale per figure and measures what
+actually renders, so sizes set through rcParams or by a helper are caught too.
 
-Prescriptive style sheets already exist and are good:
-[SciencePlots](https://github.com/garrettj403/SciencePlots) and LovelyPlots for
-journal looks, [tueplots](https://github.com/pnkraemer/tueplots) and mpl_sizes
-for exact conference sizing. Accessibility tooling exists too:
-[matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text,
-Chart4Blind converts a chart image into an accessible one, contrast reporters
-check colors in isolation.
-
-None of them verifies a built figure. That is the gap this fills — a style
-sheet says what to do, and this says whether it happened, in a test, on the
-figure's own artists. The two are complementary: use a style sheet, then gate
-it.
+Placing at a fraction of the content width? Say so — `audit(fig,
+placed_frac=0.48)` mirrors `\includegraphics[width=0.48\textwidth]`, and without
+it a half-width figure is certified at twice the type size it ships at. If your
+document is a venue the table knows, skip the measuring: `audit(fig,
+venue="neurips")`, and `python check_figure.py --venues` lists all twelve.
 
 ## Install
 
-Copy three files into your project. `check_palette.py` is standard library
-only; `check_figure.py` needs matplotlib. scipy is optional and only a
-speed-up.
+Copy three files into your project. `check_palette.py` is standard library only;
+`check_figure.py` needs matplotlib. scipy is optional and only a speed-up.
 
 ```bash
 git clone https://github.com/narenp12/figure-gate
@@ -116,8 +109,7 @@ Then set two things and nothing else:
 2. `CONTENT_WIDTH_PT` at the top of `check_figure.py` → the usable width, in
    points, of the page the figure lands in. Leave it `None` if you author each
    figure at the width it's placed at, which makes the scale 1.0 and the whole
-   calculation disappear — or skip it entirely and pass `audit(fig,
-   venue="neurips")` for one of the twelve venues the table already knows.
+   calculation disappear — or skip it and pass `venue=` instead.
 
 ### As a Claude Code skill
 
@@ -159,6 +151,19 @@ def test_figure_is_composed(name):
     assert ok, "\n".join(f"{k}: {d}" for k, s, d in rows if not s)
 ```
 
+## Where this sits
+
+Prescriptive style sheets already exist and are good:
+[SciencePlots](https://github.com/garrettj403/SciencePlots) and LovelyPlots for
+journal looks, [tueplots](https://github.com/pnkraemer/tueplots) and mpl_sizes
+for exact conference sizing. Accessibility tooling exists too:
+[matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text,
+Chart4Blind converts a chart image into an accessible one, contrast reporters
+check colors in isolation.
+
+None of them verifies a built figure. That is the gap this fills, and it makes
+the two complementary: use a style sheet, then gate it.
+
 ## What it doesn't do
 
 It won't tell you the figure is worth making. Every check here is an
@@ -198,22 +203,25 @@ rules that were tried and reverted, is in
 Which *form* the data wants — the decision the styling rules cannot rescue — is
 in [`skill/references/choosing-a-form.md`](skill/references/choosing-a-form.md).
 It is built on Cleveland & McGill's ordering of the elementary perceptual tasks,
-and only its mechanical subset is gated: a script can rule out a pie or a cut
-bar baseline, but it cannot tell you a box plot is hiding an n of 8.
+and only its mechanical subset is gated: a script can rule out a pie or a cut bar
+baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 ## Requirements
 
 - `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8–3.13.
 - `check_figure.py` — Python 3.9+, matplotlib 3.8+.
-- `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the
-  palette is eight hex strings; they're listed in the style guide.
+- `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the palette
+  is eight hex strings; they're listed in the style guide.
+
+CI runs the palette checker with no `pip install` at all, on 3.8, 3.9, 3.11 and
+3.13, because "standard library only" is a load-bearing claim.
 
 ## Contributing
 
 New gates are welcome, and the bar is the one the project holds itself to: a
-gate ships with a test proving it fails on a figure with that defect, and a note
-naming the real failure that motivated it. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+gate ships with a test proving it fails on a figure with that defect, a test
+proving it doesn't over-fire on the nearest legitimate case, and a note naming
+the real failure that motivated it. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

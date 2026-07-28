@@ -1101,3 +1101,164 @@ def test_box_blur_matches_scipy_uniform_filter():
                                                mode="nearest")
                         for c in range(3)])
     assert np.allclose(mine, theirs, atol=1e-9)
+
+
+# --- line weight ----------------------------------------------------------
+#
+# This gate shipped without a single test, which is the one thing CONTRIBUTING
+# says a gate may not do. Everything below is the coverage it should have had.
+
+
+def test_line_weight_catches_a_hairline_stroke():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=0.4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_line_weight_catches_a_stroke_thinned_by_placement():
+    """1.2pt is legal as authored and 0.6pt on the page at half width. The
+    whole point of the gate is that the second number is the one that prints."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.2)
+    ok, rows = cf.audit(fig, scale=0.5)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_line_weight_does_not_fire_on_a_legal_stroke():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is True
+
+
+def test_line_weight_does_not_fire_on_the_grid():
+    """The bundled sheet ships the grid at 0.7pt on purpose. Holding furniture
+    to the data floor would be failing the sheet's own design."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.grid(True, lw=0.5)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is True
+
+
+# --- regressions: gates that fired on correct figures ----------------------
+
+
+def test_polar_radial_tick_labels_are_not_judged():
+    """Radial tick labels sit inside the disc on every polar plot matplotlib
+    draws; there is no outside to move them to. Failing them told the author to
+    "move the label to clear ground", which is not an available move.
+
+    Eight seeds, not one. Exempting these labels from the clutter clause alone
+    left the contrast clause failing the same figures at 2.0:1, and a single
+    example passed the whole time it was still broken."""
+    import numpy as np
+    theta = np.linspace(0, 2 * np.pi, 80)
+    for seed in range(8):
+        rng = np.random.default_rng(seed)
+        fig = plt.figure(figsize=(5, 5))
+        ax = fig.add_subplot(projection="polar")
+        ax.plot(theta, rng.random(80))
+        ok, rows = cf.audit(fig)
+        detail = dict((n, d) for n, _, d in rows)["Text readability"]
+        plt.close(fig)
+        assert gates(rows)["Text readability"] is True, (seed, detail)
+        assert "not judged" in detail, detail
+
+
+def test_polar_still_catches_an_illegible_label():
+    """The exemption is for the radial ticks specifically, not for polar axes.
+    A label the author placed on top of the curve is still a defect."""
+    import numpy as np
+    theta = np.linspace(0, 2 * np.pi, 200)
+    fig = plt.figure(figsize=(5, 5))
+    ax = fig.add_subplot(projection="polar")
+    ax.plot(theta, np.ones_like(theta), lw=6, color="#d55e00")
+    ax.text(0, 1.0, "on the curve", ha="center", va="center", fontsize=14)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Text readability"] is False
+
+
+def test_redundancy_ignores_panels_with_their_axes_turned_off():
+    """Three image panels at axis("off") display no tick column at all. The
+    gate read the Text objects matplotlib keeps for ticks that never render,
+    and advised sharey on panels with nothing to share."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3), constrained_layout=True)
+    for a in axes:
+        a.imshow(rng.random((8, 8)))
+        a.axis("off")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Axis redundancy"] is True
+
+
+def test_redundancy_still_catches_a_repeated_tick_column():
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3), constrained_layout=True)
+    for a in axes:
+        a.plot([0, 1], [0, 1])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Axis redundancy"] is False
+
+
+def test_ink_coverage_flags_a_panel_that_was_never_filled():
+    """The blank subplot in a grid -- the case that actually ships in papers.
+    The frame and ticks alone measure 0.03, over the 0.02 floor, so the pixel
+    fraction never caught it."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    fig, axes = plt.subplots(2, 3, figsize=(9, 5), constrained_layout=True)
+    for a in axes.flat[:5]:
+        a.plot(np.linspace(0, 1, 40), rng.random(40))
+    # axes.flat[5] is left empty on purpose
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+    assert "ax5" in dict((n, d) for n, _, d in rows)["Ink coverage"]
+
+
+def test_ink_coverage_does_not_call_a_sparse_panel_empty():
+    """Two points is a legitimate panel. Only a panel with no data artist at
+    all is empty."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0.2, 0.8], marker="o")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] is True
+
+
+def test_ink_coverage_does_not_call_a_table_panel_empty():
+    """A table lives in `ax.tables` and in none of the containers the
+    dual-axis helper looks at. The emptiness check has to be the broader
+    question -- was this panel used -- not the narrower one."""
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    ax.axis("off")
+    ax.table(cellText=[[1, 2], [3, 4]], colLabels=["a", "b"], loc="center")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] is True
+
+
+def test_ink_coverage_emptiness_is_structural_not_just_a_low_fraction():
+    """The two clauses are separate on purpose. A panel holding one small
+    annotation covers under 2% of its area and still warns -- that is the
+    fraction clause, and it is right to. The structural clause exists for the
+    panel the fraction clause cannot see, where the frame carries it over the
+    floor with nothing drawn inside it."""
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    ax.axis("off")
+    ax.annotate("start", xy=(0.7, 0.5), xytext=(0.2, 0.5),
+                arrowprops=dict(arrowstyle="->"))
+    assert cf._axes_drew_anything(ax) is True
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+    assert ok, "the ink row is advisory and must not gate"
