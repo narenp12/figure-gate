@@ -1631,6 +1631,22 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
                    "or disappear in print")
 
 
+# The names matplotlib gives a colormap it built itself, from colours the
+# author handed to an artist. `contour(colors=[...])` produces one, and it must
+# not be read as a colour encoding: three near-black levels are one encoding in
+# one hue, not three categories, and classifying them qualitative fails them
+# against the all-pairs separation floor.
+#
+# The name is version-dependent and that is why this is a list rather than one
+# string. matplotlib 3.8.4, 3.9.4 and 3.10.0 call it "from_list"; 3.11.1 calls
+# it "unnamed". Shipping only the 3.11 spelling is what put every contour
+# figure - including `gallery-field.png` - into a hard FAIL on the two CI jobs
+# that run older matplotlib, while every local run on 3.11 stayed green.
+# `test_matplotlib_still_names_an_author_built_colormap_something_we_skip`
+# fails loudly if a future version invents a fourth spelling.
+ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
+
+
 def check_colormap(fig):
     try:
         import check_palette as cp
@@ -1655,7 +1671,7 @@ def check_colormap(fig):
                 # An unnamed colormap means the artist has explicit colours set
                 # (e.g. `contour(colors="black")`), rather than a continuous
                 # encoding named by the author.
-                if not name or name in ("_no_name", "unnamed", None):
+                if not name or name in ANONYMOUS_CMAP_NAMES:
                     continue
                 seen.setdefault(name, cmap)
 
