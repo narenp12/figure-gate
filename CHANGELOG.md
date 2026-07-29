@@ -1,5 +1,241 @@
 # Changelog
 
+## 0.3.0 — 2026-07-29
+
+A minor release, for the same reason 0.2.0 was one: a figure that passed on
+0.2.0 can fail on this one. There is a twentieth gate, and it is a hard failure
+rather than an advisory. A heatmap drawn in `jet` was a PASS in every release
+before this and is a FAIL now.
+
+The four sections below are the release in the order it happened: a gate, the
+site it was published on, an audit of the documents it arrived with, and the
+two ways the suite stayed green while CI was red.
+
+### A twentieth gate: colormap kind
+
+Every gate before this one read artists that carry an identity: a line's
+colour, a bar's face, a scatter's marks. A figure whose entire content is one
+colormapped image has no such artist, so it passed every check by having nothing
+the checks knew how to read. `_data_colors_by_axes` had excluded colormapped
+artists since it was written, with a comment saying they answer to "the viridis
+rule instead". No such rule existed.
+
+- **`check_colormap` is row 18**, directly after `Contour dash`, which moves
+  `Fonts` to 19 and `Alt text` to 20. It harvests every artist in `ax.images`
+  and `ax.collections` whose `get_array()` is not `None`, classifies each
+  colormap, and fails the ones a reader cannot order values in.
+
+  The guard is the array, never the colormap. Every `ScalarMappable` carries a
+  default colormap whether or not anything was mapped through it: a plain
+  `scatter(x, y, color="#0072b2")` returns `viridis` from `get_cmap()` and
+  `None` from `get_array()`. Testing the colormap would gate every unmapped
+  scatter against a ramp it never used.
+
+- **`cmap_kind()` classifies, in `check_palette.py`, stdlib only.** It samples
+  `CMAP_SAMPLES = 256` levels, converts to OKLab, and reads the lightness
+  channel. Under `CMAP_QUALITATIVE_N = 40` levels is qualitative. A span under
+  `CMAP_SPAN_MIN = 0.02` is isoluminant and carries no order. Otherwise the
+  measure is **back-travel**, the fraction of a segment's lightness span spent
+  moving against its own direction: under `CMAP_BACKTRAVEL_MAX = 0.02` over the
+  whole map is sequential, under it over both halves is diverging, or cyclic
+  when the ends are within `CMAP_WRAP_DE_MAX = 3.0` in OKLab ΔE ×100.
+
+  Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
+  `rainbow`, `hsv` and `gist_ncar` land there.
+
+- **The cyclic wrap is a colour distance, not a lightness one, and that was
+  found by running a differential rather than by reasoning.** The first draft
+  measured the wrap in lightness and put 11 of 148 colormaps in the wrong
+  family. RdYlGn, `managua` and nine `cmr.*` maps were every one of them called
+  cyclic by us and diverging by cmasher. A symmetric diverging map has equal
+  lightness at both ends *by construction*, so lightness cannot separate the
+  families. Only a cyclic map closes the loop in colour. The gap in end-to-end
+  ΔE runs from 0.74
+  to 7.48, a factor of ten, and 3.0 sits near its geometric mean.
+
+- **A qualitative colormap is routed to the palette gates**, read for its
+  separation rows only, exactly as `check_series_color` reads them. The
+  lightness-band and chroma-floor rows are for a palette being chosen, not for
+  colours already drawn; applied here they fail Okabe-Ito, which this project
+  ships.
+
+- **A seventh gallery figure**, `gallery-encoding.png`, because the gate needed
+  one that could not be drawn any other way. Three complex-plane panels:
+  Mandelbrot escape time in viridis with a colorbar, Newton basins for `z³ − 1`
+  in three separated hues with a legend, and the phase of a rational function in
+  twilight on a bar ticked at −π, 0 and π whose ends are the same colour because
+  they are the same angle. The set's interior is drawn in an explicit neutral
+  and keyed off the bar: "did not escape" is a separate class, not a small
+  value.
+
+  Three dense images with three keys in one row is the hardest composition in
+  the gallery, which is why it is there. The one failure on the way was `Text
+  collision`, on a first attempt that put both keys through the x labels.
+
+- **Stated limits, because the row is named "Colormap kind" and not "Colormap
+  quality".** `turbo` passes as diverging: its lightness profile genuinely is
+  diverging-shaped, and its real defect is hue banding, which a lightness-only
+  measure cannot see. `Wistia` is classified `misc` and is sequential by kind;
+  back-travel divides by span, and narrow-span maps get noisy ratios. Both are
+  written down in `specs/2026-07-28-colormap-kind-gate-design.md` with the
+  measurements, rather than resolved with a guessed constant.
+
+### The swatches, and the stylesheet that had stopped reaching the page
+
+- **Twenty-two swatches across the style guide**: the Okabe-Ito table, the
+  ink and furniture tokens, the achromatic ramp, the RdBu poles and midpoint,
+  and the viridis endpoint. Every number in those sections is recomputable
+  through `contrast()`; the hue was not, and the Hue column had been answering
+  it with the word "vermillion". Each swatch restates its hex in an inline
+  `--c`, so both copies are gated: the source in `test_docs_match_code.py`, the
+  paint in `test_docs_render.py`.
+
+- **`palette.css` had been reaching nothing.** Prefixing both scheme rules with
+  `:root` won a specificity fight that did not exist: Zensical sets
+  `data-md-color-scheme` on `<body>`, so `:root[data-md-color-scheme="slate"]`
+  matches zero elements and the whole stylesheet went dead. The published site
+  fell back to Material's default indigo, with body links at 2.85:1 against a
+  4.5:1 floor.
+
+  It shipped past 44 green tests, and that is the interesting part. They read
+  hex values out of `palette.css` and checked the contrast numbers quoted in its
+  comments, and every one of those assertions was arithmetically true. The
+  defect was that the stylesheet reached nothing, which arithmetic on two hex
+  values cannot see. The site is now rendered in Chromium and measured where it
+  is painted, six pages in both schemes, by the same `contrast()` that gates the
+  figures.
+
+- **Two wrapped code spans had become `<h1>` headings.** Python-Markdown splits
+  blocks before it parses inline spans, so a line beginning with `#` is a
+  heading even mid-sentence. A hex colour wrapped onto a second line turned the
+  rest of the sentence into a heading, left an unclosed backtick above it, and
+  added a line of prose to the table of contents. `--strict` does not fail on
+  it: nothing is broken, a heading was invented.
+
+- **A `<figcaption>` link resolved off the site entirely.** Paths in raw HTML
+  are resolved against the docs directory and then rewritten relative to the
+  output page, so a `../` that reads correctly in the source is applied twice.
+  The built page shipped a link to `narenp12.github.io/choosing-a-form/`. Every
+  href in the built HTML is now resolved the way a browser does, against the
+  base path `site_url` publishes under.
+
+- **A bare `filelock` import errored on all four pytest jobs** instead of
+  skipping, on the path xdist workers take. The file's promise (skipped, not
+  failed, without the docs-test group) now has a test of its own that runs it
+  in a subprocess with both distributions unimportable.
+
+### An audit of the documents the gate arrived with
+
+The gate shipped with 122 lines of logic and 13 lines of documentation: one
+table row, two counts, one comma in a roster sentence, and a figcaption. The
+audit of that gap found a larger one behind it.
+
+- **The README's Threshold column was ungated prose.** Four rosters are held to
+  `audit()`: the module docstring, the table's first column, `SKILL.md`'s
+  sentence, and the advisory tags. The numbers beside them were held to
+  nothing. Eleven of the twenty rows name a constant and quote its value. All
+  eleven agreed the day the gate was written, which is the argument for the
+  gate: `#fcfcfb`, `#898781` and "171 tests" were each right when they were
+  typed too. Every name is now resolved against `check_figure` and
+  `check_palette`, and a name in neither raises rather than being skipped.
+
+  Two of the nine prose rows were checkable numbers wearing prose and were
+  converted rather than exempted: "40 keys" against `figure.mplstyle`, and
+  "Type 42" against the `pdf.fonttype`/`ps.fonttype` the sheet declares. The
+  remaining seven are a literal set, so an unquantified threshold is a decision
+  someone writes down.
+
+- **The roster size is stated in seven places in the README, and five of them
+  said 19.** The gate took the roster to 20 and updated two, leaving "20 passing
+  rows means the figure avoids 20 named defects" reading 19, the sentence that
+  tells a reader what a passing run means. An eighth mention recounts an
+  incident that happened at a particular roster size; its number was removed
+  rather than pinned, because holding history to today's count would make it
+  drift on every new gate.
+
+- **The gallery has seven figures and the README described six**, omitting the
+  encoding figure the gate exists for. `gallery.py` and the gallery page had
+  been updated. All three are now held to the number of `finish()` calls in the
+  script.
+
+- **Neither guide had a cyclic colormap**, while the gallery shipped a twilight
+  phase portrait. `### Cyclic: twilight, as shipped` and `### Which kind, and
+  the key it takes` are new: the four kinds as four questions, the five
+  constants that decide them, and what each kind costs to get wrong. The kind
+  table is gated against `cmap_kind()`, as is the list of maps the guide names
+  as failing.
+
+- **"The key follows the kind" lived only in a figcaption**, the least
+  discoverable text in the repository. A colorbar is a ruler, so the three
+  continuous kinds take one and categories take a legend; a value outside the
+  measured range is a separate class, drawn in a neutral and keyed off the bar,
+  never as `cmap(0)`. It is in both guides now.
+
+- **Nothing joined a gate to its explanation.** The README table says what a
+  gate measures and the reference material says why the rule is there, and the
+  colormap gate is the proof they were unconnected: a table row, a threshold, an
+  advisory tag, four rosters updated, and no explanation anywhere a reader would
+  look, with the suite green throughout. `GUIDANCE_ANCHORS` binds eighteen of
+  the twenty gates to a passage that has to still be there. `Clipping` and `Ink
+  coverage` are named in an exemption set rather than left silently uncovered.
+
+- **The style guide now has a references section.** It had none while making
+  the stronger claims; `choosing-a-form.md` has carried one since it was
+  written. Kovesi (arXiv:1509.03700) for the lightness-monotonicity criterion
+  back-travel measures, Crameri, Shephard & Heron (*Nat Commun* 11, 5444) for
+  what rainbow and red-green maps cost a reader, Nuñez, Anderton & Renslow
+  (*PLoS ONE* 13(7), e0199239) for the colour-vision-deficiency floor the
+  Okabe-Ito section rests on, and Moreland (ISVC 2009, 92–103) for the midpoint
+  rule the guide already stated without a source. Each was checked against the
+  publisher. A citation is the one claim in this project that cannot be gated
+  without making the suite depend on the network, and it is worth saying so.
+
+### Two ways the suite was green and CI was not
+
+`main` failed CI on every run between the gate landing and this release. Both
+causes are invisible on a developer machine, which is how a green local suite
+shipped them twice.
+
+- **An author-built colormap is named differently across matplotlib versions.**
+  `contour(colors=[...])` builds a `ListedColormap` that 3.8.4, 3.9.4 and 3.10.0
+  call `from_list` and 3.11.1 calls `unnamed`. The gate shipped knowing only the
+  3.11 spelling, so on the two CI jobs running older matplotlib every contour
+  drawn with explicit colours was harvested as a colour encoding, classified
+  qualitative, and hard-failed against all-pairs separation. Three near-black
+  levels are three indistinguishable categories by the letter of that check and
+  one encoding in one hue in fact. Three tests and `gallery-field.png` went
+  with it. `ANONYMOUS_CMAP_NAMES` holds all three spellings, and a test asks
+  matplotlib what it calls one rather than assuming.
+
+- **The test count was unwritable, not wrong.** `test_palette_oracle.py` opened
+  with a module-level `pytest.importorskip("cmasher")`, which raises during
+  collection: the module contributed zero tests rather than two skipped ones. CI
+  installs pytest, xdist and matplotlib and never the dev group, so it collected
+  two fewer than any machine with cmasher, and the README's test count is
+  compared against whatever the local run collected. No single integer satisfied
+  both. The oracle skips per test now, so collection is the same everywhere.
+
+- **The differential had never run in CI at all.** The thresholds above were
+  justified by differencing `cmap_kind()` against `cmasher.get_cmap_type()`
+  across 148 colormaps, and that comparison only ever ran where someone had
+  installed cmasher by hand. One job installs it now. An oracle that runs only
+  where it is remembered is not a check.
+
+- **`main` is branch-protected**: fourteen required status checks, enforced for
+  administrators, and a branch must be up to date before it merges. The gate
+  above was merged into a `main` that was already red, and nothing was in the
+  way.
+
+### Also
+
+- `plans/` is untracked. It held an implementation plan written for an agent to
+  execute and its task queue, and the queue still recorded every task as
+  pending for a gate that had been in `main` for three merges. `specs/` stays:
+  a design note is the evidence behind a number the code enforces, and the
+  style guide cites one.
+
+Suite: 286 → 482 tests. Gates: 19 → 20.
+
 ## 0.2.0 — 2026-07-28
 
 A minor release rather than a patch, because the gates now answer differently.
