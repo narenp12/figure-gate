@@ -206,6 +206,25 @@ def _parameter_names():
 PARAMETERS = _parameter_names()
 
 
+# Colormaps the prose is entitled to name that a supported matplotlib may not
+# have. `okabe_ito` ships from 3.11 and this project supports matplotlib 3.8
+# upward, so on an older one the registry says the guide names something that
+# does not exist - which is a fact about the reader's matplotlib, not about the
+# guide.
+#
+# The general rule is the point, not the entry. A resolver that consults the
+# live environment gives different answers on different machines, so the sweep
+# passes locally and fails in CI. It did exactly that. Anything version-
+# dependent belongs here with the version that introduced it, and
+# `test_the_later_colormaps_are_real_where_the_version_has_them` stops the map
+# from becoming somewhere to hide a typo.
+COLORMAPS_ADDED_LATER = {"okabe_ito": "matplotlib 3.11"}
+
+
+def _is_colormap(name):
+    return name in colormaps or name in COLORMAPS_ADDED_LATER
+
+
 def _defining_modules(name):
     return [doc for doc, module in MODULES.items() if hasattr(module, name)]
 
@@ -219,7 +238,7 @@ def _resolves_dotted(dotted):
             return True
         if head in APPENDIX or head in PARAMETERS:
             return True
-        return head in MPL_NAMES or head in colormaps
+        return head in MPL_NAMES or _is_colormap(head)
     for part in rest:
         obj = getattr(obj, part, None)
         if obj is None:
@@ -298,7 +317,7 @@ def resolve(span):
     if subscript:
         base, key = subscript.groups()
         return ("registry-lookup"
-                if _resolves_dotted(base) and key in colormaps else None)
+                if _resolves_dotted(base) and _is_colormap(key) else None)
     if re.fullmatch(r"\(\s*[a-z_]+(?:\s*,\s*[a-z_]+)+\s*\)", span):
         return "tuple-shape"                  # order checked by the API tests
     call = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_.]*)\s*\(.*\)", span, re.S)
@@ -502,6 +521,16 @@ def _okabe_hexes():
     return {to_hex(cmap(i))[:7].lower() for i in range(cmap.N)}
 
 
+@pytest.mark.parametrize("name,version", sorted(COLORMAPS_ADDED_LATER.items()))
+def test_the_later_colormaps_are_real_where_the_version_has_them(name, version):
+    """`COLORMAPS_ADDED_LATER` lets a name resolve that this matplotlib cannot
+    confirm, which is also how a typo would get through. On a matplotlib new
+    enough to know, the name is held to the registry."""
+    if name not in colormaps:
+        pytest.skip(f"{name} needs {version}")
+    assert name in colormaps
+
+
 def test_the_okabe_literal_is_matplotlibs_okabe():
     """The fallback above is a hand-copied palette, which is a claim like any
     other. Where matplotlib has the colormap, the copy is held to it."""
@@ -577,7 +606,8 @@ def end_claims():
         current = None
         for line in path.read_text().splitlines():
             if line.startswith("#"):
-                found = [m for m in colormaps if f"`{m}`" in line
+                found = [m for m in list(colormaps) + list(COLORMAPS_ADDED_LATER)
+                         if f"`{m}`" in line
                          or f" {m}," in line or line.endswith(m)]
                 current = found[0] if found else current
             if current is None:
