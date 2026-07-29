@@ -142,6 +142,23 @@ CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 
 def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozenset()):
+    """Gate a palette. Returns `(rows, ok)`.
+
+    Note the order: `check_figure.audit` returns its pair the other way round,
+    as `(ok, rows)`. Unpacking either one the wrong way binds a bool to the
+    rows and raises nothing, so the README states both and this says it where
+    the call is written.
+
+    `rows` are `(name, status, detail)`, one per gate, with `status` True or
+    False. `ok` is False when any row is.
+
+    `colors` are hex strings. `surface` is the page they are drawn on and sets
+    what the contrast row measures against. `all_pairs` gates every pair rather
+    than adjacent ones, which is what a scatter needs and a line chart does
+    not. `ordinal` swaps the categorical separation rows for the ramp rows:
+    monotone lightness, even steps, a light end that still holds contrast.
+    `ink` names colours to treat as furniture rather than data.
+    """
     lin = [hex_to_linear(c) for c in colors]
     lab = [linear_to_oklab(v) for v in lin]
     rows, ok = [], True

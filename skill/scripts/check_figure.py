@@ -1953,6 +1953,26 @@ def check_style_sheet(fig):
 
 
 def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
+    """Run every gate over a figure. Returns `(ok, rows)`.
+
+    Note the order: `check_palette.check` returns its pair the other way round,
+    as `(rows, ok)`. Unpacking either one the wrong way binds a bool to the
+    rows and raises nothing, so the README states both and this says it where
+    the call is written.
+
+    `rows` are `(label, status, detail)`, one per gate, in the order the report
+    prints them. `status` is True, False, or the string "warn"; only a hard
+    False sets `ok` to False, so an advisory row reports without gating a
+    build.
+
+    `placed_frac` is the fraction of the content width the figure is placed at,
+    and `venue` names a row of `VENUE_WIDTH_PT` instead of setting
+    `CONTENT_WIDTH_PT` by hand; between them they decide the page scale every
+    type and stroke measurement runs through. `scale` overrides that
+    calculation outright. `context_axes` names axes whose fill is a context
+    surface rather than data ink, which is what stops a filled contourf panel
+    reading as saturated.
+    """
     r, canvas = _renderer(fig)
     rows = [
         ("Clipping", *check_clipping(fig, r)),
