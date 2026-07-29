@@ -84,6 +84,33 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
   filled band is not a marker.
 - Ordinal emphasis is a lightness ramp, not a transparency stack.
 
+### Panel occupancy
+
+`check_ink` measures the fraction of each axes rectangle whose pixels differ from the
+page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`. Advisory, because the
+right density is a property of the form: a heatmap legitimately runs near the ceiling
+and a schematic near the floor.
+
+**It is not the data-ink ratio.** Tufte's quantity is the share of ink that carries
+data. This one counts every non-background pixel in the rectangle, frame, ticks,
+gridlines and labels included. The two move opposite ways under one edit: deleting
+gridlines raises the data-ink ratio and lowers this number. A high reading means
+saturation, not decoration, and stripping furniture is never the answer to it. That the
+guide states no data-ink rule at all is deliberate: the evidence for minimalism as a
+comprehension aid is thinner than its currency suggests (Bateman et al., below).
+
+The ends fail differently.
+
+**At the floor**, suspect the scale before the data. Marks occupying one corner of a
+panel usually mean limits set by an outlier or left at the default, and the fix is the
+limits, not more ink. If nothing was drawn at all, that is a panel that should not be in
+the grid, and the gate separates that case from a merely sparse one.
+
+**At the ceiling**, the panel is reporting density rather than observations, which is
+the Overplotting section in `choosing-a-form.md`: transparency within the 3-alpha-level
+budget, hexbin, or a 2-D density estimate. A heatmap reading high is not overplotted and
+needs no change.
+
 ### Then still look at it
 
 The checker sees geometry, not meaning: it cannot tell you an arrow points at the wrong
@@ -381,6 +408,22 @@ it costs nothing to hold, because the fix is nearly always cutting words.
 If text does not fit, cut it: "Acquisition function ranks the candidate molecules" →
 "Rank every candidate."
 
+**Text off the canvas has two fixes that are not fixes.** The Clipping gate fails when a
+string's bounding box crosses the canvas edge, and the cause is nearly always a figure
+authored at a size its labels do not fit in. Both reflexes make the figure worse.
+Shrinking type until it fits moves the failure to the Type size gate, which measures on
+the page and does not care that the string is now inside the canvas.
+
+`bbox_inches="tight"` is the worse one, because it fails nothing. It trims the canvas to
+the drawn content, so the saved file is no longer the width you authored
+(matplotlib#11681). Every number in this section is derived from that width: the page
+scale, the type floor, the stroke arithmetic. Trim the canvas and all of them are
+computed against a size the file does not have, and nothing reports it.
+`figure.mplstyle` says this at the top; it is repeated here because this is where the
+gate that catches the symptom sends a reader. The fix is `constrained_layout=True` at
+figure creation, or a wider `figsize` and then re-deciding the placement, since the
+placed fraction just changed.
+
 **Strokes have the same problem and the same arithmetic.** SIAM's instructions for
 authors: lines one point or thicker, because thinner lines break up or disappear in print.
 A 0.8pt stroke in a 9in figure placed at 5.5in prints at 0.49pt, so `check_line_weight`
@@ -494,3 +537,13 @@ kinds, and the reason `misc` fails, comes from this literature.
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
   centre, and why a diverging map needs a meaningful zero to diverge around.
+
+One more, for the ink measurement rather than the colour.
+
+- Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
+  (2010). Useful junk? The effects of visual embellishment on comprehension
+  and memorability of charts. *CHI '10*, 2573-2582.
+  doi:10.1145/1753326.1753716. Accuracy in describing embellished charts was
+  no worse than for plain ones, and recall after a two-to-three-week gap was
+  significantly better. Cited to mark that "less ink is better" is not
+  settled, not to license decoration.

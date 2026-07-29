@@ -1297,14 +1297,23 @@ GUIDANCE_ANCHORS = {
     "Colormap kind": ("style-guide.md", "### Which kind, and the key it takes"),
     "Fonts": ("style-guide.md", "**Embed fonts as Type 42.**"),
     "Alt text": ("style-guide.md", "shipped with no alt text"),
+    "Clipping": ("style-guide.md", "two fixes that are not fixes"),
+    "Ink coverage": ("style-guide.md", "not the data-ink ratio"),
 }
 
-# Gates the reference material does not explain. Named rather than absent: an
-# enumerable debt is worth more than a map that quietly covers eighteen of
-# twenty. Both are mechanical rows with nothing to advise - a clipped label is
-# fixed by moving it, and an ink fraction is read off the figure - but if
-# either grows a rule it belongs in the guide and out of this set.
-NO_GUIDANCE = {"Clipping", "Ink coverage"}
+# Gates the reference material does not explain, now empty. Both members were
+# filled rather than argued away: the exemption said a clipped label is fixed
+# by moving it, and the two moves a reader actually reaches for - shrinking the
+# type, saving with `bbox_inches="tight"` - respectively fail a different gate
+# and void the page arithmetic every other legibility number rests on. Ink
+# coverage was worse, being routinely read as Tufte's data-ink ratio, which it
+# is not and is anti-correlated with under the edit that reading suggests.
+#
+# Kept rather than deleted. It is the union with `GUIDANCE_ANCHORS` that makes
+# the completeness assertion below mean anything, and a twenty-first gate
+# arriving unexplained needs an honest place to sit while its guidance is
+# written. `test_the_exemption_set_is_empty` is what keeps that temporary.
+NO_GUIDANCE: set[str] = set()
 
 
 def test_the_guidance_map_covers_exactly_the_gates_that_exist():
@@ -1315,6 +1324,18 @@ def test_the_guidance_map_covers_exactly_the_gates_that_exist():
     assert mapped == set(audit_gate_names()), (
         "the guidance map is out of date with the roster `audit()` returns: "
         f"{sorted(mapped ^ set(audit_gate_names()))}")
+
+
+def test_the_exemption_set_is_empty():
+    """The debt this set was created to make visible has been paid. Re-adding a
+    gate is allowed - writing guidance is its own work with its own evidence,
+    and a paragraph written to satisfy an anchor is worth less than an honest
+    gap. It is not allowed to be quiet."""
+    assert not NO_GUIDANCE, (
+        f"{sorted(NO_GUIDANCE)} are exempt from having guidance a reader can "
+        "find. That may be the right call, but it is a call: write the "
+        "guidance, or change this test and say here why the gate has nothing "
+        "to teach")
 
 
 def test_no_gate_is_both_explained_and_exempt():
