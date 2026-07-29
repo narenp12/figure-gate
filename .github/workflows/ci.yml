@@ -67,6 +67,20 @@ jobs:
           else
             uv pip install --system "matplotlib==${{ matrix.matplotlib }}"
           fi
+      # The classifier's thresholds were justified by a differential against
+      # cmasher across 148 colormaps, and until now that differential never ran
+      # anywhere but a developer machine: this job installs pytest, xdist and
+      # matplotlib and nothing else, so `test_palette_oracle.py` skipped on
+      # every CI run since it was written. An oracle that only runs where
+      # someone remembers to install it is not a check.
+      #
+      # One job, not four. cmasher needs Python >= 3.10 so it cannot run on the
+      # 3.9 legs at all, and the differential is over matplotlib's registry
+      # rather than over anything version-specific, so running it four times
+      # would buy four copies of one answer.
+      - name: Install the differential oracle (this job only)
+        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        run: uv pip install --system cmasher
       - name: Install TeX (for PGF test that tests the real backend)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq texlive-xetex
       - run: pytest -n auto -q

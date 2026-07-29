@@ -258,10 +258,11 @@ Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
 any of them, which is the whole job.
 
 The thresholds are empirical, measured across matplotlib's registry against
-`cmasher.get_cmap_type()` as an oracle; the margins, the three adjudicated
-disagreements, and the one known false positive are in
-`specs/2026-07-28-colormap-kind-gate-design.md`. The theory is Kovesi,
-*Good Colour Maps: How to Design Them* (arXiv:1509.03700).
+`cmasher.get_cmap_type()` as an oracle. The margins, the three adjudicated
+disagreements, and the one known false positive are recorded in the design note
+that ships with the repository, at
+[`specs/2026-07-28-colormap-kind-gate-design.md`](https://github.com/narenp12/figure-gate/blob/main/specs/2026-07-28-colormap-kind-gate-design.md).
+The theory is Kovesi; see the references at the end of this document.
 
 Kind is not quality. `turbo` passes as diverging because its lightness profile
 genuinely is diverging-shaped; its problem is hue banding, which a
@@ -468,3 +469,28 @@ def ordinal(n, window=VIRIDIS_WINDOW):
 ```
 
 Ink tokens live in `figure.mplstyle`, not here.
+
+---
+
+## References
+
+The colour rules above are not house preference. Each of the four colormap
+kinds, and the reason `misc` fails, comes from this literature.
+
+- Kovesi, P. (2015). Good Colour Maps: How to Design Them. arXiv:1509.03700. —
+  uniform incremental change in perceptual lightness as the governing
+  requirement, with separate stated criteria for linear, diverging, rainbow and
+  cyclic maps. The back-travel measure is this criterion made mechanical.
+- Crameri, F., Shephard, G. E. & Heron, P. J. (2020). The misuse of colour in
+  science communication. *Nature Communications* 11, 5444.
+  doi:10.1038/s41467-020-19160-7. — why rainbow-like and red-green maps are
+  still prevalent, and what they cost a reader.
+- Nuñez, J. R., Anderton, C. R. & Renslow, R. S. (2018). Optimizing colormaps
+  with consideration for color vision deficiency to enable accurate
+  interpretation of scientific data. *PLoS ONE* 13(7), e0199239. — the
+  CVD-safe side of the same question, and the argument the Okabe-Ito section
+  above rests on.
+- Moreland, K. (2009). Diverging Color Maps for Scientific Visualization. In
+  *Advances in Visual Computing* (ISVC 2009), 92-103.
+  doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
+  centre, and why a diverging map needs a meaningful zero to diverge around.
