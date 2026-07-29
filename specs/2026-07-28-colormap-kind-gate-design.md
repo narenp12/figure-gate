@@ -135,8 +135,41 @@ Two thresholds, each with a measured margin:
   high half at 1.05% against rainbow's low half at 2.79% — 2.7x total, roughly
   1.9x of headroom on each side. This is the tightest constraint in the design
   and the number most likely to need revisiting.
-- **Cyclic rather than diverging: wrap below 1% of span.** `twilight_shifted` at
-  0.34% against RdBu at 2.09%, a 6x margin.
+- **Cyclic rather than diverging: end-to-end colour distance below OKLab
+  dE x100 of 3.0.** Not a lightness difference. See below.
+
+### The wrap is a colour distance, not a lightness difference
+
+The first draft of this spec tested the wrap in lightness, at 1% of span. The
+differential against cmasher rejected it: 13 of 148 colormaps disagreed, and 11
+of those 13 were the same mistake — RdYlGn, `cmr.fusion`, `cmr.holly`,
+`cmr.iceburn`, `cmr.pride`, `cmr.redshift`, `cmr.seaweed`, `cmr.viola`,
+`cmr.watermelon`, `cmr.wildfire` and `managua`, every one classified cyclic by
+us and diverging by cmasher.
+
+The reason is structural. A symmetric diverging map has *equal lightness at both
+ends by construction* — that is cmasher's own definition of the family. RdYlGn
+ends red and ends green: same lightness, opposite colour. Lightness wrap cannot
+tell the two families apart, because both families close the loop in lightness.
+Only a cyclic map closes it in colour.
+
+Measuring the ends with `check_palette.delta_e`, already in the file:
+
+| cyclic | wrap dE | | diverging | wrap dE |
+| --- | --- | --- | --- | --- |
+| twilight | **0.00** | | cmr.fusion | **7.48** |
+| cmr.infinity | 0.26 | | cmr.viola | 7.90 |
+| twilight_shifted | 0.29 | | cmr.holly | 9.07 |
+| hsv | 0.74 | | wildfire, redshift, iceburn | 14.5–19.7 |
+| | | | RdBu, Spectral, managua, vanimo | 19.8–21.6 |
+| | | | PuOr, RdYlGn, coolwarm, watermelon | 27.0–31.1 |
+
+The gap runs from 0.74 to 7.48 — **10x**, the widest margin in the design.
+Every threshold from dE 1.0 to 5.0 produces an identical differential result.
+**3.0** is taken as near the geometric mean of the gap.
+
+(hsv appears in the cyclic column because its ends genuinely do meet. It is
+still classified misc, on back-travel, long before the wrap is consulted.)
 
 Order of tests, mirroring cmasher:
 
@@ -144,7 +177,7 @@ Order of tests, mirroring cmasher:
 N < 40                          -> qualitative
 total span < 0.02 OKLab L       -> misc          (isoluminant)
 whole-map back-travel < 2%      -> sequential
-both halves back-travel < 2%    -> cyclic if wrap < 1%, else diverging
+both halves back-travel < 2%    -> cyclic if wrap dE < 3.0, else diverging
 otherwise                       -> misc
 ```
 
@@ -162,9 +195,30 @@ meaningless for it. Guarding the span also keeps that division safe.
 `Fonts` to 19 and `Alt text` to 20 as described above. It is a router, not a new
 body of checking:
 
-1. **Harvest.** Every artist in `ax.images`, plus every artist anywhere in the
-   figure whose `get_array()` is not None. Take `get_cmap()` off each. Colorbar
-   axes are skipped, as they already are in `check_ink`.
+1. **Harvest.** Every artist in `ax.images` and `ax.collections` whose
+   `get_array()` is not None. Take `get_cmap()` off each. Colorbar axes are
+   skipped, as they already are in `check_ink`.
+
+   Verified on matplotlib 3.11.1 — every colormapped call lands in one of those
+   two containers and exposes both methods, so no wider sweep is needed:
+
+   | call | artist | container |
+   | --- | --- | --- |
+   | `imshow` | AxesImage | `images` |
+   | `pcolormesh` | QuadMesh | `collections` |
+   | `contourf` / `contour(cmap=)` | QuadContourSet | `collections` |
+   | `hexbin` / `tripcolor` | PolyCollection | `collections` |
+   | `scatter(c=, cmap=)` | PathCollection | `collections` |
+   | `quiver(C, cmap=)` | Quiver | `collections` |
+   | `streamplot(color=, cmap=)` | LineCollection | `collections` |
+
+   **The guard is `get_array() is not None`, never `get_cmap() is not None`.**
+   Every `ScalarMappable` carries a default colormap whether or not anything was
+   mapped through it: a plain `scatter(x, y, color="#0072b2")` returns `viridis`
+   from `get_cmap()` and `None` from `get_array()`. Testing the colormap instead
+   of the array would gate every unmapped scatter in the repository against a
+   ramp it never used. This is the same discrimination `_data_colors_by_axes`
+   already makes, in the opposite direction, at `check_figure.py:1096`.
 2. **Classify.** Sample 256 colors, call `cmap_kind()`.
 3. **Route to the check that kind already has.**
    - qualitative -> `check_palette.check(levels, all_pairs=True)`, the same
@@ -231,6 +285,42 @@ non-zero if it fails.
   an empty list would be a claim of exact parity across two color spaces, which
   is not true and should not be asserted.
 
+**The differential has been run.** cmasher 1.9.2, matplotlib 3.11.1, 148
+colormaps excluding reversals. At the thresholds above: **145 agree, 3
+disagree.** Each is adjudicated, and the adjudication is the expected content of
+that comment list:
+
+| colormap | ours | cmasher | who is right |
+| --- | --- | --- | --- |
+| `managua` | diverging | misc | **ours** |
+| `vanimo` | diverging | misc | **ours** |
+| `Wistia` | misc | sequential | **cmasher** |
+
+`managua` runs L 0.877 -> 0.355 -> 0.875 and `vanimo` runs 0.906 -> 0.201 ->
+0.931: light ends, dark centre, the same shape as RdBu inverted. They are
+Crameri maps added in matplotlib 3.10, and cmasher's strict `np.isclose` test
+fails on their micro-reversals — the same defect that made a direct
+transcription misclassify viridis. The tolerance-based method is the more robust
+of the two, and the test should record that rather than defer.
+
+`Wistia` is the one we get wrong, and it exposes a real limit of the metric.
+Its lightness descends monotonically, 0.954 -> 0.726, but over a span of only
+0.228. Back-travel is a ratio with span in the denominator, so its 0.0128 of
+absolute wobble reads as 5.61% where viridis's 0.0006 over a 0.633 span reads as
+0.10%. Narrow-span maps get noisy ratios.
+
+Wistia is sequential *by kind*. Its problem — a lightness range too narrow to
+carry an ordinal reading — is a quality defect, and quality is what the routed
+`check(ordinal=True)` exists to judge. Conflating the two in the classifier is a
+category error.
+
+Two ways to fix it, neither chosen here: a floor on absolute back-travel
+alongside the ratio, or a minimum span below which the ratio is not trusted.
+Both need their own measurement across the registry before a constant is picked,
+and per this spec's own rule a new colormap is a new row in the table, not a
+quiet change to a threshold. **Ship with Wistia as a known, documented
+disagreement; resolve it with evidence in a follow-up.**
+
 **Gate, in `tests/test_figure.py`**
 
 - `imshow` with `jet` FAILs; with `viridis` PASSes
@@ -272,14 +362,20 @@ the fix is another row in the table above, not a quiet change to the constant.
 
 ## Risks
 
-- **The differential test may disagree more than expected.** cmasher's cyclic
-  test is threshold-sensitive and runs in a different color space. If the
-  disagreement list grows past a handful of entries, the oracle is not earning
-  its dependency and should be dropped rather than papered over.
-- **Three dense panels may not survive the existing gates.** If
-  `gallery-encoding.png` cannot be made to pass, the finding is either a real
-  composition limit worth documenting or a defect in a gate — both are outcomes
-  the gallery exists to produce. It is not a reason to weaken a check.
-- **`hexbin` and `contourf` harvest paths are unverified.** Both are asserted to
-  expose a colormap through `get_array()`/`get_cmap()`; neither has been run.
-  Verify before relying on the routing.
+- ~~The differential test may disagree more than expected.~~ **Resolved by
+  running it.** 3 of 148, adjudicated above. The oracle earned its dependency
+  before being written into a test: it caught the lightness-wrap error, which was
+  a real design defect that would have shipped 11 colormaps misclassified.
+- ~~`hexbin` and `contourf` harvest paths are unverified.~~ **Resolved.** Both
+  verified on matplotlib 3.11.1, along with five other call types, and the
+  `get_cmap()`-versus-`get_array()` trap found in the process.
+- **Three dense panels may not survive the existing gates.** Still open, and not
+  resolvable without building the figure. If `gallery-encoding.png` cannot be
+  made to pass, the finding is either a real composition limit worth documenting
+  or a defect in a gate — both are outcomes the gallery exists to produce. It is
+  not a reason to weaken a check.
+- **The 2% back-travel threshold has one known false positive.** Wistia. See the
+  adjudication above; the resolution is deferred with evidence, not hidden.
+- **Thresholds are pinned to matplotlib 3.11.1's registry.** A future matplotlib
+  that adds or revises colormaps can move the binding pairs. The differential
+  test is what will catch that, which is the second reason to keep it.
