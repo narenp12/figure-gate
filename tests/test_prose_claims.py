@@ -484,9 +484,33 @@ def _style_sheet_hexes():
                                                     for h in bare}
 
 
+# Okabe-Ito in publication order. matplotlib ships it as a colormap from 3.11,
+# and this project supports 3.8 upward, so a module that reads
+# `colormaps["okabe_ito"]` at import fails collection on every older matplotlib
+# rather than failing one test. `test_palette.py` and `test_example.py` both
+# guard the same lookup with a skip; this needs the colours themselves, so it
+# carries them and checks the copy against matplotlib wherever matplotlib has
+# them.
+OKABE_ITO = ("#000000", "#e69f00", "#56b4e9", "#009e73",
+             "#f0e442", "#0072b2", "#d55e00", "#cc79a7")
+
+
 def _okabe_hexes():
+    if "okabe_ito" not in colormaps:
+        return set(OKABE_ITO)
     cmap = colormaps["okabe_ito"]
     return {to_hex(cmap(i))[:7].lower() for i in range(cmap.N)}
+
+
+def test_the_okabe_literal_is_matplotlibs_okabe():
+    """The fallback above is a hand-copied palette, which is a claim like any
+    other. Where matplotlib has the colormap, the copy is held to it."""
+    if "okabe_ito" not in colormaps:
+        pytest.skip("matplotlib < 3.11 has no okabe_ito colormap")
+    cmap = colormaps["okabe_ito"]
+    builtin = tuple(to_hex(cmap(i))[:7].lower() for i in range(cmap.N))
+    assert OKABE_ITO == builtin, (
+        f"the literal is {OKABE_ITO}; matplotlib ships {builtin}")
 
 
 def _colormap_hexes(name, samples=1001):
