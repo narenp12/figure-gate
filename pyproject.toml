@@ -84,6 +84,17 @@ filterwarnings = [
     # A missing font family is a real defect in a figure, but in CI the runner
     # simply has no serif installed and the fallback is correct behaviour.
     "ignore:findfont:UserWarning",
+    # cmasher 1.9.2 builds each of its 114 colormaps with
+    # `ListedColormap(..., N=...)`, deprecated in matplotlib 3.11 and removed
+    # in 3.13, so importing the oracle emits 114 identical warnings. Ours is
+    # not the code being warned about: nothing under `skill/scripts/` builds a
+    # ListedColormap at all, so this cannot mask a defect of this project's.
+    #
+    # It is a countdown, not a fix. On matplotlib 3.13 cmasher stops importing
+    # outright; `oracle()` in tests/test_palette_oracle.py skips with the
+    # ImportError attached when that happens, so the suite stays green and says
+    # what it stopped checking. Drop this line once cmasher ships the fix.
+    "ignore:Passing 'N' to ListedColormap is deprecated:DeprecationWarning",
 ]
 
 # cmasher is a TEST ORACLE and never a runtime dependency. `cmap_kind` is a
