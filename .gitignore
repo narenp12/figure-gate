@@ -16,3 +16,10 @@ site/
 .codebase-memory/
 CLAUDE.md
 opencode.json
+
+# Implementation plans are a work queue, not a document. `specs/` is tracked
+# because a design note is the evidence behind a threshold and the style guide
+# cites one; a plan is checkbox state that goes stale the moment the work ships,
+# and the one that was tracked still read "status": "pending" three merges after
+# its gate was in main. Git has the history if it is ever wanted.
+plans/
