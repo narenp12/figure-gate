@@ -88,10 +88,20 @@ filterwarnings = [
     "ignore:findfont:UserWarning",
 ]
 
-# A group, not an extra: extras are published metadata, and a `figure-gate[dev]`
-# on the project page means nothing to anyone installing a checker.
+# cmasher is a TEST ORACLE and never a runtime dependency. `cmap_kind` is a
+# port of its `get_cmap_type()` into OKLab, and `tests/test_palette_oracle.py`
+# differentials the two across matplotlib's registry. It earned its place
+# before it was written into a test: running the differential during design
+# caught a wrong threshold that would otherwise have shipped 11 colormaps in
+# the wrong family.
+#
+# Same marker reasoning as `docs` below -- cmasher 1.9.2 needs Python >= 3.10
+# and this project supports 3.9, so without the marker uv resolves the group
+# across the full range and fails outright. It pulls colorspacious, numpy and
+# matplotlib, none of which the shipped scripts may import.
 [dependency-groups]
 dev = [
+    "cmasher>=1.9 ; python_full_version >= '3.10'",
     "pytest>=7.0",
     "pytest-xdist>=3.8.0",
     "scipy>=1.6",

@@ -87,6 +87,51 @@ def delta_e(rgb_a, rgb_b):
     return 100 * math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+# --- colormap kind ----------------------------------------------------------
+
+CMAP_SAMPLES = 256
+CMAP_QUALITATIVE_N = 40
+CMAP_SPAN_MIN = 0.02
+CMAP_BACKTRAVEL_MAX = 0.02
+CMAP_WRAP_DE_MAX = 3.0
+
+
+def _back_travel(ls):
+    steps = [b - a for a, b in zip(ls, ls[1:])]
+    if not steps:
+        return 0.0
+    span = max(ls) - min(ls)
+    if span <= 0:
+        return 0.0
+    sign = 1 if sum(1 for s in steps if s > 0) > len(steps) / 2 else -1
+    return sum(abs(s) for s in steps if s * sign < 0) / span
+
+
+def cmap_back_travel(samples):
+    return _back_travel([linear_to_oklab(hex_to_linear(h))[0] for h in samples])
+
+
+def cmap_kind(samples):
+    if len(samples) < CMAP_QUALITATIVE_N:
+        return "qualitative"
+
+    ls = [linear_to_oklab(hex_to_linear(h))[0] for h in samples]
+
+    if max(ls) - min(ls) < CMAP_SPAN_MIN:
+        return "misc"
+
+    if _back_travel(ls) < CMAP_BACKTRAVEL_MAX:
+        return "sequential"
+
+    half = len(ls) // 2
+    if (_back_travel(ls[:half + 1]) < CMAP_BACKTRAVEL_MAX
+            and _back_travel(ls[half:]) < CMAP_BACKTRAVEL_MAX):
+        wrap = delta_e(hex_to_linear(samples[0]), hex_to_linear(samples[-1]))
+        return "cyclic" if wrap < CMAP_WRAP_DE_MAX else "diverging"
+
+    return "misc"
+
+
 # --- gates ------------------------------------------------------------------
 
 L_MIN, L_MAX = 0.43, 0.77

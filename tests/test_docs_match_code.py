@@ -551,6 +551,7 @@ FIGURE_PROSE = {
     "Label attribution": "label attribution",
     "Style sheet": "whether the style sheet is the one actually in effect",
     "Contour dash": "contour dash",
+    "Colormap kind": "colormap kind",
     "Fonts": "font embedding",
     "Alt text": "alt text",
 }
@@ -815,9 +816,9 @@ def test_the_examples_still_describe_every_figure():
     """Seven figures, seven descriptions. A refactor that changes the call
     shape would otherwise leave this file comparing the site against a shorter
     list and finding no disagreement."""
-    assert len(described_strings()) == 7, (
+    assert len(described_strings()) == 8, (
         f"read {len(described_strings())} descriptions out of demo.py and "
-        "gallery.py, expected 7 - the call shape changed and "
+        "gallery.py, expected 8 - the call shape changed and "
         "described_strings() needs updating with it")
 
 

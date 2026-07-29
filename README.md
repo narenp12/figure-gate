@@ -42,7 +42,7 @@ colors it was drawing.
 `check_series_color` closes that. It reads the hues off the figure's own
 artists, decides from the mark types whether the figure needs adjacent
 separation (lines, bars) or all-pairs separation (scatter), and runs them
-through the palette gates. That is row 11 of the 19.
+through the palette gates. That is row 11 of the 20.
 
 ## What each gate measures
 
@@ -67,7 +67,7 @@ validated only for the red-green forms, so the number is indicative rather than
 decisive.
 
 **`check_figure.py`** — renders the figure through an Agg canvas, at the dpi it
-was authored at, and measures the result. `audit()` returns these 19 rows in
+was authored at, and measures the result. `audit()` returns these 20 rows in
 this order.
 
 | Gate | Threshold | Fails when |
@@ -89,6 +89,7 @@ this order.
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest other series is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
 | Contour dash | — | a signed contour set dashes its negative levels *(advisory)* |
+| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap's lightness reverses, or a qualitative one's levels fail all-pairs separation |
 | Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 
@@ -278,7 +279,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 356 tests, and
+**Gates are tested for their ability to fail.** The suite is 416 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

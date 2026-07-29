@@ -34,9 +34,10 @@ Checks, in the order `audit` runs them
    14. Identity channel  - series are not told apart by color alone
    15. Label attribution - each label is nearest the curve it names
    16. Style sheet       - figure.mplstyle is the one actually in effect
-   17. Contour dash      - dashing is not spent on a signed contour's negatives
-   18. Fonts             - Type 42 embedding; the named face is installed
-   19. Alt text          - the figure carries a description
+    17. Contour dash      - dashing is not spent on a signed contour's negatives
+    18. Colormap kind     - the colormaps in use are ones a reader can order
+    19. Fonts             - Type 42 embedding; the named face is installed
+    20. Alt text          - the figure carries a description
 """
 
 import itertools
@@ -1630,6 +1631,75 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
                    "or disappear in print")
 
 
+def check_colormap(fig):
+    try:
+        import check_palette as cp
+    except ImportError:
+        return True, ("check_palette.py is not importable beside this file, "
+                      "so no colormap was classified")
+
+    from matplotlib.colors import to_hex
+
+    seen = {}
+    for ax in fig.axes:
+        if ax.get_label() == "<colorbar>":
+            continue
+        for artist in list(ax.images) + list(ax.collections):
+            if not artist.get_visible():
+                continue
+            if getattr(artist, "get_array", lambda: None)() is None:
+                continue
+            cmap = getattr(artist, "get_cmap", lambda: None)()
+            if cmap is not None:
+                name = getattr(cmap, "name", "")
+                # An unnamed colormap means the artist has explicit colours set
+                # (e.g. `contour(colors="black")`), rather than a continuous
+                # encoding named by the author.
+                if not name or name in ("_no_name", "unnamed", None):
+                    continue
+                seen.setdefault(name, cmap)
+
+    if not seen:
+        return True, "no colormapped artists"
+
+    fails, notes = [], []
+    for name, cmap in sorted(seen.items()):
+        if cmap.N < cp.CMAP_QUALITATIVE_N:
+            levels = [to_hex(cmap(i)) for i in range(cmap.N)]
+        else:
+            levels = [to_hex(cmap(i / (cp.CMAP_SAMPLES - 1)))
+                      for i in range(cp.CMAP_SAMPLES)]
+
+        kind = cp.cmap_kind(levels)
+
+        if kind == "misc":
+            fails.append(
+                f"{name}: lightness reverses over "
+                f"{cp.cmap_back_travel(levels):.0%} of its span  <- a reader "
+                "cannot order two values in it. viridis for sequential, RdBu "
+                "for diverging, twilight for cyclic")
+            continue
+
+        if kind == "qualitative":
+            rows, _ = cp.check(levels, all_pairs=True)
+            bad = [detail.split("  <-")[0].strip()
+                   for row_name, status, detail in rows
+                   if row_name.startswith(("CVD separation",
+                                            "Normal-vision floor"))
+                   and status is False]
+            if bad:
+                fails.append(f"{name} ({cmap.N} categories): " + "; ".join(bad)
+                             + "  <- an image puts every category beside every "
+                             "other, so every pair has to separate")
+                continue
+
+        notes.append(f"{name} {kind}")
+
+    if fails:
+        return False, "; ".join(fails)
+    return True, ", ".join(notes)
+
+
 def check_fonts(fig):
     """Two silent failures between the figure on screen and the file you submit.
 
@@ -1887,6 +1957,7 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
         ("Label attribution", *check_label_attribution(fig, r)),
         ("Style sheet", *check_style_sheet(fig)),
         ("Contour dash", *check_contour_dash(fig)),
+        ("Colormap kind", *check_colormap(fig)),
         ("Fonts", *check_fonts(fig)),
         ("Alt text", *check_alt_text(fig)),
     ]

@@ -1,4 +1,4 @@
-"""Six figures hard enough to be worth checking.
+"""Seven figures hard enough to be worth checking.
 
     python examples/gallery.py
 
@@ -13,6 +13,7 @@ compositions where the checks have somewhere to hide:
     gallery-forms.png             the three forms `choosing-a-form.md` argues for
     gallery-convergence.png       log-log error against h, with a slope triangle
     gallery-orbit.png             a dense attractor, where density IS the finding
+    gallery-encoding.png          three colormap kinds, one per panel
 
 Each one is audited and the script exits non-zero if any figure fails, so these
 are regression tests with pictures attached rather than decoration. Writing them
@@ -464,7 +465,119 @@ def orbit():
            "window near r = 3.83.")
 
 
-for build in (small_multiples, field, schematic, forms, convergence, orbit):
+# --- 7. three encodings, three colormap kinds --------------------------------
+
+def encoding():
+    UNMEASURED = "#d9d7d2"
+    from matplotlib.patches import Patch
+
+    fig, (a, b, c) = plt.subplots(1, 3, figsize=(7.9, 3.1),
+                                  constrained_layout=True)
+
+    # (a) escape time -- a quantity, so a sequential ramp.
+    n = 400
+    budget = 60
+    ax_x = np.linspace(-2.05, 0.65, n)
+    ax_y = np.linspace(-1.25, 1.25, n)
+    cc = ax_x[None, :] + 1j * ax_y[:, None]
+    z = np.zeros_like(cc)
+    escape = np.full(cc.shape, np.nan)
+    for k in range(budget):
+        z = z * z + cc
+        out = np.abs(z) > 2.0
+        escape[out & np.isnan(escape)] = k
+        z[out] = 2.0
+    ramp = plt.get_cmap("viridis").with_extremes(bad=UNMEASURED)
+    escaped = a.imshow(np.ma.masked_invalid(escape), cmap=ramp, origin="lower",
+                       extent=(ax_x[0], ax_x[-1], ax_y[0], ax_y[-1]),
+                       interpolation="nearest", aspect="auto")
+    a.set_title("(a) quantity: sequential", loc="left")
+    a.set_xlabel(r"$\Re c$")
+    a.set_ylabel(r"$\Im c$")
+    # A ramp without a scale is a picture of a quantity nobody can read back.
+    # The neutral is NOT on this bar and cannot be: the bar is the range that
+    # was measured, and "did not escape" is outside it. That is the whole point
+    # the panel exists to make, so it takes a key of its own rather than a
+    # silently unexplained grey.
+    bar_a = fig.colorbar(escaped, ax=a, pad=0.02)
+    bar_a.set_label("escape iterations")
+    bar_a.outline.set_linewidth(0.0)
+    a.legend(handles=[Patch(facecolor=UNMEASURED, edgecolor="none",
+                            label="did not escape")],
+             loc="upper center", bbox_to_anchor=(0.5, -0.25), frameon=False,
+             handlelength=1.1, borderpad=0.0, borderaxespad=0.0)
+
+    # (b) Newton basins -- a category, so separated hues and no ramp at all.
+    bx = np.linspace(-1.4, 1.4, n)
+    by = np.linspace(-1.4, 1.4, n)
+    w = bx[None, :] + 1j * by[:, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for _ in range(40):
+            w = w - (w ** 3 - 1) / (3 * w ** 2)
+    roots = np.array([1.0 + 0j,
+                      -0.5 + 0.8660254037844386j,
+                      -0.5 - 0.8660254037844386j])
+    basin = np.argmin(np.abs(w[..., None] - roots[None, None, :]), axis=-1)
+    from matplotlib.colors import ListedColormap
+    basins = ListedColormap(list(SERIES[:3]), name="newton-basins")
+    b.imshow(basin, cmap=basins, origin="lower",
+             extent=(bx[0], bx[-1], by[0], by[-1]),
+             interpolation="nearest", aspect="auto")
+    b.set_title("(b) category: qualitative", loc="left")
+    b.set_xlabel(r"$\Re z_0$")
+    b.tick_params(labelleft=False)
+    # A legend and not a colorbar, and the difference IS the panel's argument:
+    # a colorbar is a ruler, and three basins have nothing to be a ruler along.
+    # The key names the roots because "orange" is not what the reader wants back.
+    b.legend(handles=[Patch(facecolor=col, edgecolor="none", label=lab)
+                      for col, lab in zip(SERIES[:3],
+                                          ("$1$", r"$e^{2\pi i/3}$",
+                                           r"$e^{-2\pi i/3}$"))],
+             loc="upper center", bbox_to_anchor=(0.5, -0.25), ncols=3,
+             frameon=False, handlelength=1.1, borderpad=0.0,
+             borderaxespad=0.0, columnspacing=1.2)
+
+    # (c) phase -- an angle, so a cyclic map.
+    px = np.linspace(-2.0, 2.0, n)
+    py = np.linspace(-2.0, 2.0, n)
+    v = px[None, :] + 1j * py[:, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        f = (v ** 2 - 1.0) / (v ** 2 + 0.5j)
+    phase = c.imshow(np.angle(f), cmap="twilight", origin="lower",
+                     vmin=-np.pi, vmax=np.pi,
+                     extent=(px[0], px[-1], py[0], py[-1]),
+                     interpolation="nearest", aspect="auto")
+    c.set_title("(c) angle: cyclic", loc="left")
+    c.set_xlabel(r"$\Re z$")
+    c.tick_params(labelleft=False)
+    # Ticked at the wrap and at both ends, so the bar shows the reader that its
+    # two ends are the same angle. A bar whose ends match is the visible claim
+    # that the colormap closes the loop -- exactly what `cmap_kind` measures as
+    # a wrap dE below 3.0.
+    bar_c = fig.colorbar(phase, ax=c, pad=0.02,
+                         ticks=[-np.pi, 0.0, np.pi])
+    bar_c.set_ticklabels([r"$-\pi$", "$0$", r"$\pi$"])
+    bar_c.set_label(r"$\arg f(z)$")
+    bar_c.outline.set_linewidth(0.0)
+
+    finish(fig, "gallery-encoding",
+           "Three complex-plane images, each on a colormap matched to what it "
+           "encodes, and each with the key that kind of encoding takes. (a) "
+           "Mandelbrot escape time in viridis, a sequential ramp, read against "
+           "a colorbar running 0 to 60 iterations; the set's interior is a "
+           "neutral keyed separately as 'did not escape', because that is a "
+           "separate class and not a small value. (b) Newton basins for "
+           "z^3 - 1 in three separated hues with a legend naming the three "
+           "roots, because a basin is a category, nothing orders them, and a "
+           "colorbar would be a ruler along nothing. (c) The phase of "
+           "(z^2 - 1)/(z^2 + i/2) in twilight, a cyclic map, on a colorbar "
+           "ticked at -pi, 0 and pi whose two ends are the same colour because "
+           "they are the same angle.",
+           context_axes=[a, b, c])
+
+
+for build in (small_multiples, field, schematic, forms, convergence, orbit,
+              encoding):
     build()
 
 print("\n" + "=" * 62)
