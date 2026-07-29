@@ -237,7 +237,7 @@ continuous kinds have one. Categories do not, and a bar drawn beside them is a
 scale along nothing: name them in a legend instead. The same rule decides where
 a value that falls outside the measured range goes. "Did not converge", "no
 data", "censored" are separate classes, not small values, so they are drawn in
-an explicit neutral and keyed *off* the bar, never as `cmap(0)` — the bar is the
+an explicit neutral and keyed *off* the bar, never as `cmap(0)`. The bar is the
 range that was measured, and putting a non-value at the bottom of it claims a
 quantity nobody measured.
 

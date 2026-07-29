@@ -306,10 +306,12 @@ order. Phase, angle and heading are cyclic and take `twilight`: they close the
 loop, and a sequential ramp on them draws a seam where the data is continuous.
 
 **The key follows the kind.** A colorbar is a ruler, so the three continuous
-kinds get one and categories get a legend instead — a bar beside categories is a
+kinds get one and categories get a legend instead. A bar beside categories is a
 scale along nothing. A value outside the measured range ("did not converge", "no
 data") is a separate class and not a small value: draw it in an explicit neutral
-and key it *off* the bar, never as `cmap(0)`.
+and key it *off* the bar, never as `cmap(0)`. The bar is the range that was
+measured, and putting a non-value at the bottom of it claims a quantity nobody
+measured.
 
 **Categorical or ordinal is the decision that matters,** and the intuitive
 answer is usually wrong. Categorical = independent identities. Ordinal = ordered
