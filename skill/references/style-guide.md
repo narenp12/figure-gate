@@ -87,29 +87,35 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 ### Panel occupancy
 
 `check_ink` measures the fraction of each axes rectangle whose pixels differ from the
-page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`. Advisory, because the
-right density is a property of the form: a heatmap legitimately runs near the ceiling
-and a schematic near the floor.
+page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`. Advisory, and it stays
+advisory because the right density is a property of the form: an `imshow` heatmap
+measures 1.00 and warns on every figure that has one. Colorbars are exempt, being a
+solid ramp by construction and nobody's design decision.
 
 **It is not the data-ink ratio.** Tufte's quantity is the share of ink that carries
 data. This one counts every non-background pixel in the rectangle, frame, ticks,
 gridlines and labels included. The two move opposite ways under one edit: deleting
 gridlines raises the data-ink ratio and lowers this number. A high reading means
-saturation, not decoration, and stripping furniture is never the answer to it. That the
-guide states no data-ink rule at all is deliberate: the evidence for minimalism as a
-comprehension aid is thinner than its currency suggests (Bateman et al., below).
+saturation, not decoration, and stripping furniture is never the answer to it. The guide
+states no data-ink rule of its own, and one reason is that the empirical case for
+minimalism is weaker than its standing suggests (Bateman et al., below).
 
 The ends fail differently.
 
 **At the floor**, suspect the scale before the data. Marks occupying one corner of a
 panel usually mean limits set by an outlier or left at the default, and the fix is the
-limits, not more ink. If nothing was drawn at all, that is a panel that should not be in
-the grid, and the gate separates that case from a merely sparse one.
+limits, not more ink. A panel with nothing drawn in it warns even though its frame and
+ticks alone measure inside the range: the gate asks whether anything was drawn, so the
+blank cell in a grid is a WARN and not a pass.
 
 **At the ceiling**, the panel is reporting density rather than observations, which is
 the Overplotting section in `choosing-a-form.md`: transparency within the 3-alpha-level
-budget, hexbin, or a 2-D density estimate. A heatmap reading high is not overplotted and
-needs no change.
+budget, hexbin, or a 2-D density estimate.
+
+**When the fill is context, say so.** A `contourf` landscape under a few marks reads as
+saturated because the surface is what fills the rectangle. Pass those axes as
+`check_ink(fig, context_axes=[ax])`, or `audit(fig, context_axes=[ax])`, and the gate
+separates surface from marks and measures only what sits on top.
 
 ### Then still look at it
 
@@ -410,19 +416,21 @@ If text does not fit, cut it: "Acquisition function ranks the candidate molecule
 
 **Text off the canvas has two fixes that are not fixes.** The Clipping gate fails when a
 string's bounding box crosses the canvas edge, and the cause is nearly always a figure
-authored at a size its labels do not fit in. Both reflexes make the figure worse.
-Shrinking type until it fits moves the failure to the Type size gate, which measures on
-the page and does not care that the string is now inside the canvas.
+authored at a size its labels do not fit in. Shrinking type until it fits pays for canvas
+space out of the legibility budget, and a string driven under 7.5pt on the page has
+bought a Clipping pass with a Type size failure.
 
-`bbox_inches="tight"` is the worse one, because it fails nothing. It trims the canvas to
-the drawn content, so the saved file is no longer the width you authored
-(matplotlib#11681). Every number in this section is derived from that width: the page
-scale, the type floor, the stroke arithmetic. Trim the canvas and all of them are
-computed against a size the file does not have, and nothing reports it.
-`figure.mplstyle` says this at the top; it is repeated here because this is where the
-gate that catches the symptom sends a reader. The fix is `constrained_layout=True` at
-figure creation, or a wider `figsize` and then re-deciding the placement, since the
-placed fraction just changed.
+`bbox_inches="tight"` is the one to actually watch, because it fails nothing. It trims
+the canvas to the drawn content, so the saved file is no longer the width you authored
+([matplotlib#11681](https://github.com/matplotlib/matplotlib/issues/11681)). Every number
+in this section is derived from that width: the page scale, the type floor, the stroke
+arithmetic. Trim the canvas and all of them are computed against a size the file does not
+have. Nothing reports it either, because `check_figure.py` reads the figure in memory and
+never sees the `savefig` call. `figure.mplstyle` says this at the top; it is repeated
+here because this is where the gate that catches the symptom sends a reader.
+
+The fix is `constrained_layout=True` at figure creation, or a wider `figsize` and then
+re-deciding the placement, since the placed fraction just changed.
 
 **Strokes have the same problem and the same arithmetic.** SIAM's instructions for
 authors: lines one point or thicker, because thinner lines break up or disappear in print.
