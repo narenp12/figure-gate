@@ -5,7 +5,7 @@
 [![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
 
 **Two scripts that read a built matplotlib figure and report which gates it
-fails.** `audit(fig)` returns `(ok, rows)` — 19 rows, one per gate, each a
+fails.** `audit(fig)` returns `(ok, rows)` — 20 rows, one per gate, each a
 `(label, status, detail)` triple where `status` is `True`, `False`, or
 `"warn"`. `check(colors)` gates a palette the same way in 5 rows, though it
 returns them the other way round, as `(rows, ok)`. Every threshold is a
@@ -28,13 +28,14 @@ still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-ga
 decision commented against the failure it avoids. `python examples/gallery.py`
 covers the harder forms: a shared-axis grid, a filled field with a colorbar, an
 axis-free schematic, three statistical forms, a log-log convergence plot with a
-slope triangle, and a dense attractor. Writing those six found six defects in
-the checks themselves.*
+slope triangle, a dense attractor, and three complex-plane encodings on three
+kinds of colormap. Writing those seven found six defects in the checks
+themselves.*
 
 ## Why the two scripts talk to each other
 
 A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
-returned 19 passing rows from the composition checks. `check_palette.py` rated
+returned nothing but passing rows from the composition checks. `check_palette.py` rated
 that same cycle's orange and green at dE 1.4 under protanopia — one hue to that
 reader, against a floor of 8. The composition checker had no access to the
 colors it was drawing.
@@ -89,7 +90,7 @@ this order.
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest other series is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
 | Contour dash | — | a signed contour set dashes its negative levels *(advisory)* |
-| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap's lightness reverses, or a qualitative one's levels fail all-pairs separation |
+| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation |
 | Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 
@@ -188,7 +189,7 @@ okabe = colormaps["okabe_ito"]          # matplotlib >= 3.11
 fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
 ax.plot(x, y, color=okabe(1))           # line width comes from the sheet
 
-report(fig, "my-figure")                # prints 19 rows, returns True if ok
+report(fig, "my-figure")                # prints 20 rows, returns True if ok
 ```
 
 Two details in that block carry weight. The style sheet is resolved relative to
@@ -254,11 +255,18 @@ other.
 ## What it does not do
 
 Every check is an elimination gate: each one forbids a single enumerated
-failure, and none looks at the figure as a whole. 19 passing rows means the
-figure avoids 19 named defects. It does not mean the figure is good, and the
+failure, and none looks at the figure as a whole. 20 passing rows means the
+figure avoids 20 named defects. It does not mean the figure is good, and the
 checker cannot see that an arrow points at the wrong object, that reading order
 runs backwards, or that a label is true of the concept and false of the curve
 beside it. Render it and look at it.
+
+Two blind spots are worth naming because a passing row looks the same as an
+absent one. The colormap gate reads a `Colormap`'s name to tell an encoding from
+a hand-set list of colors, so a map matplotlib left unnamed is skipped rather
+than judged; and it needs `check_palette.py` importable beside it, reporting
+that it could not classify anything rather than raising if it is not. Both are
+deliberate, and both mean the row can pass by having seen nothing.
 
 The rules also do not transfer to interactive web charts, where hover,
 responsive reflow and dark mode change most of the constraints.
@@ -271,7 +279,7 @@ for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
 poles clear every gate in `check_palette.py` unmodified, and a windowed custom
 ramp discarded 35% of viridis for no measured gain.
 
-**WARN is not FAIL.** Seven of the 19 rows are advisory — they can return
+**WARN is not FAIL.** Seven of the 20 rows are advisory — they can return
 `"warn"` but never `False` — and `ADVISORY_GATES` in `check_figure.py` is the
 list. A sub-3:1 hue is legal when it carries a direct label; a heatmap panel
 legitimately measures 0.98 ink coverage. Failing those would train people to
@@ -279,7 +287,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 416 tests, and
+**Gates are tested for their ability to fail.** The suite is 481 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

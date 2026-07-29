@@ -37,6 +37,7 @@ people who measured it:
 |---|---|---|
 | Sequential / ordinal | `cmap="viridis"` | a hand-built ramp |
 | Diverging | `cmap="RdBu"` (`RdBu_r` if low = blue) | two hand-picked poles |
+| Cyclic (phase, angle, heading) | `cmap="twilight"` | a sequential ramp with a seam at the wrap |
 | Colorblind-safe categorical | `colormaps["okabe_ito"]` (matplotlib ≥ 3.11) | a private palette |
 | Defaults: type, ink, spines, grid | `assets/figure.mplstyle` | an rcParams dict in the plotting file |
 | Layout | `constrained_layout=True` | manual `subplots_adjust` |
@@ -296,6 +297,19 @@ contrast obligation and windowing it only throws range away. The one exception:
 *discrete tiers drawn as standalone lines or marks* do stand alone against the
 page, and full-range viridis ends at `#fde725`, 1.26:1, invisible as a hairline
 — sample `t ∈ [0.05, 0.70]`, evenly.
+
+**A colormap's kind is measured, not taken on the name.** `check_figure.py`
+samples the map, reads its OKLab lightness, and classifies it sequential,
+diverging, cyclic, qualitative, or `misc`; `misc` fails. `jet`, `rainbow`, `hsv`
+and `gist_ncar` are `misc`, because a reader cannot put two of their values in
+order. Phase, angle and heading are cyclic and take `twilight`: they close the
+loop, and a sequential ramp on them draws a seam where the data is continuous.
+
+**The key follows the kind.** A colorbar is a ruler, so the three continuous
+kinds get one and categories get a legend instead — a bar beside categories is a
+scale along nothing. A value outside the measured range ("did not converge", "no
+data") is a separate class and not a small value: draw it in an explicit neutral
+and key it *off* the bar, never as `cmap(0)`.
 
 **Categorical or ordinal is the decision that matters,** and the intuitive
 answer is usually wrong. Categorical = independent identities. Ordinal = ordered

@@ -318,13 +318,12 @@ def test_the_readme_states_the_advisory_count_it_marks():
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    words = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
     claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", README.read_text())
     assert claimed, ("the README no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
-    assert word in words, f"unreadable advisory count {word!r}"
-    assert words[word] == len(cf.ADVISORY_GATES)
+    assert word in WORD_NUMBERS, f"unreadable advisory count {word!r}"
+    assert WORD_NUMBERS[word] == len(cf.ADVISORY_GATES)
 
 
 def test_every_advisory_gate_is_a_gate_that_exists():
@@ -367,6 +366,176 @@ def test_no_advisory_gate_ever_returns_false():
         bad = [r for r in returns if r.startswith(("False", "(False", "ok,",
                                                    "(ok", "not "))]
         assert not bad, f"{name} has a returning-False path: {bad}"
+
+
+# --- the threshold column ----------------------------------------------------
+# Four rosters are held to `audit()`: the module docstring, the README table's
+# first column, SKILL.md's sentence, and the advisory tags. The numbers beside
+# them were held to nothing. Eleven of the twenty rows name a constant and quote
+# its value, and every one of them agreed on the day this was written - which is
+# the argument for writing it, not against. `#fcfcfb` was the surface the
+# contrast table really had been computed against; `#898781` really was in the
+# style sheet; the test count really was 171. Each was right when it was typed.
+# This column is eleven claims of that shape with no machinery under them.
+
+THRESHOLD_CONST = re.compile(
+    r"`([A-Z][A-Z0-9_]*(?:\s*,\s*[A-Z][A-Z0-9_]*)*)\s*=\s*([^`]+)`")
+
+# Rows whose threshold is a phrase rather than a constant. A literal set, so
+# that a gate arriving with an unquantified threshold is a decision someone
+# writes down - the discipline `ADVISORY_GATES` already imposes on the other
+# optional column. Two of these are checkable numbers wearing prose and have
+# their own tests below; the remaining seven have nothing to check.
+PROSE_THRESHOLDS = {
+    "Clipping",           # canvas bounds
+    "Text collision",     # bbox overlap
+    "Axis redundancy",    # shared scale
+    "Dual axis",          # no threshold
+    "Form",               # no threshold
+    "Identity channel",   # no threshold
+    "Contour dash",       # no threshold
+    "Style sheet",        # "40 keys", checked below
+    "Fonts",              # "Type 42", checked below
+}
+
+
+def readme_gate_rows():
+    """(gate, threshold) for every row of the README gate table.
+
+    A second read of the table `readme_gate_names` parses, taking the column
+    beside the one that parser takes. Deliberately not folded into it: that
+    function's docstring records a README rewrite which added this very column
+    and turned a regex-based parser into one that silently matched zero rows,
+    and the fix was to stop caring how many columns there are. Reaching into a
+    second cell by index cares again, so it cares here rather than making the
+    roster check care too.
+    """
+    lines = README.read_text().splitlines()
+    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    rows = []
+    for line in lines[start:]:
+        if line.startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) >= 2:
+                rows.append((cells[0], cells[1]))
+        elif rows:
+            break
+    return [(gate, threshold) for gate, threshold in rows
+            if gate != "Gate" and set(gate) != {"-"}]
+
+
+def quoted_thresholds():
+    """(gate, constant, quoted value) for every constant the column names.
+
+    One row declares two in one code span - `INK_MIN, INK_MAX = 0.02, 0.55` -
+    and a pattern written for the single form matches that row zero times
+    rather than failing on it. The names and the values are zipped, and
+    `test_every_quoted_constant_got_a_value` is what makes a row that lists
+    three names and two values a failure instead of a dropped assertion.
+    """
+    out = []
+    for gate, cell in readme_gate_rows():
+        for names, values in THRESHOLD_CONST.findall(cell):
+            for name, value in zip(names.split(","), values.split(",")):
+                out.append((gate, name.strip(), value.strip()))
+    return out
+
+
+def constant_value(name):
+    """(module, value) for a constant named in the table.
+
+    Raises rather than skipping. A constant renamed in code and left in the
+    README is exactly what this gate is for, and a lookup that shrugs at a name
+    it cannot find reports agreement with nothing.
+    """
+    import check_figure as cf
+
+    for module in (cf, cp):
+        if hasattr(module, name):
+            return module.__name__, getattr(module, name)
+    raise AssertionError(
+        f"the README threshold column names {name}, which is in neither "
+        "check_figure.py nor check_palette.py")
+
+
+def test_the_threshold_column_is_still_parseable():
+    """Every row either quotes a constant or is a named exception. Written this
+    way rather than as a count so that it stays true as gates are added, and
+    still fails loudly if the column moves or changes shape."""
+    quoted = {gate for gate, _, _ in quoted_thresholds()}
+    silent = [gate for gate, _ in readme_gate_rows()
+              if gate not in quoted and gate not in PROSE_THRESHOLDS]
+    assert not silent, (
+        f"{silent} quote no threshold constant and are not in "
+        "PROSE_THRESHOLDS - either the cell names a constant in a form "
+        "THRESHOLD_CONST no longer matches, or the row genuinely has no "
+        "number and belongs in the set")
+
+
+def test_the_prose_thresholds_are_gates_that_exist():
+    assert PROSE_THRESHOLDS <= set(audit_gate_names()), (
+        "PROSE_THRESHOLDS names rows the README table does not have: "
+        f"{sorted(PROSE_THRESHOLDS - set(audit_gate_names()))}")
+
+
+def test_every_quoted_constant_got_a_value():
+    """`zip` truncates. A cell naming three constants and quoting two values
+    would otherwise drop the third assertion rather than fail."""
+    for gate, cell in readme_gate_rows():
+        for names, values in THRESHOLD_CONST.findall(cell):
+            assert len(names.split(",")) == len(values.split(",")), (
+                f"{gate} names {len(names.split(','))} constants and quotes "
+                f"{len(values.split(','))} values: {cell!r}")
+
+
+@pytest.mark.parametrize("gate,name,quoted", quoted_thresholds())
+def test_the_quoted_threshold_is_the_constants_value(gate, name, quoted):
+    module, actual = constant_value(name)
+    try:
+        agrees = float(quoted) == float(actual)
+    except (TypeError, ValueError):
+        agrees = quoted == str(actual)
+    assert agrees, (
+        f"the README's {gate} row quotes {name} = {quoted}; "
+        f"{module}.{name} is {actual!r}. One of the two is wrong, and it is "
+        "not automatically the README")
+
+
+def test_the_style_sheet_row_states_the_number_of_keys_the_sheet_sets():
+    """"40 keys" is a measurement in prose, in a column this file now checks
+    everywhere else. The sheet is the thing that can change under it."""
+    import matplotlib as mpl
+
+    from conftest import STYLE_SHEET
+
+    cell = dict(readme_gate_rows())["Style sheet"]
+    claimed = re.search(r"(\d+)\s+keys", cell)
+    assert claimed, (
+        f"the Style sheet row no longer states a key count: {cell!r}")
+    actual = len(mpl.rc_params_from_file(STYLE_SHEET,
+                                         use_default_template=False))
+    assert int(claimed.group(1)) == actual, (
+        f"the README says figure.mplstyle sets {claimed.group(1)} keys; it "
+        f"sets {actual}")
+
+
+def test_the_fonts_row_names_the_type_the_sheet_declares():
+    """The other prose number. `check_fonts` fails a figure whose rcParams say
+    Type 3, and the only reason they do not is that the shipped sheet declares
+    42 - so the README's claim is really a claim about the sheet."""
+    import matplotlib as mpl
+
+    from conftest import STYLE_SHEET
+
+    cell = dict(readme_gate_rows())["Fonts"]
+    claimed = re.search(r"Type\s+(\d+)", cell)
+    assert claimed, f"the Fonts row no longer names a font type: {cell!r}"
+    params = mpl.rc_params_from_file(STYLE_SHEET, use_default_template=False)
+    for key in ("pdf.fonttype", "ps.fonttype"):
+        assert key in params, f"figure.mplstyle does not set {key}"
+        assert params[key] == int(claimed.group(1)), (
+            f"the README says {claimed.group(0)}; figure.mplstyle sets "
+            f"{key} to {params[key]}")
 
 
 # --- the ink tokens the guide hands you --------------------------------------
@@ -865,3 +1034,301 @@ def test_no_document_teaches_the_pathless_alt_metadata_call():
         f"{bad} pass alt_metadata a figure and no path. That returns "
         "'Description', which matplotlib warns about on every PDF save and "
         "which SVG rejects outright - pass the path too")
+
+
+# --- the colormap kinds the guide names --------------------------------------
+# The guide now recommends a colormap per kind and states which key that kind
+# takes. "twilight is cyclic" is a claim about `cmap_kind()`, in the same class
+# as every contrast ratio in this file: prose asserting something the code
+# computes. It is also the first claim of that class the guide has ever made
+# about a colormap, and the gate row that motivated it shipped with a table row
+# and no explanation anywhere, so the join is worth having from the start.
+
+KIND_ROW = re.compile(
+    r"^\|\s*(Sequential|Diverging|Cyclic|Qualitative)\s*\|[^|]*\|\s*"
+    r"`([A-Za-z_0-9]+)`\s*\|")
+MISC_CLAIM = re.compile(
+    r"((?:`[A-Za-z_0-9]+`(?:,\s*|\s+and\s+)?)+)\s*land there")
+
+
+def guide_kind_claims():
+    """(kind, colormap) for every row of the guide's kind table."""
+    return [(m.group(1).lower(), m.group(2))
+            for m in map(KIND_ROW.match, GUIDE.read_text().splitlines()) if m]
+
+
+def guide_misc_claims():
+    """The colormaps the guide names as failing."""
+    match = MISC_CLAIM.search(" ".join(GUIDE.read_text().split()))
+    return re.findall(r"`([A-Za-z_0-9]+)`", match.group(1)) if match else []
+
+
+def cmap_levels(name):
+    """The guide's colormap, sampled the way `check_colormap` samples it."""
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+
+    cmap = colormaps[name]
+    if cmap.N < cp.CMAP_QUALITATIVE_N:
+        return [to_hex(cmap(i)) for i in range(cmap.N)]
+    return [to_hex(cmap(i / (cp.CMAP_SAMPLES - 1)))
+            for i in range(cp.CMAP_SAMPLES)]
+
+
+def test_the_kind_table_is_still_parseable():
+    """Four kinds, four rows. A parser that matched three would let one
+    recommendation go unchecked and report agreement about the rest."""
+    claims = guide_kind_claims()
+    assert len(claims) == 4, (
+        f"expected the guide's four kind rows, matched {claims}")
+
+
+def test_the_misc_sentence_is_still_parseable():
+    assert guide_misc_claims(), (
+        "the guide no longer names the colormaps that classify misc in the "
+        "form this test reads - the sentence was rewritten")
+
+
+@pytest.mark.parametrize("kind,name", guide_kind_claims())
+def test_the_colormap_the_guide_recommends_is_that_kind(kind, name):
+    from matplotlib import colormaps
+
+    if name not in colormaps:
+        pytest.skip(f"this matplotlib has no {name} colormap")
+    measured = cp.cmap_kind(cmap_levels(name))
+    assert measured == kind, (
+        f"the guide recommends {name} for {kind} encodings; cmap_kind() "
+        f"classifies it {measured}, so the gate would judge it as one")
+
+
+@pytest.mark.parametrize("name", guide_misc_claims())
+def test_the_colormaps_the_guide_condemns_do_fail(name):
+    from matplotlib import colormaps
+
+    if name not in colormaps:
+        pytest.skip(f"this matplotlib has no {name} colormap")
+    measured = cp.cmap_kind(cmap_levels(name))
+    assert measured == "misc", (
+        f"the guide says {name} classifies misc and fails; cmap_kind() "
+        f"returns {measured}, which passes")
+
+
+# --- constants quoted in the reference material ------------------------------
+# The README's threshold column is checked above. The guide quotes constants
+# too, now that it explains how the kind is measured, and a guide that names a
+# threshold is making the same executable claim a table cell does. One pattern,
+# both documents, so a constant renamed in code cannot be left standing in
+# either.
+
+CONSTANT_DOCS = [GUIDE, SKILL_MD]
+
+
+def doc_constant_claims():
+    out = []
+    for path in CONSTANT_DOCS:
+        for names, values in THRESHOLD_CONST.findall(path.read_text()):
+            for name, value in zip(names.split(","), values.split(",")):
+                out.append((path.name, name.strip(), value.strip()))
+    return out
+
+
+def test_the_reference_material_still_quotes_constants():
+    """This gate is only worth its line count while something matches it. If
+    the guide stops naming thresholds the test should be removed, not left
+    passing on an empty parse."""
+    assert doc_constant_claims(), (
+        f"{[p.name for p in CONSTANT_DOCS]} quote no `NAME = value` constants "
+        "in the form this test reads")
+
+
+@pytest.mark.parametrize("document,name,quoted", doc_constant_claims())
+def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
+                                                          quoted):
+    module, actual = constant_value(name)
+    try:
+        agrees = float(quoted) == float(actual)
+    except (TypeError, ValueError):
+        agrees = quoted == str(actual)
+    assert agrees, (
+        f"{document} quotes {name} = {quoted}; {module}.{name} is {actual!r}")
+
+
+# --- the roster count, written in prose seven times ---------------------------
+# The gate table's rows are checked against `audit()`. The number of them is
+# stated in prose beside it, and that was not: the colormap gate took the roster
+# from 19 to 20, updated two of the seven places the README says how many there
+# are, and left five reading 19 - including "20 passing rows means the figure
+# avoids 20 named defects", which is the sentence that tells a reader what a
+# passing run means.
+#
+# One sentence is deliberately not here. "A figure on matplotlib's default
+# tab10 cycle ... returned nothing but passing rows" recounts an incident that
+# happened at a particular roster size, and pinning it to today's count would
+# make a historical anecdote drift every time a gate is added. It had a number
+# in it and the number is now gone, which is the fix for that class rather than
+# an exemption from this one.
+
+WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+                "ten": 10}
+
+ROSTER_COUNT_CLAIMS = {
+    "the audit() summary": r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows",
+    "the report() comment": r"prints (\d+) rows, returns True if ok",
+    "the series-color row number": r"That is row 11 of the (\d+)",
+    "the gate table lead-in": r"`audit\(\)` returns these (\d+) rows",
+    "the elimination-gate claim": r"(\d+) passing rows means the",
+    "the named-defect count": r"figure avoids (\d+) named defects",
+    "the advisory paragraph": r"of the (\d+) rows are advisory",
+}
+
+
+def roster_count_claims():
+    text = " ".join(README.read_text().split())
+    return {label: re.search(pattern, text)
+            for label, pattern in ROSTER_COUNT_CLAIMS.items()}
+
+
+def test_every_roster_count_claim_is_still_stated():
+    """A regex that matches nothing agrees with everything, and this file has
+    seven of them pointed at one document."""
+    missing = [label for label, match in roster_count_claims().items()
+               if not match]
+    assert not missing, (
+        f"{missing} no longer state the roster count in the form this test "
+        "reads - the sentence was rewritten and ROSTER_COUNT_CLAIMS needs "
+        "updating with it")
+
+
+@pytest.mark.parametrize("label", sorted(ROSTER_COUNT_CLAIMS))
+def test_the_readme_states_the_real_roster_count(label):
+    match = roster_count_claims()[label]
+    assert int(match.group(1)) == len(audit_gate_names()), (
+        f"{label} says {match.group(1)} gates; `audit()` returns "
+        f"{len(audit_gate_names())}")
+
+
+# --- how many figures the gallery has ----------------------------------------
+# Same shape, one document over. The seventh figure landed in `gallery.py` and
+# in `docs/gallery.md`, and the README kept describing six and enumerating six
+# forms. The count is executable - it is how many times the script calls
+# `finish` - so nothing here needs to agree with anything but the script.
+
+GALLERY_PY = README.parent / "examples" / "gallery.py"
+
+GALLERY_COUNT_CLAIMS = {
+    "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
+    "the gallery page": (DOCS_GALLERY, r"builds these (\w+) and audits"),
+    "the README": (README, r"Writing those (\w+) found"),
+}
+
+
+def gallery_figure_count():
+    """The executable roster: the figures `gallery.py` actually finishes."""
+    return len(re.findall(r'finish\(\s*\w+,\s*"gallery-',
+                          GALLERY_PY.read_text()))
+
+
+def gallery_count_claims():
+    return {label: re.search(pattern, " ".join(path.read_text().split()))
+            for label, (path, pattern) in GALLERY_COUNT_CLAIMS.items()}
+
+
+def test_the_gallery_roster_is_still_readable():
+    assert gallery_figure_count() > 1, (
+        "matched no `finish(fig, \"gallery-...\")` calls in gallery.py - the "
+        "script was restructured and gallery_figure_count() needs updating")
+    missing = [label for label, match in gallery_count_claims().items()
+               if not match]
+    assert not missing, (
+        f"{missing} no longer state how many figures the gallery has in the "
+        "form this test reads")
+
+
+@pytest.mark.parametrize("label", sorted(GALLERY_COUNT_CLAIMS))
+def test_every_source_states_the_real_gallery_count(label):
+    word = gallery_count_claims()[label].group(1).lower()
+    assert word in WORD_NUMBERS, f"{label} states an unreadable count {word!r}"
+    assert WORD_NUMBERS[word] == gallery_figure_count(), (
+        f"{label} says {word} figures; gallery.py builds "
+        f"{gallery_figure_count()}")
+
+
+# --- every gate has somewhere to send a reader --------------------------------
+# The fifth roster, and the one that is not a roster: the README table says what
+# a gate measures, the reference material says why the rule is there and what to
+# do instead, and nothing joined them. The colormap gate is the proof - it
+# shipped with a table row, a threshold, an advisory tag, four rosters updated,
+# and no explanation anywhere a reader would look. The suite was green.
+#
+# Prose does not use the gate's label, so the join is written down, the same way
+# `FIGURE_PROSE` is. Asserted complete against `audit()`, so a twenty-first gate
+# goes stale loudly instead of quietly having no guidance.
+
+GUIDE_FILES = {
+    "style-guide.md": GUIDE,
+    "choosing-a-form.md": SKILL / "references" / "choosing-a-form.md",
+}
+
+GUIDANCE_ANCHORS = {
+    "Text collision": ("style-guide.md",
+                       "hides the collision by deleting the data underneath"),
+    "Text readability": ("style-guide.md", "4.5:1, or 3:1 at ≥14pt bold"),
+    "Contrast stack": ("style-guide.md", "One thing opaque; ≤3 alpha levels"),
+    "Mark ratio": ("style-guide.md",
+                   "Emphasis = shape or label, not 5× the area"),
+    "Overplotting": ("choosing-a-form.md",
+                     "At large n, marks stop being individually visible"),
+    "Axis redundancy": ("style-guide.md",
+                        "Shared scale → shared axis furniture"),
+    "Type size": ("style-guide.md", "fails any string under 7.5pt on page"),
+    "Line weight": ("style-guide.md",
+                    "Strokes have the same problem and the same arithmetic"),
+    "Series color": ("style-guide.md", "### Categorical: Okabe-Ito"),
+    "Dual axis": ("choosing-a-form.md", "**Dual y axes.**"),
+    "Form": ("choosing-a-form.md", "The forms with no research-figure use"),
+    "Identity channel": ("style-guide.md",
+                         "add a second channel when it must survive a "
+                         "photocopier"),
+    "Label attribution": ("style-guide.md",
+                          "### Direct labels: the alignment is the decision"),
+    "Style sheet": ("style-guide.md", "**Build** on `figure.mplstyle`"),
+    "Contour dash": ("style-guide.md",
+                     '`linestyles="solid"` to `contour` on signed data'),
+    "Colormap kind": ("style-guide.md", "### Which kind, and the key it takes"),
+    "Fonts": ("style-guide.md", "**Embed fonts as Type 42.**"),
+    "Alt text": ("style-guide.md", "shipped with no alt text"),
+}
+
+# Gates the reference material does not explain. Named rather than absent: an
+# enumerable debt is worth more than a map that quietly covers eighteen of
+# twenty. Both are mechanical rows with nothing to advise - a clipped label is
+# fixed by moving it, and an ink fraction is read off the figure - but if
+# either grows a rule it belongs in the guide and out of this set.
+NO_GUIDANCE = {"Clipping", "Ink coverage"}
+
+
+def test_the_guidance_map_covers_exactly_the_gates_that_exist():
+    """Asserted before the test below draws conclusions from the map. A map
+    missing a gate would otherwise let that gate go unexplained and unnoticed,
+    which is how `Colormap kind` shipped without a word of guidance."""
+    mapped = set(GUIDANCE_ANCHORS) | NO_GUIDANCE
+    assert mapped == set(audit_gate_names()), (
+        "the guidance map is out of date with the roster `audit()` returns: "
+        f"{sorted(mapped ^ set(audit_gate_names()))}")
+
+
+def test_no_gate_is_both_explained_and_exempt():
+    assert not (set(GUIDANCE_ANCHORS) & NO_GUIDANCE), (
+        f"{sorted(set(GUIDANCE_ANCHORS) & NO_GUIDANCE)} are in both the "
+        "anchor map and the exemption set")
+
+
+@pytest.mark.parametrize("gate", sorted(GUIDANCE_ANCHORS))
+def test_every_gate_has_guidance_a_reader_can_find(gate):
+    document, anchor = GUIDANCE_ANCHORS[gate]
+    text = " ".join(GUIDE_FILES[document].read_text().split())
+    assert anchor in text, (
+        f"{gate} is anchored to {document} at {anchor!r}, which is no longer "
+        "in that file. Either the passage was rewritten and the anchor needs "
+        "updating, or the guidance was removed and the gate now explains "
+        "itself nowhere")

@@ -98,6 +98,7 @@ thing or that the reading order runs backwards.
 | Categorical | Okabe-Ito |
 | Sequential / ordinal | `cmap="viridis"` |
 | Diverging | `cmap="RdBu"` or `RdBu_r` |
+| Cyclic | `cmap="twilight"` |
 | Context backdrop | achromatic ramp, below |
 
 ### Categorical: Okabe-Ito
@@ -201,6 +202,71 @@ to hand it to — keep those tiers few and evenly stepped, and validate with
 ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b`{ .sw style="--c:#b1182b" } /
 `#2065ab`{ .sw style="--c:#2065ab" } clear every gate. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
 Never a hue at the midpoint; never two cool poles.
+
+### Cyclic: `twilight`, as shipped
+
+An angle has no ends. Phase, heading, direction, time of day: the last value is
+adjacent to the first, and a ramp that starts dark and ends light draws a seam
+straight across the figure at the one place the data is continuous. `twilight`
+and `twilight_shifted` close the loop and are monotone in lightness over each
+half, so a reader can still order two values within a half turn.
+
+```python
+ax.imshow(np.angle(w), cmap="twilight", vmin=-np.pi, vmax=np.pi)
+```
+
+Tick the bar at both ends and the centre. The two ends are the same colour
+because they are the same angle, and a bar that does not show that reads as a
+scale someone got wrong.
+
+### Which kind, and the key it takes
+
+Four kinds, four questions. The kind is a property of the data, not a
+preference, and picking the wrong one is not a matter of taste: it claims an
+ordering the values do not have, or hides one they do.
+
+| Kind | The question it answers | matplotlib | Key |
+|---|---|---|---|
+| Sequential | can a reader put two values in order? | `viridis` | colorbar |
+| Diverging | is there a middle the values are signed around? | `RdBu` | colorbar, centred on that middle |
+| Cyclic | does the last value touch the first? | `twilight` | colorbar, ticked at both ends and the centre |
+| Qualitative | are the levels identities, with no order to read? | `okabe_ito` | legend |
+
+**A colorbar is a ruler, so it needs something to be a ruler along.** The three
+continuous kinds have one. Categories do not, and a bar drawn beside them is a
+scale along nothing: name them in a legend instead. The same rule decides where
+a value that falls outside the measured range goes. "Did not converge", "no
+data", "censored" are separate classes, not small values, so they are drawn in
+an explicit neutral and keyed *off* the bar, never as `cmap(0)` — the bar is the
+range that was measured, and putting a non-value at the bottom of it claims a
+quantity nobody measured.
+
+`check_figure.py` measures the kind rather than trusting a name, because
+matplotlib groups its colormaps by kind in prose documentation only: there is no
+API and no metadata on a `Colormap` object. It samples `CMAP_SAMPLES = 256`
+levels, converts to OKLab, and reads the lightness channel. Anything under
+`CMAP_QUALITATIVE_N = 40` levels is qualitative and is sent to the categorical
+gates instead. A map whose lightness span is under `CMAP_SPAN_MIN = 0.02` is
+isoluminant and carries no order at all. Otherwise the measure is **back-travel**,
+the fraction of a segment's lightness span spent moving against its own
+direction: under `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential,
+under it over both halves is diverging, or cyclic when the two ends are within
+`CMAP_WRAP_DE_MAX = 3.0` of each other in OKLab ΔE ×100.
+
+Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
+`rainbow`, `hsv` and `gist_ncar` land there. A reader cannot order two values in
+any of them, which is the whole job.
+
+The thresholds are empirical, measured across matplotlib's registry against
+`cmasher.get_cmap_type()` as an oracle; the margins, the three adjudicated
+disagreements, and the one known false positive are in
+`specs/2026-07-28-colormap-kind-gate-design.md`. The theory is Kovesi,
+*Good Colour Maps: How to Design Them* (arXiv:1509.03700).
+
+Kind is not quality. `turbo` passes as diverging because its lightness profile
+genuinely is diverging-shaped; its problem is hue banding, which a
+lightness-only measure cannot see. The row is named "Colormap kind" for that
+reason.
 
 ### Ink, status, backdrop
 
