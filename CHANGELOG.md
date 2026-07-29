@@ -9,6 +9,20 @@ standing in for a fix: unpacking either one the wrong way binds a bool to the
 rows and raises nothing at the call site, so the failure surfaces later,
 somewhere else, as a bool that will not iterate.
 
+**Python 3.11 is the floor.** `requires-python` was `>=3.9`, and 3.9 reached
+end of life on 2025-10-31, so the package was being offered to an interpreter
+upstream had stopped patching. 3.10 goes the same way in October 2026, so the
+floor skips it. Two things deliberately did not move with it:
+
+- **`check_palette.py` still runs on Python 3.8** when vendored, which is what
+  the file is for, and CI still proves it in a job that installs nothing.
+  Installed from PyPI it needs 3.11, because the package carries
+  `check_figure.py` too.
+- **matplotlib stays floored at 3.8.** Pinned matplotlib is normal in
+  scientific environments, the checks are written to survive the 3.8-to-3.11
+  API drift, and the CI leg that pins 3.8.4 now runs under Python 3.11 rather
+  than disappearing.
+
 **`check()` now returns `(ok, rows)`.** If you unpack it, swap the names. The
 paragraph in the README is gone and a test holds both entry points to the same
 shape.

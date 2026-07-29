@@ -16,7 +16,7 @@ Ships with one style sheet and two validators:
 |---|---|---|---|
 | `figure.mplstyle` | `assets/` | matplotlib | visual defaults as a style sheet |
 | `check_palette.py` | `scripts/` | Python 3.8+, stdlib only | color gates, any toolchain |
-| `check_figure.py` | `scripts/` | Python 3.9+, matplotlib 3.8+ | composition + type-size gates |
+| `check_figure.py` | `scripts/` | Python 3.11+, matplotlib 3.8+ | composition + type-size gates |
 
 Copy all three into the project (conventionally `diagrams/`), where they sit beside each
 other as the guide assumes. Only `check_figure.py` is coupled to matplotlib; the

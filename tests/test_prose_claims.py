@@ -504,9 +504,10 @@ def _style_sheet_hexes():
 
 
 # Okabe-Ito in publication order. matplotlib ships it as a colormap from 3.11,
-# and this project supports 3.8 upward, so a module that reads
+# and this project floors at matplotlib 3.8, so a module that reads
 # `colormaps["okabe_ito"]` at import fails collection on every older matplotlib
-# rather than failing one test. `test_palette.py` and `test_example.py` both
+# rather than failing one test. Raising the Python floor to 3.11 does not
+# change that: the matplotlib floor is separate and deliberately lower. `test_palette.py` and `test_example.py` both
 # guard the same lookup with a skip; this needs the colours themselves, so it
 # carries them and checks the copy against matplotlib wherever matplotlib has
 # them.

@@ -308,8 +308,14 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 - `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8, 3.9,
   3.11 and 3.13. Copied, it runs on 3.8; installed from PyPI it does not,
-  because the package carries `check_figure.py` too and that needs 3.9.
-- `check_figure.py` — Python 3.9+, matplotlib 3.8+.
+  because the package carries `check_figure.py` too and that needs 3.11. The
+  vendoring case is the one that matters here, and a job with no install in it
+  is what keeps the 3.8 claim true.
+- `check_figure.py` — Python 3.11+, matplotlib 3.8+. The Python floor is
+  support status, not syntax: 3.9 reached end of life in October 2025, and
+  3.10 follows in October 2026. The matplotlib floor is deliberately older,
+  because pinned matplotlib is normal in scientific environments and the
+  checks are written to survive it.
 - `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the
   palette is eight hex strings, listed in the style guide.
 
