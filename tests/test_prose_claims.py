@@ -27,10 +27,10 @@ A new paragraph then cannot introduce an unchecked claim quietly. It either
 resolves, or it fails until somebody writes down why it cannot.
 """
 
+import ast
 import inspect
 import pathlib
 import re
-import sys
 
 import pytest
 
@@ -43,12 +43,12 @@ from matplotlib.colors import to_hex                         # noqa: E402
 from matplotlib.figure import Figure                         # noqa: E402
 import matplotlib.patheffects                                # noqa: E402
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skill"
-sys.path.insert(0, str(SKILL / "scripts"))
+from conftest import SKILL                                   # noqa: E402
 
 import check_figure as cf                                    # noqa: E402
 import check_palette as cp                                   # noqa: E402
+
+ROOT = SKILL.parent
 
 GUIDE = SKILL / "references" / "style-guide.md"
 FORMS = SKILL / "references" / "choosing-a-form.md"
@@ -106,7 +106,6 @@ def test_every_fenced_python_block_parses(document, index, source):
     the class of defect that ships when an example is edited in prose rather
     than in an editor.
     """
-    import ast
     try:
         ast.parse(source)
     except SyntaxError as exc:
@@ -145,7 +144,7 @@ MPL_NAMES = _matplotlib_names()
 # spans because they are terms of art, not because they name code.
 VOCABULARY = {"misc", "sequential", "diverging", "cyclic", "qualitative",
               "warn", '"warn"', "True", "False", "None", "ggplot2",
-              "facet_wrap", "hexbin", "n", "figure.mplstyle"}
+              "facet_wrap", "n"}
 
 
 def _cli_flags(module):
@@ -199,7 +198,7 @@ def _parameter_names():
         for _, obj in inspect.getmembers(module, inspect.isfunction):
             try:
                 names |= set(inspect.signature(obj).parameters)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError):   # builtins have no signature
                 pass
     return names
 
@@ -365,6 +364,22 @@ def test_the_unresolved_ledger_has_no_stale_entries():
         "prose. Drop them from UNRESOLVED_SPANS")
 
 
+def test_no_vocabulary_entry_is_one_a_resolver_now_handles():
+    """`figure.mplstyle` and `hexbin` sat in that set claiming to be terms of
+    art. One is a file that ships and one is a matplotlib method, and both
+    resolve on their own, so listing them exempted two real claims from being
+    checked at all."""
+    saved = set(VOCABULARY)
+    VOCABULARY.clear()
+    try:
+        redundant = sorted(v for v in saved if resolve(v) is not None)
+    finally:
+        VOCABULARY.update(saved)
+    assert not redundant, (
+        f"{redundant} resolve without being called vocabulary. Take them out "
+        "of VOCABULARY so the resolver checks them")
+
+
 def test_no_ledger_entry_is_one_a_resolver_now_handles():
     """An excused span that resolves is a resolver improvement nobody noticed,
     and it leaves the span exempt from the check it would now pass."""
@@ -392,19 +407,25 @@ def test_the_hex_sweep_rejects_a_colour_nothing_ships():
     assert "#123456" not in KNOWN_HEXES
 
 
-def test_the_end_claim_pattern_catches_an_interior_sample():
+def test_the_end_claim_sweep_catches_both_hexes_of_the_old_sentence():
     """`#b1182b` was called an RdBu pole for as long as that section existed.
-    This is that sentence, and the assertion it now has to survive."""
-    claimed = "#b1182b"
+
+    Both halves matter. The first version of this extractor took one hex per
+    keyword, so ``Poles `#a` / `#b``` had its second colour checked by nothing,
+    which is half the defect still shipping under a passing test.
+    """
+    sentence = "Poles `#b1182b` / `#2065ab` clear every gate."
+    found = [h for s in _sentences(sentence) if END_WORDS.search(s)
+             for h in HEX_SPAN.findall(s)]
+    assert found == ["#b1182b", "#2065ab"], (
+        f"the sweep pulls {found} out of the sentence it exists for, so a "
+        "return of the same defect would go unchecked")
+
     rdbu = colormaps["RdBu"]
     ends = {to_hex(rdbu(t))[:7].lower() for t in (0.0, 1.0)}
-    middle = to_hex(rdbu(0.5))[:7].lower()
-    assert claimed not in ends | {middle}, (
-        "RdBu now has #b1182b at an end or its midpoint, which would make the "
-        "sentence this test was written for correct after all")
-    assert END_CLAIM.search(f"Poles `{claimed}` / `#2065ab` clear every gate"), (
-        "the pattern no longer recognises the sentence shape it exists to "
-        "catch, so the gate would pass a return of the same defect")
+    assert not {h.lower() for h in found} & (ends | {to_hex(rdbu(0.5))[:7]}), (
+        "RdBu now has one of those at an end or its midpoint, which would "
+        "make the sentence this test was written for correct after all")
 
 
 # --- constants belong to the module the sentence names -----------------------
@@ -501,14 +522,28 @@ def test_every_hex_in_the_prose_is_a_colour_something_ships(document, hexcode):
 # `#b1182b` was called an RdBu pole for as long as the section existed. It is
 # the map at t=0.098. The claim is positional, so the check is positional.
 
-END_WORDS = r"(?:pole|poles|end|ends|extreme|extremes|midpoint|centre|center)"
-END_CLAIM = re.compile(
-    rf"{END_WORDS}[^.`]{{0,80}}?`(#[0-9a-fA-F]{{6}})`", re.I)
+END_WORDS = re.compile(
+    r"\b(?:pole|poles|end|ends|extreme|extremes|midpoint|centre|center)\b",
+    re.I)
+HEX_SPAN = re.compile(r"`(#[0-9a-fA-F]{6})`")
+
+
+def _sentences(text):
+    """Crude, and crude in the safe direction. Running two sentences together
+    over-reports, which fails loudly. Splitting mid-sentence under-reports,
+    which is the silent direction. `.py` and a decimal keep their periods
+    because the split needs whitespace after one."""
+    return re.split(r"(?<=[.:])\s+", " ".join(text.split()))
 
 
 def end_claims():
     """(document, colormap, hex) for every sentence calling a hex an end or a
     midpoint of a named colormap.
+
+    Sentence-scoped rather than a fixed window after the keyword. The window
+    version took the first hex after "Poles" and stopped, so
+    ``Poles `#a` / `#b``` had its second colour checked by nothing, which is
+    half of the exact defect this test exists for.
 
     The colormap is taken from the nearest preceding heading, which is how the
     guide is organised: one map per `###` section.
@@ -523,9 +558,11 @@ def end_claims():
                 current = found[0] if found else current
             if current is None:
                 continue
-            for m in END_CLAIM.finditer(line):
-                out.append((path.name, current, m.group(1).lower()))
-    return out
+            for sentence in _sentences(line):
+                if END_WORDS.search(sentence):
+                    out.extend((path.name, current, h.lower())
+                               for h in HEX_SPAN.findall(sentence))
+    return sorted(set(out))
 
 
 @pytest.mark.parametrize("document,cmap_name,hexcode", end_claims())
@@ -825,8 +862,10 @@ def _gate_functions():
 
 @pytest.mark.parametrize("gate", sorted(_gate_functions()))
 def test_a_gates_message_either_names_a_fix_or_is_named_here(gate):
-    source = inspect.getsource(_gate_functions()[gate])
-    has_clause = "<-" in source
+    tree = ast.parse(inspect.getsource(_gate_functions()[gate]).lstrip())
+    has_clause = any("<-" in node.value for node in ast.walk(tree)
+                     if isinstance(node, ast.Constant)
+                     and isinstance(node.value, str))
     excused = gate in MESSAGES_WITHOUT_A_FIX_CLAUSE
     assert has_clause != excused, (
         f"{gate} {'carries' if has_clause else 'carries no'} a `<-` "
@@ -847,8 +886,7 @@ def test_a_gates_declared_needs_are_the_arguments_it_takes(gate):
     assert set(gate.needs) <= set(params), (
         f"{gate.name} declares needs={gate.needs}, and its signature is "
         f"{tuple(params)}")
-    supplied = {"r", "canvas", "scale", "placed_frac", "venue", "context_axes"}
-    unfed = sorted((set(params) & supplied) - set(gate.needs))
+    unfed = sorted((set(params) & set(cf.GATE_INPUTS)) - set(gate.needs))
     assert not unfed, (
         f"{gate.name} takes {unfed}, which audit knows how to supply and this "
         "row does not ask for. The gate runs on the default instead, which is "

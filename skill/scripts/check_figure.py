@@ -1950,6 +1950,13 @@ def check_style_sheet(fig):
                     "in the sheet was written with a leading #")
 
 
+# Everything `audit` can hand a gate, named once. A gate asks for a subset of
+# these in its `needs`, and a gate that takes one of them without asking runs on
+# the default instead - measuring against a 1.0 page scale, say, on a figure
+# placed at half width. The test suite reads this to catch that.
+GATE_INPUTS = ("r", "canvas", "scale", "placed_frac", "venue", "context_axes")
+
+
 class Gate(NamedTuple):
     """One row of the audit: what it is called, what runs it, what it needs.
 
@@ -2023,9 +2030,8 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     reading as saturated.
     """
     r, canvas = _renderer(fig)
-    available = {"r": r, "canvas": canvas, "scale": scale,
-                 "placed_frac": placed_frac, "venue": venue,
-                 "context_axes": context_axes}
+    available = dict(zip(GATE_INPUTS,
+                         (r, canvas, scale, placed_frac, venue, context_axes)))
     # Passed by name, not by position. The gates take these in different
     # orders, and a registry that supplied them positionally would hand a
     # renderer to a `scale` parameter the moment a signature was reordered,

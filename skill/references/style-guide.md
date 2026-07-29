@@ -235,10 +235,10 @@ to hand it to — keep those tiers few and evenly stepped, and validate with
 ColorBrewer, colorblind-safe, in matplotlib. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
 Never a hue at the midpoint; never two cool poles.
 
-**Take discrete levels from inside the ends, the way viridis is windowed.** As shipped
-the map runs to `#67001f`{ .sw style="--c:#67001f" } and `#053061`{ .sw style="--c:#053061" },
-and handed to `check_palette.py` as swatches both fall outside the lightness band, the
-dark blue under the chroma floor as well. `t ∈ [0.1, 0.9]` gives
+**Take discrete levels from inside the ends, the way viridis is windowed.** Its ends as
+shipped are `#67001f`{ .sw style="--c:#67001f" } and `#053061`{ .sw style="--c:#053061" }.
+Handed to `check_palette.py` as swatches, both fall outside the lightness band, the dark
+blue under the chroma floor as well. `t ∈ [0.1, 0.9]` gives
 `#b1182b`{ .sw style="--c:#b1182b" } / `#2065ab`{ .sw style="--c:#2065ab" }, which clear
 every gate. A continuous fill is unaffected: the colormap gate reads the kind, and only
 runs the swatch gates on a map discrete enough to count as qualitative.
