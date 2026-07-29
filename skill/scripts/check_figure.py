@@ -44,6 +44,7 @@ import itertools
 import math
 from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -75,15 +76,12 @@ MAX_SERIES_HUES = 6
 # gave Overplotting and Contour dash a "Fails when" they cannot do, and the
 # count said five against an actual seven. `tests/test_docs_match_code.py`
 # reads this set and holds the prose to it.
-ADVISORY_GATES = frozenset({
-    "Overplotting",
-    "Ink coverage",
-    "Identity channel",
-    "Style sheet",
-    "Contour dash",
-    "Fonts",
-    "Alt text",
-})
+# Built from `GATES` at the bottom of this module, where each row declares
+# whether it is advisory beside the function that decides it. It was a second
+# hand-maintained list of the same twenty names for a while, which is two places
+# to update and one of them silently optional.
+def _advisory_gates():
+    return frozenset(gate.name for gate in GATES if gate.advisory)
 
 # Ink and furniture from `figure.mplstyle`. These land in `ax.lines` and
 # `ax.patches` beside the data - reference rules, annotation boxes, spine-colored
@@ -1208,7 +1206,7 @@ def check_series_color(fig):
                              "  <- the color cycle wrapped")
 
         if len(distinct) >= 2 and cp is not None:
-            rows, _ = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
+            _, rows = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
             for name, status, detail in rows:
                 if not name.startswith(("CVD separation", "Normal-vision floor")):
                     continue
@@ -1697,7 +1695,7 @@ def check_colormap(fig):
             continue
 
         if kind == "qualitative":
-            rows, _ = cp.check(levels, all_pairs=True)
+            _, rows = cp.check(levels, all_pairs=True)
             bad = [detail.split("  <-")[0].strip()
                    for row_name, status, detail in rows
                    if row_name.startswith(("CVD separation",
@@ -1952,6 +1950,57 @@ def check_style_sheet(fig):
                     "in the sheet was written with a leading #")
 
 
+class Gate(NamedTuple):
+    """One row of the audit: what it is called, what runs it, what it needs.
+
+    `needs` is the part worth having. The gates do not take the same arguments
+    - some want the renderer, some the already-drawn canvas, some the page
+    scale - and for as long as `audit` spelled each call out by hand, that
+    variation was twenty hand-written argument lists nobody could see the shape
+    of. Declaring it makes the variation data: `audit` supplies what a gate
+    asks for, and a new gate says what it wants rather than being wired in.
+
+    The signatures themselves stay as they are. A gate that takes a renderer
+    says so in its own parameters, and `check_ink(fig, context_axes=[ax])` is a
+    call the style guide teaches a reader to write. Hiding both behind one
+    context object would cost more than the uniformity is worth.
+    """
+    name: str
+    func: object
+    advisory: bool = False
+    needs: tuple = ()
+
+
+GATES = (
+    Gate("Clipping", check_clipping, needs=("r",)),
+    Gate("Text collision", check_collisions, needs=("r",)),
+    Gate("Text readability", check_text_readability,
+         needs=("r", "canvas", "scale", "placed_frac", "venue")),
+    Gate("Contrast stack", check_contrast_stack),
+    Gate("Mark ratio", check_mark_ratio),
+    Gate("Overplotting", check_overplotting, advisory=True),
+    Gate("Axis redundancy", check_redundancy, needs=("r",)),
+    Gate("Type size", check_type_size,
+         needs=("r", "scale", "placed_frac", "venue")),
+    Gate("Line weight", check_line_weight,
+         needs=("scale", "placed_frac", "venue")),
+    Gate("Ink coverage", check_ink, advisory=True,
+         needs=("context_axes", "canvas")),
+    Gate("Series color", check_series_color),
+    Gate("Dual axis", check_dual_axis),
+    Gate("Form", check_form),
+    Gate("Identity channel", check_identity_channel, advisory=True),
+    Gate("Label attribution", check_label_attribution, needs=("r",)),
+    Gate("Style sheet", check_style_sheet, advisory=True),
+    Gate("Contour dash", check_contour_dash, advisory=True),
+    Gate("Colormap kind", check_colormap),
+    Gate("Fonts", check_fonts, advisory=True),
+    Gate("Alt text", check_alt_text, advisory=True),
+)
+
+ADVISORY_GATES = _advisory_gates()
+
+
 def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     """Run every gate over a figure. Returns `(ok, rows)`.
 
@@ -1974,29 +2023,16 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     reading as saturated.
     """
     r, canvas = _renderer(fig)
-    rows = [
-        ("Clipping", *check_clipping(fig, r)),
-        ("Text collision", *check_collisions(fig, r)),
-        ("Text readability",
-         *check_text_readability(fig, r, canvas, scale, placed_frac, venue)),
-        ("Contrast stack", *check_contrast_stack(fig)),
-        ("Mark ratio", *check_mark_ratio(fig)),
-        ("Overplotting", *check_overplotting(fig)),
-        ("Axis redundancy", *check_redundancy(fig, r)),
-        ("Type size", *check_type_size(fig, r, scale, placed_frac, venue)),
-        ("Line weight", *check_line_weight(fig, scale, placed_frac, venue)),
-        ("Ink coverage", *check_ink(fig, context_axes, canvas)),
-        ("Series color", *check_series_color(fig)),
-        ("Dual axis", *check_dual_axis(fig)),
-        ("Form", *check_form(fig)),
-        ("Identity channel", *check_identity_channel(fig)),
-        ("Label attribution", *check_label_attribution(fig, r)),
-        ("Style sheet", *check_style_sheet(fig)),
-        ("Contour dash", *check_contour_dash(fig)),
-        ("Colormap kind", *check_colormap(fig)),
-        ("Fonts", *check_fonts(fig)),
-        ("Alt text", *check_alt_text(fig)),
-    ]
+    available = {"r": r, "canvas": canvas, "scale": scale,
+                 "placed_frac": placed_frac, "venue": venue,
+                 "context_axes": context_axes}
+    # Passed by name, not by position. The gates take these in different
+    # orders, and a registry that supplied them positionally would hand a
+    # renderer to a `scale` parameter the moment a signature was reordered,
+    # which is a wrong number rather than an exception.
+    rows = [(gate.name, *gate.func(fig, **{n: available[n]
+                                           for n in gate.needs}))
+            for gate in GATES]
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.
     return all(s is not False for _, s, _ in rows), rows

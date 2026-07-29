@@ -607,7 +607,7 @@ def largest_all_pairs_count():
     """The most slots, taken in order, that clear every gate in all-pairs mode."""
     best = 1
     for n in range(2, len(SERIES_SLOTS) + 1):
-        _, ok = cp.check(SERIES_SLOTS[:n], all_pairs=True)
+        ok, _ = cp.check(SERIES_SLOTS[:n], all_pairs=True)
         if not ok:
             break
         best = n
@@ -770,7 +770,7 @@ def prose_roster(script):
 
 def palette_gate_names():
     """The executable palette roster, in the order `check` returns it."""
-    rows, _ = cp.check(SERIES_SLOTS[:3])
+    _, rows = cp.check(SERIES_SLOTS[:3])
     return [name for name, _, _ in rows]
 
 

@@ -52,7 +52,7 @@ CYCLE = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 assert [c.lower() for c in CYCLE[:3]] == SERIES, (CYCLE[:3], SERIES)
 
 # Prove it before drawing it. This is the cheap half of the method.
-rows, ok = cp.check(SERIES, all_pairs=True)
+ok, rows = cp.check(SERIES, all_pairs=True)
 assert ok, rows
 
 # The halo has to be the surface the figure actually sits on, not a hardcoded

@@ -142,12 +142,13 @@ CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 
 def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozenset()):
-    """Gate a palette. Returns `(rows, ok)`.
+    """Gate a palette. Returns `(ok, rows)`.
 
-    Note the order: `check_figure.audit` returns its pair the other way round,
-    as `(ok, rows)`. Unpacking either one the wrong way binds a bool to the
-    rows and raises nothing, so the README states both and this says it where
-    the call is written.
+    The order matches `check_figure.audit`. It did not until 0.4.0: this
+    returned `(rows, ok)` and the README carried a paragraph warning about the
+    difference, which is documentation standing in for a fix. Unpacking either
+    one the wrong way binds a bool to the rows and raises nothing, so the two
+    were made the same rather than described.
 
     `rows` are `(name, status, detail)`, one per gate, with `status` True or
     False. `ok` is False when any row is.
@@ -185,7 +186,7 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
         ratio = max(gaps) / min(gaps) if gaps and min(gaps) > 0 else float("inf")
         rows.append(("Step uniformity", ratio <= 2.0,
                      f"largest/smallest dL {ratio:.2f}" if gaps else "single step"))
-        return rows, all(r[1] for r in rows)
+        return all(r[1] for r in rows), rows
 
     ink_set = set(ink) if isinstance(ink, frozenset) else set(ink)
     band = [c for c, v in zip(colors, lab)
@@ -250,7 +251,7 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
                  else f"under {CONTRAST_MIN}:1, each needs a visible direct label: {low}"))
 
     ok = all(r[1] is True for r in rows if r[1] != "warn")
-    return rows, ok
+    return ok, rows
 
 
 def main():
@@ -271,7 +272,7 @@ def main():
 
     colors = [c.strip() for c in a.colors.split(",") if c.strip()]
     ink_set = frozenset(c.strip() for c in a.ink.split(",") if c.strip())
-    rows, ok = check(colors, a.surface, a.pairs == "all", a.ordinal, ink_set)
+    ok, rows = check(colors, a.surface, a.pairs == "all", a.ordinal, ink_set)
 
     kind = "ordinal ramp" if a.ordinal else "categorical"
     print(f"\nPalette ({kind}, surface {a.surface}): {len(colors)} slots")

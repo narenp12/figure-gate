@@ -30,7 +30,7 @@ def test_the_example_palette_is_valid_without_the_builtin_colormap():
     import check_palette as cp
     fallback = ["#000000", "#e69f00", "#56b4e9", "#009e73",
                 "#f0e442", "#0072b2", "#d55e00", "#cc79a7"]
-    rows, ok = cp.check(fallback[1:4], all_pairs=True)
+    ok, rows = cp.check(fallback[1:4], all_pairs=True)
     assert ok, rows
 
 

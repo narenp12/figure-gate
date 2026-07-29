@@ -571,8 +571,8 @@ def test_the_rdbu_window_is_the_one_that_passes_the_palette_gates():
     rdbu = colormaps["RdBu"]
     inside = [to_hex(rdbu(t))[:7] for t in (0.1, 0.9)]
     outside = [to_hex(rdbu(t))[:7] for t in (0.0, 1.0)]
-    _, inside_ok = cp.check(inside)
-    _, outside_ok = cp.check(outside)
+    inside_ok, _ = cp.check(inside)
+    outside_ok, _ = cp.check(outside)
     assert inside_ok, f"{inside} no longer clear the palette gates"
     assert not outside_ok, (
         f"{outside} now clear the palette gates, so the guide's instruction to "
@@ -761,34 +761,34 @@ def test_context_axes_turns_a_saturated_surface_into_a_pass():
 
 
 # --- the shapes the prose teaches -------------------------------------------
-# Two entry points return their pair in opposite orders, and the README says so
-# rather than fixing it. While that is the design, the warning has to stay true:
-# a silent flip on either side turns the README's paragraph into the trap it
-# was written to prevent, and `rows, ok = audit(fig)` raises nothing.
+# The two entry points returned their pair in opposite orders until 0.4.0, and
+# the README carried a paragraph about the difference rather than the difference
+# being fixed. Unpacking either one the wrong way binds a bool to the rows and
+# raises nothing. They are the same shape now; this is what stops them drifting
+# apart again.
 
-def test_the_two_entry_points_return_the_orders_the_readme_documents():
+def test_the_two_entry_points_return_the_same_shape():
     text = " ".join(README.read_text().split())
     assert "`audit(fig)` returns `(ok, rows)`" in text, (
         "the README no longer states audit's return order in the form this "
         "test reads")
-    assert "as `(rows, ok)`" in text, (
-        "the README no longer warns that check_palette returns the pair the "
-        "other way round")
 
     fig, ax = plt.subplots(figsize=(3, 2), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
     try:
-        first, second = cf.audit(fig)
+        audit_ok, audit_rows = cf.audit(fig)
     finally:
         plt.close(fig)
-    assert isinstance(first, bool) and isinstance(second, list), (
-        "audit no longer returns (ok, rows); the README teaches an unpacking "
-        "that now binds the wrong names")
+    check_ok, check_rows = cp.check(["#E69F00", "#0072B2"])
 
-    rows, ok = cp.check(["#E69F00", "#0072B2"])
-    assert isinstance(rows, list) and isinstance(ok, bool), (
-        "check_palette.check no longer returns (rows, ok); either fix the "
-        "README's warning or, better, align the two orders")
+    assert isinstance(audit_ok, bool) and isinstance(audit_rows, list), (
+        "audit no longer returns (ok, rows)")
+    assert isinstance(check_ok, bool) and isinstance(check_rows, list), (
+        "check no longer returns (ok, rows). It was aligned to audit in 0.4.0 "
+        "because two orders is a trap that raises nothing")
+    assert all(len(row) == 3 for row in audit_rows + check_rows), (
+        "the (label, status, detail) triple is the other half of the shape "
+        "both entry points promise")
 
 
 def test_both_entry_points_are_documented():
@@ -834,6 +834,32 @@ def test_a_gates_message_either_names_a_fix_or_is_named_here(gate):
         "MESSAGES_WITHOUT_A_FIX_CLAUSE. A gate that tells a reader what broke "
         "and not what to do is the gap; a gate that grew a clause should come "
         "out of the set")
+
+
+@pytest.mark.parametrize("gate", cf.GATES, ids=lambda g: g.name)
+def test_a_gates_declared_needs_are_the_arguments_it_takes(gate):
+    """`needs` names what `audit` passes. It is dispatched by keyword, so a
+    name that is not in the signature raises there; what this adds is the other
+    direction, a gate that grew a parameter the registry does not supply and
+    which therefore silently keeps its default."""
+    params = list(inspect.signature(gate.func).parameters)
+    assert params[0] == "fig", f"{gate.name} does not take a figure first"
+    assert set(gate.needs) <= set(params), (
+        f"{gate.name} declares needs={gate.needs}, and its signature is "
+        f"{tuple(params)}")
+    supplied = {"r", "canvas", "scale", "placed_frac", "venue", "context_axes"}
+    unfed = sorted((set(params) & supplied) - set(gate.needs))
+    assert not unfed, (
+        f"{gate.name} takes {unfed}, which audit knows how to supply and this "
+        "row does not ask for. The gate runs on the default instead, which is "
+        "a measurement against the wrong page")
+
+
+def test_the_registry_is_the_only_place_the_advisory_rows_are_listed():
+    assert cf.ADVISORY_GATES == frozenset(g.name for g in cf.GATES
+                                          if g.advisory), (
+        "ADVISORY_GATES has stopped being derived from GATES, which is how it "
+        "came to disagree with the README twice")
 
 
 def test_the_fix_clause_exemptions_are_gates_that_exist():
