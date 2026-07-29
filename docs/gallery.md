@@ -1,6 +1,6 @@
 # Gallery
 
-`python examples/gallery.py` builds these six and audits each one. The script
+`python examples/gallery.py` builds these seven and audits each one. The script
 exits non-zero if any figure fails, so they are regression tests with pictures
 attached rather than decoration.
 
@@ -56,6 +56,13 @@ is checked rather than written once and forgotten.
 <figure markdown="span">
   ![Orbit diagram of the logistic map for r from 2.5 to 4. A single fixed point splits at r = 3, doubles repeatedly at an accelerating rate, and dissolves into a dense chaotic band at r about 3.57, with windows of periodic behaviour inside it — the widest a period-3 window near r = 3.83.](images/gallery-orbit.png)
   <figcaption>One mark, one opacity, one hue. 168,000 points that are a single object seen at density, not a series — which is why the ink-coverage row is advisory and not a failure.</figcaption>
+</figure>
+
+## Three encodings
+
+<figure markdown="span">
+  ![Three complex-plane images, each on a colormap matched to what it encodes, and each with the key that kind of encoding takes. (a) Mandelbrot escape time in viridis, a sequential ramp, read against a colorbar running 0 to 60 iterations; the set's interior is a neutral keyed separately as 'did not escape', because that is a separate class and not a small value. (b) Newton basins for z^3 - 1 in three separated hues with a legend naming the three roots, because a basin is a category, nothing orders them, and a colorbar would be a ruler along nothing. (c) The phase of (z^2 - 1)/(z^2 + i/2) in twilight, a cyclic map, on a colorbar ticked at -pi, 0 and pi whose two ends are the same colour because they are the same angle.](images/gallery-encoding.png)
+  <figcaption>The figure the colormap gate exists for. Escape time is a quantity and takes a sequential ramp; a Newton basin is a category and takes separated hues; a phase is an angle, so its colormap has to close the loop or a false seam appears where it wraps. Each panel also takes the key its kind implies — a colorbar is a ruler, so the two continuous panels get one and the categorical panel gets a legend instead. The interior of the Mandelbrot set is drawn in a neutral rather than at the bottom of the ramp, because "did not escape" is a separate class and not a small value, and it is keyed off the bar for the same reason.</figcaption>
 </figure>
 
 ---

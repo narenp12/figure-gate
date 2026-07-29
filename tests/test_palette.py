@@ -202,3 +202,102 @@ def test_cli_exit_codes(tmp_path):
                          capture_output=True)
     assert good.returncode == 0
     assert bad.returncode == 1
+
+
+# --- colormap kind -----------------------------------------------------------
+
+CMAP_KINDS = {
+    "viridis": "sequential",
+    "cividis": "sequential",
+    "plasma": "sequential",
+    "magma": "sequential",
+    "gray": "sequential",
+    "Blues": "sequential",
+    "twilight": "cyclic",
+    "twilight_shifted": "cyclic",
+    "RdBu": "diverging",
+    "Spectral": "diverging",
+    "coolwarm": "diverging",
+    "PuOr": "diverging",
+    "turbo": "diverging",
+    "rainbow": "misc",
+    "jet": "misc",
+    "hsv": "misc",
+    "brg": "misc",
+    "nipy_spectral": "misc",
+    "gist_ncar": "misc",
+    "Wistia": "misc",
+    "tab10": "qualitative",
+    "Set1": "qualitative",
+}
+
+
+def cmap_samples(name):
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    from matplotlib.colors import to_hex
+    cmap = colormaps[name]
+    if cmap.N < cp.CMAP_QUALITATIVE_N:
+        return [to_hex(cmap(i)) for i in range(cmap.N)]
+    return [to_hex(cmap(i / (cp.CMAP_SAMPLES - 1)))
+            for i in range(cp.CMAP_SAMPLES)]
+
+
+@pytest.mark.parametrize("name,expected", sorted(CMAP_KINDS.items()))
+def test_named_colormaps_classify_as_measured(name, expected):
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    if name not in colormaps:
+        pytest.skip(f"this matplotlib has no {name}")
+    assert cp.cmap_kind(cmap_samples(name)) == expected
+
+
+def test_viridis_is_not_misc():
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    assert cp.cmap_kind(cmap_samples("viridis")) == "sequential"
+
+
+def lightness_with_one_reversal(reverse, n=101):
+    ls = [i / (n - 1) for i in range(n)]
+    ls[n // 2] = ls[n // 2 - 1] - reverse
+    return ls
+
+
+def test_the_back_travel_threshold_is_where_it_says_it_is():
+    assert cp._back_travel(lightness_with_one_reversal(0.019)) < cp.CMAP_BACKTRAVEL_MAX
+    assert cp._back_travel(lightness_with_one_reversal(0.021)) > cp.CMAP_BACKTRAVEL_MAX
+    assert cp._back_travel(lightness_with_one_reversal(0.0)) == 0.0
+
+
+def test_an_isoluminant_ramp_is_misc_not_sequential():
+    assert cp.cmap_kind(["#808080"] * 256) == "misc"
+
+
+def test_fewer_than_forty_samples_is_qualitative_whatever_its_lightness():
+    grays = ["#111111", "#333333", "#555555", "#777777",
+             "#999999", "#bbbbbb", "#dddddd", "#ffffff"]
+    assert cp.cmap_kind(grays) == "qualitative"
+
+
+def test_the_cyclic_wrap_is_a_colour_distance_not_a_lightness_one():
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    if "RdYlGn" not in colormaps:
+        pytest.skip("this matplotlib has no RdYlGn")
+    from matplotlib.colors import to_hex
+    ends = cmap_samples("RdYlGn")
+    lab = [cp.linear_to_oklab(cp.hex_to_linear(h)) for h in (ends[0], ends[-1])]
+    assert abs(lab[0][0] - lab[1][0]) < 0.05
+    assert cp.delta_e(cp.hex_to_linear(ends[0]),
+                      cp.hex_to_linear(ends[-1])) > cp.CMAP_WRAP_DE_MAX
+    assert cp.cmap_kind(ends) == "diverging"
+
+
+def test_check_palette_still_imports_nothing_outside_the_standard_library():
+    import ast
+    from pathlib import Path
+    source = Path(cp.__file__).read_text()
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert imported <= {"argparse", "itertools", "math"}, imported

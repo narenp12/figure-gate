@@ -1593,3 +1593,224 @@ def test_ink_coverage_emptiness_is_structural_not_just_a_low_fraction():
     plt.close(fig)
     assert gates(rows)["Ink coverage"] == "warn"
     assert ok, "the ink row is advisory and must not gate"
+
+
+# --- the colormap kind gate --------------------------------------------------
+
+import numpy as np
+
+
+def heat(cmap, n=24):
+    import matplotlib.pyplot as plt
+    z = np.add.outer(np.linspace(0, 1, n), np.linspace(0, 1, n))
+    fig, ax = plt.subplots()
+    ax.imshow(z, cmap=cmap)
+    return fig
+
+
+@pytest.mark.parametrize("cmap", ["viridis", "cividis", "twilight", "RdBu",
+                                  "coolwarm", "magma"])
+def test_a_legible_colormap_passes(cmap):
+    fig = heat(cmap)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+@pytest.mark.parametrize("cmap", ["jet", "hsv", "rainbow", "nipy_spectral",
+                                  "gist_ncar"])
+def test_a_rainbow_colormap_fails(cmap):
+    fig = heat(cmap)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert cmap in detail
+
+
+def test_hsv_fails_and_twilight_passes_which_is_the_phase_portrait_case():
+    bad, good = heat("hsv"), heat("twilight")
+    try:
+        assert cf.check_colormap(bad)[0] is False
+        assert cf.check_colormap(good)[0] is True
+    finally:
+        plt.close(bad)
+        plt.close(good)
+
+
+@pytest.mark.parametrize("draw,cmap", [
+    ("imshow", "viridis"),
+    ("pcolormesh", "magma"),
+    ("contourf", "viridis"),
+    ("hexbin", "cividis"),
+    ("scatter_c", "plasma"),
+])
+def test_harvest_reaches_every_colormapped_call(draw, cmap):
+    import matplotlib.pyplot as plt
+    rng = np.random.default_rng(0)
+    gx, gy = np.meshgrid(np.linspace(-2, 2, 40), np.linspace(-2, 2, 40))
+    z = gx ** 2 + gy ** 2
+    fig, ax = plt.subplots()
+    if draw == "imshow":
+        ax.imshow(z, cmap=cmap)
+    elif draw == "pcolormesh":
+        ax.pcolormesh(gx, gy, z, cmap=cmap)
+    elif draw == "contourf":
+        ax.contourf(gx, gy, z, levels=12, cmap=cmap)
+    elif draw == "hexbin":
+        ax.hexbin(rng.normal(size=300), rng.normal(size=300), cmap=cmap)
+    elif draw == "scatter_c":
+        ax.scatter(rng.random(20), rng.random(20), c=rng.random(20), cmap=cmap)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+    assert cmap in detail, detail
+
+
+def test_a_figure_with_no_colormapped_artist_says_so_and_passes():
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.plot([0, 1, 2], [0, 1, 4])
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True
+    assert detail == "no colormapped artists"
+
+
+def test_a_contour_given_explicit_colors_is_not_read_as_a_colormap():
+    """The load-bearing half of the harvest guard, and the one the `get_array`
+    rule does not cover.
+
+    `contour(colors=[...])` builds a ListedColormap that matplotlib leaves
+    named "unnamed", and its `get_array()` IS the level values -- so the array
+    test alone lets it through. Three near-black contour lines would then be
+    classified qualitative and put through all-pairs separation, which they
+    fail by construction: they are ONE encoding drawn in one hue with the
+    levels labelled, not three categories that have to be told apart by colour.
+    Naming is the discrimination that works here -- an author who wrote
+    `cmap="viridis"` chose a continuous encoding, and one who wrote
+    `colors="black"` chose not to encode in colour at all."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    gx, gy = np.meshgrid(np.linspace(-2, 2, 50), np.linspace(-2, 2, 50))
+    fig, ax = plt.subplots()
+    ax.contour(gx, gy, gx * gy, levels=3,
+               colors=["#000000", "#0a0a0a", "#141414"])
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True
+    assert detail == "no colormapped artists"
+
+
+def test_an_unmapped_scatter_is_not_gated_against_a_ramp_it_never_used():
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    art = ax.scatter([1, 2, 3], [1, 2, 3], color="#0072b2")
+    try:
+        assert art.get_cmap() is not None
+        assert art.get_array() is None
+        assert cf.check_colormap(fig) == (True, "no colormapped artists")
+    finally:
+        plt.close(fig)
+
+
+def test_a_colorbar_does_not_report_its_parents_colormap_twice():
+    import matplotlib.pyplot as plt
+    z = np.add.outer(np.linspace(0, 1, 12), np.linspace(0, 1, 12))
+    fig, ax = plt.subplots()
+    im = ax.imshow(z, cmap="viridis")
+    fig.colorbar(im, ax=ax)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True
+    assert detail.count("viridis") == 1, detail
+
+
+def test_a_qualitative_colormap_that_does_not_separate_fails():
+    fig = heat("tab10")
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert "tab10" in detail
+    assert "dE" in detail, detail
+
+
+def test_a_qualitative_colormap_that_does_separate_passes():
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+    basins = ListedColormap(["#e69f00", "#56b4e9", "#009e73"], name="basins")
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots()
+    ax.imshow(rng.integers(0, 3, (20, 20)), cmap=basins)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+    assert "qualitative" in detail
+
+
+def test_the_qualitative_route_does_not_apply_the_band_and_chroma_rows():
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+    okabe = ListedColormap(["#e69f00", "#56b4e9", "#009e73", "#f0e442"],
+                           name="okabe4")
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots()
+    ax.imshow(rng.integers(0, 4, (20, 20)), cmap=okabe)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_heatmap_is_not_gated_twice_under_two_different_rules():
+    fig = heat("viridis")
+    try:
+        assert cf._data_colors_by_axes(fig) == {}
+        assert cf.check_colormap(fig)[0] is True
+    finally:
+        plt.close(fig)
+
+
+def test_the_gate_is_a_row_in_audit_between_contour_dash_and_fonts():
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    try:
+        _, rows = cf.audit(fig)
+    finally:
+        plt.close(fig)
+    names = [n for n, _, _ in rows]
+    assert len(names) == 20, names
+    assert names[names.index("Contour dash") + 1] == "Colormap kind"
+    assert names[names.index("Colormap kind") + 1] == "Fonts"
+
+
+def test_a_jet_heatmap_fails_the_whole_audit():
+    fig = heat("jet")
+    try:
+        ok, rows = cf.audit(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    row = next(r for r in rows if r[0] == "Colormap kind")
+    assert row[1] is False, row
+
+
+def test_the_colormap_row_is_not_advisory():
+    assert "Colormap kind" not in cf.ADVISORY_GATES

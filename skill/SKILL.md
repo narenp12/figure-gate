@@ -207,7 +207,7 @@ full dict.
 stacking, mark ratio, overplotting, axis redundancy, type size, line weight, ink
 coverage, series color, dual axes, form, the identity channel, label
 attribution, whether the style sheet is the one actually in effect, contour
-dash, font embedding, and alt text — in that order. `check_palette.py` gates
+dash, colormap kind, font embedding, and alt text — in that order. `check_palette.py` gates
 lightness band, chroma floor, colorblind separation, normal-vision separation,
 and contrast against the surface.
 

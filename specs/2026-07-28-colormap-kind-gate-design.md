@@ -1,7 +1,7 @@
 # Colormap-kind gate, and the figures that need it
 
 Date: 2026-07-28
-Status: approved, not yet implemented
+Status: implemented
 
 ## The hole
 
@@ -33,11 +33,22 @@ Two further gaps follow from the same root:
 | `skill/scripts/check_figure.py` | new gate row 18, "Colormap kind" |
 | `examples/gallery.py` | seventh figure, `gallery-encoding.png` |
 | `tests/test_palette.py` | classifier unit tests, thresholds pinned |
+| `tests/test_palette_oracle.py` | the cmasher differential, in its own file |
 | `tests/test_figure.py` | harvest and routing tests |
 | `tests/test_example.py` | gallery count 6 -> 7 |
-| `tests/test_docs_match_code.py` | roster 19 -> 20, two name maps |
+| `tests/test_docs_match_code.py` | the name-to-prose map, and the description count |
+| `tests/test_docs_site.py` | symlink count 12 -> 13 |
 | `README.md` | gate table row, and "row 11 of the 19" |
+| `docs/gallery.md` | the seventh figure and its caption |
+| `skill/SKILL.md` | the gate order sentence |
 | `pyproject.toml` | one dev-only optional dependency |
+
+Two of the ripples predicted above did not happen, and both are recorded here
+rather than quietly dropped. The roster count at `test_docs_match_code.py:224`
+is prose about a past incident, not an assertion, so it needed no edit. The
+name-to-function map at line 359 is `ADVISORY_GATES`, and `Colormap kind` FAILs
+rather than warns — `test_the_colormap_row_is_not_advisory` pins that it stays
+out of it.
 
 ### The roster ripple
 
@@ -219,15 +230,38 @@ body of checking:
    of the array would gate every unmapped scatter in the repository against a
    ramp it never used. This is the same discrimination `_data_colors_by_axes`
    already makes, in the opposite direction, at `check_figure.py:1096`.
+
+   **A second guard, found while building the gallery figure: skip colormaps
+   matplotlib left unnamed.** `contour(colors=[...])` builds a ListedColormap
+   named "unnamed", and its `get_array()` is the level values, so the array
+   test alone passes it through. Three near-black contour lines then classify
+   qualitative and fail all-pairs separation — correctly, by the letter of that
+   check, and wrongly, because they are one encoding drawn in one hue with the
+   levels labelled rather than three categories told apart by colour. An author
+   who wrote `cmap="viridis"` chose a continuous encoding; one who wrote
+   `colors="black"` chose not to encode in colour at all, and the name is what
+   tells the two apart.
 2. **Classify.** Sample 256 colors, call `cmap_kind()`.
 3. **Route to the check that kind already has.**
-   - qualitative -> `check_palette.check(levels, all_pairs=True)`, the same
-     colorblind-separation gate a categorical palette clears
-   - sequential -> `check_palette.check(ramp, ordinal=True)`, monotone lightness
-     and even steps
-   - diverging, cyclic -> the ordinal check per half; end-to-end monotonicity is
-     not the contract either one signs
+   - qualitative -> `check_palette.check(levels, all_pairs=True)`, read for its
+     `CVD separation` and `Normal-vision floor` rows only, exactly as
+     `check_series_color` reads it at `check_figure.py:1209`. The lightness-band
+     and chroma-floor rows are for a palette being chosen, not for colors
+     already drawn; applied here they fail Okabe-Ito, which this repository
+     ships.
+   - sequential, diverging, cyclic -> pass on the kind. `cmap_kind` has already
+     proved monotone lightness, whole-map or per half.
    - misc -> FAIL, naming the colormap and its back-travel
+
+   **Not `check(ordinal=True)`, and this was measured rather than assumed.**
+   That gate's `Light-end contrast` row requires the lightest step to clear
+   2.0:1 against the surface, which viridis (1.26:1), cividis (1.25:1), magma
+   (1.05:1) and Blues (1.04:1) all fail. The row is correct for a discrete ramp
+   of swatches on a white page; a continuous colormap's light end sits against
+   its own neighbouring values instead. Its `Adjacent dL` row is a function of
+   the caller's sample count, not of the colormap: Blues passes it at 5 and 7
+   samples and fails at 9. Routing sequential maps there would have failed
+   `gallery-field.png`, which this repository already ships.
 
 FAIL rather than WARN. A `jet` colormap is a definite defect with a known
 correct replacement, and the repository's own position — `test_figure.py:836` —
@@ -255,11 +289,18 @@ interior is not a small value, it is a separate class — "did not escape" — a
 drawing it as the bottom of the ramp claims a quantity that was never measured.
 The interior is drawn in an explicit neutral, not `cmap(0)`.
 
-Three dense images with three colorbars in one row is the hardest composition in
+Three dense images with three keys in one row is the hardest composition in
 the gallery. That is deliberate. Per the gallery's own docstring, the figures
 exist to find defects in the checks, and the checks most likely to be found
 wanting here are text readability over a busy backdrop, axis redundancy across
 image panels, and `check_ink` on three saturated axes at once.
+
+Three keys, but not three colorbars, and the difference is the figure's own
+argument restated in its furniture. A colorbar is a ruler. Escape time and
+phase have something to be a ruler along, so they get one; three Newton basins
+do not, so that panel gets a legend naming the roots. The Mandelbrot interior
+is keyed off the bar rather than on it, because the bar is the range that was
+measured and "did not escape" is outside it.
 
 The figure is audited by `finish()` like every other, and the script exits
 non-zero if it fails.
@@ -355,6 +396,13 @@ instead of one measured one.
 
 The row is therefore named "Colormap kind" and not "Colormap quality".
 
+**A narrow-span sequential map passes.** Because sequential now passes on kind
+alone, nothing gates a ramp whose lightness moves too little to be read as an
+order. This is the same open question as the Wistia disagreement above and
+takes the same fix: a lightness-span floor measured across the registry. It is
+deferred with the reason written down rather than resolved with a guessed
+constant.
+
 **The 2% threshold is empirical.** It separates the colormaps matplotlib ships.
 A custom colormap sitting between 1.05% and 2.79% will be classified by a number
 that has 1.9x of justification behind it and no theory. When such a map appears,
@@ -369,11 +417,14 @@ the fix is another row in the table above, not a quiet change to the constant.
 - ~~`hexbin` and `contourf` harvest paths are unverified.~~ **Resolved.** Both
   verified on matplotlib 3.11.1, along with five other call types, and the
   `get_cmap()`-versus-`get_array()` trap found in the process.
-- **Three dense panels may not survive the existing gates.** Still open, and not
-  resolvable without building the figure. If `gallery-encoding.png` cannot be
-  made to pass, the finding is either a real composition limit worth documenting
-  or a defect in a gate — both are outcomes the gallery exists to produce. It is
-  not a reason to weaken a check.
+- ~~Three dense panels may not survive the existing gates.~~ **Resolved by
+  building it.** All twenty rows pass at 7.9 x 3.1in, keys included, with the
+  smallest type at 9.5pt against a 7.5pt floor and ink fractions of 0.26, 0.36
+  and 0.13. No gate had to be weakened and none was found wanting. The one
+  failure on the way was `Text collision`, on a first attempt that set both
+  keys 0.19 axes-heights below their panels and put them through the x labels —
+  the gate caught a composition defect that is genuinely hard to see in code,
+  which is the outcome this figure was added to test for.
 - **The 2% back-travel threshold has one known false positive.** Wistia. See the
   adjudication above; the resolution is deferred with evidence, not hidden.
 - **Thresholds are pinned to matplotlib 3.11.1's registry.** A future matplotlib
