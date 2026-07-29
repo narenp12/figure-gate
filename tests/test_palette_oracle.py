@@ -11,17 +11,29 @@ cmasher is a dev-group dependency and is never imported by anything under
 `skill/scripts/`. It needs Python >= 3.10; this project supports 3.9.
 """
 
+import importlib.util
 import sys
 
 import pytest
 
 import check_palette as cp
 
-cmr = pytest.importorskip("cmasher", reason="dev-only test oracle")
-colormaps = pytest.importorskip("matplotlib").colormaps
+# `pytest.importorskip` at module scope, which this used, raises during
+# collection: the module contributes zero tests rather than two skipped ones.
+# CI installs pytest, xdist and matplotlib and never the dev group, so it
+# collected 479 where a machine with cmasher collects 481 - and
+# `test_the_readme_test_count_is_the_real_one` compares a number in the README
+# against whatever the local run collected. The count was therefore unwritable:
+# 481 was honest here and wrong in CI, 479 the reverse, and the README had been
+# failing that test on every CI run since the oracle was added.
+#
+# A collected-and-skipped test is visible in the count and in the summary. A
+# module that never collected is neither.
+HAVE_CMASHER = importlib.util.find_spec("cmasher") is not None
 
 pytestmark = pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="cmasher requires Python 3.10")
+    sys.version_info < (3, 10) or not HAVE_CMASHER,
+    reason="cmasher is a dev-only oracle and needs Python >= 3.10")
 
 
 # name: (ours, cmasher's). An empty dict here would be a claim of exact parity
@@ -47,12 +59,31 @@ KNOWN_DISAGREEMENTS = {
 }
 
 
+def oracle():
+    """cmasher, imported for its side effect as much as for its function.
+
+    Importing it registers its own colormaps into matplotlib's registry, and
+    the differential is over that registry: with the import deferred and not
+    called here, `registry_names()` returns matplotlib's 91 instead of the 148
+    the design was measured against. So every helper that reads the registry
+    goes through this, and the ordering cannot come apart.
+    """
+    import cmasher as cmr
+
+    return cmr
+
+
 def registry_names():
+    oracle()
+    from matplotlib import colormaps
+
     return sorted(n for n in colormaps if not n.endswith("_r"))
 
 
 def samples(name):
+    from matplotlib import colormaps
     from matplotlib.colors import to_hex
+
     cmap = colormaps[name]
     if cmap.N < cp.CMAP_QUALITATIVE_N:
         return [to_hex(cmap(i)) for i in range(cmap.N)]
@@ -61,6 +92,9 @@ def samples(name):
 
 
 def disagreements():
+    cmr = oracle()
+    from matplotlib import colormaps
+
     out = {}
     for name in registry_names():
         ours = cp.cmap_kind(samples(name))

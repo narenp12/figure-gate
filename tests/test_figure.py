@@ -1684,12 +1684,48 @@ def test_a_figure_with_no_colormapped_artist_says_so_and_passes():
     assert detail == "no colormapped artists"
 
 
+def test_matplotlib_still_names_an_author_built_colormap_something_we_skip():
+    """The version-dependent fact the test below rests on, asked of matplotlib.
+
+    `ANONYMOUS_CMAP_NAMES` is a list of spellings, not one string, because the
+    name changes between releases: 3.8.4, 3.9.4 and 3.10.0 say "from_list" and
+    3.11.1 says "unnamed". The gate shipped knowing only the 3.11 spelling, so
+    on the two CI jobs running older matplotlib every contour drawn with
+    explicit colours was classified qualitative and hard-failed, including
+    `gallery-field.png`. Every local run was on 3.11 and stayed green.
+
+    So the fact is asserted rather than assumed. If a future matplotlib invents
+    a fourth spelling this fails here, naming the new one, instead of silently
+    failing every contour figure in the suite.
+    """
+    import matplotlib
+    import matplotlib.pyplot as plt
+    import numpy as np
+    gx, gy = np.meshgrid(np.linspace(-2, 2, 20), np.linspace(-2, 2, 20))
+    fig, ax = plt.subplots()
+    ax.contour(gx, gy, gx * gy, levels=3,
+               colors=["#000000", "#0a0a0a", "#141414"])
+    try:
+        names = {artist.get_cmap().name for artist in ax.collections
+                 if artist.get_array() is not None}
+    finally:
+        plt.close(fig)
+
+    assert names, ("matplotlib no longer hands `contour(colors=...)` a "
+                   "colormap this can read the name off")
+    unknown = names - set(cf.ANONYMOUS_CMAP_NAMES)
+    assert not unknown, (
+        f"matplotlib {matplotlib.__version__} names an author-built colormap "
+        f"{unknown}, which is not in ANONYMOUS_CMAP_NAMES. Every contour drawn "
+        "with explicit colours is now classified as a colour encoding")
+
+
 def test_a_contour_given_explicit_colors_is_not_read_as_a_colormap():
     """The load-bearing half of the harvest guard, and the one the `get_array`
     rule does not cover.
 
     `contour(colors=[...])` builds a ListedColormap that matplotlib leaves
-    named "unnamed", and its `get_array()` IS the level values -- so the array
+    anonymously named, and its `get_array()` IS the level values -- so the array
     test alone lets it through. Three near-black contour lines would then be
     classified qualitative and put through all-pairs separation, which they
     fail by construction: they are ONE encoding drawn in one hue with the
