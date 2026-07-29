@@ -8,11 +8,10 @@ wrong family because a symmetric diverging map has equal lightness at both ends
 BY CONSTRUCTION. Running this differential is what found that.
 
 cmasher is a dev-group dependency and is never imported by anything under
-`skill/scripts/`. It needs Python >= 3.10; this project supports 3.9.
+`skill/scripts/`.
 """
 
 import importlib.util
-import sys
 
 import pytest
 
@@ -32,8 +31,7 @@ import check_palette as cp
 HAVE_CMASHER = importlib.util.find_spec("cmasher") is not None
 
 pytestmark = pytest.mark.skipif(
-    sys.version_info < (3, 10) or not HAVE_CMASHER,
-    reason="cmasher is a dev-only oracle and needs Python >= 3.10")
+    not HAVE_CMASHER, reason="cmasher is a dev-only oracle")
 
 
 # name: (ours, cmasher's). An empty dict here would be a claim of exact parity
@@ -67,8 +65,22 @@ def oracle():
     called here, `registry_names()` returns matplotlib's 91 instead of the 148
     the design was measured against. So every helper that reads the registry
     goes through this, and the ordering cannot come apart.
+
+    The import is allowed to fail. cmasher 1.9.2 builds every one of its
+    colormaps with `ListedColormap(..., N=...)`, which matplotlib deprecated in
+    3.11 and removes in 3.13 -- so on a new enough matplotlib this import stops
+    working entirely, through no fault of anything in this repo. An oracle that
+    cannot be imported is a skip with the reason attached, not an error: the
+    only thing lost is the differential, and the message says so out loud
+    rather than leaving a green run that quietly stopped checking.
     """
-    import cmasher as cmr
+    try:
+        import cmasher as cmr
+    except Exception as exc:                                # pragma: no cover
+        import matplotlib
+
+        pytest.skip(f"cmasher does not import under matplotlib "
+                    f"{matplotlib.__version__}: {exc!r}")
 
     return cmr
 
@@ -91,12 +103,12 @@ def samples(name):
             for i in range(cp.CMAP_SAMPLES)]
 
 
-def disagreements():
+def disagreements(names):
     cmr = oracle()
     from matplotlib import colormaps
 
     out = {}
-    for name in registry_names():
+    for name in names:
         ours = cp.cmap_kind(samples(name))
         theirs = cmr.get_cmap_type(colormaps[name])
         if ours != theirs:
@@ -104,14 +116,37 @@ def disagreements():
     return out
 
 
+def expected(names):
+    """`KNOWN_DISAGREEMENTS` narrowed to the colormaps this matplotlib has.
+
+    `managua` and `vanimo` arrived in matplotlib 3.10, so on anything older the
+    dict describes two colormaps that are not in the registry to disagree
+    about. Unfiltered, the "these no longer disagree" assertion read their
+    absence as a resolved disagreement and failed -- under matplotlib 3.8.4,
+    the floor this project still supports, on any machine with cmasher
+    installed. CI never hit it because cmasher goes on the latest-matplotlib
+    job only; `uv sync --group dev` with an older matplotlib pinned does.
+
+    Same defect class as the sweep fix: a registry-derived expectation stated
+    as a constant. The constant stays -- each entry is an adjudication that has
+    to be written down somewhere -- and what this does is scope it to what is
+    present, so a missing colormap is silent and a present one that flipped
+    still fails.
+    """
+    have = set(names)
+    return {k: v for k, v in KNOWN_DISAGREEMENTS.items() if k in have}
+
+
 def test_the_registry_is_large_enough_to_be_evidence():
     assert len(registry_names()) >= 100, registry_names()
 
 
 def test_only_the_three_known_colormaps_disagree_with_cmasher():
-    found = disagreements()
-    new = {k: v for k, v in found.items() if k not in KNOWN_DISAGREEMENTS}
-    gone = {k: v for k, v in KNOWN_DISAGREEMENTS.items() if k not in found}
+    names = registry_names()
+    found = disagreements(names)
+    want = expected(names)
+    new = {k: v for k, v in found.items() if k not in want}
+    gone = {k: v for k, v in want.items() if k not in found}
     assert not new, (
         f"new disagreements with cmasher: {new}. Adjudicate each one -- say "
         "which implementation is right and why -- and either fix cmap_kind or "
@@ -119,4 +154,19 @@ def test_only_the_three_known_colormaps_disagree_with_cmasher():
     assert not gone, (
         f"these no longer disagree: {gone}. Good news, but the comment "
         "explaining each is now stale and should come out with it.")
-    assert found == KNOWN_DISAGREEMENTS, found
+    assert found == want, found
+
+
+def test_the_three_known_colormaps_are_all_present_on_a_new_matplotlib():
+    """`expected()` scopes the constant to the registry, which means a typo in
+    a key -- or a colormap matplotlib renamed -- would drop out of the
+    comparison and take its adjudication with it, silently. Nothing older than
+    3.10 is missing an entry, so on 3.10+ every key has to be a real name."""
+    from matplotlib import __version__ as mpl
+
+    if tuple(int(p) for p in mpl.split(".")[:2]) < (3, 10):
+        pytest.skip(f"managua and vanimo arrive in matplotlib 3.10 (have {mpl})")
+    missing = set(KNOWN_DISAGREEMENTS) - set(registry_names())
+    assert not missing, (
+        f"KNOWN_DISAGREEMENTS names colormaps the registry does not have: "
+        f"{sorted(missing)}")

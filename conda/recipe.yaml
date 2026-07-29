@@ -1,0 +1,85 @@
+# conda-forge recipe for figure-gate, rattler-build v1 schema.
+#
+# This file is the source of truth for the conda package and is copied verbatim
+# into a conda-forge/staged-recipes PR (see README.md beside it). It is not
+# built by this repo's CI: conda-forge builds it, and after the first release
+# lands, conda-forge's autotick bot opens the version bump on every PyPI
+# release, so nothing here has to run on tag.
+#
+# `tests/test_conda_recipe.py` holds the parts that can drift -- version,
+# runtime dependencies, entry points -- against pyproject.toml, because a
+# recipe that disagrees with the package it claims to build is the failure mode
+# that a file nobody in this repo executes invites.
+schema_version: 1
+
+context:
+  name: figure-gate
+  version: "0.4.0"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  # The sdist, not the wheel: conda-forge builds from source. The filename uses
+  # the normalised underscore form that hatchling emits.
+  url: https://pypi.org/packages/source/f/figure-gate/figure_gate-${{ version }}.tar.gz
+  # Stamped by `python conda/update_recipe.py` once the release is on PyPI.
+  # The placeholder is deliberately not a valid hash, so a recipe submitted
+  # without that step fails to build instead of fetching something unchecked.
+  sha256: SHA256-NOT-STAMPED-RUN-conda/update_recipe.py
+
+build:
+  # Pure Python, no compiled anything: one noarch package serves every platform
+  # and interpreter. matplotlib is a runtime dependency, not a build one.
+  noarch: python
+  number: 0
+  script: python -m pip install . -vv --no-deps --no-build-isolation
+  python:
+    entry_points:
+      - check-palette = check_palette:main
+      - check-figure = check_figure:main
+
+requirements:
+  host:
+    # 3.11 rather than conda-forge's `python_min`: this project's floor is
+    # higher than the global one, and `noarch: python` takes the run constraint
+    # from what is declared here.
+    - python 3.11
+    - hatchling >=1.26
+    - pip
+  run:
+    - python >=3.11
+    # matplotlib-base, not matplotlib: the metapackage pulls pyqt for an
+    # interactive backend, and these checkers render on Agg and never open a
+    # window. On conda-forge that is the difference between a small dependency
+    # and a GUI toolkit.
+    - matplotlib-base >=3.8
+
+tests:
+  - python:
+      imports:
+        # The wheel installs two top-level modules, not a package -- that is
+        # deliberate, the scripts are meant to be vendorable single files -- so
+        # these are the import names, and `figure_gate` is not one.
+        - check_palette
+        - check_figure
+      pip_check: true
+      python_version: 3.11
+  - script:
+      # Both entry points exit 0: check-palette prints usage, check-figure runs
+      # its own self-test. This catches the console scripts not being wired.
+      - check-palette --help
+      - check-figure --help
+
+about:
+  homepage: https://github.com/narenp12/figure-gate
+  repository: https://github.com/narenp12/figure-gate
+  documentation: https://narenp12.github.io/figure-gate/
+  summary: "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - narenp12

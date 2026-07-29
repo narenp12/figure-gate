@@ -81,6 +81,55 @@ The set is empty now, with a test to keep a future re-entry deliberate.
   in a `<-` clause naming the fix. The five that do not are listed in the test
   suite with the reason, rather than being an invisible inconsistency.
 
+### The oracle no longer depends on which matplotlib you have
+
+- **`KNOWN_DISAGREEMENTS` is scoped to the registry it is about.**
+  `test_only_the_three_known_colormaps_disagree_with_cmasher` asserted that all
+  three of its adjudicated colormaps still disagree. Two of them, `managua` and
+  `vanimo`, arrive in matplotlib 3.10, so under the 3.8.4 floor this project
+  still supports the test read their absence as a resolved disagreement and
+  failed. CI never saw it, because cmasher is installed on the latest-matplotlib
+  job only; `uv sync --group dev` with an older matplotlib pinned did.
+
+  Same defect class as the swatch sweep: an expectation derived from a registry,
+  written down as a constant. The constant stays, because each entry is an
+  adjudication that has to live somewhere, and it is now compared only against
+  the colormaps the running matplotlib actually has. A second test holds every
+  key to a real name on 3.10 and up, so scoping cannot quietly swallow a typo.
+
+- **A broken oracle skips with its reason instead of erroring.** cmasher 1.9.2
+  builds each of its 114 colormaps with `ListedColormap(..., N=...)`, deprecated
+  in matplotlib 3.11 and removed in 3.13, which is what those 114 identical
+  warnings on every test run were counting down to. When 3.13 lands, cmasher
+  stops importing at all, through no fault of anything here. The differential
+  now reports that as a skip naming the ImportError and the matplotlib version,
+  rather than a suite that fails on someone else's deprecation. The warnings are
+  filtered with the countdown written next to the filter; nothing under
+  `skill/scripts/` constructs a `ListedColormap`, so the filter cannot hide a
+  defect of this project's.
+
+### A conda package
+
+`conda/recipe.yaml` is a rattler-build v1 recipe for conda-forge, so the install
+line will be `conda install -c conda-forge figure-gate` with no extra channel to
+add. Submission is one manual PR to conda-forge/staged-recipes after this
+release reaches PyPI; the autotick bot opens the version bump on every release
+after that. `conda/README.md` is the checklist, and
+`conda/update_recipe.py` stamps the version and the sdist hash, downloading and
+hashing the sdist itself rather than trusting PyPI's declared digest.
+
+Nothing in this repo builds it, which is precisely why `tests/test_conda_recipe.py`
+exists: it holds the recipe's version, runtime dependencies, Python floor and
+entry points to `pyproject.toml`. A conda package that disagrees with the wheel
+about any of those is a defect only a conda user meets, and they meet it as "the
+gate does not run" rather than as a build failure. The recipe depends on
+`matplotlib-base`, not `matplotlib`, which on conda-forge is the difference
+between the library and a package that pulls pyqt for a backend these checkers
+never open.
+
+The README does not yet claim a conda install, because there is not one until
+the staged-recipes PR merges.
+
 ## 0.3.0 — 2026-07-29
 
 A minor release, for the same reason 0.2.0 was one: a figure that passed on
