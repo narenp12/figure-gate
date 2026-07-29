@@ -15,6 +15,7 @@ import json
 import re
 import sys
 import tomllib
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -26,7 +27,14 @@ PYPROJECT = ROOT / "pyproject.toml"
 # underscore in the artifact filename but not in the project name, and the
 # recipe's `source.url` has to spell both.
 SDIST = "figure_gate-{version}.tar.gz"
-PYPI_JSON = "https://pypi.org/pypi/figure-gate/json"
+
+# The per-version endpoint, not the project one. `/pypi/figure-gate/json` has a
+# `releases` map with every version in it and is served from a cache that lags
+# a publish by minutes: run straight after the release workflow, it reports the
+# version that just shipped as missing. `/pypi/figure-gate/<version>/json`
+# answers 200 as soon as the files are there, and its `urls` list is the one
+# release's artifacts, which is all this needs.
+PYPI_JSON = "https://pypi.org/pypi/figure-gate/{version}/json"
 
 
 def project_version():
@@ -41,16 +49,18 @@ def pypi_sdist(version):
     download is hashed and compared, so what gets stamped is a number this
     script computed.
     """
-    with urllib.request.urlopen(PYPI_JSON, timeout=30) as response:
-        payload = json.load(response)
-
-    releases = payload.get("releases", {})
-    if version not in releases:
+    url = PYPI_JSON.format(version=version)
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
         sys.exit(f"figure-gate {version} is not on PyPI yet -- run this after "
                  f"the release workflow finishes")
 
     wanted = SDIST.format(version=version)
-    for artifact in releases[version]:
+    for artifact in payload["urls"]:
         if artifact["filename"] == wanted:
             break
     else:

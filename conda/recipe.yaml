@@ -27,7 +27,7 @@ source:
   # Stamped by `python conda/update_recipe.py` once the release is on PyPI.
   # The placeholder is deliberately not a valid hash, so a recipe submitted
   # without that step fails to build instead of fetching something unchecked.
-  sha256: SHA256-NOT-STAMPED-RUN-conda/update_recipe.py
+  sha256: 23b095cc976551d91565bb4fbc23b9a375c385f0f33863b33b08e551f9188a5a
 
 build:
   # Pure Python, no compiled anything: one noarch package serves every platform
