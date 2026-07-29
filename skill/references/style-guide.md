@@ -232,9 +232,16 @@ to hand it to — keep those tiers few and evenly stepped, and validate with
 
 ### Diverging: `RdBu`, as shipped
 
-ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b`{ .sw style="--c:#b1182b" } /
-`#2065ab`{ .sw style="--c:#2065ab" } clear every gate. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
+ColorBrewer, colorblind-safe, in matplotlib. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
 Never a hue at the midpoint; never two cool poles.
+
+**Take discrete levels from inside the ends, the way viridis is windowed.** As shipped
+the map runs to `#67001f`{ .sw style="--c:#67001f" } and `#053061`{ .sw style="--c:#053061" },
+and handed to `check_palette.py` as swatches both fall outside the lightness band, the
+dark blue under the chroma floor as well. `t ∈ [0.1, 0.9]` gives
+`#b1182b`{ .sw style="--c:#b1182b" } / `#2065ab`{ .sw style="--c:#2065ab" }, which clear
+every gate. A continuous fill is unaffected: the colormap gate reads the kind, and only
+runs the swatch gates on a map discrete enough to count as qualitative.
 
 ### Cyclic: `twilight`, as shipped
 
@@ -274,10 +281,13 @@ an explicit neutral and keyed *off* the bar, never as `cmap(0)`. The bar is the
 range that was measured, and putting a non-value at the bottom of it claims a
 quantity nobody measured.
 
-`check_figure.py` measures the kind rather than trusting a name, because
-matplotlib groups its colormaps by kind in prose documentation only: there is no
-API and no metadata on a `Colormap` object. It samples `CMAP_SAMPLES = 256`
-levels, converts to OKLab, and reads the lightness channel. Anything under
+The kind is measured rather than trusted to a name, because matplotlib groups
+its colormaps by kind in prose documentation only: there is no API and no
+metadata on a `Colormap` object. The gate is in `check_figure.py`, which samples
+`CMAP_SAMPLES = 256` levels off the colormap and hands them to `cmap_kind()` in
+`check_palette.py`, where every constant below is defined and where the OKLab
+conversion and the lightness reading happen. The split is the porting story: the
+kind measure travels with the stdlib-only module. Anything under
 `CMAP_QUALITATIVE_N = 40` levels is qualitative and is sent to the categorical
 gates instead. A map whose lightness span is under `CMAP_SPAN_MIN = 0.02` is
 isoluminant and carries no order at all. Otherwise the measure is **back-travel**,
@@ -439,13 +449,16 @@ measures on the page through the same `page_scale`. Gridlines are held to a lowe
 than data deliberately — a gridline that drops out costs a reference, a curve that drops
 out costs the finding.
 
-**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress rejects the
-upload; ACM and Elsevier reject the submission. The figure renders identically either way,
-so nothing tells you until the latest and most expensive possible moment.
-`figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
+**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress takes
+embedded Type 1 or TrueType and does not accept Type 3, so the upload is refused before a
+reviewer sees it. ACM and Elsevier check embedding in production instead, which is the
+same problem surfacing after acceptance rather than a milder one. The figure renders
+identically either way, so nothing tells you until the latest and most expensive possible
+moment. `figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
 
-**Describe the figure.** Across 100,000 public notebooks, 99.81% of generated images
-shipped with no alt text, nearly all of them matplotlib. `describe(fig, ...)` then
+**Describe the figure.** Across 100,000 public notebooks, 99.81% of programmatically
+generated images shipped with no alt text (Potluri et al., below), and matplotlib was the
+charting library behind more of them than anything else. `describe(fig, ...)` then
 `savefig(path, metadata=alt_metadata(fig, path))` — the path a second time, so the call
 can pick the key that format has. Say what the reader would have taken from
 looking — the numbers and the direction — not what the figure is made of. "A line chart
@@ -546,8 +559,15 @@ kinds, and the reason `misc` fails, comes from this literature.
   doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
   centre, and why a diverging map needs a meaningful zero to diverge around.
 
-One more, for the ink measurement rather than the colour.
+Two more, for claims the sections above make outside colour.
 
+- Potluri, V., Singanamalla, S., Tieanklin, N. & Mankoff, J. (2023). Notably
+  Inaccessible: Data Driven Understanding of Data Science Notebook
+  (In)Accessibility. *ASSETS '23*. doi:10.1145/3597638.3608417,
+  arXiv:2308.03241. The 99.81% is their measured figure: of the
+  programmatically generated images across 100,000 notebooks, N=342102 carry no
+  alternative text. They also identify matplotlib as the most-imported charting
+  library in the corpus, seaborn second and built on it.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.

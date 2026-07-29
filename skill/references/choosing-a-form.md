@@ -20,21 +20,26 @@ terms.
 ## The ordering everything else follows
 
 Cleveland & McGill (1984) measured how accurately people read the same quantity
-encoded different ways. The result is an ordering, most accurate first:
+encoded different ways. Their ordering, most accurate first, is six ranks and not
+seven:
 
 1. Position along a common scale
 2. Position along identical, non-aligned scales
-3. Length
-4. Angle, slope
-5. Area
-6. Volume, curvature
-7. Color saturation, then color hue
+3. Length, direction, angle
+4. Area
+5. Volume, curvature
+6. Shading, color saturation
+
+Colour **hue** is not ranked there, and lists that append it are extending the
+paper rather than quoting it. This guide gives hue no magnitude job at all: it
+carries identity, which is a different question from how accurately a magnitude
+can be read off it.
 
 Almost every rule in this file is a corollary: **move the reader's judgement up the
 list.** A dot plot beats a bar because position beats length. Small multiples beat
 grouped bars because identical non-aligned scales beat comparing lengths across a
-gap. A pie loses because angle and area are both near the bottom. Color is last,
-which is why it identifies series rather than carrying their magnitudes — and why
+gap. A pie loses because angle and area are both near the bottom. Color sits at the
+bottom, which is why it identifies series rather than carrying their magnitudes — and why
 `check_palette.py` exists at all: the weakest channel is the one that has to survive
 a reader who sees it differently.
 
