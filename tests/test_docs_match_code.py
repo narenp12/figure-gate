@@ -1047,7 +1047,8 @@ def test_no_document_teaches_the_pathless_alt_metadata_call():
 KIND_ROW = re.compile(
     r"^\|\s*(Sequential|Diverging|Cyclic|Qualitative)\s*\|[^|]*\|\s*"
     r"`([A-Za-z_0-9]+)`\s*\|")
-MISC_CLAIM = re.compile(r"((?:`[A-Za-z_0-9]+`(?:,\s*|\s+and\s+)?)+)\s*land there")
+MISC_CLAIM = re.compile(
+    r"((?:`[A-Za-z_0-9]+`(?:,\s*|\s+and\s+)?)+)\s*land there")
 
 
 def guide_kind_claims():
@@ -1263,8 +1264,10 @@ def test_every_source_states_the_real_gallery_count(label):
 # `FIGURE_PROSE` is. Asserted complete against `audit()`, so a twenty-first gate
 # goes stale loudly instead of quietly having no guidance.
 
-GUIDE_FILES = {"style-guide.md": GUIDE,
-               "choosing-a-form.md": SKILL / "references" / "choosing-a-form.md"}
+GUIDE_FILES = {
+    "style-guide.md": GUIDE,
+    "choosing-a-form.md": SKILL / "references" / "choosing-a-form.md",
+}
 
 GUIDANCE_ANCHORS = {
     "Text collision": ("style-guide.md",
