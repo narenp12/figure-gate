@@ -154,9 +154,9 @@ def test_the_cycle_clears_the_palette_gates_it_is_measured_by():
     multiples, which compare every series against every other."""
     import check_palette as cp
     cycle = parsed()["axes.prop_cycle"].by_key()["color"]
-    rows, ok = cp.check(cycle)
+    ok, rows = cp.check(cycle)
     assert ok, rows
-    rows, ok = cp.check(cycle[:4], all_pairs=True)
+    ok, rows = cp.check(cycle[:4], all_pairs=True)
     assert ok, rows
 
 

@@ -16,7 +16,7 @@ Ships with one style sheet and two validators:
 |---|---|---|---|
 | `figure.mplstyle` | `assets/` | matplotlib | visual defaults as a style sheet |
 | `check_palette.py` | `scripts/` | Python 3.8+, stdlib only | color gates, any toolchain |
-| `check_figure.py` | `scripts/` | Python 3.9+, matplotlib 3.8+ | composition + type-size gates |
+| `check_figure.py` | `scripts/` | Python 3.11+, matplotlib 3.8+ | composition + type-size gates |
 
 Copy all three into the project (conventionally `diagrams/`), where they sit beside each
 other as the guide assumes. Only `check_figure.py` is coupled to matplotlib; the
@@ -83,6 +83,39 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
   vanishes where it crosses a contour is not a line; a marker that disappears into a
   filled band is not a marker.
 - Ordinal emphasis is a lightness ramp, not a transparency stack.
+
+### Panel occupancy
+
+`check_ink` measures the fraction of each axes rectangle whose pixels differ from the
+page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`. Advisory, and it stays
+advisory because the right density is a property of the form: an `imshow` heatmap
+measures 1.00 and warns on every figure that has one. Colorbars are exempt, being a
+solid ramp by construction and nobody's design decision.
+
+**It is not the data-ink ratio.** Tufte's quantity is the share of ink that carries
+data. This one counts every non-background pixel in the rectangle, frame, ticks,
+gridlines and labels included. The two move opposite ways under one edit: deleting
+gridlines raises the data-ink ratio and lowers this number. A high reading means
+saturation, not decoration, and stripping furniture is never the answer to it. The guide
+states no data-ink rule of its own, and one reason is that the empirical case for
+minimalism is weaker than its standing suggests (Bateman et al., below).
+
+The ends fail differently.
+
+**At the floor**, suspect the scale before the data. Marks occupying one corner of a
+panel usually mean limits set by an outlier or left at the default, and the fix is the
+limits, not more ink. A panel with nothing drawn in it warns even though its frame and
+ticks alone measure inside the range: the gate asks whether anything was drawn, so the
+blank cell in a grid is a WARN and not a pass.
+
+**At the ceiling**, the panel is reporting density rather than observations, which is
+the Overplotting section in `choosing-a-form.md`: transparency within the 3-alpha-level
+budget, hexbin, or a 2-D density estimate.
+
+**When the fill is context, say so.** A `contourf` landscape under a few marks reads as
+saturated because the surface is what fills the rectangle. Pass those axes as
+`check_ink(fig, context_axes=[ax])`, or `audit(fig, context_axes=[ax])`, and the gate
+separates surface from marks and measures only what sits on top.
 
 ### Then still look at it
 
@@ -199,9 +232,16 @@ to hand it to — keep those tiers few and evenly stepped, and validate with
 
 ### Diverging: `RdBu`, as shipped
 
-ColorBrewer, colorblind-safe, in matplotlib. Poles `#b1182b`{ .sw style="--c:#b1182b" } /
-`#2065ab`{ .sw style="--c:#2065ab" } clear every gate. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
+ColorBrewer, colorblind-safe, in matplotlib. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
 Never a hue at the midpoint; never two cool poles.
+
+**Take discrete levels from inside the ends, the way viridis is windowed.** Its ends as
+shipped are `#67001f`{ .sw style="--c:#67001f" } and `#053061`{ .sw style="--c:#053061" }.
+Handed to `check_palette.py` as swatches, both fall outside the lightness band, the dark
+blue under the chroma floor as well. `t ∈ [0.1, 0.9]` gives
+`#b1182b`{ .sw style="--c:#b1182b" } / `#2065ab`{ .sw style="--c:#2065ab" }, which clear
+every gate. A continuous fill is unaffected: the colormap gate reads the kind, and only
+runs the swatch gates on a map discrete enough to count as qualitative.
 
 ### Cyclic: `twilight`, as shipped
 
@@ -241,10 +281,13 @@ an explicit neutral and keyed *off* the bar, never as `cmap(0)`. The bar is the
 range that was measured, and putting a non-value at the bottom of it claims a
 quantity nobody measured.
 
-`check_figure.py` measures the kind rather than trusting a name, because
-matplotlib groups its colormaps by kind in prose documentation only: there is no
-API and no metadata on a `Colormap` object. It samples `CMAP_SAMPLES = 256`
-levels, converts to OKLab, and reads the lightness channel. Anything under
+The kind is measured rather than trusted to a name, because matplotlib groups
+its colormaps by kind in prose documentation only: there is no API and no
+metadata on a `Colormap` object. The gate is in `check_figure.py`, which samples
+`CMAP_SAMPLES = 256` levels off the colormap and hands them to `cmap_kind()` in
+`check_palette.py`, where every constant below is defined and where the OKLab
+conversion and the lightness reading happen. The split is the porting story: the
+kind measure travels with the stdlib-only module. Anything under
 `CMAP_QUALITATIVE_N = 40` levels is qualitative and is sent to the categorical
 gates instead. A map whose lightness span is under `CMAP_SPAN_MIN = 0.02` is
 isoluminant and carries no order at all. Otherwise the measure is **back-travel**,
@@ -381,6 +424,24 @@ it costs nothing to hold, because the fix is nearly always cutting words.
 If text does not fit, cut it: "Acquisition function ranks the candidate molecules" →
 "Rank every candidate."
 
+**Text off the canvas has two fixes that are not fixes.** The Clipping gate fails when a
+string's bounding box crosses the canvas edge, and the cause is nearly always a figure
+authored at a size its labels do not fit in. Shrinking type until it fits pays for canvas
+space out of the legibility budget, and a string driven under 7.5pt on the page has
+bought a Clipping pass with a Type size failure.
+
+`bbox_inches="tight"` is the one to actually watch, because it fails nothing. It trims
+the canvas to the drawn content, so the saved file is no longer the width you authored
+([matplotlib#11681](https://github.com/matplotlib/matplotlib/issues/11681)). Every number
+in this section is derived from that width: the page scale, the type floor, the stroke
+arithmetic. Trim the canvas and all of them are computed against a size the file does not
+have. Nothing reports it either, because `check_figure.py` reads the figure in memory and
+never sees the `savefig` call. `figure.mplstyle` says this at the top; it is repeated
+here because this is where the gate that catches the symptom sends a reader.
+
+The fix is `constrained_layout=True` at figure creation, or a wider `figsize` and then
+re-deciding the placement, since the placed fraction just changed.
+
 **Strokes have the same problem and the same arithmetic.** SIAM's instructions for
 authors: lines one point or thicker, because thinner lines break up or disappear in print.
 A 0.8pt stroke in a 9in figure placed at 5.5in prints at 0.49pt, so `check_line_weight`
@@ -388,13 +449,16 @@ measures on the page through the same `page_scale`. Gridlines are held to a lowe
 than data deliberately — a gridline that drops out costs a reference, a curve that drops
 out costs the finding.
 
-**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress rejects the
-upload; ACM and Elsevier reject the submission. The figure renders identically either way,
-so nothing tells you until the latest and most expensive possible moment.
-`figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
+**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress takes
+embedded Type 1 or TrueType and does not accept Type 3, so the upload is refused before a
+reviewer sees it. ACM and Elsevier check embedding in production instead, which is the
+same problem surfacing after acceptance rather than a milder one. The figure renders
+identically either way, so nothing tells you until the latest and most expensive possible
+moment. `figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
 
-**Describe the figure.** Across 100,000 public notebooks, 99.81% of generated images
-shipped with no alt text, nearly all of them matplotlib. `describe(fig, ...)` then
+**Describe the figure.** Across 100,000 public notebooks, 99.81% of programmatically
+generated images shipped with no alt text (Potluri et al., below), and matplotlib was the
+charting library behind more of them than anything else. `describe(fig, ...)` then
 `savefig(path, metadata=alt_metadata(fig, path))` — the path a second time, so the call
 can pick the key that format has. Say what the reader would have taken from
 looking — the numbers and the direction — not what the figure is made of. "A line chart
@@ -494,3 +558,20 @@ kinds, and the reason `misc` fails, comes from this literature.
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
   centre, and why a diverging map needs a meaningful zero to diverge around.
+
+Two more, for claims the sections above make outside colour.
+
+- Potluri, V., Singanamalla, S., Tieanklin, N. & Mankoff, J. (2023). Notably
+  Inaccessible: Data Driven Understanding of Data Science Notebook
+  (In)Accessibility. *ASSETS '23*. doi:10.1145/3597638.3608417,
+  arXiv:2308.03241. The 99.81% is their measured figure: of the
+  programmatically generated images across 100,000 notebooks, N=342102 carry no
+  alternative text. They also identify matplotlib as the most-imported charting
+  library in the corpus, seaborn second and built on it.
+- Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
+  (2010). Useful junk? The effects of visual embellishment on comprehension
+  and memorability of charts. *CHI '10*, 2573-2582.
+  doi:10.1145/1753326.1753716. Accuracy in describing embellished charts was
+  no worse than for plain ones, and recall after a two-to-three-week gap was
+  significantly better. Cited to mark that "less ink is better" is not
+  settled, not to license decoration.

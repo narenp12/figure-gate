@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.4.0 — 2026-07-29
+
+A minor release because it breaks a call. `check_palette.check()` returned
+`(rows, ok)` while `check_figure.audit()` returned `(ok, rows)`, and the README
+carried a paragraph warning readers about the difference. Documentation
+standing in for a fix: unpacking either one the wrong way binds a bool to the
+rows and raises nothing at the call site, so the failure surfaces later,
+somewhere else, as a bool that will not iterate.
+
+**Python 3.11 is the floor.** `requires-python` was `>=3.9`, and 3.9 reached
+end of life on 2025-10-31, so the package was being offered to an interpreter
+upstream had stopped patching. 3.10 goes the same way in October 2026, so the
+floor skips it. Two things deliberately did not move with it:
+
+- **`check_palette.py` still runs on Python 3.8** when vendored, which is what
+  the file is for, and CI still proves it in a job that installs nothing.
+  Installed from PyPI it needs 3.11, because the package carries
+  `check_figure.py` too.
+- **matplotlib stays floored at 3.8.** Pinned matplotlib is normal in
+  scientific environments, the checks are written to survive the 3.8-to-3.11
+  API drift, and the CI leg that pins 3.8.4 now runs under Python 3.11 rather
+  than disappearing.
+
+**`check()` now returns `(ok, rows)`.** If you unpack it, swap the names. The
+paragraph in the README is gone and a test holds both entry points to the same
+shape.
+
+### Prose is now swept, not spot-checked
+
+An accuracy audit of the reference material found five defects the doc suite
+could not have caught, because every assertion in it was written after somebody
+noticed the claim. Two were mechanical and are now mechanically prevented:
+
+- `#b1182b` and `#2065ab` were described as RdBu's poles. They are the map at
+  t=0.098 and t=0.899. Its actual ends, `#67001f` and `#053061`, fail the
+  lightness band, and the dark blue also fails the chroma floor. A reader
+  taking two swatches off the ends got a failing pair. The section now states
+  a sampling window, the same shape as the viridis rule beside it.
+- Five `CMAP_*` constants were named in a paragraph about `check_figure.py`.
+  They are defined in `check_palette.py`, which is where a reader porting the
+  checks needs to look.
+
+Three were claims about the world, which no test can verify: Cleveland &
+McGill's ordering was printed with seven ranks and a rank the paper does not
+contain, "ACM and Elsevier reject the submission" overstated what either
+publishes, and the 99.81% alt-text figure was correct and uncited.
+
+`tests/test_prose_claims.py` sweeps the four prose documents: every code span
+has to name something that exists, every hex has to be a colour something
+ships, every fenced python block has to parse, every sampling window has to be
+one the repo defines, and a constant named in a paragraph about one module has
+to be defined in that module. Claims about the world go in `EXTERNAL_CLAIMS`
+with a source, a date and the passage that supports them, and the cited work
+has to appear in the document's own references. Anything a resolver cannot
+place is named in a ledger with the reason.
+
+### Clipping and Ink coverage have guidance
+
+`NO_GUIDANCE` held the two gates the reference material never explained, on the
+argument that both were mechanical rows with nothing to advise. Both turned out
+to have something a reader could not get anywhere else. Clipping's two natural
+fixes are shrinking the type, which moves the failure to the Type size gate,
+and `bbox_inches="tight"`, which fails nothing while trimming the canvas away
+from the authored width that every legibility number is derived from. Ink
+coverage is routinely read as Tufte's data-ink ratio, which it is not, and
+which it moves opposite to under the edit that reading suggests.
+
+The set is empty now, with a test to keep a future re-entry deliberate.
+
+### Standardization
+
+- **One gate registry.** `GATES` holds the twenty rows with their functions,
+  their advisory flag and the arguments they need. `audit()` builds its rows
+  from it and `ADVISORY_GATES` is derived from it, where both were separately
+  maintained lists of the same names.
+- **Both entry points are documented.** `audit()` and `check()` were the only
+  functions in either module with no docstring.
+- **Remediation clauses are enumerable.** Fifteen of twenty gate messages end
+  in a `<-` clause naming the fix. The five that do not are listed in the test
+  suite with the reason, rather than being an invisible inconsistency.
+
 ## 0.3.0 — 2026-07-29
 
 A minor release, for the same reason 0.2.0 was one: a figure that passed on

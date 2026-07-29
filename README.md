@@ -7,9 +7,10 @@
 **Two scripts that read a built matplotlib figure and report which gates it
 fails.** `audit(fig)` returns `(ok, rows)` — 20 rows, one per gate, each a
 `(label, status, detail)` triple where `status` is `True`, `False`, or
-`"warn"`. `check(colors)` gates a palette the same way in 5 rows, though it
-returns them the other way round, as `(rows, ok)`. Every threshold is a
-module-level constant you can read and change.
+`"warn"`. `check(colors)` gates a palette the same way in 5 rows and returns
+the same shape. It returned `(rows, ok)` until 0.4.0, and this paragraph
+carried a warning about the difference instead of the difference being fixed.
+Every threshold is a module-level constant you can read and change.
 
 There is also an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper
 that applies the same checks when Claude Code builds a figure.
@@ -287,7 +288,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 482 tests, and
+**Gates are tested for their ability to fail.** The suite is 869 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
@@ -307,8 +308,14 @@ baseline, but it cannot tell you a box plot is hiding an n of 8.
 
 - `check_palette.py` — Python 3.8+, standard library only. Tested on 3.8, 3.9,
   3.11 and 3.13. Copied, it runs on 3.8; installed from PyPI it does not,
-  because the package carries `check_figure.py` too and that needs 3.9.
-- `check_figure.py` — Python 3.9+, matplotlib 3.8+.
+  because the package carries `check_figure.py` too and that needs 3.11. The
+  vendoring case is the one that matters here, and a job with no install in it
+  is what keeps the 3.8 claim true.
+- `check_figure.py` — Python 3.11+, matplotlib 3.8+. The Python floor is
+  support status, not syntax: 3.9 reached end of life in October 2025, and
+  3.10 follows in October 2026. The matplotlib floor is deliberately older,
+  because pinned matplotlib is normal in scientific environments and the
+  checks are written to survive it.
 - `colormaps["okabe_ito"]` needs matplotlib 3.11+. On older versions the
   palette is eight hex strings, listed in the style guide.
 

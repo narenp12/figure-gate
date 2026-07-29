@@ -1,19 +1,17 @@
 [project]
 name = "figure-gate"
-version = "0.3.0"
+version = "0.4.0"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Naren Prakash", email = "146764727+narenp12@users.noreply.github.com" }]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = ["matplotlib", "figures", "accessibility", "colorblind",
             "okabe-ito", "viridis", "data-visualization", "publishing"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -95,13 +93,13 @@ filterwarnings = [
 # caught a wrong threshold that would otherwise have shipped 11 colormaps in
 # the wrong family.
 #
-# Same marker reasoning as `docs` below -- cmasher 1.9.2 needs Python >= 3.10
-# and this project supports 3.9, so without the marker uv resolves the group
-# across the full range and fails outright. It pulls colorspacious, numpy and
-# matplotlib, none of which the shipped scripts may import.
+# cmasher pulls colorspacious, numpy and matplotlib, none of which the shipped
+# scripts may import. It needed a `python_full_version >= '3.10'` marker while
+# this project supported 3.9; the floor is 3.11 now, so the marker is gone and
+# the oracle runs everywhere the tests do.
 [dependency-groups]
 dev = [
-    "cmasher>=1.9 ; python_full_version >= '3.10'",
+    "cmasher>=1.9",
     "pytest>=7.0",
     "pytest-xdist>=3.8.0",
     "scipy>=1.6",
@@ -114,12 +112,12 @@ dev = [
 # Pinned to a minor, not floored: Zensical is 0.0.x, so the usual reading of a
 # lower bound -- "anything newer is compatible" -- does not hold.
 #
-# The marker is load-bearing, not hygiene. Zensical needs Python 3.10; this
-# project supports 3.9, and `check_palette.py` supports 3.8, which is a claim
-# CI runs a whole job to keep true. Without the marker uv resolves this group
-# across the project's full Python range and fails outright -- and the tempting
-# fix, raising `requires-python`, would narrow the library's support because of
-# a tool that only builds a website.
+# The marker outlived its reason and is kept anyway. It was load-bearing while
+# `requires-python` was 3.9: Zensical needs 3.10, so without it uv resolved the
+# group across the project's full range and failed outright. The floor is 3.11
+# now, so it never excludes anything -- but `check_palette.py` is still claimed
+# to run on 3.8 when vendored, and a marker that documents a tool's own floor
+# costs nothing next to a resolution failure if that range ever widens again.
 docs = ["zensical>=0.0.51,<0.1; python_version >= '3.10'"]
 
 # Out of `dev` on purpose: the documented command is

@@ -29,6 +29,35 @@ Thresholds are measured, and several are quoted in the guide and pinned in
 the docs quoting a number the code doesn't produce has no reason to trust
 anything else in them.
 
+## Writing prose
+
+`tests/test_prose_claims.py` sweeps the reference material rather than checking
+named claims one at a time. Three things follow from that when you write a
+sentence.
+
+**Anything in backticks has to exist.** Constants, functions, files, flags,
+rcParam keys, colormap names. A name that resolves nowhere fails, and the fix is
+usually that the name is wrong. If it genuinely cannot resolve — a LaTeX
+package, an error string quoted so a reader recognises it — add it to
+`UNRESOLVED_SPANS` with the reason. That set is meant to stay small.
+
+**A constant belongs to the module the paragraph names.** A paragraph about
+`check_figure.py` that names a `check_palette.py` constant fails, because a
+reader porting the checks greps the module the paragraph named. This is a real
+defect that shipped.
+
+**A claim about the world needs a source and a recorded verification.** Journal
+type floors, font requirements, published results: those go in
+`EXTERNAL_CLAIMS` with the document, an anchor phrase, the source, the date it
+was checked, and the passage that supports it. No test can verify a claim about
+the world; what the ledger does is make the human check enumerable, dated, and
+auditable without repeating the search. The cited work also has to appear in the
+document's own References, because a source only the test file knows about is
+not a source the reader has.
+
+Numbers keep working the way they already did: write them as
+`` `NAME = value` `` and the doc suite pins them against the code.
+
 ## Style
 
 Comments explain *why*, since the *what* is usually legible from the code.
