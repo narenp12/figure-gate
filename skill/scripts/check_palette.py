@@ -103,7 +103,13 @@ def _back_travel(ls):
     span = max(ls) - min(ls)
     if span <= 0:
         return 0.0
-    sign = 1 if sum(1 for s in steps if s > 0) > len(steps) / 2 else -1
+    # Direction is net travel, not a majority vote over the steps. A vote counts
+    # plateau steps against ascending, and 8-bit sRGB rounding makes plateaus the
+    # majority whenever the lightness span is narrow relative to the sample count:
+    # viridis windowed to t in [0.00, 0.38], the window the style guide asks for,
+    # is 158 plateaus out of 255 steps. Voting reads that ramp as descending and
+    # scores every genuine rise as back travel, 1.00 against a 0.02 threshold.
+    sign = 1 if ls[-1] >= ls[0] else -1
     return sum(abs(s) for s in steps if s * sign < 0) / span
 
 

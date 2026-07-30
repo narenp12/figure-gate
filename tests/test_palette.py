@@ -267,6 +267,38 @@ def test_the_back_travel_threshold_is_where_it_says_it_is():
     assert cp._back_travel(lightness_with_one_reversal(0.0)) == 0.0
 
 
+def windowed_samples(name, lo, hi):
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+    cmap = colormaps[name]
+    n = cp.CMAP_SAMPLES
+    return [to_hex(cmap(lo + (hi - lo) * i / (n - 1))) for i in range(n)]
+
+
+def test_a_plateau_heavy_ramp_still_reads_as_monotone():
+    # 8-bit sRGB rounding flattens consecutive samples, so a narrow window is
+    # mostly plateaus. Counting those against ascending inverted the direction.
+    ls = [(i // 4) / 64 for i in range(cp.CMAP_SAMPLES)]
+    assert sum(1 for a, b in zip(ls, ls[1:]) if b == a) > len(ls) / 2
+    assert cp._back_travel(ls) == 0.0
+    assert cp._back_travel(ls[::-1]) == 0.0
+
+
+def test_the_window_the_style_guide_asks_for_is_sequential():
+    pytest.importorskip("matplotlib")
+    # style-guide.md narrows viridis to t in [0.00, 0.38] beside status green.
+    samples = windowed_samples("viridis", 0.00, 0.38)
+    assert cp.cmap_kind(samples) == "sequential"
+    assert cp.cmap_kind(windowed_samples("viridis", 0.05, 0.70)) == "sequential"
+
+
+def test_a_narrow_window_classifies_the_same_read_either_way():
+    pytest.importorskip("matplotlib")
+    samples = windowed_samples("Greys", 0.20, 0.35)
+    assert cp.cmap_kind(samples) == "sequential"
+    assert cp.cmap_kind(samples[::-1]) == "sequential"
+
+
 def test_an_isoluminant_ramp_is_misc_not_sequential():
     assert cp.cmap_kind(["#808080"] * 256) == "misc"
 

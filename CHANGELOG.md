@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+**`cmap_kind` called a windowed viridis "misc".** `_back_travel` picked its
+direction by majority vote over the steps, counting strictly positive steps
+against the length of the whole list. Plateau steps therefore counted as
+evidence against ascending, and 8-bit sRGB rounding makes plateaus the majority
+whenever the lightness span is narrow relative to the sample count. Viridis
+windowed to `t ∈ [0.00, 0.38]`, the window `style-guide.md` asks for beside
+status green, is 158 plateaus in 255 steps: the vote read it as descending and
+scored every genuine rise as back travel, 1.00 against a 0.02 threshold.
+
+The bug was one-sided, which is why it survived. A descending ramp with the same
+plateaus landed on `-1` by accident and passed, so only ascending ramps failed.
+Direction is now net travel, `ls[-1] >= ls[0]`, which is what the vote was
+approximating. No named colormap changes kind.
+
 ## 0.4.0 — 2026-07-29
 
 A minor release because it breaks a call. `check_palette.check()` returned
