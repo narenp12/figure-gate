@@ -78,6 +78,45 @@ exclude = [
     ".DS_Store",
 ]
 
+[tool.ruff]
+# The project floor, which is what everything except one file is written to.
+target-version = "py311"
+
+# The exception, and the reason ruff is configured at all. `check_palette.py` is
+# claimed to run on Python 3.8 with nothing installed, and that claim is what
+# makes it vendorable into a non-Python toolchain. The `stdlib-only` job in
+# ci.yml already runs it on 3.8, so a syntax break is caught -- but only after a
+# push, and only for the two invocations that job happens to make. Ruff reads
+# the whole file against the 3.8 grammar in the editor, before the commit.
+#
+# Per-file rather than a nested config: `check_figure.py` sits in the same
+# directory, imports matplotlib, and is under no such constraint.
+per-file-target-version = { "skill/scripts/check_palette.py" = "py38" }
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP", "FA"]
+
+# E741 forbids `l` as a name. In OKLab, `l` IS the name of the lightness
+# channel: `linear_to_oklab` returns `l, m, s` because that is what the
+# published matrix calls its rows. Renaming to satisfy the linter would make
+# the code harder to check against the reference, not easier.
+#
+# B905 wants `strict=` on every `zip()`. It is a 3.10 keyword, so it cannot be
+# used in the file with the 3.8 floor, and adding it everywhere else buys a
+# guard against a length mismatch that no zip here can have.
+ignore = ["E741", "B905"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["conda", "examples", "skill", "tests"]
+
+# The code is unannotated by choice, so the strict flags are off: the value here
+# is catching a real contradiction (an attribute that cannot exist, a return
+# that cannot happen), not pressure to annotate. matplotlib and scipy ship
+# incomplete stubs and pytest plugins ship none, and nothing is gained by
+# reporting that.
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
@@ -111,8 +150,10 @@ filterwarnings = [
 [dependency-groups]
 dev = [
     "cmasher>=1.9",
+    "mypy>=1.11",
     "pytest>=7.0",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.16",
     "scipy>=1.6",
 ]
 

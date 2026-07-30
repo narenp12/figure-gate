@@ -37,6 +37,28 @@ jobs:
             exit 1
           fi
 
+  # Its own job rather than a step on `test`: this says nothing about whether
+  # the gates work, so it should not wait behind a TeX install to say it, and a
+  # lint failure should not read as a broken checker.
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv python install 3.13
+      - run: uv sync --group dev
+
+      # The 3.8 floor on check_palette.py is enforced here through
+      # `per-file-target-version`, not only by the stdlib-only job below. That
+      # job proves the two invocations it makes still run; this reads the whole
+      # file against the 3.8 grammar.
+      - run: uv run ruff check --output-format github .
+      - run: uv run mypy
+
   test:
     name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
     runs-on: ubuntu-latest
@@ -174,6 +196,64 @@ jobs:
               sys.exit(f"unexpected skill name: {meta['name']!r}")
           print(f"ok: {meta['name']} ({len(meta['description'])} char description)")
           PY
+      # The skill is also distributed as a Claude Code plugin, and plugin.json
+      # carries its own `version`. Claude Code pins installs to that string, so
+      # a release that bumps pyproject.toml and forgets plugin.json ships new
+      # files under the old version and no installed copy ever updates. The tag
+      # check in release.yml already exists for the same reason one level up;
+      # this is the same check for the second place the version is written.
+      - name: The plugin manifest and pyproject agree on the version
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys, tomllib
+
+          project = tomllib.loads(
+              pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          manifest = json.loads(
+              pathlib.Path("skill/.claude-plugin/plugin.json").read_text())
+          plugin = manifest.get("version")
+
+          if plugin != project:
+              sys.exit(f"skill/.claude-plugin/plugin.json says {plugin!r}, "
+                       f"pyproject.toml says {project!r}")
+          print(f"ok: both say {project}")
+          PY
+
+      # A marketplace entry whose `source` does not resolve is only discovered
+      # when someone runs `/plugin install` and it fails, which is after the
+      # push that broke it.
+      - name: The marketplace entry points at a real plugin
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          market = json.loads(
+              pathlib.Path(".claude-plugin/marketplace.json").read_text())
+          problems = []
+
+          for entry in market["plugins"]:
+              source = entry["source"]
+              if not isinstance(source, str):
+                  continue  # a git or GitHub source is not ours to resolve
+              root = pathlib.Path(source)
+              own = root / ".claude-plugin" / "plugin.json"
+              if not own.is_file():
+                  problems.append(f"{entry['name']}: no plugin.json under {root}")
+                  continue
+              name = json.loads(own.read_text()).get("name")
+              if name != entry["name"]:
+                  problems.append(
+                      f"marketplace calls it {entry['name']!r}, "
+                      f"{own} calls it {name!r}")
+              if not (root / "SKILL.md").is_file() and not (root / "skills").is_dir():
+                  problems.append(f"{entry['name']}: {root} has no SKILL.md and "
+                                  "no skills/ directory, so it loads with no skill")
+              print(f"  ok {entry['name']} -> {root}")
+
+          if problems:
+              sys.exit("\n".join(problems))
+          PY
+
       - name: Files the skill references actually exist
         run: |
           test -f skill/assets/figure.mplstyle

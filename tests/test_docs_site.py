@@ -180,7 +180,7 @@ def slate(lightness):
     right and wrong by 0.2:1.
     """
     r, g, b = colorsys.hls_to_rgb(225 / 360, lightness, 0.15)
-    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 # The two theme variants differ in their dark background, so they differ in

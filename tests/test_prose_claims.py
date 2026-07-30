@@ -353,6 +353,16 @@ UNRESOLVED_SPANS = {
     "status": "a field of the row triple, named in prose describing the shape",
     "#": "the character itself, in the sentence about style-sheet colours "
          "written with a leading hash",
+    "/plugin install figure-gate@figure-gate": "a Claude Code command, named "
+                                               "where the README explains how "
+                                               "to install the skill as a "
+                                               "plugin; the resolvers see this "
+                                               "project's Python, not the "
+                                               "host's command set",
+    "figure-gate:research-figures": "how Claude Code namespaces the skill once "
+                                    "installed as a plugin: the plugin name "
+                                    "from plugin.json, then the skill name "
+                                    "from SKILL.md's frontmatter",
 }
 
 

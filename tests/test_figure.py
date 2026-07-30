@@ -758,7 +758,6 @@ def test_contour_dash_warns_on_a_signed_field():
 
 
 def test_contour_dash_warns_on_negative_levels():
-    import numpy as np
     X, Y = _grid()
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.contour(X, Y, -(X**2 + Y**2), colors="black")   # monochrome: auto-dash
@@ -769,7 +768,6 @@ def test_contour_dash_warns_on_negative_levels():
 
 
 def test_contour_dash_passes_with_explicit_solid_linestyle():
-    import numpy as np
     X, Y = _grid()
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.contour(X, Y, -(X**2 + Y**2), linestyles="solid")
@@ -793,7 +791,6 @@ def test_contour_dash_does_not_fire_without_a_negative_level():
     """Nothing is dashed when there is nothing negative to dash, so widening
     the condition to 'any negative level' must not start firing on ordinary
     positive-valued fields."""
-    import numpy as np
     X, Y = _grid()
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     cs = ax.contour(X, Y, X**2 + Y**2 + 1.0, colors="black")
@@ -1597,7 +1594,10 @@ def test_ink_coverage_emptiness_is_structural_not_just_a_low_fraction():
 
 # --- the colormap kind gate --------------------------------------------------
 
-import numpy as np
+# Deliberately here and not at the top: every test above imports numpy inside
+# the function that needs it, so the file states per test what that test needs.
+# This section is the one place several helpers share it.
+import numpy as np  # noqa: E402
 
 
 def heat(cmap, n=24):

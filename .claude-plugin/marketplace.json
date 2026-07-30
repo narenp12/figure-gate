@@ -1,0 +1,17 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "figure-gate",
+  "description": "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size.",
+  "owner": {
+    "name": "Naren Prakash",
+    "url": "https://github.com/narenp12"
+  },
+  "plugins": [
+    {
+      "name": "figure-gate",
+      "source": "./skill",
+      "category": "documentation",
+      "tags": ["matplotlib", "figures", "accessibility", "colorblind", "publishing"]
+    }
+  ]
+}

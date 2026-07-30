@@ -90,12 +90,27 @@ something that was already tried and reverted for a measured reason; keep them.
 ## Running things
 
 ```bash
-pip install -e ".[dev]"
-pytest -q                              # the suite
-python skill/scripts/check_figure.py   # the checker rejects a bad figure
-python examples/demo.py                # end-to-end
+uv sync --group dev
+uv run pytest -q                              # the suite
+uv run ruff check .                           # lint
+uv run mypy                                   # type check
+uv run python skill/scripts/check_figure.py   # the checker rejects a bad figure
+uv run python examples/demo.py                # end-to-end
 ```
+
+`dev` is a dependency group, not an extra, so it is `--group dev` rather than
+`.[dev]`.
+
+Ruff runs at the project floor of 3.11 with one exception, set through
+`per-file-target-version`: `check_palette.py` is read against the 3.8 grammar,
+because that file is claimed to run on 3.8 when vendored. The `stdlib-only` CI
+job proves the two invocations it makes still work on 3.8; ruff reads the whole
+file, and does it before the commit rather than after the push.
+
+mypy runs unannotated. The code is written without type annotations on purpose,
+so the strict flags are off and what is left is the contradiction a reader would
+also catch: an attribute that cannot exist, a return that cannot happen.
 
 `check_palette.py` must keep importing nothing outside the standard library.
 That's what makes it usable from a non-Python toolchain, and CI has a job with
-no `pip install` in it to make sure the claim stays true.
+no install step in it to make sure the claim stays true.

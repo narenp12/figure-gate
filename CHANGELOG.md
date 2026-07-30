@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+**The repository is a Claude Code plugin marketplace.**
+`.claude-plugin/marketplace.json` lists the skill and `skill/.claude-plugin/plugin.json`
+describes it, so `/plugin marketplace add narenp12/figure-gate` installs it and
+follows the tags this project already cuts. The route that existed before was
+`cp -r skill ~/.claude/skills/`, which pins nothing and updates never. Nothing
+publishes: the marketplace resolves against git, so pushing is the release.
+
+Two CI checks come with it, both in the `skill` job. `plugin.json` carries its
+own `version` and Claude Code pins installs to that string, so a release that
+bumped `pyproject.toml` alone would ship new files under the old version and no
+installed copy would ever update. The second check resolves each marketplace
+entry to a real plugin directory with a matching name, because a broken
+`source` is otherwise found by a user whose `/plugin install` fails.
+
+**Ruff and mypy run in CI.** Neither existed before. The reason for ruff is one
+file: `check_palette.py` is claimed to run on Python 3.8, and that claim is what
+makes it vendorable into a non-Python toolchain. The `stdlib-only` job proves
+the two invocations it makes still run there; `per-file-target-version` sets
+that one file to `py38` and reads all of it against the 3.8 grammar. Ruff is
+configured to ignore `E741`, since `l` is the name of the OKLab lightness
+channel and `linear_to_oklab` returns `l, m, s` because that is what the
+published matrix calls its rows.
+
+Thirteen findings were fixed rather than suppressed: four dead imports, a
+`pytest.importorskip` whose binding was unused, two percent-format strings, an
+f-string with no placeholders, two unused loop variables, a missing
+`raise ... from None`, and one annotation mypy needed. Two carry a `noqa` with
+the reason written next to it.
+
 **`cmap_kind` called a windowed viridis "misc".** `_back_travel` picked its
 direction by majority vote over the steps, counting strictly positive steps
 against the length of the whole list. Plateau steps therefore counted as
