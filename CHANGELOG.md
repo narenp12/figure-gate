@@ -127,8 +127,10 @@ gate does not run" rather than as a build failure. The recipe depends on
 between the library and a package that pulls pyqt for a backend these checkers
 never open.
 
-The README does not yet claim a conda install, because there is not one until
-the staged-recipes PR merges.
+The README claimed no conda install at this release, because there was not one
+until the staged-recipes PR merged. It has since merged, and the README gained
+the badge and the `conda install -c conda-forge figure-gate` line after 0.4.0
+shipped.
 
 ## 0.3.0 — 2026-07-29
 
