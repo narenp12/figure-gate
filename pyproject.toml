@@ -117,6 +117,23 @@ files = ["conda", "examples", "skill", "tests"]
 # reporting that.
 ignore_missing_imports = true
 
+# Third-party types are not read at all, which is a larger hammer than it looks
+# and is here for a specific reason. numpy's `__init__.pyi` uses PEP 695 `type`
+# statements, and mypy refuses to parse those when `python_version` is below
+# 3.12: it stops at the first one and reports "errors prevented further
+# checking", so the run says nothing about this project's code at all. CI builds
+# its venv on 3.13 and hit exactly that; a 3.11 venv happens to resolve an older
+# numpy and did not, which is why this passed locally and failed on the first
+# push.
+#
+# The alternative was raising `python_version` to 3.13, which would have made
+# the stub parse and quietly stopped checking this code against the 3.11 floor
+# it actually has to run on. Given `ignore_missing_imports` was already set, the
+# gate was never leaning on matplotlib's or numpy's types; it is here for
+# contradictions in this project's own code, and it still catches those. Drop
+# this line once the floor reaches 3.12.
+no_site_packages = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
