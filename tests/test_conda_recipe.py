@@ -40,6 +40,36 @@ def recipe_text():
     return RECIPE.read_text()
 
 
+def context():
+    """The recipe's `context:` block, as a plain dict of strings.
+
+    rattler-build interpolates these into the rest of the file as
+    `${{ name }}`. A test that compared the raw text would be comparing
+    `python ${{ python_min }}` against `3.11` and failing on a recipe that is
+    correct, so the substitution happens here too. Only simple scalars: the
+    block holds a name, a version and a floor, and nothing that needs an
+    expression evaluator.
+    """
+    lines = recipe_text().splitlines()
+    start = lines.index("context:")
+    out = {}
+    for line in lines[start + 1:]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        pair = re.fullmatch(r'  (\w+): "?([^"#]+?)"?', line)
+        if not pair:
+            break
+        out[pair.group(1)] = pair.group(2)
+    return out
+
+
+def resolve(value):
+    """`python >=${{ python_min }}` -> `python >=3.11`."""
+    for key, replacement in context().items():
+        value = value.replace("${{ %s }}" % key, replacement)
+    return value
+
+
 def items(header, indent):
     """The `- ` entries of a YAML block, by exact header line.
 
@@ -64,7 +94,7 @@ def items(header, indent):
 
 def requirement(entry):
     """`matplotlib-base >=3.8` -> `("matplotlib-base", ">=3.8")`."""
-    name, _, spec = entry.partition(" ")
+    name, _, spec = resolve(entry).partition(" ")
     return name, spec.strip()
 
 
@@ -123,8 +153,11 @@ def test_the_recipe_python_floor_is_the_project_floor():
         f"recipe runs on python {run.get('python')!r}, project floor is "
         f">={version}")
 
+    # `python 3.11` on its own is not a match spec -- rattler-build rejects it
+    # outright, asking for `==3.11` or `3.11.*` -- so the host pin is the
+    # `.*` form and the floor is what it is built from.
     host = dict(requirement(entry) for entry in items("  host:", indent=4))
-    assert host.get("python") == version, (
+    assert host.get("python") == f"{version}.*", (
         f"recipe builds against python {host.get('python')!r}, project floor "
         f"is {version}")
 

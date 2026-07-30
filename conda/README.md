@@ -30,15 +30,28 @@ The recipe pins its `source.url` to a PyPI sdist, so PyPI has to go first.
    `pyproject.toml` is not on PyPI yet.
 3. Commit the stamped `conda/recipe.yaml`.
 4. Fork [conda-forge/staged-recipes][staged], copy the stamped file to
-   `recipes/figure-gate/recipe.yaml` on a branch, and open a PR titled
-   `Add figure-gate`. One recipe per PR.
-5. Optional but worth it -- build it locally before asking a reviewer to:
+   `recipes/figure-gate/recipe.yaml` on a branch, and commit. One recipe per
+   PR.
+5. Lint and build it there, before asking a reviewer to. Both are tasks in
+   their `pixi.toml`, and running them rather than `rattler-build` directly is
+   what exercises their variant config:
 
    ```bash
-   pixi exec rattler-build build --recipe conda/recipe.yaml
+   pixi run lint && pixi run build-osx osx_arm64
    ```
 
-6. A conda-forge reviewer merges it, a bot creates
+   Three things that stop the build before it starts, none of them the
+   recipe's fault: their workspace needs pixi >= 0.59 (`pixi self-update`), the
+   script refuses to run on `main`, and `OSX_SDK_DIR` points at
+   `.pixi/macOS-SDKs`, which has to exist or its writability probe aborts. The
+   build also `rm -rf`s every recipe already in their `main` to isolate yours,
+   so `git checkout -- .ci_support recipes` afterwards.
+6. Open the PR, titled `Add figure-gate`. Post a comment confirming you are
+   willing to be listed as a maintainer -- their checklist requires it and
+   nobody else can post it for you. A first-time contributor cannot ping the
+   review team directly, so ask the bot:
+   `@conda-forge-admin, please ping conda-forge/help-python`.
+7. A conda-forge reviewer merges it, a bot creates
    `conda-forge/figure-gate-feedstock`, and the package appears on the
    `conda-forge` channel within an hour or so. `narenp12` is listed under
    `recipe-maintainers`, which is what grants write access to that feedstock.
@@ -56,13 +69,19 @@ because `conda/recipe.yaml` in this repo is what the next reader will believe.
 ## What the tests hold
 
 `tests/test_conda_recipe.py` checks the recipe against `pyproject.toml` for the
-three things that drift silently and are only discovered by a user whose
-`conda install` produced something the `pip install` would not have:
+things that drift silently and are only discovered by a user whose `conda
+install` produced something the `pip install` would not have:
 
 - the recipe version equals the project version,
-- the runtime dependencies and the Python floor match, allowing for
-  conda-forge's `matplotlib-base` in place of PyPI's `matplotlib`,
+- `source.url` interpolates that version rather than hard-coding one, so the
+  test above cannot pass while the recipe fetches a different sdist,
+- the runtime dependencies match, allowing for conda-forge's `matplotlib-base`
+  in place of PyPI's `matplotlib`,
+- the Python floor matches, in both `host` and `run`,
 - the entry points match `[project.scripts]`.
+
+`${{ }}` context variables are resolved before comparing, so `python
+>=${{ python_min }}` is checked as the version it expands to.
 
 It deliberately does not check `sha256`, which is unknowable until the release
 exists and is the one field `update_recipe.py` is responsible for.
