@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How a gate is meant to behave
+    url: https://github.com/narenp12/figure-gate/blob/main/skill/references/style-guide.md
+    about: >-
+      Every threshold in the checkers is derived from a named failure recorded
+      in the style guide. Read the entry for your gate before filing: it may
+      already say why the number is where it is.
+  - name: The bar for a new gate
+    url: https://github.com/narenp12/figure-gate/blob/main/CONTRIBUTING.md
+    about: >-
+      A new check ships with a named failure, a test proving it fails, and a
+      test proving it does not over-fire. Proposals are held to that.

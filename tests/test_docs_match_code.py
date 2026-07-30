@@ -1353,3 +1353,58 @@ def test_every_gate_has_guidance_a_reader_can_find(gate):
         "in that file. Either the passage was rewritten and the anchor needs "
         "updating, or the guidance was removed and the gate now explains "
         "itself nowhere")
+
+
+# --- the issue tracker ------------------------------------------------------
+# Open defects live in the tracker rather than in a "known issues" heading,
+# because a bug description is the one kind of sentence `test_prose_claims.py`
+# cannot gate. That makes the templates themselves ungated prose unless
+# something checks them, and the parts worth checking are the parts that name
+# code: a form quoting a gate that no longer exists teaches a reporter to file
+# against a name the maintainer will not recognise.
+
+TEMPLATES = README.parent / ".github" / "ISSUE_TEMPLATE"
+
+
+def template_files():
+    return sorted(p for p in TEMPLATES.glob("*.yml") if p.name != "config.yml")
+
+
+def test_the_issue_forms_are_the_ones_contributing_describes():
+    names = {re.match(r"name:\s*(.+)", p.read_text().splitlines()[0]).group(1)
+             for p in template_files()}
+    assert names == {"A gate fired on a figure that is fine",
+                     "A broken figure passed",
+                     "Something else is broken",
+                     "Propose a new gate"}
+    described = (README.parent / "CONTRIBUTING.md").read_text()
+    for name in names:
+        first = name.split(".")[0]
+        assert f"**{first}" in described, (
+            f"{first!r} is an issue form with no entry in CONTRIBUTING.md")
+
+
+def test_the_issue_forms_name_files_that_exist():
+    missing = []
+    for path in template_files() + [TEMPLATES / "config.yml"]:
+        for span in re.findall(r"`([^`]+)`", path.read_text()):
+            if not span.endswith((".py", ".md", ".mplstyle")):
+                continue
+            hits = list(README.parent.rglob(span))
+            if not hits:
+                missing.append(f"{path.name}: {span}")
+    assert not missing, f"{missing} name files that are not in the repo"
+
+
+def test_the_over_fire_form_quotes_real_gate_names():
+    pytest.importorskip("matplotlib")
+    text = (TEMPLATES / "gate-over-fires.yml").read_text()
+    # Only the "Which gate" field. Elsewhere in the form a backtick is a shell
+    # command, and every example there would read as a gate name.
+    block = re.search(r"id: gate\n(.*?)\n  - type:", text, re.S)
+    quoted = set(re.findall(r"`([^`]+)`", block.group(1)))
+    roster = set(audit_gate_names())
+    assert quoted, "the form stopped giving examples; it should name gates"
+    assert quoted <= roster, (
+        f"{sorted(quoted - roster)} are offered as example gate names and "
+        "`audit` returns no row by those names")

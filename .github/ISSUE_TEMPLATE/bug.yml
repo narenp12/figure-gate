@@ -1,0 +1,56 @@
+name: Something else is broken
+description: A crash, a wrong number, or a document that says something the code does not do.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind
+      options:
+        - The checker crashed or hung
+        - A reported number is wrong
+        - The docs describe behaviour the code does not have
+        - Packaging or install
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: >-
+        For a wrong number, give the value you expected and how you derived it.
+        For a documentation defect, quote the sentence and name the file: prose
+        claims are gated by `tests/test_prose_claims.py`, so one that slipped
+        through is usually a gap in the sweep as well as a wrong sentence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The smallest script or command that shows it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Traceback or report, verbatim.
+      render: text
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: >-
+        Output of `python -c "import matplotlib, sys; print(sys.version,
+        matplotlib.__version__)"`, the figure-gate version, and how you
+        installed it (PyPI, conda-forge, vendored `check_palette.py`, source).
+      render: text
+    validations:
+      required: true

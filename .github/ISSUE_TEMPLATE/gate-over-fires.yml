@@ -1,0 +1,68 @@
+name: A gate fired on a figure that is fine
+description: A check returned FAIL or WARN on a legitimate figure.
+labels: ["false positive"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Every false positive spends the credibility the gate runs on, so these
+        are treated as defects rather than tuning requests. Three of the
+        existing checks fired on things that never render before they were
+        tuned.
+
+  - type: input
+    id: gate
+    attributes:
+      label: Which gate
+      description: >-
+        The name as it appears in the report, e.g. `Type size`, `Mark ratio`,
+        `Contrast stack`. If several fired, file the one you believe is wrong.
+      placeholder: Type size
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: The figure that produced it
+      description: >-
+        A script that builds the figure and the exact command you ran. Keep it
+        to the smallest figure that still fires the gate: a check that fires on
+        a two-line plot and one that fires only on a full paper figure are
+        usually different bugs.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: What the checker printed
+      description: The report, verbatim, including the measured number.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why the figure is fine
+      description: >-
+        The case for the figure, at the size it will print. If it is legible at
+        7pt in a single column, say so and say at what width. This is the part
+        that decides whether the threshold moves, the gate learns an exemption,
+        or the gate is right and the figure is not.
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: >-
+        Output of `python -c "import matplotlib, sys; print(sys.version,
+        matplotlib.__version__)"` and the figure-gate version. Several gates
+        measure rendered text, so the matplotlib version matters.
+      render: text
+    validations:
+      required: true
