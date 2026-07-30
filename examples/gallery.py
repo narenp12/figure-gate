@@ -55,7 +55,7 @@ INK = "#000000"
 MUTED = "#777570"
 SURFACE = plt.rcParams["axes.facecolor"]
 
-results = []
+results: list[tuple[str, bool]] = []
 
 
 def finish(fig, name, description, **audit_kw):
@@ -296,7 +296,7 @@ def forms():
     samples = [rng.normal(0.42, 0.06, 14),
                np.concatenate([rng.normal(0.38, 0.04, 7),
                                rng.normal(0.71, 0.04, 7)])]
-    for i, (name, vals) in enumerate(zip(groups, samples)):
+    for i, (_name, vals) in enumerate(zip(groups, samples)):
         jitter = rng.uniform(-0.09, 0.09, vals.size)
         a.plot(np.full(vals.size, i) + jitter, vals, linestyle="none",
                marker="o", ms=4.5, color=SERIES[i], alpha=1.0)
@@ -443,7 +443,7 @@ def orbit():
 
     # The two structural facts a reader wants marked, on clear ground above the
     # attractor rather than inside it.
-    for r, name in ((3.0, "period doubles"), (3.5699, "chaos onset")):
+    for r, _name in ((3.0, "period doubles"), (3.5699, "chaos onset")):
         ax.axvline(r, color=MUTED, lw=1.0, zorder=1)
     ax.annotate("first doubling\n$r = 3$", (3.0, 0.06), textcoords="offset points",
                 xytext=(-6, 0), ha="right", va="bottom", color=INK)

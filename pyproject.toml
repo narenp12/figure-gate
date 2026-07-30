@@ -78,6 +78,62 @@ exclude = [
     ".DS_Store",
 ]
 
+[tool.ruff]
+# The project floor, which is what everything except one file is written to.
+target-version = "py311"
+
+# The exception, and the reason ruff is configured at all. `check_palette.py` is
+# claimed to run on Python 3.8 with nothing installed, and that claim is what
+# makes it vendorable into a non-Python toolchain. The `stdlib-only` job in
+# ci.yml already runs it on 3.8, so a syntax break is caught -- but only after a
+# push, and only for the two invocations that job happens to make. Ruff reads
+# the whole file against the 3.8 grammar in the editor, before the commit.
+#
+# Per-file rather than a nested config: `check_figure.py` sits in the same
+# directory, imports matplotlib, and is under no such constraint.
+per-file-target-version = { "skill/scripts/check_palette.py" = "py38" }
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP", "FA"]
+
+# E741 forbids `l` as a name. In OKLab, `l` IS the name of the lightness
+# channel: `linear_to_oklab` returns `l, m, s` because that is what the
+# published matrix calls its rows. Renaming to satisfy the linter would make
+# the code harder to check against the reference, not easier.
+#
+# B905 wants `strict=` on every `zip()`. It is a 3.10 keyword, so it cannot be
+# used in the file with the 3.8 floor, and adding it everywhere else buys a
+# guard against a length mismatch that no zip here can have.
+ignore = ["E741", "B905"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["conda", "examples", "skill", "tests"]
+
+# The code is unannotated by choice, so the strict flags are off: the value here
+# is catching a real contradiction (an attribute that cannot exist, a return
+# that cannot happen), not pressure to annotate. matplotlib and scipy ship
+# incomplete stubs and pytest plugins ship none, and nothing is gained by
+# reporting that.
+ignore_missing_imports = true
+
+# Third-party types are not read at all, which is a larger hammer than it looks
+# and is here for a specific reason. numpy's `__init__.pyi` uses PEP 695 `type`
+# statements, and mypy refuses to parse those when `python_version` is below
+# 3.12: it stops at the first one and reports "errors prevented further
+# checking", so the run says nothing about this project's code at all. CI builds
+# its venv on 3.13 and hit exactly that; a 3.11 venv happens to resolve an older
+# numpy and did not, which is why this passed locally and failed on the first
+# push.
+#
+# The alternative was raising `python_version` to 3.13, which would have made
+# the stub parse and quietly stopped checking this code against the 3.11 floor
+# it actually has to run on. Given `ignore_missing_imports` was already set, the
+# gate was never leaning on matplotlib's or numpy's types; it is here for
+# contradictions in this project's own code, and it still catches those. Drop
+# this line once the floor reaches 3.12.
+no_site_packages = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
@@ -111,8 +167,10 @@ filterwarnings = [
 [dependency-groups]
 dev = [
     "cmasher>=1.9",
+    "mypy>=1.11",
     "pytest>=7.0",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.16",
     "scipy>=1.6",
 ]
 

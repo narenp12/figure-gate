@@ -162,6 +162,19 @@ next to it.
 
 ### As a Claude Code skill
 
+The repository is also a plugin marketplace, so Claude Code can install the
+skill and track updates against the tags this project already cuts:
+
+```bash
+/plugin marketplace add narenp12/figure-gate
+```
+
+then `/plugin install figure-gate@figure-gate`. The skill is invoked as
+`figure-gate:research-figures`.
+
+Copying works too, and is the right choice if you want to edit the thresholds
+in place:
+
 ```bash
 cp -r figure-gate/skill ~/.claude/skills/research-figures
 ```
@@ -290,7 +303,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 881 tests, and
+**Gates are tested for their ability to fail.** The suite is 883 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

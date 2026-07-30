@@ -251,7 +251,7 @@ def test_named_colormaps_classify_as_measured(name, expected):
 
 
 def test_viridis_is_not_misc():
-    colormaps = pytest.importorskip("matplotlib").colormaps
+    pytest.importorskip("matplotlib")
     assert cp.cmap_kind(cmap_samples("viridis")) == "sequential"
 
 
@@ -313,7 +313,6 @@ def test_the_cyclic_wrap_is_a_colour_distance_not_a_lightness_one():
     colormaps = pytest.importorskip("matplotlib").colormaps
     if "RdYlGn" not in colormaps:
         pytest.skip("this matplotlib has no RdYlGn")
-    from matplotlib.colors import to_hex
     ends = cmap_samples("RdYlGn")
     lab = [cp.linear_to_oklab(cp.hex_to_linear(h)) for h in (ends[0], ends[-1])]
     assert abs(lab[0][0] - lab[1][0]) < 0.05

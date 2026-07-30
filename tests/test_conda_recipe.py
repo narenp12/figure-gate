@@ -66,7 +66,7 @@ def context():
 def resolve(value):
     """`python >=${{ python_min }}` -> `python >=3.11`."""
     for key, replacement in context().items():
-        value = value.replace("${{ %s }}" % key, replacement)
+        value = value.replace(f"${{{{ {key} }}}}", replacement)
     return value
 
 

@@ -1445,7 +1445,7 @@ def check_label_attribution(fig, r):
     if not bad:
         return True, f"{checked} direct label{'s' if checked != 1 else ''}, "\
                      f"each nearest the curve it names"
-    return False, ("; ".join(bad) + f"  <- the reader resolves a direct label "
+    return False, ("; ".join(bad) + "  <- the reader resolves a direct label "
                    "by proximity, so it has to be plainly nearest its own "
                    "curve. Move it to where that curve is furthest from its "
                    "neighbours, or draw a leader line to the anchor")
@@ -1938,7 +1938,10 @@ def check_style_sheet(fig):
         except KeyError:
             continue
         if not isinstance(same, bool):        # a numpy array of comparisons
-            same = bool(getattr(same, "all", lambda: same)())
+            # B023 reads the lambda as capturing the loop variable late. It is
+            # called on the same line it is built, before the loop advances, so
+            # there is no later binding for it to see.
+            same = bool(getattr(same, "all", lambda: same)())  # noqa: B023
         if not same:
             drift.append(key)
     if not drift:
@@ -2104,7 +2107,7 @@ def main():
             "The composition RULES are library-agnostic and written up in the "
             "style guide; only this automated check is matplotlib-specific. On "
             "another plotting stack, apply the rules by hand or port the "
-            "checks - each one reads geometry any library can report.")
+            "checks - each one reads geometry any library can report.") from None
 
     matplotlib.use("agg")
     composed = report(self_test_figure(), "self-test (expected: FAIL)")
