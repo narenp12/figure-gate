@@ -1,0 +1,51 @@
+name: A broken figure passed
+description: A figure with a real defect came back clean.
+labels: ["false negative"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        The failure mode this project guards against hardest is a gate that
+        sounds sensible and never fires. A pass on a genuinely broken figure is
+        the most valuable report here.
+
+  - type: textarea
+    id: defect
+    attributes:
+      label: The named failure
+      description: >-
+        Not "the figure looks wrong". What is actually broken, and for whom:
+        text under 7pt at the printed width, two series that merge under
+        deuteranopia, a ramp that reverses in lightness. Say how you noticed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: The figure that passed
+      description: A script that builds it, and the exact command you ran.
+      render: python
+    validations:
+      required: true
+
+  - type: input
+    id: gate
+    attributes:
+      label: Which gate should have caught it
+      description: >-
+        If an existing gate covers this and stayed silent, name it. If nothing
+        covers it, say so and file it as a new gate instead if you have the
+        three things CONTRIBUTING.md asks for.
+      placeholder: Type size, or "nothing covers this"
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: >-
+        Output of `python -c "import matplotlib, sys; print(sys.version,
+        matplotlib.__version__)"` and the figure-gate version.
+      render: text
+    validations:
+      required: true

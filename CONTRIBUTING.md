@@ -1,5 +1,28 @@
 # Contributing
 
+## Reporting a defect
+
+Open defects live in the issue tracker, and nowhere else. Not a "known issues"
+heading in the README, not a caveat in the style guide. Prose in this repo is
+gated — `tests/test_prose_claims.py` sweeps the reference material and pins
+every number and every backticked name against the code — and a bug description
+is the one kind of sentence that cannot be gated, so a known-issues list rots
+quietly in exactly the file whose discipline is that it does not. The 0.4.0 note
+in the CHANGELOG names the general version of this: documentation standing in
+for a fix. The CHANGELOG records what shipped; the tracker records what has not.
+
+`.github/ISSUE_TEMPLATE/` has four forms, split by what the report is evidence
+of rather than by severity:
+
+- **A gate fired on a figure that is fine.** The report needs the case for the
+  figure at the size it will print, because that is what decides whether the
+  threshold moves or the figure is genuinely broken.
+- **A broken figure passed.** The most valuable report here, since a gate that
+  never fires is the failure mode this project guards against hardest.
+- **Something else is broken.** Crashes, wrong numbers, and documents that
+  describe behaviour the code does not have.
+- **Propose a new gate.** Held to the three things below.
+
 ## The bar for a new gate
 
 This project is a pile of elimination gates, and the failure mode it guards

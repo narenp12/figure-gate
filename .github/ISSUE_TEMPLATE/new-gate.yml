@@ -1,0 +1,66 @@
+name: Propose a new gate
+description: A check that does not exist yet.
+labels: ["new gate"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        CONTRIBUTING.md sets the bar: a named failure, a test proving the gate
+        fails, and a test proving it does not over-fire. The three fields below
+        are those three things. A proposal without the third is the one that
+        ships a gate people learn to skip.
+
+  - type: textarea
+    id: failure
+    attributes:
+      label: The named failure
+      description: >-
+        A real figure that was really broken, and how. Not "figures should have
+        good contrast". The style guide is written this way throughout, and it
+        is why the thresholds are arguable rather than arbitrary.
+    validations:
+      required: true
+
+  - type: textarea
+    id: nearest
+    attributes:
+      label: The legitimate case nearest the line
+      description: >-
+        Whatever this gate would come closest to firing on wrongly: side-by-side
+        panels each needing their own x label, a heatmap at 0.98 ink coverage.
+        If you cannot name one, the gate is probably not measurable yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: threshold
+    attributes:
+      label: Where the threshold goes, and what measured it
+      description: >-
+        The number, the unit, and how you arrived at it. If the right value
+        depends on the form rather than being fixed, say so: that makes it a
+        WARN rather than a FAIL.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which checker
+      options:
+        - check_figure.py
+        - check_palette.py
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: stdlib
+    attributes:
+      label: Constraint
+      options:
+        - label: >-
+            If this lands in `check_palette.py`, it imports nothing outside the
+            standard library. That is what makes the file usable from a
+            non-Python toolchain, and CI proves it in a job that installs
+            nothing.
