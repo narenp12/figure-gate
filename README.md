@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/narenp12/figure-gate/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/figure-gate)](https://pypi.org/project/figure-gate/)
+[![conda-forge](https://img.shields.io/conda/vn/conda-forge/figure-gate)](https://anaconda.org/conda-forge/figure-gate)
 [![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
 
 **Two scripts that read a built matplotlib figure and report which gates it
@@ -135,6 +136,7 @@ on PATH as `check-palette` and `check-figure`:
 
 ```bash
 uv add figure-gate          # or: uv tool install figure-gate
+conda install -c conda-forge figure-gate
 ```
 
 The install ships `figure.mplstyle` beside the checkers, which is where the
