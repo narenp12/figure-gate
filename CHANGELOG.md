@@ -31,6 +31,15 @@ claim the stdlib-only CI job exists to keep true, the test count
 `_compares_all_pairs`, a function renamed to `_axes_all_pairs` long enough ago
 that nothing in the repository still used the old name.
 
+**The prose sweep failed on every release and nobody had run it on one.**
+`CONTRIBUTING.md` tells a maintainer to write release notes under a
+`## Unreleased` heading, and the heading resolver added in this cycle checks
+that a heading named in prose exists. It does, right up until the bump renames
+it to the version, so the suite went red at the tagged commit and green again
+with the next change. The absence is correct and load-bearing: it is what makes
+a release with nothing written about it stop before the tag. The span is in the
+unresolved ledger with that reason.
+
 **The documentation audit is a procedure now, not a memory.** It had been run
 four times, each time reconstructed from the previous run's changelog entry, and
 each run missed something the next one found: seven of eleven prose documents

@@ -658,11 +658,19 @@ UNRESOLVED_SPANS = {
     "#": "the character itself, in the sentence about style-sheet colours "
          "written with a leading hash",
     "/plugin install figure-gate@figure-gate": "a Claude Code command, named "
-                                               "where the README explains how "
-                                               "to install the skill as a "
-                                               "plugin; the resolvers see this "
-                                               "project's Python, not the "
-                                               "host's command set",
+                                               "where docs/getting-started.md "
+                                               "explains how to install the "
+                                               "skill as a plugin; the "
+                                               "resolvers see this project's "
+                                               "Python, not the host's command "
+                                               "set",
+    "## Unreleased": "the heading CONTRIBUTING.md tells a maintainer to write "
+                     "their notes under. It is absent between a release and "
+                     "the next change on purpose: bump-my-version renames it "
+                     "to the version, and its absence is what stops a release "
+                     "with nothing written about it. A resolver that found it "
+                     "would only ever be reporting that somebody had started "
+                     "the next entry",
     "figure-gate:research-figures": "how Claude Code namespaces the skill once "
                                     "installed as a plugin: the plugin name "
                                     "from plugin.json, then the skill name "
