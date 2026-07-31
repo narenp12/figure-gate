@@ -169,7 +169,25 @@ target-version = "py311"
 per-file-target-version = { "skill/scripts/check_palette.py" = "py38" }
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "B", "UP", "FA"]
+# The four `DOC` rules are the docstring half of what `test_prose_claims.py`
+# does to the markdown: a docstring that names a parameter the signature does
+# not have, or documents a return, a yield or an exception the body never
+# produces, is prose making a claim the code does not honour. Same defect class,
+# a surface no sweep over `*.md` reaches.
+#
+# Only the four `extraneous` rules. Their `missing` counterparts -- DOC201 alone
+# reports 59 -- ask every function to carry a Returns section, which is a house
+# style this project does not write in and would not be improved by. Missing
+# prose is an editorial decision; prose that contradicts the code is a defect.
+#
+# Both settings are load-bearing. `preview` because the pydoclint rules are not
+# stable yet, and `explicit-preview-rules` so that turning them on selects those
+# four codes and nothing else: without it, `preview` also changes the behaviour
+# of every stable rule already in `select`.
+select = ["E4", "E7", "E9", "F", "B", "UP", "FA",
+          "DOC102", "DOC202", "DOC403", "DOC502"]
+preview = true
+explicit-preview-rules = true
 
 # E741 forbids `l` as a name. In OKLab, `l` IS the name of the lightness
 # channel: `linear_to_oklab` returns `l, m, s` because that is what the
@@ -180,6 +198,26 @@ select = ["E4", "E7", "E9", "F", "B", "UP", "FA"]
 # used in the file with the 3.8 floor, and adding it everywhere else buys a
 # guard against a length mismatch that no zip here can have.
 ignore = ["E741", "B905"]
+
+# A misspelling is the one documentation defect this repository has no machinery
+# for. Every gate here asks whether prose agrees with code; none of them reads
+# the words. codespell is cheap enough to run on everything and found nothing on
+# the day it was added, which is the same argument the threshold gate was written
+# on: a check is worth having before it has something to say.
+#
+# The three exceptions are not typos, and each is a term the documents are right
+# to use:
+#
+#   vermillion  the Okabe-Ito palette's own name for entry 7, as Wong spells it
+#               in Nature Methods. The dictionary word has one `l`; the palette
+#               does not, and renaming it would put this project's tables out of
+#               step with every other citation of the same eight colours.
+#   commun      "Nat. Commun.", the abbreviated journal title in a citation.
+#   theses      the plural of thesis, in the list of documents a figure is made
+#               for. codespell reads it as a misspelling of "these".
+[tool.codespell]
+skip = "./site,./.venv,./.git,uv.lock,*.png,*.svg"
+ignore-words-list = "vermillion,commun,theses"
 
 [tool.mypy]
 python_version = "3.11"
@@ -243,6 +281,7 @@ filterwarnings = [
 dev = [
     "bump-my-version>=1.0",
     "cmasher>=1.9",
+    "codespell>=2.3",
     "mypy>=1.11",
     "pytest>=7.0",
     "pytest-xdist>=3.8.0",
@@ -266,6 +305,19 @@ dev = [
 docs = [
     "mkdocstrings-python>=1.10 ; python_full_version >= '3.10'",
     "zensical>=0.0.51,<0.1; python_version >= '3.10'",
+]
+
+# griffe alone, for the job that asks whether the public API broke since the
+# last tag. Its own group and not `dev`, so the answer does not wait behind
+# matplotlib and scipy: the comparison is static, and installing the thing being
+# compared would only slow it down.
+#
+# griffe arrives anyway as a dependency of `mkdocstrings-python` in `docs`. It
+# is named here regardless, because a group that gets its tool by accident from
+# another group's transitive tree stops working the day that tree changes, and
+# the failure reads as the API check being broken rather than uninstalled.
+api = [
+    "griffe>=1.0",
 ]
 
 # Out of `dev` on purpose: the documented command is
