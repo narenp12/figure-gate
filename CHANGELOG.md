@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-07-30
 
 **The README is a landing page now, and the documentation is on the docs site.**
 It had grown to 361 lines carrying both threshold tables, three install routes,
@@ -161,7 +161,7 @@ Pushing the tag still publishes; `release.yml` has not moved.
 
 `CHANGELOG.md` is first in the file list, and the order is load-bearing.
 bump-my-version writes each file as it reaches it rather than validating the
-set first, so with the changelog last a missing `## Unreleased` heading leaves
+set first, so with the changelog last a missing `## 0.6.0 — 2026-07-30` heading leaves
 the other three bumped on disk before it errors. First, it touches nothing. The
 failure itself is deliberate: a release with no notes written for it now stops
 before the tag rather than at the `no '## $version' section` check in
@@ -173,7 +173,7 @@ before the tag rather than at the `no '## $version' section` check in
 to find it in. The last one is the reason the test exists. bump-my-version does
 refuse to write a file whose pattern is missing, but only when someone runs it,
 which is the moment a release is being cut. `CHANGELOG.md` is exempt from that
-check, since `## Unreleased` is absent for most of the life of the repository
+check, since `## 0.6.0 — 2026-07-30` is absent for most of the life of the repository
 and present only once there are notes.
 
 The two checks that caught the 0.4.0 recipe stay. What changes is their job:
