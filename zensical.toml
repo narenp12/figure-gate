@@ -6,12 +6,13 @@
 # config carried over from MkDocs builds a site with a dangling page and exits
 # 0. Native config, and the flag where it belongs, in `.github/workflows/docs.yml`.
 #
-# The site is built from symlinks. `docs/` holds no prose of its own except
-# gallery.md — every other page points at the file that already existed, so
-# there is exactly one copy of the style guide and `test_docs_match_code.py`
-# still reads the copy the site serves. A `docs/` of hand-maintained duplicates
-# is the drift this project already has tests against; it would just be drift
-# with a nicer stylesheet.
+# The site is built from symlinks wherever the prose already had a home. The
+# pages authored here (gallery.md, gates.md, getting-started.md) are the
+# single copy of what they say; every other page points at the file that
+# already existed, so there is exactly one copy of the style guide and
+# `test_docs_match_code.py` still reads the copy the site serves. A `docs/` of
+# hand-maintained duplicates is the drift this project already has tests
+# against; it would just be drift with a nicer stylesheet.
 
 [project]
 site_name = "figure-gate"
@@ -32,8 +33,10 @@ extra_css = ["stylesheets/palette.css"]
 
 nav = [
   { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "The gates" = "gates.md" },
   { "Gallery" = "gallery.md" },
-  { "The gates" = "style-guide.md" },
+  { "Style guide" = "style-guide.md" },
   { "API" = "api.md" },
   { "Choosing a form" = "choosing-a-form.md" },
   { "Agent skill" = "skill.md" },

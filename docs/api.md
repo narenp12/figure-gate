@@ -15,18 +15,18 @@ import check_figure as cf
 import check_palette as cp
 ```
 
-The **thresholds are module-level constants** and are not repeated here.
-[The gates](style-guide.md) explains what each one was measured against, and
-the tables on the [home page](index.md) list them with their failure
-conditions. Read them in the source with `cf.TYPE_FLOOR_PT` and the like; they
-are meant to be changed.
+The **thresholds are module-level constants** and are not repeated here. The
+tables on [the gates](gates.md) list every one with its failure condition, and
+[the style guide](style-guide.md) explains what each was measured against. Read
+them in the source with `cf.TYPE_FLOOR_PT` and the like; they are meant to be
+changed.
 
-The **twenty gate functions** — `check_clipping`, `check_type_size`,
-`check_series_color` and the rest — are deliberately not documented here.
-`audit()` runs all of them, in the order the home page tables list, and calling
-one directly means reproducing the renderer and scale arguments `audit()`
-computes. What a caller needs from them is the threshold and the failure
-condition, which is what those tables are.
+The **twenty gate functions**, meaning `check_clipping`, `check_type_size`,
+`check_series_color` and the rest, are deliberately not documented here.
+`audit()` runs all of them, in the order [the gates](gates.md) lists, and
+calling one directly means reproducing the renderer and scale arguments
+`audit()` computes. What a caller needs from them is the threshold and the
+failure condition, which is what those tables are.
 
 ## check_figure
 

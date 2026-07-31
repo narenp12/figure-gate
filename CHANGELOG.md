@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+**The README is a landing page now, and the documentation is on the docs site.**
+It had grown to 361 lines carrying both threshold tables, three install routes,
+the usage examples, the retina history and the design notes, for a project that
+has published a docs site since 0.4.0. Someone deciding whether to use this had
+to read the reference material to find out what it was.
+
+Nothing was duplicated in the move, which is the only version of this worth
+doing. `docs/gates.md` is the one copy of the two tables and the roster prose;
+`docs/getting-started.md` is the one copy of install, the two settings that need
+your document's values, the usage examples and the requirements. Both are
+authored pages in the sense `docs/gallery.md` already was, and `AUTHORED` in
+`tests/test_docs_site.py` names them so that a page becoming a hand-maintained
+copy still fails.
+
+The gates that read the README read those pages instead. Eleven parsers and
+seven roster-count claims were pointed at one file; the count claims now carry
+the document each is made in, because the reason they exist is that one copy of
+a claim gets updated and the others do not. `docs/api.md` had been sending
+readers to tables on the home page that are no longer there.
+
+**Em dashes are gone from the README and from the pages cut out of it.**
+
+**Comments naming the README were swept.** A dozen of them cited it as the
+source of a promise that had moved: three files and no install, the Python 3.8
+claim the stdlib-only CI job exists to keep true, the test count
+`tests/test_docs_render.py` explains its collection strategy against. One named
+`_compares_all_pairs`, a function renamed to `_axes_all_pairs` long enough ago
+that nothing in the repository still used the old name.
+
 **The documentation audit is a procedure now, not a memory.** It had been run
 four times, each time reconstructed from the previous run's changelog entry, and
 each run missed something the next one found: seven of eleven prose documents

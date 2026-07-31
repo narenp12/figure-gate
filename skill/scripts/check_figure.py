@@ -71,7 +71,7 @@ MAX_SERIES_HUES = 6
 # says every constant worth knowing about is a module-level one you can read,
 # and this is the one that says which rows can stop a build.
 #
-# A constant rather than a sentence in the README, because "which rows are
+# A constant rather than a sentence in the documentation, because "which rows are
 # advisory" was stated in prose in two places and was wrong in both: the table
 # gave Overplotting and Contour dash a "Fails when" they cannot do, and the
 # count said five against an actual seven. `tests/test_docs_match_code.py`
@@ -473,10 +473,10 @@ def _box_blur(field, size):
 
     `scipy.ndimage.uniform_filter` does this and is what the first version
     called. Written out in numpy instead so `check_figure.py` stays a file you
-    can copy next to your figures with nothing but matplotlib installed —
-    the promise in the README is three files and no install, and a hard scipy
-    import quietly broke it. Separable and cumulative, so it costs two passes
-    regardless of the window.
+    can copy next to your figures with nothing but matplotlib installed. The
+    promise in the documentation is three files and no install, and a hard
+    scipy import quietly broke it. Separable and cumulative, so it costs two
+    passes regardless of the window.
     """
     import numpy as np
     half = size // 2
