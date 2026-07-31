@@ -111,7 +111,7 @@ NOT_A_THRESHOLD = {
 
 
 @pytest.mark.parametrize("module,func,line,source", thresholds(),
-                         ids=lambda v: str(v))
+                         ids=str)
 def test_a_threshold_is_a_named_constant(module, func, line, source):
     """The README's sentence, as an assertion.
 
