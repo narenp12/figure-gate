@@ -65,8 +65,21 @@ jobs:
               sys.exit(f"dangling symlinks under docs/: {dangling}")
           PY
 
+      # `--only-group docs`, not `--no-project --with "zensical..."`. The
+      # `--with` form spelled the version range a second time, in a file nothing
+      # resolves against `pyproject.toml`, and it was correct only for as long
+      # as the two lists happened to agree. They stopped agreeing the first time
+      # the build needed a package one of them did not name: the group gained
+      # `mkdocstrings-python` for the API page, this line did not, and the build
+      # failed with `No module named 'mkdocstrings'` after the same build passed
+      # locally in a project environment that had it. One list now, in
+      # `pyproject.toml`; `test_docs_site.py` fails if a second one appears.
+      #
+      # `--only`, because the group comment claims the docs build needs nothing
+      # the tests need. Plain `--group` would install the project and `dev`
+      # alongside it, and the claim would stop being checked by anything.
       - name: Build
-        run: uv run --no-project --with "zensical>=0.0.51,<0.1" zensical build --strict
+        run: uv run --only-group docs zensical build --strict
 
       # The gap `--strict` leaves. A nav entry whose file cannot be read is
       # dropped from the build with no error and no page, and the sidebar then
