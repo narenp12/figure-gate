@@ -31,6 +31,7 @@ import ast
 import inspect
 import pathlib
 import re
+import subprocess
 
 import pytest
 
@@ -55,12 +56,83 @@ FORMS = SKILL / "references" / "choosing-a-form.md"
 SKILL_MD = SKILL / "SKILL.md"
 README = ROOT / "README.md"
 
-PROSE_DOCS = [GUIDE, FORMS, SKILL_MD, README]
 MODULES = {"check_figure.py": cf, "check_palette.py": cp}
+
+
+# --- the corpus, derived rather than listed -----------------------------------
+# This file swept four documents for its first two releases: the guide, the
+# forms reference, SKILL.md and the README. The repository had eleven, and
+# nothing anywhere said which seven were unswept. `CONTRIBUTING.md`,
+# `SECURITY.md`, `conda/README.md` and both site-only pages could say anything
+# they liked about the code and the suite stayed green, which is the same defect
+# one level out: an unchecked claim, invisible because nobody enumerated the
+# place it could hide.
+#
+# So the corpus is read out of git. A new document is swept the day it is
+# committed, or else it fails until `_is_historical` catches it and the tests
+# below record the reason it should not be.
+#
+# `git ls-files` rather than a glob over the tree, for two reasons. A scratch
+# note left in the working directory is not documentation and should not fail
+# anybody's test run; and `docs/` is symlinks, so a glob reports `index.md` and
+# `README.md` as two documents and sweeps the same file twice under two names.
+# Resolving before deduplicating collapses them.
+
+
+def _tracked_markdown():
+    listed = subprocess.run(["git", "ls-files", "*.md"], cwd=ROOT,
+                            capture_output=True, text=True)
+    assert listed.returncode == 0, (
+        f"`git ls-files` failed in {ROOT}: {listed.stderr.strip()!r}. The "
+        "prose corpus is derived from what the repository tracks, so this "
+        "suite needs to run inside the checkout")
+    paths = sorted({(ROOT / name).resolve() for name in listed.stdout.split()})
+    assert paths, "git tracks no markdown at all, which cannot be right"
+    return paths
+
+
+# Documents that record what was true on a date, not what is true now. A
+# changelog entry saying `check()` returned `(rows, ok)` is accurate history:
+# it did, until 0.4.0. Sweeping it against today's modules would turn a correct
+# record into a failure, and the only way to pass would be to falsify the
+# history. The specs are the same shape -- each states the code as it stood when
+# the design was written, and one of them is explicitly a record of an audit.
+#
+# The repository already settled this once, in
+# `specs/2026-07-28-documentation-audit-design.md`: an anecdote in the README
+# about a figure at a particular roster size had its number removed rather than
+# pinned, because "holding history to today's count would make it drift on every
+# new gate". Same reasoning, applied to whole documents instead of one sentence.
+#
+# This is an exemption by class, not by convenience, which is why it is a rule
+# and not a list of filenames someone can append to. Anything not matching it is
+# current-state prose and gets swept.
+def _is_historical(path):
+    relative = path.relative_to(ROOT)
+    return relative.name == "CHANGELOG.md" or relative.parts[0] == "specs"
+
+
+PROSE_DOCS = [p for p in _tracked_markdown() if not _is_historical(p)]
+HISTORICAL_DOCS = [p for p in _tracked_markdown() if _is_historical(p)]
 
 FENCE = re.compile(r"```.*?```", re.S)
 CODE_SPAN = re.compile(r"`([^`\n]+(?:\n[^`\n]+)?)`")
+# ``a literal `span` `` -- markdown's way of putting a backtick inside a code
+# span. The single-backtick pattern reads the pair as an empty span and reports
+# `''` as an unresolvable claim, which is a bug in the sweep that reads like a
+# defect in the document. Matched first, and its contents swept as a span in
+# their own right rather than dropped: a doubled span is still a claim.
+DOUBLE_SPAN = re.compile(r"``(.+?)``", re.S)
 HEX = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def doc_id(path):
+    """How a document is named in failure messages: its path from the root.
+
+    Not `path.name`. The corpus has two `README.md`, and a message naming one
+    of them tells the reader nothing about which.
+    """
+    return path.relative_to(ROOT).as_posix()
 
 
 def prose_only(text):
@@ -74,6 +146,14 @@ def prose_only(text):
     return FENCE.sub("", text)
 
 
+def _spans_in(text):
+    """Every inline code span in one document's prose, doubled ones included."""
+    out = [" ".join(m.group(1).split()) for m in DOUBLE_SPAN.finditer(text)]
+    for m in CODE_SPAN.finditer(DOUBLE_SPAN.sub("", text)):
+        out.append(" ".join(m.group(1).split()))
+    return out
+
+
 def spans():
     """(document, span) for every inline code span in the prose corpus.
 
@@ -84,9 +164,56 @@ def spans():
     prose between them as a symbol, which is a bug in the sweep that reads like
     a defect in the document.
     """
-    return [(path.name, " ".join(m.group(1).split()))
+    return [(doc_id(path), span)
             for path in PROSE_DOCS
-            for m in CODE_SPAN.finditer(prose_only(path.read_text()))]
+            for span in _spans_in(prose_only(path.read_text()))]
+
+
+def test_the_corpus_accounts_for_every_tracked_document():
+    """Parseability first, per the pattern the doc suite already uses.
+
+    Every test below is parametrized over `PROSE_DOCS`. A corpus that came back
+    empty, or short, would not fail them -- it would delete them, and the suite
+    would report a green sweep of nothing.
+    """
+    tracked = _tracked_markdown()
+    accounted = {p for p in PROSE_DOCS} | {p for p in HISTORICAL_DOCS}
+    assert accounted == set(tracked), (
+        "documents are tracked but in neither class: "
+        f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
+    assert (len(tracked), len(PROSE_DOCS)) == (13, 9), (
+        f"the repository tracks {len(tracked)} distinct markdown documents and "
+        f"sweeps {len(PROSE_DOCS)}, expected 13 and 9 - if that is a real "
+        "addition, these numbers move with it, which is the point of writing "
+        "them down")
+
+
+def test_the_historical_class_holds_only_the_records():
+    """The exemption is a rule, and a rule can be widened by editing one line.
+
+    Naming the documents it currently catches means widening it is visible in a
+    diff: a guide moved into `specs/` to get out of the sweep would fail here
+    rather than quietly stop being checked.
+    """
+    assert sorted(doc_id(p) for p in HISTORICAL_DOCS) == [
+        "CHANGELOG.md",
+        "specs/2026-07-28-colormap-kind-gate-design.md",
+        "specs/2026-07-28-documentation-audit-design.md",
+        "specs/2026-07-30-standardized-docs-audit.md",
+    ], "the set of documents exempted as historical records changed"
+
+
+@pytest.mark.parametrize("path", HISTORICAL_DOCS, ids=doc_id)
+def test_a_historical_document_says_what_it_is_dated_to(path):
+    """The exemption is only honest if a reader can tell the document is a
+    record. A changelog is dated by its headings and a spec by its front
+    matter; something in `specs/` with neither is current-state prose that has
+    been filed somewhere the sweep does not look."""
+    text = path.read_text()
+    assert re.search(r"^(Date: |## )\d{4}-\d{2}-\d{2}", text, re.M) or \
+        re.search(r"^## \d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2}", text, re.M), (
+            f"{doc_id(path)} is exempted from the prose sweep as a historical "
+            "record, but carries no date saying what it is a record of")
 
 
 def fenced_python():
@@ -94,7 +221,7 @@ def fenced_python():
     out = []
     for path in PROSE_DOCS:
         blocks = re.findall(r"```python\n(.*?)```", path.read_text(), re.S)
-        out.extend((path.name, i, src) for i, src in enumerate(blocks))
+        out.extend((doc_id(path), i, src) for i, src in enumerate(blocks))
     return out
 
 
@@ -225,6 +352,139 @@ def _is_colormap(name):
     return name in colormaps or name in COLORMAPS_ADDED_LATER
 
 
+# --- what the wider repository has a name for ---------------------------------
+# Four documents could be resolved against two modules and matplotlib. Eleven
+# cannot: `CONTRIBUTING.md` names workflows and dependency groups, `conda/
+# README.md` names recipe keys, and the pages name scripts that live outside
+# `skill/`. Each of the domains below is a real place a name can be checked
+# against, so a typo in one of them fails rather than landing in the ledger.
+
+
+def _tracked_files():
+    """Every path the repository tracks, by relative path and by basename.
+
+    The old file resolver looked under `skill/` and the repository root, which
+    is where the documents it swept pointed. `examples/demo.py`,
+    `conda/update_recipe.py` and `.github/workflows/release.yml` are named in
+    prose too, and were unresolvable for no better reason than that nothing had
+    needed them yet.
+    """
+    listed = subprocess.run(["git", "ls-files"], cwd=ROOT,
+                            capture_output=True, text=True)
+    assert listed.returncode == 0, f"`git ls-files` failed in {ROOT}"
+    names = listed.stdout.split()
+    assert names, "git tracks nothing at all, which cannot be right"
+    return set(names) | {pathlib.Path(name).name for name in names}
+
+
+TRACKED_FILES = _tracked_files()
+
+PYPROJECT = (ROOT / "pyproject.toml").read_text()
+RECIPE = (ROOT / "conda" / "recipe.yaml").read_text()
+WORKFLOWS = "\n".join(
+    path.read_text() for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")))
+
+
+def _ci_names():
+    """Job ids and job or step names, which is what prose points at.
+
+    Structural positions only, not "any word that occurs in a workflow file".
+    The loose version resolved the bare word `status` -- the third field of a
+    gate's row triple, and nothing to do with CI -- because the string appears
+    somewhere in six YAML files. A resolver that agrees with almost anything
+    reports agreement with nothing, which is the failure this whole file exists
+    to prevent, one level in.
+    """
+    names = set()
+    for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        text = path.read_text()
+        names |= set(re.findall(r"^  ([a-z][a-z0-9_-]*):$", text, re.M))
+        names |= set(re.findall(r"^\s*-?\s*name:\s*(.+?)\s*$", text, re.M))
+    return names
+
+
+CI_NAMES = _ci_names()
+
+# `make audit-prose` is a claim that the target exists. The Makefile is the one
+# place in the repository where a documented command is also a definition, so it
+# reads as one.
+MAKE_TARGETS = set(re.findall(r"^([a-z][a-z-]*):",
+                              (ROOT / "Makefile").read_text(), re.M))
+
+# Ruff rule codes the project selects, and the prefixes they belong to. Prose
+# names both: `E741` is a rule the configuration ignores by name, and `DOC` is
+# the family the four docstring rules come from. A code the project neither
+# selects nor ignores is a claim about a lint that does not run here.
+_ruff = re.search(r"\[tool\.ruff\.lint\](.*?)^\[", PYPROJECT, re.S | re.M)
+assert _ruff, "pyproject.toml no longer has a [tool.ruff.lint] section"
+RUFF_CODES = set(re.findall(r'"([A-Z]+\d*)"', _ruff.group(1)))
+RUFF_CODES |= {re.sub(r"\d+$", "", code) for code in RUFF_CODES}
+
+# `[project.scripts]`, `[tool.ruff.lint]`. A table header is a claim that the
+# section exists, and it is the one form of TOML reference the prose uses that a
+# bare key lookup would miss.
+TOML_TABLES = set(re.findall(r"^\[+([^]\n]+)\]+", PYPROJECT, re.M))
+
+# Bare keys, from both files that carry configuration the prose describes.
+# `per-file-target-version` is a real key in one and `sha256` is a real key in
+# the other; neither is a Python name and both are claims.
+CONFIG_KEYS = set(re.findall(r"^\s*\"?([A-Za-z][A-Za-z0-9_.-]*)\"?\s*[:=]",
+                             PYPROJECT + "\n" + RECIPE, re.M))
+
+DEPENDENCY_GROUPS = set(re.findall(r"^([a-z][a-z-]*) = \[",
+                                   PYPROJECT.split("[dependency-groups]")[-1],
+                                   re.M))
+
+# Distribution names this project depends on or ships beside, which is what
+# `bump-my-version` and `matplotlib-base` are: packages, not importable modules.
+DEPENDENCIES = set(re.findall(r'"([A-Za-z][A-Za-z0-9_.-]+)\s*[><=;\[]',
+                              PYPROJECT)) | set(
+    re.findall(r"^\s*-\s*([a-z][a-z0-9_.-]+)", RECIPE, re.M))
+
+
+def _module_strings(module):
+    """String literals the module can print, which is where `PASS` lives.
+
+    Read from the source rather than by running a gate: the verdict words are
+    what a caller greps for, so they are a claim about output, and output is
+    what the source spells.
+    """
+    return set(re.findall(r'"([A-Z][A-Z ]*)"',
+                          pathlib.Path(inspect.getfile(module)).read_text()))
+
+
+STATUS_WORDS = set().union(*(_module_strings(m) for m in MODULES.values()))
+
+# Module-level names the test suite defines. The contributing guide explains how
+# to add to `UNRESOLVED_SPANS` and `EXTERNAL_CLAIMS`, which are as real as any
+# constant in the scripts and were unresolvable only because nothing looked in
+# `tests/`.
+TEST_SYMBOLS = set(re.findall(
+    r"^([A-Z][A-Z0-9_]{2,})\s*[:=]", "\n".join(
+        path.read_text() for path in sorted((ROOT / "tests").glob("*.py"))),
+    re.M)) | set(re.findall(
+        r"^def (test_[a-z0-9_]+)", "\n".join(
+            path.read_text() for path in sorted((ROOT / "tests").glob("*.py"))),
+        re.M))
+
+
+def _headings():
+    """Every markdown heading in the corpus, historical documents included.
+
+    `## Unreleased` is a heading in the changelog that the contributing guide
+    tells a reader to write under, and `### Cyclic: twilight, as shipped` is a
+    section the specs point at. A heading quoted as code is a claim that the
+    section exists, checkable against the documents themselves.
+    """
+    out = set()
+    for path in _tracked_markdown():
+        out |= set(re.findall(r"^(#{1,6} .+?)\s*$", path.read_text(), re.M))
+    return out
+
+
+HEADINGS = _headings()
+
+
 def _defining_modules(name):
     return [doc for doc, module in MODULES.items() if hasattr(module, name)]
 
@@ -272,9 +532,35 @@ def resolve(span):
         return "metadata-key"
     if span in CONSOLE_SCRIPTS:
         return "console-script"
+    if span in HEADINGS:
+        return "heading"
+    if span in STATUS_WORDS:
+        return "status"
+    if span in TEST_SYMBOLS:
+        return "test-symbol"
+    if span.startswith("[") and span.strip("[]") in TOML_TABLES:
+        return "toml-table"
+    if span in DEPENDENCY_GROUPS:
+        return "dependency-group"
+    if span in DEPENDENCIES:
+        return "dependency"
     if span.startswith("--"):
         flags = set(re.findall(r"--[a-z-]+", span))
-        return "cli" if flags <= ALL_FLAGS else None
+        if flags <= ALL_FLAGS:
+            return "cli"
+        # A flag of a tool this project runs rather than one it ships:
+        # `--group dev` is uv's, and the claim it makes is that the project is
+        # invoked that way somewhere. The workflows are where that is true.
+        rest = span.split(None, 1)
+        if span in WORKFLOWS or (len(rest) == 2 and rest[1] in DEPENDENCY_GROUPS
+                                 and rest[0] in WORKFLOWS):
+            return "tooling-flag"
+        return None
+    make = re.fullmatch(r"make(?:\s+([a-z][a-z-]*))?", span)
+    if make:
+        target = make.group(1)
+        return ("make-target"
+                if target is None or target in MAKE_TARGETS else None)
     shell = re.fullmatch(r"(python|pip|uv)\s+(\S+)(.*)", span, re.S)
     if shell:
         tool, target, tail = shell.groups()
@@ -287,7 +573,10 @@ def resolve(span):
             if (SKILL / base / target).exists() or (ROOT / target).exists():
                 return "shell"
         return None
-    if span.endswith((".py", ".mplstyle", ".md", ".toml")):
+    if span.endswith((".py", ".mplstyle", ".md", ".toml", ".yml", ".yaml",
+                      ".css", ".json")):
+        if span in TRACKED_FILES:
+            return "file"
         for base in ("", "scripts", "assets", "references"):
             if (SKILL / base / span).exists() or (ROOT / span).exists():
                 return "file"
@@ -299,8 +588,8 @@ def resolve(span):
     if comparison:
         return ("comparison" if comparison.group(1) in PARAMETERS
                 else None)
-    if re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", span):
-        return "constant" if _defining_modules(span) else None
+    if re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", span) and _defining_modules(span):
+        return "constant"                     # `DOC` falls through to the codes
     assign = re.fullmatch(r"([A-Z][A-Z0-9_, ]*)=\s*(.+)", span)
     if assign:            # `NAME = value`; the value is gated in the doc suite
         names = [n.strip() for n in assign.group(1).split(",")]
@@ -311,8 +600,8 @@ def resolve(span):
     if re.fullmatch(r"[a-z_.]+", span) and span in matplotlib.rcParams:
         return "rcparam"
     rcparam = re.fullmatch(r"([a-z_.]+):\s*(\S+)", span)
-    if rcparam:
-        return "rcparam" if rcparam.group(1) in matplotlib.rcParams else None
+    if rcparam and rcparam.group(1) in matplotlib.rcParams:
+        return "rcparam"                       # `noarch: python` falls through
     subscript = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_.]*)\[\"([^\"]+)\"\]", span)
     if subscript:
         base, key = subscript.groups()
@@ -327,12 +616,27 @@ def resolve(span):
     if kwarg:
         return ("keyword" if kwarg.group(1) in MPL_NAMES | PARAMETERS
                 else None)
-    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", span):
-        return "identifier" if _resolves_dotted(span) else None
-    if re.fullmatch(r"[A-Za-z0-9_^+*/() .-]+", span) and not span.isalpha():
-        return "expression" if re.search(r"[+*/^]", span) else None
-    if ";" in span or "import" in span:
-        return "snippet" if _identifiers_resolve(span) else None
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", span) and _resolves_dotted(span):
+        return "identifier"
+    if (re.fullmatch(r"[A-Za-z0-9_^+*/() .-]+", span) and not span.isalpha()
+            and re.search(r"[+*/^]", span)):
+        return "expression"
+    if (";" in span or "import" in span) and _identifiers_resolve(span):
+        return "snippet"
+
+    # The configuration domains, last. Everything above knows what a Python
+    # name looks like, and a key such as `host` or `sha256` looks exactly like
+    # one -- so these have to run after the Python resolvers have declined,
+    # rather than before them where they would shadow a real identifier.
+    if all(part in CONFIG_KEYS for part in span.split(".")):
+        return "config-key"
+    key = re.fullmatch(r"([A-Za-z][A-Za-z0-9_.-]*):\s*\S+", span)
+    if key and key.group(1) in CONFIG_KEYS:
+        return "config-key"
+    if span in CI_NAMES:
+        return "ci"
+    if span in RUFF_CODES:
+        return "ruff-rule"
     return None
 
 
@@ -363,6 +667,61 @@ UNRESOLVED_SPANS = {
                                     "installed as a plugin: the plugin name "
                                     "from plugin.json, then the skill name "
                                     "from SKILL.md's frontmatter",
+
+    # --- conda-forge, which this project is a package in and not a part of ---
+    # Everything here belongs to somebody else's repository, bot or toolchain.
+    # A resolver for them would have to read the feedstock, and the feedstock is
+    # not in this checkout -- which is the whole point of `conda/README.md`
+    # saying so. They are named because a maintainer needs the exact strings.
+    "conda-forge": "the channel and the organisation, named where conda/"
+                   "README.md explains where the package comes from",
+    "conda install": "the command a reader runs, from a toolchain this project "
+                     "does not ship and cannot resolve against",
+    "conda install -c conda-forge figure-gate": "the install line, quoted whole "
+                                               "so a reader can copy it",
+    "regro-cf-autotick-bot": "the conda-forge bot that opens the version-bump "
+                             "pull request; an account on another repository",
+    "rattler-build": "the recipe format and builder conda-forge runs, named "
+                     "where the local recipe explains which schema it is",
+    "pixi.toml": "the local build harness the feedstock ships; a file in the "
+                 "feedstock, not here",
+    "pixi self-update": "a command from that harness",
+    "recipe/recipe.yaml": "the copy of the recipe that actually builds the "
+                          "package, in the feedstock repository",
+    "recipes/figure-gate/recipe.yaml": "where the recipe sat in staged-recipes "
+                                       "while the submission was open; a path "
+                                       "in a repository that is not this one",
+    "OSX_SDK_DIR": "an environment variable conda-forge's macOS build reads",
+    "${{ }}": "rattler-build's template syntax, quoted as syntax rather than "
+              "as a value",
+    "python >=${{ python_min }}": "a dependency line in that syntax, quoted to "
+                                  "show the form the recipe uses",
+    "@conda-forge-admin, please update version": "an issue comment that "
+                                                 "commands the admin bot; the "
+                                                 "text is the interface",
+    "@conda-forge-admin, please add bot automerge": "the same, for automerge",
+    "@conda-forge-admin, please ping conda-forge/help-python": "the same, to "
+                                                               "ask for review",
+    "Add figure-gate": "the title of the staged-recipes pull request, recorded "
+                       "so the submission can be found again",
+    "git checkout -- .ci_support recipes": "a git command in the feedstock "
+                                          "checkout, quoted verbatim because "
+                                          "the paths are the instruction",
+    "rm -rf": "the command, named in a warning about what not to run",
+
+    # --- forms and placeholders, which resolve to nothing by construction ---
+    "v<new>": "the shape of a release tag with the version elided, not a tag",
+    ".devN": "the PEP 440 developmental-release suffix with its number elided, "
+             "written where CONTRIBUTING.md explains how to rehearse a release "
+             "on TestPyPI without spending a real version",
+    ".[dev]": "the pip extra form, quoted by CONTRIBUTING.md in the sentence "
+              "saying this project does NOT use it: `dev` is a dependency "
+              "group. A counter-example has to be unresolvable to be one",
+    "`NAME = value`": "the shape of a threshold cell in the README, quoted "
+                      "with its backticks so a contributor can see the form. "
+                      "The names it stands for are gated by the doc suite",
+    "figure-gate security": "the subject line SECURITY.md asks a reporter to "
+                            "use; a convention for a human reading email",
 }
 
 
@@ -482,7 +841,7 @@ def constants_in_module_paragraphs():
             for span in CODE_SPAN.findall(para):
                 name = span.split("=")[0].strip()
                 if re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", name):
-                    out.append((path.name, i, name, module))
+                    out.append((doc_id(path), i, name, module))
     return out
 
 
@@ -747,13 +1106,44 @@ EXTERNAL_CLAIMS = {
     },
 }
 
-DOC_BY_NAME = {path.name: path for path in PROSE_DOCS}
+# Ledger entries name a document by its basename, which was unambiguous while
+# the corpus was four hand-listed files. It is not any more: the corpus has two
+# `README.md`. Rather than respell every entry as a path, the index keeps the
+# short names and refuses to guess when one is shared -- so a ledger entry that
+# becomes ambiguous fails loudly instead of resolving to whichever file sorted
+# first.
+DOCS_BY_NAME: dict[str, list[pathlib.Path]] = {}
+for _path in PROSE_DOCS:
+    DOCS_BY_NAME.setdefault(_path.name, []).append(_path)
+
+
+def document(name):
+    found = DOCS_BY_NAME.get(name, [])
+    assert found, (
+        f"the ledger names {name}, which is not a document in the corpus "
+        f"(have {sorted(DOCS_BY_NAME)})")
+    assert len(found) == 1, (
+        f"the ledger names {name}, and the corpus has "
+        f"{[doc_id(p) for p in found]}. Name it by its path from the "
+        "repository root instead")
+    return found[0]
+
+
+def test_every_swept_document_is_reachable_by_the_name_the_ledger_uses():
+    """`document()` is only ever called for names already in a ledger, so an
+    ambiguity introduced by a new file would sit undetected until somebody
+    added an entry for it. Check the whole corpus, not the referenced part."""
+    shared = {name: [doc_id(p) for p in paths]
+              for name, paths in DOCS_BY_NAME.items() if len(paths) > 1}
+    assert shared == {"README.md": ["README.md", "conda/README.md"]}, (
+        f"documents sharing a basename changed: {shared}. Any ledger entry "
+        "naming a shared basename has to be respelled as a path")
 
 
 @pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
 def test_every_external_claim_is_still_written_where_the_ledger_says(claim):
     entry = EXTERNAL_CLAIMS[claim]
-    text = " ".join(DOC_BY_NAME[entry["document"]].read_text().split())
+    text = " ".join(document(entry["document"]).read_text().split())
     assert entry["anchor"] in text, (
         f"{claim} is recorded as verified against {entry['source']}, but "
         f"{entry['anchor']!r} is no longer in {entry['document']}. A rewritten "
@@ -779,7 +1169,7 @@ def test_an_external_source_is_named_in_the_references(claim):
     """The reader gets what the ledger has: a citation in the document, not a
     comment in a test file."""
     entry = EXTERNAL_CLAIMS[claim]
-    text = " ".join(DOC_BY_NAME[entry["document"]].read_text().split())
+    text = " ".join(document(entry["document"]).read_text().split())
     surname = entry["source"].split(",")[0].split()[0].strip()
     assert surname in text or surname.lower() in text.lower(), (
         f"{claim} cites {entry['source']}, and {surname} appears nowhere in "

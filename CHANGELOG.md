@@ -2,6 +2,81 @@
 
 ## Unreleased
 
+**The documentation audit is a procedure now, not a memory.** It had been run
+four times, each time reconstructed from the previous run's changelog entry, and
+each run missed something the next one found: seven of eleven prose documents
+unswept, a fourth version site nobody had listed, a docs dependency list that
+existed twice. `make audit` runs every mechanical check in one command, and
+`specs/2026-07-30-standardized-docs-audit.md` records what each one proves and
+what it deliberately does not.
+
+**The prose corpus is derived from git rather than listed.** `PROSE_DOCS` was
+four hand-written paths; it is now every tracked markdown file, resolved through
+the `docs/` symlinks and deduplicated, minus a historical class.
+`CONTRIBUTING.md`, `SECURITY.md`, `conda/README.md`, `docs/gallery.md` and
+`docs/api.md` were making unchecked claims about the code with the suite green.
+
+`CHANGELOG.md` and `specs/` are exempt, by a rule and not a list. A changelog
+entry saying `check()` returned `(rows, ok)` is accurate history — it did, until
+0.4.0 — and sweeping it against today's modules would turn a correct record into
+a failure whose only fix is to falsify it. Two tests keep the exemption from
+being a hiding place: one names the documents the rule currently catches, and
+one requires each of them to carry the date it is a record of.
+
+Six resolver domains were added so the new documents could be checked rather
+than excused: tracked files anywhere in the repository, markdown headings, TOML
+tables and keys, dependency groups and distributions, CI job and step names, and
+test-suite symbols. The first run over the full corpus left 229 unresolved
+spans; the domains took that to 23, of which 22 are conda-forge's names or
+placeholders and are in the ledger with the reason.
+
+The twenty-third was a bug in the sweep rather than a defect in a document.
+A span written with doubled backticks, which is how markdown shows a literal
+backtick, matched as empty and reported `''` as an unresolvable claim. The
+doubled form is matched first now and its contents swept in their own right.
+
+The CI domain had to be written twice. The first version accepted any word of
+five characters or more occurring anywhere in the workflow files, which resolved
+the bare word `status` — the third field of a gate's row triple, nothing to do
+with CI. A resolver that agrees with almost anything reports agreement with
+nothing. It reads job ids and `name:` values only.
+
+**Three tools, after checking whether any of this was already somebody's
+library.** Ruff's `DOC102`, `DOC202`, `DOC403` and `DOC502` fail on a docstring
+that names a parameter the signature does not have, or documents a return, a
+yield or an exception the body never produces — the same defect class the
+markdown sweeps look for, on a surface they cannot reach. The rules that flag an
+absent section are not adopted: `DOC201` alone reports 59, and asks for a house
+style this project does not write in.
+
+`griffe check` compares both modules against the last release tag. It is not a
+veto, because a 0.x project may break its API; the new CI job fails only when a
+break is not mentioned in the Unreleased section. `check_palette.py` is meant to
+be vendored by copy, so a renamed function does not break a resolver, it breaks
+a file somebody pasted into their repository six months ago.
+
+`codespell` reads the words, which nothing else here does. Three ignore-words,
+each a term the documents are right to use: `vermillion` is the Okabe-Ito
+palette's own spelling, `commun` is an abbreviated journal title, and `theses`
+is the plural of thesis.
+
+`pymarkdownlnt` was measured and rejected. It finds two things on the whole
+corpus and misses the accidental-heading defect this project hand-rolled: given
+a hex color wrapped mid-span, it reports a missing top-level heading and does
+not notice the `<h1>` that was invented.
+
+**The docs build carried its dependency list twice.** The build step ran
+`uv run --no-project --with "zensical>=0.0.51,<0.1"`, which is the `docs`
+dependency group written out again in a file nothing resolves against
+`pyproject.toml`. It was correct only while the two happened to agree, and they
+stopped agreeing the first time the build needed a package one of them did not
+name: the group gained `mkdocstrings-python` for the API page, that line did
+not, and CI failed with `No module named 'mkdocstrings'` after the same build
+passed locally in an environment that already had it. `--only-group docs` now,
+with three gates: the build step has to install the declared group and may not
+name a package inline, the group has to contain the builder, and a page using
+`:::` directives has to be matched by a handler in the group.
+
 **The docs site has an API page, and it is not written by hand.** `docs/api.md`
 is `:::` directives; Zensical's mkdocstrings extension reads the signatures and
 docstrings out of `skill/scripts/` when the site builds, so a default shown

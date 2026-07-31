@@ -59,6 +59,112 @@ jobs:
       - run: uv run ruff check --output-format github .
       - run: uv run mypy
 
+  # `check_palette.py` is meant to be vendored: copied into somebody else's
+  # toolchain and called directly. A renamed function there does not break a
+  # dependency resolver, it breaks a file somebody pasted into their repository
+  # six months ago, silently, at import.
+  #
+  # griffe reads both modules as they stand and as they stood at the last
+  # release tag, and reports what a caller could no longer do. This is not a
+  # veto: a 0.x project is allowed to break its API. It is a join between the
+  # break and the prose, because the thing that actually harms a vendoring
+  # reader is a break the changelog did not mention.
+  api:
+    name: A break in the public API is one the changelog admits to
+    runs-on: ubuntu-latest
+    steps:
+      # Tags, not just the tip. The default checkout has neither the history
+      # nor the tags, so the comparison would have nothing to compare against
+      # and would pass by having no opinion.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Compare both modules against the last release
+        run: |
+          uv run --only-group api python - <<'PY'
+          import re, subprocess, sys, pathlib
+
+          tag = subprocess.run(["git", "describe", "--tags", "--abbrev=0"],
+                               capture_output=True, text=True)
+          if tag.returncode != 0:
+              sys.exit("no release tag to compare against")
+          tag = tag.stdout.strip()
+
+          # `skill/scripts/check_palette.py:0: contrast: Public object was
+          # removed` -- the third field is the name a caller would have used,
+          # and it is what the changelog has to say out loud.
+          #
+          # griffe writes its findings to stderr, not stdout. Reading stdout
+          # alone gives an empty report for every run, which this job would have
+          # read as "nothing broke" -- a check that cannot fail, arrived at by
+          # not looking at where the answer is written. Both streams, and a
+          # non-zero exit with nothing parsed out of either is griffe failing to
+          # run rather than the API being clean.
+          REPORTED = re.compile(r"^\S+?:\d+: (\S+?): ", re.M)
+
+          broken = {}
+          for module in ("check_figure", "check_palette"):
+              result = subprocess.run(
+                  ["griffe", "check", "-s", "skill/scripts", module, "-a", tag],
+                  capture_output=True, text=True)
+              report = (result.stdout + result.stderr).strip()
+              print(f"--- {module} against {tag} ---")
+              print(report or "  no breaking change")
+              found = REPORTED.findall(report)
+              if result.returncode != 0 and not found:
+                  sys.exit(f"griffe exited {result.returncode} for {module} "
+                           f"without reporting a finding:\n{report}\n"
+                           "That is the tool failing, not the API passing.")
+              for name in found:
+                  broken[name] = module
+
+          if not broken:
+              print(f"\nNothing a caller could do at {tag} has stopped working.")
+              sys.exit(0)
+
+          # There is a break. That is allowed, and it has to be written down --
+          # by name, in a paragraph that says something broke.
+          #
+          # Neither half is enough alone. A search for "breaking" is satisfied
+          # by any paragraph using the word, and a changelog entry about this
+          # job would satisfy it every release. A search for the name alone is
+          # satisfied by a paragraph listing the function for an unrelated
+          # reason, which is exactly what happened the first time this was
+          # tested: `contrast` was named in the API-page entry, so renaming it
+          # passed.
+          #
+          # Both, in one paragraph, can still be satisfied by coincidence. What
+          # it cannot be satisfied by is silence, which is the failure that
+          # actually reaches a reader who vendored the file.
+          CHANGED = r"break|broke|removed|renamed|replaced|no longer"
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text()
+          unreleased = re.search(r"^## Unreleased\n(.*?)(?=^## )", changelog,
+                                 re.S | re.M)
+          section = unreleased.group(1) if unreleased else ""
+          paragraphs = section.split("\n\n")
+          silent = sorted(
+              name for name in broken
+              if not any(re.search(rf"\b{re.escape(name)}\b", para)
+                         and re.search(CHANGED, para, re.I)
+                         for para in paragraphs))
+          if not silent:
+              print("\nBreaking, and the Unreleased section names every one.")
+              sys.exit(0)
+          sys.exit(
+              "\nThese changed in a way a caller would notice, and "
+              "CHANGELOG.md's Unreleased section does not name them:\n"
+              + "\n".join(f"  {name} ({broken[name]})" for name in silent)
+              + "\n\nThese modules are vendored by copy. A reader who pasted "
+                "one into their toolchain finds out at import, so the break "
+                "belongs in the changelog before it belongs in a release.")
+          PY
+
   test:
     name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
     runs-on: ubuntu-latest

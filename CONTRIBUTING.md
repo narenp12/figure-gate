@@ -101,6 +101,31 @@ uv run python examples/demo.py                # end-to-end
 `dev` is a dependency group, not an extra, so it is `--group dev` rather than
 `.[dev]`.
 
+## The audit
+
+```bash
+make audit
+```
+
+Runs every mechanical check CI runs, cheapest failure first: `codespell`, then
+ruff and mypy, then the five test files that join a document to the code it
+describes, then the site build, then the public API against the last release
+tag. `make help` lists the targets separately, and `make audit-prose` is the one
+worth running in a loop while editing documentation.
+
+Ruff includes four `DOC` rules. They fail on a docstring that names a parameter
+the function does not take, or that documents a return, a yield or an exception
+the body never produces. Their counterparts that flag an *absent* section are
+deliberately off: this project writes narrative docstrings rather than sectioned
+ones, and an absent section is an editorial choice where a contradicted one is a
+defect.
+
+The audit does not decide whether a claim about the world is true. That is
+`EXTERNAL_CLAIMS`, which requires a source, a quote and a verification date, and
+cannot require that anybody read the source.
+`specs/2026-07-30-standardized-docs-audit.md` is the long form, including what
+the audit deliberately does not cover.
+
 Ruff runs at the project floor of 3.11 with one exception, set through
 `per-file-target-version`: `check_palette.py` is read against the 3.8 grammar,
 because that file is claimed to run on 3.8 when vendored. The `stdlib-only` CI
