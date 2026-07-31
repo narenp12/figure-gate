@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-07-30
 
 **The repository is a Claude Code plugin marketplace.**
 `.claude-plugin/marketplace.json` lists the skill and `skill/.claude-plugin/plugin.json`
