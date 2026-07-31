@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+**`pytest` no longer rewrites the eight committed example PNGs.**
+`tests/test_example.py` runs `examples/demo.py` and `examples/gallery.py` as
+subprocesses, because a README whose first code block crashes is worse than no
+README. Both scripts wrote beside themselves, and the PNG bytes depend on the
+fonts installed locally, so every run left eight modified files in the working
+tree. A `git add -A` then swept a binary diff into whatever commit came next,
+which is how eight unrelated PNGs reached the 0.5.0 release branch.
+
+Both scripts now take an optional output directory,
+`python examples/demo.py [output-directory]`, and the tests pass `tmp_path`.
+The default is unchanged: run either one by hand and the files land beside it,
+which is what the README promises.
+
+`test_running_the_scripts_elsewhere_leaves_the_committed_pngs_alone` runs both
+and compares the committed files before and after, so a directory argument that
+is accepted and then ignored fails even though the other tests would still pass.
+
 ## 0.5.0 — 2026-07-30
 
 **The repository is a Claude Code plugin marketplace.**
