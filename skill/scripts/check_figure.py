@@ -48,7 +48,16 @@ from typing import NamedTuple
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
+# Alpha at or above which a mark counts as opaque. `check_contrast_stack`
+# requires one such mark, so a figure drawn entirely in washes is caught; 0.99
+# rather than 1.0 because a wash set to 0.995 is opaque to any reader.
+OPAQUE_ALPHA_MIN = 0.99
 INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
+# Summed per-channel distance from the page color at which a pixel counts as
+# ink, in 0-255 RGB. Above antialiasing and JPEG-grade noise, below any mark a
+# reader can see. The measurement `check_ink` reports is a count of pixels over
+# this line, so it is the gate's other threshold and was written inline.
+INK_DELTA_MIN = 24
 # Share of a scatter's points whose nearest neighbour sits inside one marker
 # radius before the cloud is called an unreadable mass. Up here with its
 # siblings rather than inside `check_overplotting`, because the README's claim
@@ -130,6 +139,14 @@ TEXT_FOOTPRINT_MIN_PX = 60
 # PAGE) does.
 TEXT_CONTRAST_MIN = 4.5
 TEXT_CONTRAST_MIN_LARGE = 3.0
+# The sizes at which WCAG calls text large, ON PAGE. They select which of the
+# two floors above applies, so they are thresholds in their own right and were
+# the last two in this gate still written as literals inside it.
+LARGE_TEXT_PT = 18.0
+LARGE_TEXT_BOLD_PT = 14.0
+# Numeric font weight at which CSS, and matplotlib after it, calls a face bold.
+# It decides which of the two sizes above applies.
+BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 #
@@ -139,6 +156,10 @@ TEXT_CONTRAST_MIN_LARGE = 3.0
 # to read. 7.5 is the size at which it is comfortable, and it is cheap to hold
 # because the fix is nearly always cutting words rather than shrinking type.
 TYPE_FLOOR_PT = 7.5
+# Fraction of the content width below which `check_type_size` warns even when
+# every string clears the floor: a figure authored full width and placed in a
+# third of a column is measured against a page it will not be printed on.
+PLACED_FRAC_WARN = 0.35
 
 # Stroke floor, in points ON THE PAGE. SIAM's instructions for authors: "lines
 # one point or thicker; thinner lines may break up or disappear."
@@ -655,9 +676,11 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         pt = t.get_fontsize() * scale
         weight = t.get_fontweight()
         bold = (weight in ("bold", "heavy", "black", "extra bold", "semibold")
-                or (isinstance(weight, (int, float)) and weight >= 600))
+                or (isinstance(weight, (int, float))
+                    and weight >= BOLD_WEIGHT_MIN))
         floor = (TEXT_CONTRAST_MIN_LARGE
-                 if pt >= 18.0 or (pt >= 14.0 and bold) else TEXT_CONTRAST_MIN)
+                 if pt >= LARGE_TEXT_PT or (pt >= LARGE_TEXT_BOLD_PT and bold)
+                 else TEXT_CONTRAST_MIN)
         if halo_color:
             # Casing replaces the backdrop under the strokes, so that is what
             # the reader reads against.
@@ -718,7 +741,7 @@ def check_contrast_stack(fig):
     if not alphas:
         return True, "no data artists"
     levels = sorted(set(alphas))
-    solid = any(x >= 0.99 for x in alphas)
+    solid = any(x >= OPAQUE_ALPHA_MIN for x in alphas)
     ok = len(levels) <= ALPHA_LEVELS_MAX and solid
     note = ""
     if not solid:
@@ -902,7 +925,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
     mn = min(pt for pt, _ in sizes)
     if not small:
         detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
-        if placed_frac < 0.35:
+        if placed_frac < PLACED_FRAC_WARN:
             return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
                            " — labels may be too small to read; author at the"
                            " width it ships at")
@@ -958,7 +981,7 @@ def check_ink(fig, context_axes=None, canvas=None):
     h = buf.shape[0]
     bg = buf[0, 0]
     # anything more than a few levels off the page color counts as ink
-    ink_mask = (np.abs(buf - bg).sum(axis=2) > 24)
+    ink_mask = (np.abs(buf - bg).sum(axis=2) > INK_DELTA_MIN)
 
     if context_axes is None:
         context_axes = []
@@ -1717,9 +1740,13 @@ def check_colormap(fig):
 def check_fonts(fig):
     """Two silent failures between the figure on screen and the file you submit.
 
-    *Type 3.* Matplotlib defaults `pdf.fonttype` and `ps.fonttype` to 3. IEEE,
-    ACM and Elsevier all reject submissions carrying Type 3 fonts, and IEEE PDF
-    eXpress fails the upload outright. Nothing warns you: the figure renders
+    *Type 3.* Matplotlib defaults `pdf.fonttype` and `ps.fonttype` to 3. IEEE
+    PDF eXpress requires embedded Type 1 or TrueType and does not accept Type 3,
+    so the upload is refused before a reviewer sees it. ACM and Elsevier check
+    embedding in production instead, which is the same problem surfacing after
+    acceptance rather than a milder one. Neither publishes a rule rejecting a
+    submission for it, and this docstring said they did until the prose audit
+    read the sources. Nothing warns you either way: the figure renders
     identically, and the paper bounces at the latest and most expensive possible
     moment. Type 42 embeds TrueType outlines instead. `figure.mplstyle` sets it;
     this catches the project that did not copy the sheet, and the notebook that
@@ -1749,8 +1776,8 @@ def check_fonts(fig):
              if int(mpl.rcParams[k]) == 3]
     if type3:
         notes.append(f"{' and '.join(type3)} = 3 (Type 3)  <- IEEE PDF eXpress "
-                     "rejects the upload and ACM/Elsevier reject the "
-                     "submission; set both to 42")
+                     "refuses the upload and ACM/Elsevier catch it in "
+                     "production; set both to 42")
 
     family = mpl.rcParams["font.family"]
     generic = family[0] if isinstance(family, (list, tuple)) else family

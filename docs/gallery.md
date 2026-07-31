@@ -26,7 +26,7 @@ is checked rather than written once and forgotten.
 ## A filled field
 
 <figure markdown="span">
-  ![Rosenbrock function on a log scale as a filled viridis field with isolines, and a 28-step gradient descent path from (-1.9, 2.2). The path drops into the curved valley within four steps and then crawls along it, still short of the optimum at (1, 1) after 28.](images/gallery-field.png)
+  ![Rosenbrock function on a log scale as a filled viridis field with isolines, and a 6000-step gradient descent path from (-1.75, 2.15). The path drops into the curved valley within two steps and then crawls along it, ending at (0.93, 0.86), still short of the optimum at (1, 1).](images/gallery-field.png)
   <figcaption>The hardest case in the set, and the one that broke the most checks. <code>check_ink</code> called every colorbar a saturated panel; the line-weight gate measured the colorbar's own dividers as hairline strokes; the path and its start marker in one hue read as a wrapped color cycle; and testing a label's backdrop against its dominant color failed every annotation ever placed on a heatmap. Four gate defects, one figure.</figcaption>
 </figure>
 
@@ -40,7 +40,7 @@ is checked rather than written once and forgotten.
 ## Three statistical forms
 
 <figure markdown="span">
-  ![Three panels. (a) Binding fraction for 14 controls and 14 treated samples, every point shown: the treated group is bimodal, which a box plot would hide. (b) Twelve paired before-and-after measurements as a slope graph: eleven of twelve rise. (c) A reliability diagram: observed frequency sits below the diagonal across the whole range, so the model is overconfident.](images/gallery-forms.png)
+  ![Three panels. (a) Binding fraction for 14 controls and 14 treated samples, every point shown: the treated group is bimodal, which a box plot would hide. (b) Twelve paired before-and-after measurements as a slope graph: all twelve rise. (c) A reliability diagram: observed frequency sits below the diagonal across the whole range, so the model is overconfident.](images/gallery-forms.png)
   <figcaption>The three forms <a href="choosing-a-form/">choosing-a-form.md</a> argues for, drawn as it argues for them. Panel (a) is the case a script cannot decide: a box plot here clears every mechanical gate and still hides both the n of 14 and the bimodality, which are the finding.</figcaption>
 </figure>
 
@@ -76,6 +76,6 @@ than only that they can pass.
 And the figure from the README, which is the method in miniature:
 
 <figure markdown="span">
-  ![Validation loss against training epoch for three optimisers over 12 epochs. All three fall; the Bayesian run reaches 0.05 by epoch 6, while the baseline is still at 0.25 at epoch 12.](images/demo.png)
+  ![Validation loss against training epoch for three optimisers over 12 epochs. All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12, while the baseline is still at 0.25 at epoch 12.](images/demo.png)
   <figcaption><code>python examples/demo.py</code> — every decision commented against the failure it avoids.</figcaption>
 </figure>

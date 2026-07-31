@@ -22,8 +22,8 @@ python skill/scripts/check_figure.py     # self-test on a broken figure
 ```
 
 ![Validation loss against training epoch for three optimisers over 12 epochs.
-All three fall; the Bayesian run reaches 0.05 by epoch 6, while the baseline is
-still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
+All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12,
+while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
 *`python examples/demo.py` builds that figure and audits it, and `python
 examples/gallery.py` covers the harder forms.
