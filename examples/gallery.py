@@ -1,6 +1,6 @@
 """Seven figures hard enough to be worth checking.
 
-    python examples/gallery.py
+    python examples/gallery.py [output-directory]
 
 `demo.py` is the method in miniature: one panel, three curves, every rule
 visible at once. It is also easy for a gate to pass, which is the wrong thing
@@ -43,6 +43,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
 HERE = Path(__file__).resolve().parent
+# Same optional argument as `demo.py`, and for the same reason: the test that
+# runs this file used to rewrite all seven committed PNGs on every `pytest`.
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE
 SKILL = HERE.parent / "skill"
 sys.path.insert(0, str(SKILL / "scripts"))
 
@@ -65,7 +68,7 @@ def finish(fig, name, description, **audit_kw):
     written out so you can look at what failed."""
     cf.describe(fig, description)
     ok = cf.report(fig, name, **audit_kw)
-    out = HERE / f"{name}.png"
+    out = OUT / f"{name}.png"
     # `alt_metadata` takes the path so it can pick a key the format has. PNG
     # takes `Description`; PDF's info dictionary does not have one, and asking
     # for it there makes matplotlib warn on every save.

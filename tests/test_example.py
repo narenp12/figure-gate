@@ -18,10 +18,11 @@ DEMO = Path(__file__).resolve().parent.parent / "examples" / "demo.py"
 
 
 def test_the_example_runs_and_passes_its_own_gates(tmp_path):
-    result = subprocess.run([sys.executable, str(DEMO)],
+    result = subprocess.run([sys.executable, str(DEMO), str(tmp_path)],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "COMPOSED" in result.stdout
+    assert (tmp_path / "demo.png").is_file(), result.stdout
 
 
 def test_the_example_palette_is_valid_without_the_builtin_colormap():
@@ -50,14 +51,44 @@ def test_the_fallback_matches_the_builtin_where_the_builtin_exists():
 GALLERY = Path(__file__).resolve().parent.parent / "examples" / "gallery.py"
 
 
-def test_the_gallery_runs_and_every_figure_passes():
+def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     """The harder half of the evidence. `demo.py` is one panel and three
     curves; a gate that only ever runs on that has not been tried. These seven
     put a shared-axis grid, a filled field with a colorbar, an axis-free
     schematic, three statistical forms, a log-log convergence plot, a dense
     attractor and three colormapped complex-plane images through the same
     audit."""
-    result = subprocess.run([sys.executable, str(GALLERY)],
+    result = subprocess.run([sys.executable, str(GALLERY), str(tmp_path)],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
     assert result.stdout.count("PASS  gallery-") == 7, result.stdout[-4000:]
+    assert len(list(tmp_path.glob("gallery-*.png"))) == 7, result.stdout[-4000:]
+
+
+def test_running_the_scripts_elsewhere_leaves_the_committed_pngs_alone(tmp_path):
+    """The reason both tests above take a directory.
+
+    The example scripts write beside themselves by default, which is what
+    someone running them wants and what the README's `python examples/demo.py`
+    promises. It is not what a test run wants: the PNG bytes depend on the fonts
+    installed locally, so every `pytest` left eight modified files in the
+    working tree and a `git add -A` swept a binary diff into whatever commit
+    came next. That happened, on the 0.5.0 release branch.
+
+    Both scripts run here, so a directory argument that is accepted and then
+    ignored fails this even though the tests above would still pass."""
+    committed = sorted(DEMO.parent.glob("*.png"))
+    assert len(committed) == 8, [p.name for p in committed]
+    before = {path: (path.stat().st_mtime_ns, path.stat().st_size)
+              for path in committed}
+
+    for script in (DEMO, GALLERY):
+        result = subprocess.run([sys.executable, str(script), str(tmp_path)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
+
+    after = {path: (path.stat().st_mtime_ns, path.stat().st_size)
+             for path in committed}
+    rewritten = [path.name for path in committed if before[path] != after[path]]
+    assert not rewritten, (
+        f"{rewritten} were rewritten by a run that named another directory")

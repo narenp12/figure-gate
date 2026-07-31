@@ -1,10 +1,16 @@
 """A minimal figure built the way the guide describes, with both gates run on it.
 
-    python examples/demo.py
+    python examples/demo.py [output-directory]
 
 Writes `examples/demo.png` and prints the composition audit. Everything here is
 the whole method in miniature: load the style sheet, take palette slots in
 order, run the checks, and only then look at the picture.
+
+The optional directory exists for `tests/test_example.py`, which runs this file
+to prove the README's first code block still works. Without it the test rewrote
+the committed PNG on every run: the bytes depend on the local fonts, so `pytest`
+left the working tree dirty and any `git add -A` swept a binary diff into an
+unrelated commit.
 """
 
 from pathlib import Path
@@ -19,6 +25,7 @@ from matplotlib import colormaps
 from matplotlib import patheffects as pe
 
 HERE = Path(__file__).resolve().parent
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE
 SKILL = HERE.parent / "skill"
 sys.path.insert(0, str(SKILL / "scripts"))
 
@@ -143,9 +150,9 @@ passed = cf.report(fig, "demo")
 # No dpi or bbox here on purpose: both come from the style sheet, which is the
 # point of having one. `bbox_inches="tight"` in particular would change the
 # saved width and quietly invalidate the type-size check that just ran.
-out = HERE / "demo.png"
+out = OUT / "demo.png"
 fig.savefig(out, metadata=cf.alt_metadata(fig, out))
 plt.close(fig)
 
-print(f"wrote {HERE / 'demo.png'}")
+print(f"wrote {out}")
 sys.exit(0 if passed else 1)
