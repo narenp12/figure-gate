@@ -11,7 +11,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/f/figure-gate/figure_gate-${{ version }}.tar.gz
-  sha256: 23b095cc976551d91565bb4fbc23b9a375c385f0f33863b33b08e551f9188a5a
+  sha256: 57efcc97312b1c93de1b7266f607d6dc8a0ab6deca263435028a99b8a19d589b
 
 build:
   # Three unnamespaced entries in site-packages, deliberately: the scripts are
