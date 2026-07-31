@@ -34,6 +34,7 @@ nav = [
   { "Home" = "index.md" },
   { "Gallery" = "gallery.md" },
   { "The gates" = "style-guide.md" },
+  { "API" = "api.md" },
   { "Choosing a form" = "choosing-a-form.md" },
   { "Agent skill" = "skill.md" },
   { "Changelog" = "changelog.md" },
@@ -94,3 +95,37 @@ permalink = true
 anchor_linenums = true
 [project.markdown_extensions.pymdownx.inlinehilite]
 [project.markdown_extensions.pymdownx.superfences]
+
+# `api.md` is the one page with no prose file behind it: it is `:::` directives,
+# and mkdocstrings reads the signatures and docstrings out of the scripts at
+# build time. That is the same argument as the symlinks above -- a hand-written
+# reference is a second copy of every signature and default, and this project
+# already has a test file about prose drifting from the code it describes.
+#
+# Zensical's own extension rather than the mkdocstrings plugin: `plugins:` is
+# MkDocs configuration, and the comment at the top of this file is about what
+# Zensical silently ignores from one. The extension is what it actually runs.
+[project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python]
+# The scripts are three loose files meant to be vendored, not a package, so
+# there is no import path to walk -- the handler is pointed at the directory.
+paths = ["skill/scripts"]
+
+[project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python.options]
+docstring_style = "google"
+# The page names what it documents; a second copy of the module name above each
+# block is noise between the reader and the signature.
+show_root_heading = false
+show_root_toc_entry = false
+show_source = true
+# Signatures carry the defaults, which for `audit()` and `check()` are half of
+# what a caller needs to know: `placed_frac=1.0` and `all_pairs=False` are
+# decisions, not filler.
+separate_signature = true
+show_signature_annotations = true
+signature_crossrefs = true
+# Every member here is listed explicitly on the page, so an undocumented
+# addition is a name missing from `api.md` rather than a block that appears
+# without anyone deciding it should.
+members_order = "source"
+filters = ["!^_"]
+heading_level = 3

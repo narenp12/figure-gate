@@ -2014,10 +2014,10 @@ ADVISORY_GATES = _advisory_gates()
 def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     """Run every gate over a figure. Returns `(ok, rows)`.
 
-    Note the order: `check_palette.check` returns its pair the other way round,
-    as `(rows, ok)`. Unpacking either one the wrong way binds a bool to the
-    rows and raises nothing, so the README states both and this says it where
-    the call is written.
+    `check_palette.check` returns the same shape. It returned `(rows, ok)`
+    until 0.4.0, and unpacking either one the wrong way binds a bool to the
+    rows and raises nothing at the call site, which is why they were made to
+    agree rather than documented as differing.
 
     `rows` are `(label, status, detail)`, one per gate, in the order the report
     prints them. `status` is True, False, or the string "warn"; only a hard
@@ -2049,6 +2049,15 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
 
 def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
            venue=None):
+    """`audit()`, printed. Returns the same `ok` bool and nothing else.
+
+    The arguments are `audit`'s, plus `name` for the heading. Advisory rows
+    print as WARN and do not change the verdict, so a figure can be COMPOSED
+    with advisories; only a hard FAIL makes this return False.
+
+    This is what the examples and the CLI call. Use `audit()` when the rows
+    themselves are wanted rather than a printed table.
+    """
     ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False

@@ -28,8 +28,14 @@ CONFIG = ROOT / "zensical.toml"
 # `  { "The gates" = "style-guide.md" },`
 NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 
-# gallery.md is the one page written for the site. Everything else is a pointer.
-AUTHORED = {"gallery.md"}
+# The two pages written for the site. Everything else is a pointer.
+#
+# `api.md` is site-only for the opposite reason to the symlinks rather than in
+# spite of it: it holds no reference material to keep one copy of. It is `:::`
+# directives, and mkdocstrings reads the signatures and docstrings out of
+# `skill/scripts/` at build time, so the single copy it serves is the code.
+# `tests/test_api_reference.py` holds the directives to the modules.
+AUTHORED = {"gallery.md", "api.md"}
 
 
 def nav_targets():
@@ -48,9 +54,9 @@ def nav_targets():
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
     README gate-table parser, and for the same reason."""
-    assert len(nav_targets()) == 6, (
+    assert len(nav_targets()) == 7, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
-        "6 - the nav changed shape and nav_targets() needs updating with it")
+        "7 - the nav changed shape and nav_targets() needs updating with it")
 
 
 @pytest.mark.parametrize("target", nav_targets())
