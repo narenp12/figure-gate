@@ -191,7 +191,7 @@ numbers and the direction — not what the figure is made of:
 
 ```python
 describe(fig, "Validation loss against epoch for three optimisers. All three "
-              "fall; the Bayesian run reaches 0.05 by epoch 6, the baseline is "
+              "fall; the Bayesian run reaches 0.12 by epoch 6, the baseline is "
               "still at 0.25 at 12.")
 fig.savefig(path, metadata=alt_metadata(fig, path))
 ```
@@ -367,8 +367,9 @@ the same `page_scale`. Gridlines are held to a lower floor than data: a
 gridline that drops out costs the reader a reference, a curve that drops out
 costs them the finding.
 
-**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3, and IEEE
-PDF eXpress rejects the upload while ACM and Elsevier reject the submission.
+**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3. IEEE PDF
+eXpress does not accept Type 3 and refuses the upload; ACM and Elsevier check
+embedding in production, so there it surfaces after acceptance instead.
 `figure.mplstyle` sets it; nothing else warns you, because the figure renders
 identically and the paper bounces at the latest possible moment.
 

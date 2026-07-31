@@ -484,6 +484,19 @@ def _headings():
 
 HEADINGS = _headings()
 
+# A heading the release process defines rather than one a document carries.
+# `## Unreleased` exists exactly while somebody is writing the next entry:
+# bump-my-version renames it to the version at the tag, and its absence is what
+# stops a release with nothing written about it.
+#
+# It was in `UNRESOLVED_SPANS` for one release, which fixed a suite that went
+# red at every tagged commit and produced one that went red the moment a
+# maintainer followed `CONTRIBUTING.md` and wrote the heading: the ledger's own
+# "this entry now resolves" test fired on it. Both states are correct, so the
+# span resolves in both, and the check that it does is
+# `test_the_process_heading_resolves_whether_or_not_it_is_written`.
+PROCESS_HEADINGS = {"## Unreleased"}
+
 
 def _defining_modules(name):
     return [doc for doc, module in MODULES.items() if hasattr(module, name)]
@@ -532,6 +545,8 @@ def resolve(span):
         return "metadata-key"
     if span in CONSOLE_SCRIPTS:
         return "console-script"
+    if span in PROCESS_HEADINGS:
+        return "process-heading"
     if span in HEADINGS:
         return "heading"
     if span in STATUS_WORDS:
@@ -664,13 +679,6 @@ UNRESOLVED_SPANS = {
                                                "resolvers see this project's "
                                                "Python, not the host's command "
                                                "set",
-    "## Unreleased": "the heading CONTRIBUTING.md tells a maintainer to write "
-                     "their notes under. It is absent between a release and "
-                     "the next change on purpose: bump-my-version renames it "
-                     "to the version, and its absence is what stops a release "
-                     "with nothing written about it. A resolver that found it "
-                     "would only ever be reporting that somebody had started "
-                     "the next entry",
     "figure-gate:research-figures": "how Claude Code namespaces the skill once "
                                     "installed as a plugin: the plugin name "
                                     "from plugin.json, then the skill name "
@@ -748,6 +756,34 @@ def test_every_code_span_names_something_that_exists(document, span):
         "check_palette.py, matplotlib or the skill's files has that name. "
         "Either the name is wrong, or it belongs in UNRESOLVED_SPANS with the "
         "reason it cannot be resolved")
+
+
+def test_the_process_heading_resolves_whether_or_not_it_is_written():
+    """The state that broke this twice is the one no run ever holds both of.
+
+    A tagged commit has no `## Unreleased` and a development commit has one,
+    and the resolver has to agree with the same sentence in `CONTRIBUTING.md`
+    either way. Both states are constructed here rather than waited for.
+    """
+    assert resolve("## Unreleased") == "process-heading"
+
+    saved = set(HEADINGS)
+    HEADINGS.discard("## Unreleased")
+    try:
+        assert resolve("## Unreleased") == "process-heading", (
+            "at a tagged commit, with the heading renamed to the version, the "
+            "span stops resolving and CONTRIBUTING.md's instruction reads as "
+            "a claim about a section that does not exist")
+    finally:
+        HEADINGS.update(saved)
+
+
+def test_a_process_heading_is_not_a_licence_for_any_heading():
+    """The class is two words wide on purpose. A resolver that let any `## x`
+    through would excuse a pointer to a section somebody deleted."""
+    assert resolve("## Gates that warn") is None or \
+        "## Gates that warn" in HEADINGS
+    assert resolve("## No Such Section Anywhere") is None
 
 
 def test_the_unresolved_ledger_has_no_stale_entries():
@@ -1047,6 +1083,78 @@ def test_the_rdbu_window_is_the_one_that_passes_the_palette_gates():
         f"{outside} now clear the palette gates, so the guide's instruction to "
         "sample inside the ends has lost its reason. Rewrite the section "
         "rather than deleting this test")
+
+
+# --- claims the audit retracted stay retracted -------------------------------
+# `EXTERNAL_CLAIMS` above records what was verified. This records what was
+# checked and found wanting, which is the other half and was missing: the
+# audit that produced this file retracted "ACM and Elsevier reject the
+# submission", and the retraction landed in `style-guide.md` alone. `SKILL.md`
+# and `check_figure.py` carried the sentence for two more releases, the module
+# in a gate message a reader sees on every Type 3 figure.
+#
+# A retraction that lives in one document is a correction the next writer
+# copies over from the uncorrected one. So the wording is held out of every
+# document and both modules at once, and the sweep reaches into the scripts
+# because that is where the surviving copy was.
+
+RETRACTED_CLAIMS = {
+    "ACM or Elsevier rejecting a submission for Type 3 fonts": {
+        "pattern": r"(ACM|Elsevier)[^.]{0,80}reject[^.]{0,40}submission",
+        "instead": "IEEE PDF eXpress does not accept Type 3 and refuses the "
+                   "upload; ACM and Elsevier check embedding in production, "
+                   "so there it surfaces after acceptance",
+        "why": "neither publishes a rule rejecting a submission for Type 3. "
+               "What the sources say is quoted in EXTERNAL_CLAIMS under "
+               "'Type 3 fonts'",
+        "retracted": "2026-07-29",
+    },
+}
+
+
+def _retraction_corpus():
+    """Documents and modules, because the claim survived in a module."""
+    return PROSE_DOCS + [pathlib.Path(inspect.getfile(module))
+                         for module in MODULES.values()]
+
+
+@pytest.mark.parametrize("claim", sorted(RETRACTED_CLAIMS))
+def test_a_retracted_claim_is_written_nowhere(claim):
+    entry = RETRACTED_CLAIMS[claim]
+    found = []
+    for path in _retraction_corpus():
+        text = " ".join(path.read_text().split())
+        if re.search(entry["pattern"], text, re.I):
+            found.append(path.relative_to(ROOT).as_posix())
+    assert not found, (
+        f"{found} state {claim}, retracted {entry['retracted']}: "
+        f"{entry['why']}. Write instead: {entry['instead']}")
+
+
+@pytest.mark.parametrize("claim", sorted(RETRACTED_CLAIMS))
+def test_a_retraction_records_why_and_what_to_say_instead(claim):
+    """A retraction with no replacement is how the sentence comes back: the
+    next writer needs the true version to hand, not only a prohibition."""
+    entry = RETRACTED_CLAIMS[claim]
+    for field in ("pattern", "instead", "why", "retracted"):
+        assert entry.get(field), f"{claim} has no {field}"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", entry["retracted"])
+
+
+def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
+    """The sweep runs against a corpus that no longer contains the claim, so
+    every assertion passes whether or not the pattern works. This is the
+    sentence as `check_figure.py` shipped it."""
+    shipped = ("IEEE PDF eXpress rejects the upload and ACM/Elsevier reject "
+               "the submission; set both to 42")
+    pattern = RETRACTED_CLAIMS[
+        "ACM or Elsevier rejecting a submission for Type 3 fonts"]["pattern"]
+    assert re.search(pattern, shipped, re.I), (
+        "the pattern no longer matches the message it was written to retire")
+    assert not re.search(pattern, " ".join(
+        (SKILL / "references" / "style-guide.md").read_text().split()), re.I), (
+        "the pattern matches the corrected sentence too, so it forbids the "
+        "replacement as well as the claim")
 
 
 # --- claims about the world carry a source and a recorded verification -------

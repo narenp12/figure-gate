@@ -1,5 +1,55 @@
 # Changelog
 
+## Unreleased
+
+**Alt text is swept for the numbers it states.** `tests/test_docs_match_code.py`
+already held every description on the site to the string the example attaches,
+so the page could not drift from the code. Nothing read either against the
+picture, and three figures described something the code does not draw:
+
+- the slope graph said `eleven of twelve rise`. All twelve rise, and always
+  have: `after` adds a normal centred at 0.11 with a spread of 0.05, so a fall
+  needs a draw 2.2 sigma low, and under seed 4 the smallest gain is 0.047.
+- the demo said the Bayesian run `reaches 0.05 by epoch 6`. At epoch 6 that
+  curve is at 0.115, and 0.05 arrives at epoch 6.9.
+- the field said `a 28-step gradient descent path from (-1.9, 2.2)`. The loop
+  runs 6000 steps from (-1.75, 2.15). None of the three numbers was the
+  figure's, and one of them, 2.2, is the panel's x limit, so a resolver reading
+  the sentence loosely would have called it correct.
+
+`tests/test_alt_text_numbers.py` builds every described figure and sweeps its
+description: each number either resolves against a count, limit, tick or extreme
+the figure has, or names a computation that confirms it, or sits in a ledger with
+the reason nothing can. The relational claims get checkers of their own, because
+a number that is right about the figure and attached to the wrong curve is the
+defect here. The three PNGs whose description changed were rebuilt so the
+metadata a screen reader reads is the corrected text.
+
+**A claim the last audit retracted was still shipping in a gate message.**
+"ACM and Elsevier reject the submission" was corrected in the style guide alone;
+`SKILL.md` and `check_figure.py` kept it, the module in the message printed under
+every Type 3 figure. `RETRACTED_CLAIMS` in `tests/test_prose_claims.py` now holds
+a retraction out of both documents and modules at once, with the wording to use
+instead, because a retraction that lives in one file is one the next writer
+copies back from another.
+
+**The prose sweep went red the moment somebody wrote release notes.** 0.6.0
+fixed a suite that failed at every tagged commit by putting `## Unreleased` in
+the unresolved ledger. The ledger has a test asserting none of its entries
+resolves, so the failure moved rather than went: it now fired on every commit
+where the heading existed, which is every commit a maintainer writes notes in.
+The heading is defined by the release process rather than by a document, exists
+in exactly one of the two states, and now resolves in both.
+
+**Every threshold is a module-level constant, as the README has said since
+0.2.0.** Nine were not: the ink-detection cutoff, the two WCAG large-text sizes,
+the numeric bold weight, the placement warning and the opaque-mark definition in
+`check_figure.py`, and all three ordinal rows of `check_palette.py`, whose
+categorical siblings have sat at module level throughout.
+`tests/test_thresholds_are_constants.py` sweeps both modules for a comparison
+against a literal, recognises the structural ones by shape, and requires the rest
+to name a constant or a reason. Values are unchanged, so no verdict moves.
+
 ## 0.6.0 — 2026-07-30
 
 **The README is a landing page now, and the documentation is on the docs site.**

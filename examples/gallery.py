@@ -212,9 +212,10 @@ def field():
 
     finish(fig, "gallery-field",
            "Rosenbrock function on a log scale as a filled viridis field with "
-           "isolines, and a 28-step gradient descent path from (-1.9, 2.2). "
-           "The path drops into the curved valley within four steps and then "
-           "crawls along it, still short of the optimum at (1, 1) after 28.",
+           "isolines, and a 6000-step gradient descent path from "
+           "(-1.75, 2.15). The path drops into the curved valley within two "
+           "steps and then crawls along it, ending at (0.93, 0.86), still "
+           "short of the optimum at (1, 1).",
            context_axes=[ax])
 
 
@@ -310,8 +311,13 @@ def forms():
     a.set_title("(a) every point", loc="left")
 
     # (b) Paired measurements as a slope graph. Two bars would throw the
-    # pairing away, and the pairing is what the panel is about: the group mean
-    # barely moves while eleven of twelve individuals rise.
+    # pairing away, and the pairing is what the panel is about: every one of
+    # the twelve individuals rises, and the spread they start from is wider
+    # than the change itself, neither of which survives a pair of means.
+    # The comment here said eleven of twelve for two releases. The draw has
+    # never produced a fall: `after` adds a normal centred at 0.11 with a
+    # spread of 0.05, so a drop needs a draw 2.2 sigma low, and under this
+    # seed the smallest gain is 0.047. `test_alt_text_numbers.py` now counts.
     before = rng.uniform(0.22, 0.68, 12)
     after = before + rng.normal(0.11, 0.05, 12)
     for lo, hi in zip(before, after):
@@ -343,7 +349,7 @@ def forms():
            "Three panels. (a) Binding fraction for 14 controls and 14 treated "
            "samples, every point shown: the treated group is bimodal, which a "
            "box plot would hide. (b) Twelve paired before-and-after "
-           "measurements as a slope graph: eleven of twelve rise. (c) A "
+           "measurements as a slope graph: all twelve rise. (c) A "
            "reliability diagram: observed frequency sits below the diagonal "
            "across the whole range, so the model is overconfident.")
 

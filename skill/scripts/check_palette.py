@@ -196,6 +196,13 @@ CVD_TARGET = 8.0          # below this, secondary encoding is mandatory
 NORMAL_FLOOR = 15.0       # hard floor; no secondary encoding excuses this
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
+# The three ordinal rows. `--ordinal` swaps the categorical gates for these, and
+# all three ran on literals inside `check` while every categorical threshold sat
+# up here, so half the validator was tunable and half was not.
+ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
+ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
+ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
+
 
 def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozenset()):
     """Gate a palette. Returns `(ok, rows)`.
@@ -226,12 +233,13 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
         rows.append(("Lightness monotone", mono, "steps read light->dark" if mono
                      else "steps are not monotone in lightness"))
         gaps = [abs(x - y) for x, y in zip(ls, ls[1:])]
-        gap_ok = all(g >= 0.06 for g in gaps)
+        gap_ok = all(g >= ORDINAL_DL_MIN for g in gaps)
         rows.append(("Adjacent dL", gap_ok,
                      f"min gap {min(gaps):.3f}" if gaps else "single step"))
         light_end = max(colors, key=lambda c: linear_to_oklab(hex_to_linear(c))[0])
         cr = contrast(light_end, surface)
-        rows.append(("Light-end contrast", cr >= 2.0, f"{light_end} at {cr:.2f}:1 vs surface"))
+        rows.append(("Light-end contrast", cr >= ORDINAL_LIGHT_END_CONTRAST_MIN,
+                     f"{light_end} at {cr:.2f}:1 vs surface"))
         # Step uniformity replaced an earlier "Single hue" gate (hue spread <= 20
         # degrees). That gate was a proxy for the property actually wanted, and it
         # rejected perceptually uniform multi-hue ramps such as viridis while
@@ -240,7 +248,7 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
         # above plus this one measure directly. The rainbow failure mode the old
         # gate was aimed at (jet) is caught by "Lightness monotone".
         ratio = max(gaps) / min(gaps) if gaps and min(gaps) > 0 else float("inf")
-        rows.append(("Step uniformity", ratio <= 2.0,
+        rows.append(("Step uniformity", ratio <= ORDINAL_STEP_RATIO_MAX,
                      f"largest/smallest dL {ratio:.2f}" if gaps else "single step"))
         return all(r[1] for r in rows), rows
 

@@ -144,8 +144,9 @@ ax.set_ylabel("Validation loss")
 # The description is for a reader who cannot see the figure. Across 100,000
 # public notebooks, 99.81% of generated images shipped without one.
 cf.describe(fig, "Validation loss against training epoch for three optimisers "
-                 "over 12 epochs. All three fall; the Bayesian run reaches 0.05 "
-                 "by epoch 6, while the baseline is still at 0.25 at epoch 12.")
+                 "over 12 epochs. All three fall; the Bayesian run reaches 0.12 "
+                 "by epoch 6 and 0.02 by epoch 12, while the baseline is still "
+                 "at 0.25 at epoch 12.")
 passed = cf.report(fig, "demo")
 # No dpi or bbox here on purpose: both come from the style sheet, which is the
 # point of having one. `bbox_inches="tight"` in particular would change the
