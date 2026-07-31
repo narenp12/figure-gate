@@ -28,8 +28,14 @@ CONFIG = ROOT / "zensical.toml"
 # `  { "The gates" = "style-guide.md" },`
 NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 
-# gallery.md is the one page written for the site. Everything else is a pointer.
-AUTHORED = {"gallery.md"}
+# The two pages written for the site. Everything else is a pointer.
+#
+# `api.md` is site-only for the opposite reason to the symlinks rather than in
+# spite of it: it holds no reference material to keep one copy of. It is `:::`
+# directives, and mkdocstrings reads the signatures and docstrings out of
+# `skill/scripts/` at build time, so the single copy it serves is the code.
+# `tests/test_api_reference.py` holds the directives to the modules.
+AUTHORED = {"gallery.md", "api.md"}
 
 
 def nav_targets():
@@ -48,9 +54,9 @@ def nav_targets():
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
     README gate-table parser, and for the same reason."""
-    assert len(nav_targets()) == 6, (
+    assert len(nav_targets()) == 7, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
-        "6 - the nav changed shape and nav_targets() needs updating with it")
+        "7 - the nav changed shape and nav_targets() needs updating with it")
 
 
 @pytest.mark.parametrize("target", nav_targets())
@@ -151,6 +157,72 @@ def test_no_line_becomes_a_heading_by_accident(page, target):
         f"{len(bad)} line(s) start with `#` but are not headings, so the "
         f"build will turn each into one:\n{report}\n"
         "Re-wrap the paragraph so the `#` is not in column one.")
+
+
+# --- one list of build dependencies, in pyproject.toml ------------------------
+# The build step used to read `uv run --no-project --with "zensical>=0.0.51,<0.1"`,
+# which is the `docs` dependency group spelled out a second time in a file
+# nothing resolves against `pyproject.toml`. It was correct for exactly as long
+# as the two lists happened to agree, and they stopped agreeing the first time
+# the build needed a package only one of them named: the group gained
+# `mkdocstrings-python` for the API page, the workflow line did not, and CI
+# failed with `No module named 'mkdocstrings'` after the same build passed
+# locally in a project environment that had it. `--group docs` leaves one list.
+
+WORKFLOW = ROOT / ".github" / "workflows" / "docs.yml"
+PYPROJECT = ROOT / "pyproject.toml"
+
+
+def build_steps():
+    """The lines of the docs workflow that build the site."""
+    return [line.strip() for line in WORKFLOW.read_text().splitlines()
+            if "zensical build" in line]
+
+
+def test_the_build_step_was_found():
+    """The two tests below say nothing about a workflow they cannot find."""
+    assert len(build_steps()) == 1, (
+        f"found {len(build_steps())} `zensical build` lines in "
+        f"{WORKFLOW.name}, expected 1 - the workflow changed shape and "
+        "build_steps() needs updating with it")
+
+
+@pytest.mark.parametrize("step", build_steps())
+def test_the_build_installs_the_declared_group(step):
+    assert re.search(r"--(only-)?group docs\b", step), (
+        f"the docs build runs `{step}`, which does not install the `docs` "
+        "dependency group - whatever it installs instead is a second list of "
+        "build dependencies that nothing keeps in step with pyproject.toml")
+    assert "--with" not in step, (
+        f"the docs build names a package inline: `{step}`. Add it to the "
+        "`docs` group in pyproject.toml instead, so there is one list.")
+
+
+def docs_group():
+    text = PYPROJECT.read_text()
+    match = re.search(r"^docs = \[(.*?)^\]", text, re.S | re.M)
+    assert match, "pyproject.toml no longer declares a `docs` group"
+    return re.findall(r'"([A-Za-z0-9_.-]+)', match.group(1))
+
+
+def test_the_docs_group_supplies_the_builder():
+    """`--group docs` is only the whole list if the builder is in it."""
+    assert "zensical" in docs_group(), (
+        f"the `docs` group names {docs_group()}, which does not include "
+        "zensical - the workflow installs this group and nothing else")
+
+
+def test_a_page_using_directives_declares_the_handler_that_reads_them():
+    """`:::` in a page is silently inert prose without mkdocstrings installed:
+    the extension raises at import, the build exits 1, and the message names a
+    module no page mentions. Tie the need to the declaration."""
+    using = sorted(p.name for p in DOCS.rglob("*.md")
+                   if re.search(r"^::: ", p.resolve().read_text(), re.M))
+    if not using:
+        pytest.skip("no page uses mkdocstrings directives")
+    assert "mkdocstrings-python" in docs_group(), (
+        f"{using} use `:::` directives, but the `docs` group names "
+        f"{docs_group()} - the build would fail on a missing handler")
 
 
 def test_the_build_is_not_left_configured_for_mkdocs():

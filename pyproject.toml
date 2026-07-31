@@ -263,7 +263,10 @@ dev = [
 # now, so it never excludes anything -- but `check_palette.py` is still claimed
 # to run on 3.8 when vendored, and a marker that documents a tool's own floor
 # costs nothing next to a resolution failure if that range ever widens again.
-docs = ["zensical>=0.0.51,<0.1; python_version >= '3.10'"]
+docs = [
+    "mkdocstrings-python>=1.10 ; python_full_version >= '3.10'",
+    "zensical>=0.0.51,<0.1; python_version >= '3.10'",
+]
 
 # Out of `dev` on purpose: the documented command is
 # `uv run rtk pytest tests/ -n auto -q`, and running the figure gates should not

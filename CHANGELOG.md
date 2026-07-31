@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+**The docs site has an API page, and it is not written by hand.** `docs/api.md`
+is `:::` directives; Zensical's mkdocstrings extension reads the signatures and
+docstrings out of `skill/scripts/` when the site builds, so a default shown
+there is the default the code has. A hand-written reference would have been a
+second copy of every signature, which is the drift `tests/test_prose_claims.py`
+already exists to catch one level down.
+
+Fifteen functions, chosen rather than swept: `audit`, `report`, `describe`,
+`alt_metadata`, `page_scale` and `content_width_pt` from `check_figure`, and
+`check`, `cmap_kind`, `cmap_back_travel`, `contrast`, `delta_e`, `simulate`,
+`hex_to_linear`, `linear_to_oklab` and `relative_luminance` from
+`check_palette`. The twenty gates are deliberately absent: `audit()` computes
+the renderer, canvas and scale arguments they take, so calling one directly
+means reproducing that, and what a caller needs from a gate is the threshold
+and the failure condition the README tables already carry.
+
+Eight of those fifteen had no docstring and now do. Writing them turned up a
+stale one: `audit()` said `check_palette.check` "returns its pair the other way
+round, as `(rows, ok)`", which stopped being true in 0.4.0 when the two were
+made to agree. The README and `check()` itself both record the change; the
+docstring at the call site was the copy nobody updated, and it was wrong for
+two releases.
+
+`tests/test_api_reference.py` holds the page to the modules: every public
+callable is documented or named in `EXEMPT` with a reason, every directive
+names something that exists, and every documented name has a docstring, since
+`:::` on a bare function renders a heading over an empty block. Coverage is
+what the tests are for -- a public function added to either module would
+otherwise appear nowhere, with no build error, leaving an incomplete reference
+that reads like a complete one.
+
 **`conda/README.md` described a submission that had already happened.** It read
 as a plan -- "that costs one manual submission to staged-recipes" -- while
 `conda-forge/figure-gate-feedstock` had existed since 2026-07-30 and the

@@ -32,6 +32,12 @@ def _srgb_to_linear(c):
 
 
 def hex_to_linear(h):
+    """A `#rrggbb` string as linear-light RGB, each channel in 0..1.
+
+    Linear light, not the 0..255 the hex digits carry: every distance and
+    luminance below is defined on it, and averaging or mixing gamma-encoded
+    values is the usual source of a wrong answer that looks plausible.
+    """
     h = h.lstrip("#")
     if len(h) != 6:
         raise ValueError(f"expected 6-digit hex, got {h!r}")
@@ -39,6 +45,12 @@ def hex_to_linear(h):
 
 
 def linear_to_oklab(rgb):
+    """Linear-light RGB as OKLab `(L, a, b)`.
+
+    OKLab rather than CIELAB because its lightness tracks perceived lightness
+    across hues, which is what every gate here asks about. `l, m, s` below are
+    the cone responses the published matrix names, not a lint slip.
+    """
     r, g, b = rgb
     l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
     m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
@@ -52,11 +64,22 @@ def linear_to_oklab(rgb):
 
 
 def relative_luminance(rgb):
+    """WCAG relative luminance of linear-light RGB.
+
+    The WCAG coefficients, and deliberately not OKLab's `L`: the contrast
+    ratios this project cites are defined against this number, so computing
+    them from a perceptual lightness would report figures no standard backs.
+    """
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
 def contrast(hex_a, hex_b):
+    """WCAG contrast ratio between two hex colours, from 1.0 to 21.0.
+
+    The floors it is compared against: 4.5 for text, 3.0 for a hue against the
+    surface it sits on.
+    """
     la, lb = relative_luminance(hex_to_linear(hex_a)), relative_luminance(hex_to_linear(hex_b))
     hi, lo = max(la, lb), min(la, lb)
     return (hi + 0.05) / (lo + 0.05)
@@ -78,11 +101,22 @@ CVD = {
 
 
 def simulate(rgb, kind):
+    """Linear-light RGB as a `"protan"`, `"deutan"` or `"tritan"` viewer sees it.
+
+    Vienot, Brettel & Mollon (1999), applied on linear light. Protan and deutan
+    are what the gates decide on; the tritan matrix is validated only for the
+    red-green forms, so its distances are printed and never gated.
+    """
     m = CVD[kind]
     return tuple(max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3)))) for i in range(3))
 
 
 def delta_e(rgb_a, rgb_b):
+    """OKLab distance between two linear-light colours, x100.
+
+    Scaled by 100 so the thresholds read as whole numbers: `CVD_TARGET = 8.0`
+    for two hues under a simulation, `NORMAL_FLOOR = 15.0` in full colour.
+    """
     a, b = linear_to_oklab(rgb_a), linear_to_oklab(rgb_b)
     return 100 * math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
@@ -114,10 +148,26 @@ def _back_travel(ls):
 
 
 def cmap_back_travel(samples):
+    """How much of a ramp's lightness runs backwards, as a fraction of its span.
+
+    0.0 is monotone. `CMAP_BACKTRAVEL_MAX = 0.02` is where a ramp stops
+    counting as ordered, because lightness that reverses makes two different
+    values render at the same lightness.
+    """
     return _back_travel([linear_to_oklab(hex_to_linear(h))[0] for h in samples])
 
 
 def cmap_kind(samples):
+    """Classify hex samples as `qualitative`, `sequential`, `diverging`,
+    `cyclic` or `misc`.
+
+    `misc` is the failure: the lightness reverses, or its span is flat, or its
+    halves are monotone and its ends match neither cyclic nor diverging. A
+    colormap in that state encodes nothing the reader can order.
+
+    Fewer than `CMAP_QUALITATIVE_N = 40` samples is read as a set of category
+    colours rather than a ramp, and gated on separation instead.
+    """
     if len(samples) < CMAP_QUALITATIVE_N:
         return "qualitative"
 

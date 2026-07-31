@@ -303,7 +303,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 889 tests, and
+**Gates are tested for their ability to fail.** The suite is 933 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
@@ -318,6 +318,14 @@ in [`skill/references/choosing-a-form.md`](https://github.com/narenp12/figure-ga
 built on Cleveland & McGill's ordering of the elementary perceptual tasks. Only
 its mechanical subset is gated: a script can rule out a pie or a truncated bar
 baseline, but it cannot tell you a box plot is hiding an n of 8.
+
+Signatures and defaults for the functions worth calling — `audit`, `check`,
+and the colour primitives underneath them — are on the docs site at
+[narenp12.github.io/figure-gate/api](https://narenp12.github.io/figure-gate/api/).
+That page is generated from the scripts when the site builds, so it shows what
+the code has rather than a second copy of it. The twenty gates are not on it:
+what a caller needs from a gate is its threshold and its failure condition,
+which is what the two tables above are.
 
 ## Requirements
 
