@@ -114,3 +114,32 @@ also catch: an attribute that cannot exist, a return that cannot happen.
 `check_palette.py` must keep importing nothing outside the standard library.
 That's what makes it usable from a non-Python toolchain, and CI has a job with
 no install step in it to make sure the claim stays true.
+
+## Cutting a release
+
+The version is written in four files. Do not edit them by hand:
+
+```bash
+uv run bump-my-version bump minor    # or patch, or major
+git push && git push --tags
+```
+
+That rewrites `CHANGELOG.md`, `pyproject.toml`,
+`skill/.claude-plugin/plugin.json` and `conda/recipe.yaml`, commits, and tags
+`v<new>`. Pushing the tag is what publishes: `release.yml` runs the suite,
+builds, uploads to PyPI with attestations, and cuts the GitHub release from the
+changelog section named after the version.
+
+Write the notes first, under a `## Unreleased` heading. The bump renames that
+heading to the version and the date, and fails if there is no such heading, so
+a release with nothing written about it stops before the tag rather than in the
+workflow after it.
+
+Rehearse anything that changes packaging on TestPyPI first. `testpypi.yml` is
+manual and takes the branch you dispatch it on, and TestPyPI refuses version
+reuse just as PyPI does, so a rehearsal needs a `.devN` version that is never
+tagged and a branch that is never merged.
+
+`sha256` in `conda/recipe.yaml` is the one version-shaped field the bump leaves
+alone, because it cannot be known until the sdist exists on PyPI. Update it
+with `conda/update_recipe.py` after the release lands.
