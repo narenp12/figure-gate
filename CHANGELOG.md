@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+**One command moves the version.** It is written in four files and a tag, and
+until now nothing wrote them together. 0.5.0 is what that cost: the bump moved
+`pyproject.toml` and `skill/.claude-plugin/plugin.json`, and all three pytest
+jobs failed on the release PR because `conda/recipe.yaml` still said 0.4.0.
+`uv run bump-my-version bump minor` now rewrites `CHANGELOG.md`,
+`pyproject.toml`, `plugin.json` and `recipe.yaml`, commits, and tags `v<new>`.
+Pushing the tag still publishes; `release.yml` has not moved.
+
+`CHANGELOG.md` is first in the file list, and the order is load-bearing.
+bump-my-version writes each file as it reaches it rather than validating the
+set first, so with the changelog last a missing `## Unreleased` heading leaves
+the other three bumped on disk before it errors. First, it touches nothing. The
+failure itself is deliberate: a release with no notes written for it now stops
+before the tag rather than at the `no '## $version' section` check in
+`release.yml`, which runs after the tag is already pushed.
+
+`tests/test_version_sites.py` holds the config to the files it points at:
+`current_version` against the project version, `tag_name` against what
+`release.yml` triggers on, and each `search` pattern against the file it claims
+to find it in. The last one is the reason the test exists. bump-my-version does
+refuse to write a file whose pattern is missing, but only when someone runs it,
+which is the moment a release is being cut. `CHANGELOG.md` is exempt from that
+check, since `## Unreleased` is absent for most of the life of the repository
+and present only once there are notes.
+
+The two checks that caught the 0.4.0 recipe stay. What changes is their job:
+they stop being the only thing between a half-finished bump and a release, and
+become the proof that one command ran.
+
 **`pytest` no longer rewrites the eight committed example PNGs.**
 `tests/test_example.py` runs `examples/demo.py` and `examples/gallery.py` as
 subprocesses, because a README whose first code block crashes is worse than no
