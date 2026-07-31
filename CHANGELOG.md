@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**`conda/README.md` described a submission that had already happened.** It read
+as a plan -- "that costs one manual submission to staged-recipes" -- while
+`conda-forge/figure-gate-feedstock` had existed since 2026-07-30 and the
+channel was serving 0.4.0. Anyone following it would have opened a second
+staged-recipes PR for a package conda-forge already builds.
+
+It now says where the package comes from, that the feedstock's own
+`recipe/recipe.yaml` is the copy that builds and this one is not, and what
+maintainer access does and does not change: the autotick bot produces the
+version bump either way, and being a maintainer decides who merges it. The
+admin-bot commands are written down, including
+`@conda-forge-admin, please add bot automerge`, and the submission steps are
+kept as a record rather than as instructions.
+
 **One command moves the version.** It is written in four files and a tag, and
 until now nothing wrote them together. 0.5.0 is what that cost: the bump moved
 `pyproject.toml` and `skill/.claude-plugin/plugin.json`, and all three pytest
