@@ -78,6 +78,81 @@ exclude = [
     ".DS_Store",
 ]
 
+# The version is written in four files and a tag, and nothing wrote them
+# together. 0.5.0 is what that costs: the bump moved pyproject.toml and
+# plugin.json, and all three pytest jobs failed on the release PR because
+# conda/recipe.yaml still said 0.4.0.
+#
+# The checks that caught it stay -- tests/test_conda_recipe.py and the
+# plugin.json step in ci.yml. What changes is their job. They stop being the
+# only thing between a half-finished bump and a release, and become the proof
+# that one command ran.
+#
+#     uv run bump-my-version bump minor
+#
+# rewrites all four, commits, and tags v<new>. Pushing the tag is still what
+# publishes; release.yml has not moved.
+#
+# Two things it deliberately does not do. `sha256` in the recipe is unknowable
+# until the sdist exists on PyPI, which is what conda/update_recipe.py is for.
+# And nothing writes a fresh `## Unreleased` stub back into the changelog: the
+# CHANGELOG entry below fails the bump outright when there is no such heading,
+# so a release with no notes stops here rather than at the `no '## $version'
+# section` check in release.yml, after the tag is already pushed.
+#
+# The entries below are in write order, and CHANGELOG.md is first for that
+# reason. bump-my-version writes each file as it reaches it rather than
+# validating the set up front: with the changelog last, a missing
+# `## Unreleased` leaves the other three bumped on disk before it errors. It
+# stops short of the commit and the tag either way, so `git checkout .` is the
+# whole recovery, but a failure that touches nothing is a failure nobody has to
+# read a diff to trust.
+[tool.bumpversion]
+current_version = "0.5.0"
+commit = true
+tag = true
+tag_name = "v{new_version}"
+tag_message = "figure-gate {new_version}"
+
+# The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
+# release commits already in the log, and drops the arrow.
+message = "chore: release {new_version}"
+
+# The heading release.yml cuts the GitHub release notes out of, and the entry
+# that fails a release with no notes. The date format matches every heading
+# already in the file: the awk in that workflow matches on `## ` and the
+# version field alone, but a heading that reads differently from its neighbours
+# is a diff someone has to stop and think about.
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "## Unreleased"
+replace = "## {new_version} — {now:%Y-%m-%d}"
+
+# Anchored, and the only entry here that needs to be. `current_version` above
+# ends in `version = "0.5.0"`, so an unanchored search rewrites that line as
+# well -- harmlessly today, since it wants the same new value and
+# bump-my-version maintains it anyway, but it is a second write to a line the
+# tool owns.
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+regex = true
+search = '^version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+# Claude Code pins plugin installs to this string, so a release that skipped it
+# would ship new files under the old version and no installed copy would update.
+[[tool.bumpversion.files]]
+filename = "skill/.claude-plugin/plugin.json"
+search = '"version": "{current_version}"'
+replace = '"version": "{new_version}"'
+
+# Two leading spaces: this is the `context:` entry rattler-build interpolates
+# into `source.url`, not the `package.version` line that reads `${{ version }}`.
+[[tool.bumpversion.files]]
+filename = "conda/recipe.yaml"
+search = '  version: "{current_version}"'
+replace = '  version: "{new_version}"'
+
 [tool.ruff]
 # The project floor, which is what everything except one file is written to.
 target-version = "py311"
@@ -166,6 +241,7 @@ filterwarnings = [
 # the oracle runs everywhere the tests do.
 [dependency-groups]
 dev = [
+    "bump-my-version>=1.0",
     "cmasher>=1.9",
     "mypy>=1.11",
     "pytest>=7.0",
