@@ -1,6 +1,44 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-07-30
+
+**The README is a landing page now, and the documentation is on the docs site.**
+It had grown to 361 lines carrying both threshold tables, three install routes,
+the usage examples, the retina history and the design notes, for a project that
+has published a docs site since 0.4.0. Someone deciding whether to use this had
+to read the reference material to find out what it was.
+
+Nothing was duplicated in the move, which is the only version of this worth
+doing. `docs/gates.md` is the one copy of the two tables and the roster prose;
+`docs/getting-started.md` is the one copy of install, the two settings that need
+your document's values, the usage examples and the requirements. Both are
+authored pages in the sense `docs/gallery.md` already was, and `AUTHORED` in
+`tests/test_docs_site.py` names them so that a page becoming a hand-maintained
+copy still fails.
+
+The gates that read the README read those pages instead. Eleven parsers and
+seven roster-count claims were pointed at one file; the count claims now carry
+the document each is made in, because the reason they exist is that one copy of
+a claim gets updated and the others do not. `docs/api.md` had been sending
+readers to tables on the home page that are no longer there.
+
+**Em dashes are gone from the README and from the pages cut out of it.**
+
+**Comments naming the README were swept.** A dozen of them cited it as the
+source of a promise that had moved: three files and no install, the Python 3.8
+claim the stdlib-only CI job exists to keep true, the test count
+`tests/test_docs_render.py` explains its collection strategy against. One named
+`_compares_all_pairs`, a function renamed to `_axes_all_pairs` long enough ago
+that nothing in the repository still used the old name.
+
+**The prose sweep failed on every release and nobody had run it on one.**
+`CONTRIBUTING.md` tells a maintainer to write release notes under a
+`## Unreleased` heading, and the heading resolver added in this cycle checks
+that a heading named in prose exists. It does, right up until the bump renames
+it to the version, so the suite went red at the tagged commit and green again
+with the next change. The absence is correct and load-bearing: it is what makes
+a release with nothing written about it stop before the tag. The span is in the
+unresolved ledger with that reason.
 
 **The documentation audit is a procedure now, not a memory.** It had been run
 four times, each time reconstructed from the previous run's changelog entry, and
@@ -132,7 +170,7 @@ Pushing the tag still publishes; `release.yml` has not moved.
 
 `CHANGELOG.md` is first in the file list, and the order is load-bearing.
 bump-my-version writes each file as it reaches it rather than validating the
-set first, so with the changelog last a missing `## Unreleased` heading leaves
+set first, so with the changelog last a missing `## 0.6.0 — 2026-07-30` heading leaves
 the other three bumped on disk before it errors. First, it touches nothing. The
 failure itself is deliberate: a release with no notes written for it now stops
 before the tag rather than at the `no '## $version' section` check in
@@ -144,7 +182,7 @@ before the tag rather than at the `no '## $version' section` check in
 to find it in. The last one is the reason the test exists. bump-my-version does
 refuse to write a file whose pattern is missing, but only when someone runs it,
 which is the moment a release is being cut. `CHANGELOG.md` is exempt from that
-check, since `## Unreleased` is absent for most of the life of the repository
+check, since `## 0.6.0 — 2026-07-30` is absent for most of the life of the repository
 and present only once there are notes.
 
 The two checks that caught the 0.4.0 recipe stay. What changes is their job:

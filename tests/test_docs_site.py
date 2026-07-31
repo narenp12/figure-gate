@@ -28,14 +28,20 @@ CONFIG = ROOT / "zensical.toml"
 # `  { "The gates" = "style-guide.md" },`
 NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 
-# The two pages written for the site. Everything else is a pointer.
+# The pages written for the site. Everything else is a pointer.
 #
 # `api.md` is site-only for the opposite reason to the symlinks rather than in
 # spite of it: it holds no reference material to keep one copy of. It is `:::`
 # directives, and mkdocstrings reads the signatures and docstrings out of
 # `skill/scripts/` at build time, so the single copy it serves is the code.
 # `tests/test_api_reference.py` holds the directives to the modules.
-AUTHORED = {"gallery.md", "api.md"}
+#
+# `gates.md` and `getting-started.md` are site-only in the same sense
+# `gallery.md` is: they are the one copy of what they say. Both came out of the
+# README, which was carrying the threshold tables, the install routes and the
+# usage examples for a project that has a docs site. Nothing was duplicated in
+# the move, which is what keeps this set honest rather than a growing exemption.
+AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md"}
 
 
 def nav_targets():
@@ -53,10 +59,10 @@ def nav_targets():
 
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
-    README gate-table parser, and for the same reason."""
-    assert len(nav_targets()) == 7, (
+    gate-table parser in `test_docs_match_code.py`, and for the same reason."""
+    assert len(nav_targets()) == 9, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
-        "7 - the nav changed shape and nav_targets() needs updating with it")
+        "9 - the nav changed shape and nav_targets() needs updating with it")
 
 
 @pytest.mark.parametrize("target", nav_targets())

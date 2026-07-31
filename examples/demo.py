@@ -7,7 +7,7 @@ the whole method in miniature: load the style sheet, take palette slots in
 order, run the checks, and only then look at the picture.
 
 The optional directory exists for `tests/test_example.py`, which runs this file
-to prove the README's first code block still works. Without it the test rewrote
+to prove the documented example still works. Without it the test rewrote
 the committed PNG on every run: the bytes depend on the local fonts, so `pytest`
 left the working tree dirty and any `git add -A` swept a binary diff into an
 unrelated commit.

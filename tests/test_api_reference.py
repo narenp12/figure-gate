@@ -34,10 +34,10 @@ MODULES = ("check_figure", "check_palette")
 # The twenty gates are the substantive exemption. `audit()` runs all of them
 # and computes the renderer, scale and canvas arguments they take; calling one
 # directly means reproducing that. What a caller needs from a gate is its
-# threshold and its failure condition, and the README documents all twenty in
-# two tables -- `docs/api.md` says so and points at them.
+# threshold and its failure condition, and `docs/gates.md` documents all
+# twenty in two tables -- `docs/api.md` says so and points at them.
 EXEMPT = {
-    "main": "the CLI entry point, documented by --help and the README",
+    "main": "the CLI entry point, documented by --help and the docs site",
     "self_test_figure": "builds the deliberately broken figure `main` checks; "
                         "not something a caller constructs",
 }

@@ -23,8 +23,17 @@ from conftest import SKILL
 
 import check_palette as cp
 
+ROOT = SKILL.parent
 GUIDE = SKILL / "references" / "style-guide.md"
-README = SKILL.parent / "README.md"
+README = ROOT / "README.md"
+
+# The threshold tables, the roster counts and the usage examples were in the
+# README until it was cut down to a landing page. They are one copy still, on
+# the docs site, and every parser below that used to read the README reads the
+# page the claim actually lives on now.
+GATES = ROOT / "docs" / "gates.md"
+GETTING_STARTED = ROOT / "docs" / "getting-started.md"
+
 SURFACE = "#ffffff"
 
 # | 2 | orange | `#E69F00`{ .sw style="--c:#E69F00" } | 2.25 † | series |
@@ -186,7 +195,7 @@ def test_the_guide_does_not_quote_a_retired_surface():
 # --- the gate roster ---------------------------------------------------------
 # Same failure as the contrast table, one level up: the list of gates is written
 # out in three places and only one of them executes. `check_overplotting` and
-# `check_contour_dash` shipped with tests and were never added to the README
+# `check_contour_dash` shipped with tests and were never added to the gate
 # table; `check_line_weight` was never added to the module docstring. Nobody
 # noticed, because a roster in prose cannot fall out of date loudly.
 
@@ -215,16 +224,16 @@ def docstring_gate_names():
     return [m.group(1) for m in map(DOCSTRING_ROW.match, body.splitlines()) if m]
 
 
-def readme_gate_names():
+def gate_table_names():
     """First column of the gate table, however many columns it has.
 
     The gate name has always been the first cell; the columns beside it have
-    not been stable. Matching the row shape with a regex meant a README rewrite
-    that added a Threshold column turned this parser into one that matched zero
-    rows — a roster check that reads nothing and compares it against 19 gates.
+    not been stable. Matching the row shape with a regex meant a rewrite that
+    added a Threshold column turned this parser into one that matched zero
+    rows, a roster check that reads nothing and compares it against 19 gates.
     Splitting on the delimiter instead makes the column count irrelevant.
     """
-    lines = README.read_text().splitlines()
+    lines = GATES.read_text().splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     names = []
     for line in lines[start:]:
@@ -236,22 +245,22 @@ def readme_gate_names():
     return [n for n in names if n != "Gate" and set(n) != {"-"}]
 
 
-def test_the_readme_table_is_still_parseable():
+def test_the_gate_table_is_still_parseable():
     """The failure this file exists to prevent, in its own machinery: a parser
     that matches nothing reports agreement with nothing. Assert the roster was
     actually read before any test draws a conclusion from its contents."""
-    assert readme_gate_names(), (
-        "matched no rows in the README gate table - the table moved or changed "
-        "shape and readme_gate_names() needs updating with it")
+    assert gate_table_names(), (
+        "matched no rows in the docs/gates.md gate table - the table moved or "
+        "changed shape and gate_table_names() needs updating with it")
 
 
 def test_the_module_docstring_lists_every_gate_in_order():
     assert docstring_gate_names() == audit_gate_names()
 
 
-def test_the_readme_table_lists_every_gate_in_order():
+def test_the_gate_table_lists_every_gate_in_order():
     stripped = [n.replace("*(advisory)*", "").strip()
-                for n in readme_gate_names()]
+                for n in gate_table_names()]
     assert stripped == audit_gate_names()
 
 
@@ -264,37 +273,37 @@ def collected_test_count():
     suite's.
     """
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", str(README.parent / "tests"),
+        [sys.executable, "-m", "pytest", str(ROOT / "tests"),
          "--collect-only", "-q", "-p", "no:cacheprovider"],
-        capture_output=True, text=True, cwd=README.parent)
+        capture_output=True, text=True, cwd=ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
     match = re.search(r"(\d+) tests? collected", result.stdout)
     assert match, result.stdout
     return int(match.group(1))
 
 
-def test_the_readme_test_count_is_the_real_one():
+def test_the_stated_test_count_is_the_real_one():
     """A number in prose is not executable -- the same reason the rest of this
     file exists. 0.1.3 shipped a README claiming 166 tests against a suite of
     171, and the only thing that catches that is asking pytest."""
-    claimed = re.search(r"The suite is (\d+) tests", README.read_text())
-    assert claimed, ("the README no longer states a test count in the form "
+    claimed = re.search(r"The suite is (\d+) tests", GATES.read_text())
+    assert claimed, ("docs/gates.md no longer states a test count in the form "
                      "this test reads")
     assert int(claimed.group(1)) == collected_test_count()
 
 
 # --- which rows can actually fail --------------------------------------------
-# The roster test above proved the README names every gate. It said nothing
+# The roster test above proved the gate table names every gate. It said nothing
 # about what each one is allowed to return, and the table was wrong there in
 # both directions: `Overplotting` and `Contour dash` were given a "Fails when"
 # neither can do -- both return only True or "warn" -- and the prose counted
 # five advisory rows against an actual seven. `ADVISORY_GATES` in
 # check_figure.py is now the one list, and these hold the docs to it.
 
-def readme_advisory_names():
-    """Gates the README table marks *(advisory)*, from the same parse the
-    roster test uses, so the two cannot disagree about which rows exist."""
-    lines = README.read_text().splitlines()
+def table_advisory_names():
+    """Gates the table marks *(advisory)*, from the same parse the roster test
+    uses, so the two cannot disagree about which rows exist."""
+    lines = GATES.read_text().splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     out = []
     for line in lines[start:]:
@@ -307,19 +316,19 @@ def readme_advisory_names():
     return set(out)
 
 
-def test_the_readme_marks_exactly_the_advisory_gates():
+def test_the_table_marks_exactly_the_advisory_gates():
     import check_figure as cf
 
-    assert readme_advisory_names() == set(cf.ADVISORY_GATES)
+    assert table_advisory_names() == set(cf.ADVISORY_GATES)
 
 
-def test_the_readme_states_the_advisory_count_it_marks():
+def test_the_page_states_the_advisory_count_it_marks():
     """The number in the prose and the tags in the table are the same claim
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", README.read_text())
-    assert claimed, ("the README no longer states an advisory count in the "
+    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", GATES.read_text())
+    assert claimed, ("docs/gates.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
     assert word in WORD_NUMBERS, f"unreadable advisory count {word!r}"
@@ -369,7 +378,7 @@ def test_no_advisory_gate_ever_returns_false():
 
 
 # --- the threshold column ----------------------------------------------------
-# Four rosters are held to `audit()`: the module docstring, the README table's
+# Four rosters are held to `audit()`: the module docstring, the gate table's
 # first column, SKILL.md's sentence, and the advisory tags. The numbers beside
 # them were held to nothing. Eleven of the twenty rows name a constant and quote
 # its value, and every one of them agreed on the day this was written - which is
@@ -399,18 +408,18 @@ PROSE_THRESHOLDS = {
 }
 
 
-def readme_gate_rows():
-    """(gate, threshold) for every row of the README gate table.
+def gate_table_rows():
+    """(gate, threshold) for every row of the gate table.
 
-    A second read of the table `readme_gate_names` parses, taking the column
+    A second read of the table `gate_table_names` parses, taking the column
     beside the one that parser takes. Deliberately not folded into it: that
-    function's docstring records a README rewrite which added this very column
-    and turned a regex-based parser into one that silently matched zero rows,
-    and the fix was to stop caring how many columns there are. Reaching into a
+    function's docstring records a rewrite which added this very column and
+    turned a regex-based parser into one that silently matched zero rows, and
+    the fix was to stop caring how many columns there are. Reaching into a
     second cell by index cares again, so it cares here rather than making the
     roster check care too.
     """
-    lines = README.read_text().splitlines()
+    lines = GATES.read_text().splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     rows = []
     for line in lines[start:]:
@@ -434,7 +443,7 @@ def quoted_thresholds():
     three names and two values a failure instead of a dropped assertion.
     """
     out = []
-    for gate, cell in readme_gate_rows():
+    for gate, cell in gate_table_rows():
         for names, values in THRESHOLD_CONST.findall(cell):
             for name, value in zip(names.split(","), values.split(",")):
                 out.append((gate, name.strip(), value.strip()))
@@ -454,7 +463,7 @@ def constant_value(name):
         if hasattr(module, name):
             return module.__name__, getattr(module, name)
     raise AssertionError(
-        f"the README threshold column names {name}, which is in neither "
+        f"the gate table's threshold column names {name}, which is in neither "
         "check_figure.py nor check_palette.py")
 
 
@@ -463,7 +472,7 @@ def test_the_threshold_column_is_still_parseable():
     way rather than as a count so that it stays true as gates are added, and
     still fails loudly if the column moves or changes shape."""
     quoted = {gate for gate, _, _ in quoted_thresholds()}
-    silent = [gate for gate, _ in readme_gate_rows()
+    silent = [gate for gate, _ in gate_table_rows()
               if gate not in quoted and gate not in PROSE_THRESHOLDS]
     assert not silent, (
         f"{silent} quote no threshold constant and are not in "
@@ -474,14 +483,14 @@ def test_the_threshold_column_is_still_parseable():
 
 def test_the_prose_thresholds_are_gates_that_exist():
     assert PROSE_THRESHOLDS <= set(audit_gate_names()), (
-        "PROSE_THRESHOLDS names rows the README table does not have: "
+        "PROSE_THRESHOLDS names rows the gate table does not have: "
         f"{sorted(PROSE_THRESHOLDS - set(audit_gate_names()))}")
 
 
 def test_every_quoted_constant_got_a_value():
     """`zip` truncates. A cell naming three constants and quoting two values
     would otherwise drop the third assertion rather than fail."""
-    for gate, cell in readme_gate_rows():
+    for gate, cell in gate_table_rows():
         for names, values in THRESHOLD_CONST.findall(cell):
             assert len(names.split(",")) == len(values.split(",")), (
                 f"{gate} names {len(names.split(','))} constants and quotes "
@@ -496,9 +505,9 @@ def test_the_quoted_threshold_is_the_constants_value(gate, name, quoted):
     except (TypeError, ValueError):
         agrees = quoted == str(actual)
     assert agrees, (
-        f"the README's {gate} row quotes {name} = {quoted}; "
+        f"the {gate} row quotes {name} = {quoted}; "
         f"{module}.{name} is {actual!r}. One of the two is wrong, and it is "
-        "not automatically the README")
+        "not automatically the table")
 
 
 def test_the_style_sheet_row_states_the_number_of_keys_the_sheet_sets():
@@ -508,33 +517,33 @@ def test_the_style_sheet_row_states_the_number_of_keys_the_sheet_sets():
 
     from conftest import STYLE_SHEET
 
-    cell = dict(readme_gate_rows())["Style sheet"]
+    cell = dict(gate_table_rows())["Style sheet"]
     claimed = re.search(r"(\d+)\s+keys", cell)
     assert claimed, (
         f"the Style sheet row no longer states a key count: {cell!r}")
     actual = len(mpl.rc_params_from_file(STYLE_SHEET,
                                          use_default_template=False))
     assert int(claimed.group(1)) == actual, (
-        f"the README says figure.mplstyle sets {claimed.group(1)} keys; it "
+        f"the table says figure.mplstyle sets {claimed.group(1)} keys; it "
         f"sets {actual}")
 
 
 def test_the_fonts_row_names_the_type_the_sheet_declares():
     """The other prose number. `check_fonts` fails a figure whose rcParams say
     Type 3, and the only reason they do not is that the shipped sheet declares
-    42 - so the README's claim is really a claim about the sheet."""
+    42 - so the table's claim is really a claim about the sheet."""
     import matplotlib as mpl
 
     from conftest import STYLE_SHEET
 
-    cell = dict(readme_gate_rows())["Fonts"]
+    cell = dict(gate_table_rows())["Fonts"]
     claimed = re.search(r"Type\s+(\d+)", cell)
     assert claimed, f"the Fonts row no longer names a font type: {cell!r}"
     params = mpl.rc_params_from_file(STYLE_SHEET, use_default_template=False)
     for key in ("pdf.fonttype", "ps.fonttype"):
         assert key in params, f"figure.mplstyle does not set {key}"
         assert params[key] == int(claimed.group(1)), (
-            f"the README says {claimed.group(0)}; figure.mplstyle sets "
+            f"the table says {claimed.group(0)}; figure.mplstyle sets "
             f"{key} to {params[key]}")
 
 
@@ -661,8 +670,8 @@ def test_validator_default_surface_is_what_the_style_sheet_renders():
 # README long enough to be copied into the docs site when that was written -
 # which is how a number in prose spreads rather than gets corrected.
 
-GALLERY = README.parent / "examples" / "gallery.py"
-DOCS_GALLERY = README.parent / "docs" / "gallery.md"
+GALLERY = ROOT / "examples" / "gallery.py"
+DOCS_GALLERY = ROOT / "docs" / "gallery.md"
 
 DEFECT_COUNT = re.compile(r"found (\w+) defects? in")
 
@@ -689,7 +698,7 @@ def test_the_three_sources_agree_on_the_defect_count():
 
 
 # --- the fourth roster, the one in prose -------------------------------------
-# The roster tests above cover the README table and the module docstring.
+# The roster tests above cover the gate table and the module docstring.
 # `SKILL.md` names every gate a third time, in a sentence, and nothing read it:
 # it listed eighteen of the nineteen, omitting `Contour dash`, from the commit
 # that added the gate until this one. Same failure as the other two rosters, in
@@ -942,7 +951,7 @@ def test_the_guide_says_which_unit_the_grayscale_numbers_are_in():
 # and copied into the site from there. A claim that the docs are generated from
 # the code, made in prose, about docs that are not.
 
-DEMO = README.parent / "examples" / "demo.py"
+DEMO = ROOT / "examples" / "demo.py"
 
 MARKDOWN_IMAGE = re.compile(r"!\[([^\]]+)\]\((?:[^)]*/)?([\w.-]+\.png)\)")
 
@@ -1019,9 +1028,9 @@ def test_the_readme_shows_the_demo_figures_own_alt_text():
 # beside a document still teaching the break. The CHANGELOG is excluded: it
 # quotes the broken form deliberately, as the history of it.
 
-TEACHING_DOCS = [README, SKILL_MD, GUIDE, DOCS_GALLERY,
+TEACHING_DOCS = [README, GATES, GETTING_STARTED, SKILL_MD, GUIDE, DOCS_GALLERY,
                  SKILL / "references" / "choosing-a-form.md",
-                 README.parent / "CONTRIBUTING.md"]
+                 ROOT / "CONTRIBUTING.md"]
 
 
 def test_no_document_teaches_the_pathless_alt_metadata_call():
@@ -1167,30 +1176,36 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 # make a historical anecdote drift every time a gate is added. It had a number
 # in it and the number is now gone, which is the fix for that class rather than
 # an exemption from this one.
+#
+# The seven sentences used to be seven sentences in one file. Cutting the README
+# down to a landing page spread them over three, so each claim now carries the
+# document it is made in: a count stated on the docs site and a count stated in
+# the README are the same claim about `audit()`, and the reason this exists is
+# that one copy of a claim can be updated without the others.
 
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                 "ten": 10}
 
 ROSTER_COUNT_CLAIMS = {
-    "the audit() summary": r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows",
-    "the report() comment": r"prints (\d+) rows, returns True if ok",
-    "the series-color row number": r"That is row 11 of the (\d+)",
-    "the gate table lead-in": r"`audit\(\)` returns these (\d+) rows",
-    "the elimination-gate claim": r"(\d+) passing rows means the",
-    "the named-defect count": r"figure avoids (\d+) named defects",
-    "the advisory paragraph": r"of the (\d+) rows are advisory",
+    "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
+    "the report() comment": (GETTING_STARTED,
+                             r"prints (\d+) rows, returns True if ok"),
+    "the series-color row number": (GATES, r"That is row 11 of the (\d+)"),
+    "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
+    "the elimination-gate claim": (GATES, r"(\d+) passing rows means the"),
+    "the named-defect count": (GATES, r"figure avoids (\d+) named defects"),
+    "the advisory paragraph": (GATES, r"of the (\d+) rows are advisory"),
 }
 
 
 def roster_count_claims():
-    text = " ".join(README.read_text().split())
-    return {label: re.search(pattern, text)
-            for label, pattern in ROSTER_COUNT_CLAIMS.items()}
+    return {label: re.search(pattern, " ".join(path.read_text().split()))
+            for label, (path, pattern) in ROSTER_COUNT_CLAIMS.items()}
 
 
 def test_every_roster_count_claim_is_still_stated():
     """A regex that matches nothing agrees with everything, and this file has
-    seven of them pointed at one document."""
+    seven of them pointed at the documentation."""
     missing = [label for label, match in roster_count_claims().items()
                if not match]
     assert not missing, (
@@ -1200,7 +1215,7 @@ def test_every_roster_count_claim_is_still_stated():
 
 
 @pytest.mark.parametrize("label", sorted(ROSTER_COUNT_CLAIMS))
-def test_the_readme_states_the_real_roster_count(label):
+def test_the_docs_state_the_real_roster_count(label):
     match = roster_count_claims()[label]
     assert int(match.group(1)) == len(audit_gate_names()), (
         f"{label} says {match.group(1)} gates; `audit()` returns "
@@ -1213,7 +1228,7 @@ def test_the_readme_states_the_real_roster_count(label):
 # forms. The count is executable - it is how many times the script calls
 # `finish` - so nothing here needs to agree with anything but the script.
 
-GALLERY_PY = README.parent / "examples" / "gallery.py"
+GALLERY_PY = ROOT / "examples" / "gallery.py"
 
 GALLERY_COUNT_CLAIMS = {
     "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
@@ -1254,7 +1269,7 @@ def test_every_source_states_the_real_gallery_count(label):
 
 
 # --- every gate has somewhere to send a reader --------------------------------
-# The fifth roster, and the one that is not a roster: the README table says what
+# The fifth roster, and the one that is not a roster: the gate table says what
 # a gate measures, the reference material says why the rule is there and what to
 # do instead, and nothing joined them. The colormap gate is the proof - it
 # shipped with a table row, a threshold, an advisory tag, four rosters updated,
@@ -1363,7 +1378,7 @@ def test_every_gate_has_guidance_a_reader_can_find(gate):
 # code: a form quoting a gate that no longer exists teaches a reporter to file
 # against a name the maintainer will not recognise.
 
-TEMPLATES = README.parent / ".github" / "ISSUE_TEMPLATE"
+TEMPLATES = ROOT / ".github" / "ISSUE_TEMPLATE"
 
 
 def template_files():
@@ -1377,7 +1392,7 @@ def test_the_issue_forms_are_the_ones_contributing_describes():
                      "A broken figure passed",
                      "Something else is broken",
                      "Propose a new gate"}
-    described = (README.parent / "CONTRIBUTING.md").read_text()
+    described = (ROOT / "CONTRIBUTING.md").read_text()
     for name in names:
         first = name.split(".")[0]
         assert f"**{first}" in described, (
@@ -1390,7 +1405,7 @@ def test_the_issue_forms_name_files_that_exist():
         for span in re.findall(r"`([^`]+)`", path.read_text()):
             if not span.endswith((".py", ".md", ".mplstyle")):
                 continue
-            hits = list(README.parent.rglob(span))
+            hits = list(ROOT.rglob(span))
             if not hits:
                 missing.append(f"{path.name}: {span}")
     assert not missing, f"{missing} name files that are not in the repo"

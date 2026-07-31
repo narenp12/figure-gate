@@ -466,7 +466,7 @@ def test_series_color_scopes_the_comparison_to_a_panel():
 
 
 def test_a_scatter_in_one_panel_does_not_force_all_pairs_on_another():
-    """`_compares_all_pairs` returned True if *any* axes held a scatter, which
+    """`_axes_all_pairs` returned True if *any* axes held a scatter, which
     flipped line-only panels into the stricter regime too. The six theme slots
     clear adjacent separation (what lines need) but not all-pairs; a scatter two
     panels over must not be what fails them."""
@@ -1381,7 +1381,7 @@ def _without_scipy(monkeypatch):
 
 
 def test_the_checker_runs_with_scipy_unimportable(monkeypatch, clean):
-    """The README promises three files and no install. A hard scipy import
+    """The docs promise three files and no install. A hard scipy import
     quietly broke that, so the one place it is still used has a numpy path."""
     _without_scipy(monkeypatch)
     ok, rows = cf.audit(clean)

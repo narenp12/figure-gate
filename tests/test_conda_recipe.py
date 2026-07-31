@@ -163,7 +163,7 @@ def test_the_recipe_python_floor_is_the_project_floor():
 
 
 def test_the_recipe_entry_points_match_the_console_scripts():
-    """`check-palette` and `check-figure` are how the README tells people to
+    """`check-palette` and `check-figure` are how the docs tell people to
     run this after an install. An entry point missing from the recipe is a
     conda install whose documented commands are not on PATH."""
     declared = items("    entry_points:", indent=6)

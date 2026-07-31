@@ -1,6 +1,6 @@
 [project]
 name = "figure-gate"
-version = "0.5.0"
+version = "0.6.0"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
@@ -40,8 +40,8 @@ check-palette = "check_palette:main"
 check-figure = "check_figure:main"
 
 # scipy is optional and only ever a speed-up: `check_overplotting` uses a KD-tree
-# when it is importable and an O(n^2) numpy path when it is not. The README
-# promises three files and no install, and a hard scipy import broke that.
+# when it is importable and an O(n^2) numpy path when it is not. The docs
+# promise three files and no install, and a hard scipy import broke that.
 [project.optional-dependencies]
 fast = ["scipy>=1.6"]
 
@@ -108,7 +108,7 @@ exclude = [
 # whole recovery, but a failure that touches nothing is a failure nobody has to
 # read a diff to trust.
 [tool.bumpversion]
-current_version = "0.5.0"
+current_version = "0.6.0"
 commit = true
 tag = true
 tag_name = "v{new_version}"
@@ -323,7 +323,7 @@ api = [
 # Out of `dev` on purpose: the documented command is
 # `uv run rtk pytest tests/ -n auto -q`, and running the figure gates should not
 # start requiring a 150MB Chromium. Without this group `test_docs_render.py`
-# still collects -- so the README's test count is the same number on every
+# still collects -- so the documented test count is the same number on every
 # machine -- and skips at run time. CI installs it in the docs job.
 #
 # Same marker as `docs`, and for the same reason.

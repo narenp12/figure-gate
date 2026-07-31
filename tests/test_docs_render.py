@@ -57,7 +57,7 @@ def playwright_api():
 
     A module-level skip fires during *collection*, so this file would contribute
     its tests to the suite on a machine with Chromium installed and nothing on
-    one without. `test_docs_match_code.py` holds the README's stated test count
+    one without. `test_docs_match_code.py` holds the documented test count
     to what pytest collects, and that number would then depend on which machine
     asked. Collect always, skip at run time.
     """

@@ -21,10 +21,11 @@ import check_palette as cp
 # collection: the module contributes zero tests rather than two skipped ones.
 # CI installs pytest, xdist and matplotlib and never the dev group, so it
 # collected 479 where a machine with cmasher collects 481 - and
-# `test_the_readme_test_count_is_the_real_one` compares a number in the README
-# against whatever the local run collected. The count was therefore unwritable:
-# 481 was honest here and wrong in CI, 479 the reverse, and the README had been
-# failing that test on every CI run since the oracle was added.
+# `test_the_stated_test_count_is_the_real_one` compares a number written into
+# the docs against whatever the local run collected. The count was therefore
+# unwritable: 481 was honest here and wrong in CI, 479 the reverse, and the
+# documented number had been failing that test on every CI run since the oracle
+# was added.
 #
 # A collected-and-skipped test is visible in the count and in the summary. A
 # module that never collected is neither.

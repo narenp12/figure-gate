@@ -93,7 +93,7 @@ axes.axisbelow:     True
 
 # --- marks ------------------------------------------------------------------
 # Hairlines, not dashboard strokes. These were prose in the guide and passed by
-# hand at every call site (`lw=1.6` in the README example), which is the same
+# hand at every call site (`lw=1.6` in the usage example), which is the same
 # failure mode the rest of this file exists to fix: a rule you have to remember
 # is a rule that eventually gets forgotten.
 lines.linewidth:        1.6
