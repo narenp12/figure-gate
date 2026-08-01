@@ -82,6 +82,10 @@ are asserted in the fixtures, so a change that stopped the tall figure
 collapsing the rates fails the test that calls it a defect rather than quietly
 testing nothing.
 
+`GATES` gained a row and every row after `Line weight` moved down one, which is
+a break for anything that indexes that tuple rather than reading it by name;
+`audit()` returns 21 rows now and not 20.
+
 `check_banking` reads the median absolute segment slope of each panel's strokes
 in display space, and is advisory. `BANKING_SLOPE_MAX = 10.0` is a factor of ten
 either side of banked - a typical segment past 84 degrees or under 6 - which is

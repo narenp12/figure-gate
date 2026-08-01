@@ -1262,6 +1262,29 @@ EXTERNAL_CLAIMS = {
                  "volume, curvature; shading, colour saturation. Hue is not "
                  "ranked.",
     },
+    "banking to 45 degrees": {
+        "document": "choosing-a-form.md",
+        "anchor": "Cleveland's banking to 45 degrees",
+        "source": "Cleveland, McGill & McGill, JASA 83(402), 1988, as "
+                  "surveyed by Heer & Agrawala 2006",
+        "verified": "2026-08-01",
+        "quote": "Cleveland et al. conducted human-subject experiments showing "
+                 "that viewers judge the ratio of the slopes of two adjacent "
+                 "line segments most accurately when the orientation "
+                 "resolution between them is maximized ... choosing the aspect "
+                 "ratio that sets the median absolute slope of the line "
+                 "segments to 1.",
+    },
+    "slopeless lines culling": {
+        "document": "choosing-a-form.md",
+        "anchor": "after Heer and Agrawala's \"slopeless lines\"",
+        "source": "Heer & Agrawala, IEEE TVCG 12(4), 2006, section 2.7",
+        "verified": "2026-08-01",
+        "quote": "an additional modification is to cull \"slopeless\" lines -- "
+                 "those with either zero or infinite slope. Horizontal and "
+                 "vertical lines remain unchanged by variations in aspect "
+                 "ratio, yet contribute to the banking criteria.",
+    },
 }
 
 # Ledger entries name a document by its basename, which was unambiguous while

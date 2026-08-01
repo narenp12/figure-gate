@@ -187,6 +187,14 @@ BANKING_SLOPE_MAX = 10.0
 # leg of a schematic, the two points of an annotation leader. The corpus has 24
 # such strokes and none of them has a typical slope worth reporting.
 BANKING_MIN_POINTS = 8
+# A segment shorter than this in either axis, in display pixels, is drawn flat
+# or drawn upright and carries no orientation a reader can compare. Half a pixel
+# is the resolution the page has. Heer & Agrawala cull exactly-zero and
+# exactly-infinite slopes for the same reason - they are unchanged by the aspect
+# ratio and still move the median that sets it - and a segment that renders as
+# horizontal is the same case arrived at from the render instead of the
+# arithmetic. See `_banking_slopes`.
+BANKING_FLAT_PX = 0.5
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -2151,6 +2159,21 @@ def _banking_slopes(ax):
     densifying makes every segment the same 2px length and the median of that
     is an artefact of the densifier. For a `step` line that also reads the
     treads rather than the risers, which is what the reader compares.
+
+    Segments that render flat or upright are culled. Heer & Agrawala cull
+    "slopeless" lines - zero or infinite slope - because they are unchanged by
+    the aspect ratio and still drag the median that sets it. Generalised here
+    from exactly horizontal to *drawn* horizontal, which is the same argument
+    against the page rather than against the arithmetic: a segment whose rise is
+    under `BANKING_FLAT_PX` cannot be told from flat at any aspect a reader
+    will see, and no rescaling of the panel makes it carry a rate.
+
+    That is not a nicety. A saturating curve - a converged training run, which
+    is about as common as figures get - is 92 near-flat segments out of 119, and
+    without the cull its median slope is 0.0006: the gate warned that a
+    perfectly ordinary figure needed to be six hundred times taller. Culled, the
+    same panel reads 1.30, which is banked. The saw wave the gate exists to
+    catch has nothing culled and is unaffected.
     """
     import numpy as np
     if ax.get_aspect() != "auto":
@@ -2171,7 +2194,11 @@ def _banking_slopes(ax):
         dx = np.diff(pts[:, 0])
         if not (np.all(dx > 0) or np.all(dx < 0)):
             continue
-        runs.append(np.abs(np.diff(pts[:, 1]) / dx))
+        dy = np.diff(pts[:, 1])
+        drawn = (np.abs(dy) >= BANKING_FLAT_PX) & (np.abs(dx) >= BANKING_FLAT_PX)
+        if not drawn.any():
+            continue
+        runs.append(np.abs(dy[drawn] / dx[drawn]))
     if not runs:
         return None
     # Pooled across the panel's strokes, because the aspect is one choice made

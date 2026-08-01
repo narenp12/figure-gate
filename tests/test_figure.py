@@ -2328,6 +2328,62 @@ def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
         "this fixture no longer distinguishes the two readings")
 
 
+def test_banking_culls_segments_that_render_flat():
+    """A saturating curve - a converged training run - is 92 near-flat
+    segments out of 119. Slope cannot tell the flat tail from flat at any
+    aspect, and banking a panel on it asks for something six hundred times
+    taller; the cull has to happen before the median, or the gate warns on
+    the most ordinary figure there is."""
+    import numpy as np
+    x = np.arange(120, dtype=float)
+    y = 1.0 - np.exp(-x / 6.0)
+    fig, ax = plt.subplots(figsize=(6.4, 4.0), dpi=100)
+    ax.plot(x, y, lw=1.5)
+    fig.canvas.draw()
+
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    dx, dy = d[:, 0], d[:, 1]
+    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
+
+    # The docstring's numbers, measured rather than imported: most of the
+    # stroke renders flat, and the raw (unculled) median is below the floor.
+    assert drawn.sum() < 0.5 * len(dx), (
+        f"{drawn.sum()} of {len(dx)} segments drawn; the fixture stopped "
+        "being a saturating curve")
+    keep = np.abs(dx) > 1e-9
+    raw = float(np.median(np.abs(dy[keep] / dx[keep])))
+    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, (
+        f"raw median {raw:.4f}; the gate would not have warned anyway")
+
+    ok, rows = cf.audit(fig)
+    slopes = cf._banking_slopes(ax)
+    plt.close(fig)
+    assert gates(rows)["Banking"] is True, "the cull did not silence the warn"
+    assert slopes is not None and np.median(slopes) >= 1.0 / cf.BANKING_SLOPE_MAX
+    assert ok is True
+
+
+def test_banking_leaves_the_saw_wave_alone():
+    """The cull exists so that flat segments do not drown a real rate; it must
+    not have the side effect of swallowing the figure the gate exists for. The
+    saw wave renders nothing flat - every limb moves - so nothing is culled and
+    the failure still lands."""
+    import numpy as np
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    ax = fig.axes[0]
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    dx, dy = d[:, 0], d[:, 1]
+    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
+    assert drawn.all(), (
+        f"{int(drawn.sum())}/{len(dx)} segments drawn; the cull is eating the "
+        "figure the gate exists for")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
+
+
 # --- regressions: gates that fired on correct figures ----------------------
 
 

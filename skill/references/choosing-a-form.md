@@ -232,6 +232,15 @@ on a map or a phase portrait, where the ratio is a statement about the data), a
 line whose x does not run one way, and any stroke under `BANKING_MIN_POINTS = 8`
 vertices, which is furniture rather than a rate.
 
+Segments that render flat are culled, after Heer and Agrawala's "slopeless lines":
+a horizontal or vertical segment is unchanged by the aspect ratio, so it cannot
+help set one, and a tail of them drags the median that does. Generalized from
+exactly zero or infinite slope to *drawn* flat: a segment whose rise is under
+`BANKING_FLAT_PX = 0.5` display pixels cannot be told from flat at any aspect a
+reader will see. A converged training run is mostly a flat tail — 92 near-flat
+segments of 119 — and culling them is the difference between a median slope of
+0.0006 (warn: make the panel six hundred times taller) and 1.30 (banked).
+
 ## The forms with no research-figure use
 
 - **Pie and donut.** Angle and area, the two weakest quantitative tasks, for a job a
@@ -252,7 +261,14 @@ vertices, which is furniture rather than a rate.
 - Cleveland, W. S. & McGill, R. (1984). Graphical perception: theory,
   experimentation, and application to the development of graphical methods.
   *JASA* 79(387), 531-554. — the perceptual ordering above.
+- Cleveland, W. S., McGill, M. E. & McGill, R. (1988). The shape parameter of a
+  two-variable graph. *JASA* 83(402), 289-300. — the median-absolute-slope
+  criterion and the experiments behind banking to 45°.
 - Cleveland, W. S. (1993). *Visualizing Data.* — dot plots, Trellis display, banking.
+- Heer, J. & Agrawala, M. (2006). Multi-scale banking to 45 degrees. *IEEE
+  Transactions on Visualization and Computer Graphics* 12(4), 701-708. — the
+  "slopeless lines" culling the gate applies, and the survey of banking
+  criteria.
 - Tukey, J. W. (1977). *Exploratory Data Analysis.* — the box plot, and what it was
   for.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* — the decomposition `ggplot2`
