@@ -1,4 +1,4 @@
-"""Seven figures hard enough to be worth checking.
+"""Eleven figures hard enough to be worth checking.
 
     python examples/gallery.py [output-directory]
 
@@ -14,11 +14,21 @@ compositions where the checks have somewhere to hide:
     gallery-convergence.png       log-log error against h, with a slope triangle
     gallery-orbit.png             a dense attractor, where density IS the finding
     gallery-encoding.png          three colormap kinds, one per panel
+    gallery-uncertainty.png       bands, direct labels under them, a log scale
+    gallery-counts.png            bars from zero, and a second unit for them
+    gallery-residual.png          a signed field: the fourth colormap kind
+    gallery-density.png           marks that vary in area, then bins instead
+
+The last four exist because measuring the first seven against every gate found
+rows that had never seen anything: no figure drew a band, a bar, a diverging
+map, a signed contour set or a `scatter`, so five checks had returned a passing
+row seven times over without once running the code that decides. A gate that
+passes by having seen nothing looks exactly like a gate that passed.
 
 Each one is audited and the script exits non-zero if any figure fails, so these
 are regression tests with pictures attached rather than decoration.
 
-Importing this file builds nothing. The seven builders are importable and each
+Importing this file builds nothing. The eleven builders are importable and each
 returns its figure, so a change to a gate can be measured against the corpus:
 
     import gallery
@@ -26,18 +36,20 @@ returns its figure, so a change to a gate can be measured against the corpus:
     fig = gallery.field()
 
 That is the point of the corpus, and it used to be the one thing this file made
-hard. Importing it ran every builder, overwrote all seven committed PNGs, read
+hard. Importing it ran every builder, overwrote every committed PNG, read
 `sys.argv[1]` as an output directory, put the style sheet into the importing
 process for good, and then called `sys.exit`.
 
 Writing them
-found six defects in the checks themselves, and the comments below say which:
+found seven defects in the checks themselves, and the comments below say which:
 the readability gate reported a schematic's invisible tick labels, `check_ink`
 called every colorbar a saturated panel, the line-weight gate measured a
 colorbar's own dividers, a path and its start marker in one hue read as a
 wrapped color cycle, testing a label's backdrop against its dominant color
-failed every annotation ever placed on a heatmap, and `check_label_attribution`
-was passing nearly everything it was given.
+failed every annotation ever placed on a heatmap, `check_label_attribution`
+was passing nearly everything it was given, and `_encloses` tested a band's
+outline through the affine part of the transform only, so on a log axis a
+confidence band stopped being its own curve's band and became its rival.
 
 Two more defects were in the FIGURES and no gate caught either: the schematic's
 feedback loop ran off the bottom of the canvas, and the convergence plot's slope
@@ -66,7 +78,7 @@ import check_figure as cf          # noqa: E402
 STYLE = SKILL / "assets" / "figure.mplstyle"
 
 # Where `finish` writes. Same optional argument as `demo.py`, and for the same
-# reason: the test that runs this file used to rewrite all seven committed PNGs
+# reason: the test that runs this file used to rewrite every committed PNG
 # on every `pytest`. Resolved in `main` rather than from `sys.argv` at import,
 # because under a test runner `sys.argv[1]` is the runner's own argument and
 # this file would take it for an output directory.
@@ -108,7 +120,7 @@ def finish(fig, name, description, **audit_kw):
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
     open. That is the mode for measuring a change against this corpus: the
-    seven figures are the evidence a gate is checked against, and getting at
+    eleven figures are the evidence a gate is checked against, and getting at
     them used to mean either rewriting the committed PNGs or not getting at
     them at all.
     """
@@ -641,19 +653,245 @@ def encoding():
            context_axes=[a, b, c])
 
 
+# --- 8. a band around each curve ---------------------------------------------
+# The shape `check_label_attribution` is hardest on: a direct label under a
+# confidence band. A band lies on top of the curve it belongs to, so on distance
+# alone it is tied with that curve at zero, and `_encloses` is what tells the
+# two apart. Nothing in the first seven figures drew a band, so the rule that
+# makes the row usable had never run on a real figure — and it was broken.
+# `_encloses` asked `Path.contains_points(pts, transform=...)`, which applies
+# the affine part of the transform only, so on this figure's log x axis the
+# band's outline was tested at the wrong coordinates, every point read as
+# outside, and both labels failed against their own bands at 0px. That is the
+# seventh defect writing this file found, and the first one a log scale hid.
+#
+# It is also the one figure here that is audited for a PLACE rather than for
+# the canvas: `venue` and `placed_frac` mirror
+# `\includegraphics[width=0.75\textwidth]` in a NeurIPS paper, so the type and
+# stroke floors are measured at 0.90x, the size this actually prints at.
+
+@styled
+def uncertainty():
+    n = np.array([25, 50, 100, 200, 400, 800, 1600])
+    # (label, amplitude, exponent, floor, color, anchor, side, ha)
+    # The amplitude is picked so the two curves cross at 40 samples on the
+    # drawn segments, not just in the closed form: the alt text states the
+    # crossing and `test_alt_text_numbers.py` reads it off the plotted
+    # vertices, which is the only crossing a reader can see.
+    fits = (("Gaussian process", 3.36, 0.62, 0.060, SERIES[0], 5, -1, "right"),
+            ("random forest", 0.75, 0.22, 0.075, SERIES[1], 4, +1, "left"))
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.0), constrained_layout=True)
+
+    for label, a, b, floor, color, at, side, ha in fits:
+        mid = a * n ** -b + floor
+        half = 0.9 * mid / np.sqrt(n)
+        # The band takes its series' hue at one alpha and no edge. An edge here
+        # is a second stroke saying what the fill already says, and it is the
+        # stroke the line-weight floor then has to be argued with about.
+        ax.fill_between(n, mid - half, mid + half, color=color, alpha=0.25,
+                        linewidth=0.0)
+        ax.plot(n, mid, color=color, label=label)
+        # Anchored on the BAND's edge, not the curve's, and on the side of the
+        # curve that has clear ground: below for the lower series, above for
+        # the upper one. Anchoring on the curve puts the box inside the fill,
+        # where the readability row reads it as a label on data ink.
+        edge = (mid + half)[at] if side > 0 else (mid - half)[at]
+        ax.annotate(label, (n[at], edge), textcoords="offset points",
+                    xytext=(0, 7 * side), ha=ha,
+                    va="bottom" if side > 0 else "top", color=INK)
+
+    # Doubling sample sizes are a log axis or they are six points crammed
+    # against the left edge and one at the right.
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(n, [str(v) for v in n])
+    ax.set_xlabel("Training set size")
+    ax.set_ylabel("Held-out RMSE")
+    ax.set_ylim(0, 0.78)
+    ax.set_xlim(n[0] / 1.3, n[-1] * 1.3)
+
+    return finish(fig, "gallery-uncertainty",
+           "Held-out RMSE against training set size for a Gaussian process "
+           "and a random forest, each drawn as a line inside its own shaded "
+           "interval band. The random forest is lower at 25 training points; "
+           "the curves cross at 40 and the Gaussian process is lower from "
+           "there on, ending at 0.10 against 0.22 at 1600.",
+           venue="neurips", placed_frac=0.75)
+
+
+# --- 9. counts, and a second unit for them -----------------------------------
+# The only bar chart in the corpus, and the reason it exists is that `check_form`
+# had no figure to read: it forbids a bar on a truncated baseline, and for seven
+# figures there was no `BarContainer` anywhere for it to measure. Counts from
+# zero is the one comparison `choosing-a-form.md` sends to a bar rather than to
+# a dot plot, so this is the passing case that proves the row looks.
+#
+# The right-hand axis is the other half: a second scale that is a pure relabel
+# of the same bars carries no data of its own, which is the case `check_dual_axis`
+# exists to permit. `secondary_yaxis` is how to say that — it derives its ticks
+# from the left scale through the two functions, so the two cannot drift apart.
+# A `twinx` with hand-set limits looks identical and silently can.
+
+@styled
+def counts():
+    bins = ("<1.5", "1.5-1.9", "2.0-2.4", "2.5-2.9", "3.0-3.4", r"$\geq$3.5")
+    n = np.array([38, 147, 268, 191, 112, 56])
+    total = int(n.sum())
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.2), constrained_layout=True)
+    ax.bar(range(len(bins)), n, color=SERIES[3], width=0.72)
+    ax.set_xticks(range(len(bins)), bins)
+    ax.set_xlabel(r"Resolution ($\AA$)")
+    ax.set_ylabel("Structures")
+    # Stated rather than inherited. A bar encodes its value as length, so the
+    # baseline has to be zero and the top has to be a round number the reader
+    # can divide by rather than whatever the tallest bar happened to need.
+    ax.set_ylim(0, 300)
+    # The bars ARE the categories; a vertical gridline behind each one is a
+    # rule through the middle of a bar and measures nothing.
+    ax.grid(axis="x", visible=False)
+
+    share = ax.secondary_yaxis(
+        "right", functions=(lambda c: 100.0 * c / total,
+                            lambda p: p * total / 100.0))
+    share.set_yticks([0, 10, 20, 30])
+    share.set_ylabel(f"Share of {total} (%)")
+
+    return finish(fig, "gallery-counts",
+           "Counts of 812 deposited structures by resolution bin, as bars "
+           "from a zero baseline. The distribution peaks at 268 structures in "
+           "the 2.0 to 2.4 angstrom bin and falls away on both sides; the "
+           "right-hand axis relabels the same bars as a share of the 812.")
+
+
+# --- 10. a signed field ------------------------------------------------------
+# The encoding figure covers three of the four colormap kinds and this one
+# covers the fourth. A residual has a meaningful zero and two directions away
+# from it, which is the definition of a diverging scale, and `cmap_kind` had
+# never been handed one from this corpus.
+#
+# The isolines are the other reason. `rcParams["contour.negative_linestyle"]` is
+# "dashed", so a monochrome contour over signed data ships its negative half
+# dashed with nobody having chosen that — and in this repo's vocabulary dashing
+# means unobserved, projected or threshold, none of which is true of half a
+# measured field. `check_contour_dash` warns on it, and until this figure the
+# row had no signed contour set anywhere to look at.
+
+@styled
+def residual():
+    gx, gy = np.meshgrid(np.linspace(0, 1, 240), np.linspace(0, 1, 240))
+    z = (0.42 * np.sin(3.1 * np.pi * gx) * np.cos(2.3 * np.pi * gy)
+         - 0.18 * (gx - 0.5) + 0.11 * (gy - 0.35) ** 2)
+
+    fig, ax = plt.subplots(figsize=(5.6, 4.0), constrained_layout=True)
+    # Symmetric levels, from the data's own extreme. A diverging map centred
+    # anywhere but zero puts the neutral on a value that is not neutral, and
+    # then the reader takes "pale" for "no residual" everywhere it is not.
+    lim = float(np.abs(z).max())
+    fill = ax.contourf(gx, gy, z, levels=np.linspace(-lim, lim, 21),
+                       cmap="RdBu_r")
+    ax.contour(gx, gy, z, levels=np.linspace(-lim, lim, 9), colors=SURFACE,
+               linewidths=1.0, linestyles="solid")
+
+    ax.set_xlabel("Normalised flow rate")
+    ax.set_ylabel("Normalised temperature")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    bar = fig.colorbar(fill, ax=ax, pad=0.02,
+                       ticks=[-0.4, -0.2, 0.0, 0.2, 0.4])
+    bar.set_label("Observed minus fitted yield")
+    bar.outline.set_linewidth(0.0)
+
+    return finish(fig, "gallery-residual",
+           "Observed minus fitted yield across a grid of flow rate against "
+           "temperature, as a diverging red-blue field centred on zero with "
+           "solid isolines. The residual is not noise: it alternates in a "
+           "checkerboard of positive and negative cells across both factors, "
+           "so the fitted model is missing an interaction term.",
+           context_axes=[ax])
+
+
+# --- 11. marks, then bins ----------------------------------------------------
+# `check_overplotting` reads scatters, and the orbit diagram is not one: it is
+# `plot(marker=",")`, which the row skips because it has no offsets to measure.
+# So the gate had returned "no scatter overplotting" seven times without ever
+# building a tree. This figure gives it one, with mark area carrying a third
+# variable so the radii vary and the octave path runs rather than the equal-radii
+# shortcut.
+#
+# Panel (b) is the answer the row's own message gives at 40000 points: past some
+# density a scatter is a silhouette of its own support, and the count per bin is
+# the thing the reader wanted. Both panels are the same measurement, so they
+# share one pair of scales — and the shared window is set rather than inherited,
+# because limits driven by the large panel's tails squeezed the 110 marks of (a)
+# into a corner until the overplotting row fired at 73%.
+
+@styled
+def density():
+    rng = np.random.default_rng(23)
+    genotypes = (("wild type", 0.0), ("mutant", 0.55))
+
+    def draw(shift, size):
+        x = rng.normal(2.4 + shift, 0.62, size)
+        return x, 0.62 * x + rng.normal(0.0, 0.48, size) + shift
+
+    fig, (a, b) = plt.subplots(1, 2, figsize=(7.2, 3.2), sharex=True,
+                               sharey=True, constrained_layout=True)
+
+    small = 55
+    for i, (label, shift) in enumerate(genotypes):
+        x, y = draw(shift, small)
+        # Area, not diameter: `s` is a squared diameter, so a value carried
+        # into it is carried as area, which is what `check_mark_ratio` measures
+        # and caps at 5x. The range here is 4x, deliberately under the cap.
+        a.scatter(x, y, s=rng.uniform(6.0, 24.0, small), color=SERIES[i],
+                  linewidths=0.0, label=label)
+    a.set_xlabel("log expression")
+    a.set_ylabel("log activity")
+    a.set_title(f"(a) {2 * small} cells", loc="left")
+    # A legend and not direct labels: the two clouds interpenetrate, so there
+    # is no point in either that is plainly nearest one group and not the other
+    # — which is the condition a direct label needs and this panel cannot meet.
+    a.legend(loc="upper left")
+
+    large = 20000
+    pooled = [np.concatenate(v) for v in
+              zip(*(draw(shift, large) for _label, shift in genotypes))]
+    # `mincnt=1` leaves empty bins unpainted. Without it the panel ships a
+    # rectangle of the ramp's darkest color over everything the sample never
+    # reached, and "no cells here" reads as the smallest measured value.
+    hb = b.hexbin(*pooled, gridsize=40, cmap="viridis", mincnt=1,
+                  linewidths=0.0)
+    b.set_xlabel("log expression")
+    b.set_title(f"(b) {2 * large} cells", loc="left")
+    bar = fig.colorbar(hb, ax=b, pad=0.02)
+    bar.set_label("cells per bin")
+    bar.outline.set_linewidth(0.0)
+    a.set_xlim(0.3, 5.0)
+    a.set_ylim(-0.6, 4.6)
+
+    return finish(fig, "gallery-density",
+           "Two panels of log activity against log expression on one pair of "
+           "scales. (a) 110 cells as a scatter, the two genotypes in two "
+           "hues, with mark area carrying cell mass. (b) the same measurement "
+           "on 40000 cells, where the marks would merge, drawn as a hexbin "
+           "whose color is the count per bin.",
+           context_axes=[b])
+
+
 BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
-            encoding)
+            encoding, uncertainty, counts, residual, density)
 
 
 def main(argv=None):
-    """Build all seven, audit each, and report. Returns a process exit code.
+    """Build all eleven, audit each, and report. Returns a process exit code.
 
     Under `if __name__ == "__main__"`, so that importing this file builds
     nothing, writes no PNG, reads no `sys.argv` and does not exit the
     interpreter. Importing it used to do all four, which is why the test that
     reads these figures cut the source at a marker string and executed the
     prefix instead of importing it, and why measuring a gate against this
-    corpus overwrote the seven committed PNGs as a side effect.
+    corpus overwrote every committed PNG as a side effect.
     """
     global OUT
     argv = sys.argv[1:] if argv is None else list(argv)

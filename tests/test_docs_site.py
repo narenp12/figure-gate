@@ -81,7 +81,7 @@ def test_the_symlinks_were_found():
     `docs/`; if that count drops, either something became a copy (which
     `test_no_page_has_become_a_copy` catches) or this collection stopped
     working (which nothing else would)."""
-    assert len(symlinks()) == 13, (
+    assert len(symlinks()) == 17, (
         f"found {len(symlinks())} symlinks under docs/, expected 13 - if the "
         "site legitimately gained or lost a page, update this number with it")
 

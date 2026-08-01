@@ -90,7 +90,7 @@ def _gallery():
     """Every gallery figure, keyed by the name `finish` gives it.
 
     `finish` audits and saves; here it only records, so the suite neither
-    rewrites the committed PNGs nor pays for seven audits it is not reading.
+    rewrites the committed PNGs nor pays for eleven audits it is not reading.
     """
     captured = {}
     original = gallery.finish
@@ -384,6 +384,90 @@ def check_forms_group_size(fig):
     return float(sizes.pop())
 
 
+def check_uncertainty_crossing(fig):
+    """Where the two learning curves swap places.
+
+    Read off the drawn samples rather than from the closed form they were
+    generated with: the sentence is a claim about the picture, and a checker
+    that re-evaluates the generator would agree with the picture even if the
+    picture had been drawn from something else.
+    """
+    panel = _data_axes(fig)[0]
+    lines = [line for line in panel.lines
+             if line.get_label() and not line.get_label().startswith("_")]
+    assert len(lines) == 2, f"expected two curves, found {len(lines)}"
+    x = np.asarray(lines[0].get_xdata(), dtype=float)
+    gap = (np.asarray(lines[0].get_ydata(), dtype=float)
+           - np.asarray(lines[1].get_ydata(), dtype=float))
+    sign = np.flatnonzero(np.sign(gap[:-1]) != np.sign(gap[1:]))
+    assert len(sign) == 1, f"the curves cross {len(sign)} times, not once"
+    i = int(sign[0])
+    # Linear in log x, which is the axis the reader reads the crossing off.
+    lo, hi = np.log(x[i]), np.log(x[i + 1])
+    return float(np.exp(lo + (hi - lo) * gap[i] / (gap[i] - gap[i + 1])))
+
+
+def _bars(fig):
+    from matplotlib.patches import Rectangle
+    panel = _data_axes(fig)[0]
+    bars = [p for p in panel.patches if isinstance(p, Rectangle)]
+    assert bars, "the panel draws no bars"
+    return panel, bars
+
+
+def check_counts_total(fig):
+    """The population the shares are shares OF, summed off the bars."""
+    _panel, bars = _bars(fig)
+    return float(sum(bar.get_height() for bar in bars))
+
+
+def check_counts_modal_height(fig):
+    _panel, bars = _bars(fig)
+    return float(max(bar.get_height() for bar in bars))
+
+
+def _modal_bin_edges(fig):
+    """The two numbers in the tick label of the tallest bar.
+
+    This is the relational half: 268 being a bar height somewhere and 2.0-2.4
+    being a bin somewhere would both pass on a figure where the peak is in a
+    different bin, which is the sentence told wrong.
+    """
+    panel, bars = _bars(fig)
+    tallest = max(bars, key=lambda bar: bar.get_height())
+    centre = tallest.get_x() + tallest.get_width() / 2
+    labels = {round(float(tick), 6): text.get_text()
+              for tick, text in zip(panel.get_xticks(),
+                                    panel.get_xticklabels())}
+    label = labels[round(centre, 6)]
+    edges = re.findall(r"\d+(?:\.\d+)?", label)
+    assert len(edges) == 2, f"the modal bin is labelled {label!r}"
+    return [float(edge) for edge in edges]
+
+
+def check_counts_modal_bin_low(fig):
+    return _modal_bin_edges(fig)[0]
+
+
+def check_counts_modal_bin_high(fig):
+    return _modal_bin_edges(fig)[1]
+
+
+def check_density_scatter_points(fig):
+    """Marks in panel (a), across both genotypes."""
+    panel = _data_axes(fig)[0]
+    return float(sum(len(coll.get_offsets()) for coll in panel.collections))
+
+
+def check_density_binned_points(fig):
+    """Cells in panel (b), summed out of the hexbin's own counts rather than
+    from the draw. The bins are what the panel shows, so they are what the
+    number has to come from."""
+    panel = _data_axes(fig)[1]
+    assert len(panel.collections) == 1, "panel (b) is not one binned artist"
+    return float(np.asarray(panel.collections[0].get_array()).sum())
+
+
 # What each checked number is a claim about. The value the checker returns has
 # to be the number the sentence states.
 CHECKED = {
@@ -406,6 +490,13 @@ CHECKED = {
     ("gallery-convergence", "1e-0.6"): check_convergence_largest_step,
     ("gallery-schematic", "four"): check_schematic_stage_count,
     ("gallery-orbit", "3.83"): check_orbit_period_three_window,
+    ("gallery-uncertainty", "40"): check_uncertainty_crossing,
+    ("gallery-counts", "812"): check_counts_total,
+    ("gallery-counts", "268"): check_counts_modal_height,
+    ("gallery-counts", "2.0"): check_counts_modal_bin_low,
+    ("gallery-counts", "2.4"): check_counts_modal_bin_high,
+    ("gallery-density", "110"): check_density_scatter_points,
+    ("gallery-density", "40000"): check_density_binned_points,
 }
 
 # Numbers no resolver places, each with the reason. Anything here is a claim
@@ -453,8 +544,8 @@ def test_the_sweep_reads_every_described_figure():
     """Every assertion above is parametrized over the built figures. A capture
     that came back short would not fail them, it would delete them."""
     built = figures()
-    assert len(built) == 8, (
-        f"built {sorted(built)}, expected the demo and seven gallery figures")
+    assert len(built) == 12, (
+        f"built {sorted(built)}, expected the demo and eleven gallery figures")
     assert all(alt for _fig, alt in built.values()), (
         "a figure was built with no description attached")
 
