@@ -27,7 +27,7 @@ while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.
 
 *`python examples/demo.py` builds that figure and audits it, and `python
 examples/gallery.py` covers the harder forms.
-Writing those seven found six defects in the checks themselves.*
+Writing those eleven found seven defects in the checks themselves.*
 
 ## Documentation
 

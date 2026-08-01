@@ -1,14 +1,22 @@
 # Gallery
 
-`python examples/gallery.py` builds these seven and audits each one. The script
+`python examples/gallery.py` builds these eleven and audits each one. The script
 exits non-zero if any figure fails, so they are regression tests with pictures
 attached rather than decoration.
 
 They exist because `demo.py` — one panel, three curves — is easy for a gate to
 pass, and passing an easy case is the wrong thing for a gate to be good at.
 These are the compositions where the checks have somewhere to hide. Writing
-them found six defects in the checks themselves, and two in the figures that
+them found seven defects in the checks themselves, and two in the figures that
 no check caught. Both kinds are named below.
+
+The last four were added by reading every gate's detail string across the first
+seven and looking for the ones that had never measured anything. Five had not:
+no figure drew a confidence band, a bar, a diverging colormap, a signed contour
+set or a `scatter`, so those rows returned a passing detail seven times over
+without once running the code that decides. A row that passes by having seen
+nothing looks exactly like a row that passed, which is the failure mode the
+[gates page](gates.md) names and this page had been an example of.
 
 Every alt text on this page is the string the figure itself carries, passed to
 `describe(fig, ...)` before the audit runs — the alt-text gate reads it, so it
@@ -63,6 +71,34 @@ is checked rather than written once and forgotten.
 <figure markdown="span">
   ![Three complex-plane images, each on a colormap matched to what it encodes, and each with the key that kind of encoding takes. (a) Mandelbrot escape time in viridis, a sequential ramp, read against a colorbar running 0 to 60 iterations; the set's interior is a neutral keyed separately as 'did not escape', because that is a separate class and not a small value. (b) Newton basins for z^3 - 1 in three separated hues with a legend naming the three roots, because a basin is a category, nothing orders them, and a colorbar would be a ruler along nothing. (c) The phase of (z^2 - 1)/(z^2 + i/2) in twilight, a cyclic map, on a colorbar ticked at -pi, 0 and pi whose two ends are the same colour because they are the same angle.](images/gallery-encoding.png)
   <figcaption>The figure the colormap gate exists for. Escape time is a quantity and takes a sequential ramp; a Newton basin is a category and takes separated hues; a phase is an angle, so its colormap has to close the loop or a false seam appears where it wraps. Each panel also takes the key its kind implies — a colorbar is a ruler, so the two continuous panels get one and the categorical panel gets a legend instead. The interior of the Mandelbrot set is drawn in a neutral rather than at the bottom of the ramp, because "did not escape" is a separate class and not a small value, and it is keyed off the bar for the same reason.</figcaption>
+</figure>
+
+## A band around each curve
+
+<figure markdown="span">
+  ![Held-out RMSE against training set size for a Gaussian process and a random forest, each drawn as a line inside its own shaded interval band. The random forest is lower at 25 training points; the curves cross at 40 and the Gaussian process is lower from there on, ending at 0.10 against 0.22 at 1600.](images/gallery-uncertainty.png)
+  <figcaption>The seventh gate defect, and the first one a log scale hid. A band lies on top of the curve it belongs to, so <code>check_label_attribution</code> needs <code>_encloses</code> to tell a band from a rival — and <code>_encloses</code> was testing the band's outline through the <em>affine</em> part of the transform only. On a log axis every point read as outside, the band went back to being a rival, and both direct labels failed against their own bands at 0px. This is also the one figure here audited for a place rather than for its canvas: <code>venue="neurips", placed_frac=0.75</code> measures the type and stroke floors at the 0.90x it prints at.</figcaption>
+</figure>
+
+## Counts, and a second unit for them
+
+<figure markdown="span">
+  ![Counts of 812 deposited structures by resolution bin, as bars from a zero baseline. The distribution peaks at 268 structures in the 2.0 to 2.4 angstrom bin and falls away on both sides; the right-hand axis relabels the same bars as a share of the 812.](images/gallery-counts.png)
+  <figcaption>The only bar chart in the corpus. <code>check_form</code> forbids a bar on a truncated baseline and had no <code>BarContainer</code> anywhere to measure, so the row had passed seven times without looking at a bar. Counts from zero is the one comparison <a href="choosing-a-form/">choosing-a-form.md</a> sends to a bar rather than to a dot plot. The right-hand axis is a pure relabel of the same bars, which is the case <code>check_dual_axis</code> exists to permit: <code>secondary_yaxis</code> derives its ticks from the left scale, so the two cannot drift apart the way a <code>twinx</code> with hand-set limits silently can.</figcaption>
+</figure>
+
+## A signed field
+
+<figure markdown="span">
+  ![Observed minus fitted yield across a grid of flow rate against temperature, as a diverging red-blue field centred on zero with solid isolines. The residual is not noise: it alternates in a checkerboard of positive and negative cells across both factors, so the fitted model is missing an interaction term.](images/gallery-residual.png)
+  <figcaption>The fourth colormap kind. A residual has a meaningful zero and two directions away from it, which is what a diverging scale is for, and <code>cmap_kind</code> had never been handed one from this corpus — the encoding figure covers sequential, qualitative and cyclic. The isolines are the second reason: <code>contour.negative_linestyle</code> defaults to dashed, so a monochrome contour over signed data ships its negative half dashed with nobody having chosen it, and in this repo's vocabulary dashing means unobserved or projected. <code>check_contour_dash</code> warns on exactly that and had no signed contour set to look at.</figcaption>
+</figure>
+
+## Marks, then bins
+
+<figure markdown="span">
+  ![Two panels of log activity against log expression on one pair of scales. (a) 110 cells as a scatter, the two genotypes in two hues, with mark area carrying cell mass. (b) the same measurement on 40000 cells, where the marks would merge, drawn as a hexbin whose color is the count per bin.](images/gallery-density.png)
+  <figcaption>The orbit diagram is not a scatter — it is <code>plot(marker=",")</code>, which <code>check_overplotting</code> skips for want of offsets — so the row had returned "no scatter overplotting" seven times without ever building a tree. Panel (a) gives it one, with mark area carrying a third variable so the radii vary and the octave path runs rather than the equal-radii shortcut. Panel (b) is the answer the row's own message gives at 40000 points. The shared window is set rather than inherited: limits driven by the large panel's tails squeezed the 110 marks of (a) into a corner until the overplotting row fired at 73%.</figcaption>
 </figure>
 
 ---

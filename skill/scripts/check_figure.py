@@ -1958,7 +1958,17 @@ def _encloses(artist, pts):
         transform = artist.get_transform()
         inside = np.zeros(len(pts), dtype=bool)
         for path in artist.get_paths():
-            inside |= path.contains_points(pts, transform=transform)
+            # `path.transformed(t)`, not `contains_points(pts, transform=t)`.
+            # The keyword form freezes the transform and hands it to the C
+            # containment test, which applies its AFFINE part only, so on a log
+            # axis the band's outline was tested at the wrong coordinates and
+            # every point read as outside. Nothing raised: `_encloses` returned
+            # False, the band went back to being a rival for the curve it
+            # covers, and every direct label under a band on a log scale failed
+            # `check_label_attribution` with the band sitting at 0px. Only the
+            # log case was ever wrong, which is why the linear fixtures beside
+            # it stayed green. `Path.transformed` applies the whole transform.
+            inside |= path.transformed(transform).contains_points(pts)
         return bool(inside.mean() >= SERIES_ENCLOSED_FRAC)
     except Exception:
         # Geometry that cannot be tested for containment is not evidence of a

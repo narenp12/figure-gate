@@ -1054,12 +1054,12 @@ def site_alt_texts():
 
 
 def test_the_examples_still_describe_every_figure():
-    """Seven figures, seven descriptions. A refactor that changes the call
-    shape would otherwise leave this file comparing the site against a shorter
-    list and finding no disagreement."""
-    assert len(described_strings()) == 8, (
+    """Eleven figures, eleven descriptions, plus the demo. A refactor that
+    changes the call shape would otherwise leave this file comparing the site
+    against a shorter list and finding no disagreement."""
+    assert len(described_strings()) == 12, (
         f"read {len(described_strings())} descriptions out of demo.py and "
-        "gallery.py, expected 8 - the call shape changed and "
+        "gallery.py, expected 12 - the call shape changed and "
         "described_strings() needs updating with it")
 
 
@@ -1247,7 +1247,7 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 # that one copy of a claim can be updated without the others.
 
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
-                "ten": 10}
+                "ten": 10, "eleven": 11, "twelve": 12}
 
 ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),

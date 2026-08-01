@@ -2113,6 +2113,39 @@ def test_an_error_band_is_not_a_rival_for_its_own_curves_label(band_label):
     assert gates(rows)["Label attribution"] is True
 
 
+@pytest.mark.parametrize("scale", ["linear", "log"])
+def test_a_band_encloses_its_curve_on_a_nonlinear_scale(scale):
+    """`_encloses` on an axis whose transform is not affine.
+
+    Every fixture above draws on linear axes, and on those the defect this
+    catches is invisible. `Path.contains_points(pts, transform=t)` freezes `t`
+    and hands it to the C containment test, which applies its AFFINE part only:
+    on a log axis the band's outline was tested at coordinates it does not
+    occupy, every point of the curve read as outside, and `_encloses` returned
+    False without raising. The band then went back to being a rival for the
+    curve it covers, sitting at 0px from any label on that curve, so a direct
+    label under a confidence band failed `check_label_attribution` on every
+    log-scaled figure. `examples/gallery.py`'s `uncertainty` figure is one, and
+    is what found this.
+
+    Parametrised over both scales so the linear case stays asserted beside it:
+    the fix has to leave the case that already worked working.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    x = np.array([1.0, 2.0, 4.0, 8.0, 16.0, 32.0])
+    y = 1.0 / x
+    ax.fill_between(x, y * 0.8, y * 1.2, color=OKABE[0], alpha=0.25)
+    line, = ax.plot(x, y, color=OKABE[0], label="rate")
+    ax.set_xscale(scale)
+    fig.canvas.draw()
+
+    assert cf._encloses(ax.collections[0], cf._series_px(line, ax)), (
+        f"on a {scale} x axis the band does not read as enclosing the curve "
+        "it was drawn around")
+    plt.close(fig)
+
+
 def test_adjacent_stacked_bands_stay_rivals():
     """The other side of `SERIES_ENCLOSED_FRAC`. Neighbouring `stackplot` bands
     share a dividing edge, so each holds part of the other's outline; dismissing

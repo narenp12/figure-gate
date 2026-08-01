@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+**Four gallery figures, added for the rows that had never measured anything.**
+Every gate returns a detail string, and reading all 21 of them across the seven
+figures showed five rows passing without having run the code that decides: no
+figure drew a confidence band, a bar, a diverging colormap, a signed contour set
+or a `scatter`, so `_encloses`, `check_form`'s `BarContainer` branch, the
+diverging arm of `cmap_kind`, `check_contour_dash` and `check_overplotting` had
+each returned a clean row seven times over having seen nothing. A row that
+passes by having seen nothing looks exactly like a row that passed.
+
+`gallery-uncertainty.png` puts a direct label under a confidence band on a log
+axis, and is the only figure in the corpus audited for a place rather than for
+its canvas (`venue="neurips", placed_frac=0.75`). `gallery-counts.png` is bars
+from a zero baseline with a `secondary_yaxis` relabel, which is the twin-scale
+case `check_dual_axis` exists to permit. `gallery-residual.png` is a diverging
+field with solid signed isolines. `gallery-density.png` is a `scatter` whose
+mark area varies, so the overplotting row's radius-octave path runs rather than
+its equal-radii shortcut, beside a hexbin of the same measurement at 40000
+points. All eleven figures pass every gate.
+
+**A confidence band on a log axis is its curve's band again.** `_encloses`
+asked `Path.contains_points(pts, transform=t)`, which freezes the transform and
+hands it to the C containment test — and that test applies its AFFINE part only.
+On a log axis the band's outline was therefore tested at coordinates it does not
+occupy, every point of the curve read as outside, and `_encloses` returned False
+without raising. The band went back to being a rival for the curve it covers, at
+0px from any label on that curve, so every direct label under a band on a
+log-scaled figure failed `check_label_attribution`. Only the non-affine case was
+ever wrong, which is why the linear fixtures beside it stayed green;
+`Path.transformed` applies the whole transform, and the regression test is
+parametrised over both scales.
+
 **A band is now told from a rival by what it encloses, not by whether it was
 labelled.** `check_label_attribution` skipped a filled collection unless it
 carried a legend-visible label. The intent was right, since a confidence band
@@ -23,8 +54,8 @@ degenerate near-flat ones included, is 43.9%. A `fill_between` band over its
 curve's whole range reads 100.0%. The residual is recorded rather than fixed: a
 band covering part of its curve reads in proportion, 88.1% over nine tenths of
 the range, and below the floor goes back to competing with the curve it belongs
-to. The Label attribution row is unchanged on all seven gallery figures and on
-`demo.py`.
+to. The Label attribution row is unchanged on the seven gallery figures that
+existed then and on `demo.py`.
 
 **Constants quoted in prose are pinned against the code, not just the ones in
 the table.** CONTRIBUTING.md has been telling contributors that a constant
