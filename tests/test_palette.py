@@ -8,6 +8,8 @@ trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """
 
+import math
+import random
 import re
 
 import pytest
@@ -464,3 +466,88 @@ def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
     assert 1.0 not in cp.ANOMALOUS_SEVERITIES
     assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
     assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)
+
+
+# --- the size-weighted gate that was measured and not shipped ----------------
+
+def _cielab(lin):
+    """CIELAB under D65, for comparing this file's units to a published model's.
+
+    Here rather than in `check_palette.py` on purpose: nothing in the validator
+    computes CIELAB, and shipping a conversion with no caller into a file whose
+    whole claim is that it is small and stdlib-only would be paying for an
+    argument this test settles once.
+    """
+    m = ((0.4124564, 0.3575761, 0.1804375),
+         (0.2126729, 0.7151522, 0.0721750),
+         (0.0193339, 0.1191920, 0.9503041))
+    white = [sum(row) for row in m]
+    xyz = [sum(m[i][j] * lin[j] for j in range(3)) / white[i] for i in range(3)]
+
+    def f(t):
+        return t ** (1 / 3) if t > (6 / 29) ** 3 else t / (3 * (6 / 29) ** 2) + 4 / 29
+
+    fx, fy, fz = (f(v) for v in xyz)
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+
+
+def _de_lab(a, b):
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(_cielab(a), _cielab(b))))
+
+
+def test_the_size_model_is_already_inside_the_normal_vision_floor():
+    """Why this project has no size-weighted separation gate.
+
+    A small target does need more colour difference than a large one, and Stone,
+    Szafir & Setlur (2014) measured how much: it rises as C + K/s with s the visual
+    angle in degrees, fitted from 0.333 to 6, giving 6.1 CIELAB at a two-degree
+    patch and 10.4 at a third of a degree. A gate that multiplied this file's
+    floors by that ratio was built and thrown away, because the floors are OKLab
+    and the model is CIELAB and multiplying across units is what made it fire --
+    on `examples/gallery.py`, on the palette this project recommends.
+
+    The arithmetic is pinned here so the next person to propose the gate
+    re-derives it in one run instead of rebuilding it. If a future change to the
+    colour maths moves these relationships, that is a real result and this test
+    is where it surfaces.
+    """
+    # C and K are the mean of Stone, Szafir & Setlur's Table 3 over L*, a*, b*.
+    C, K = (5.079 + 5.339 + 5.349) / 3, (0.751 + 1.541 + 2.871) / 3
+    assert C + K / 2.0 == pytest.approx(6.1, abs=0.1), (
+        "the mean of their three axes no longer reproduces the paper's own "
+        "'closer to 6' at two degrees")
+    smallest_fitted = C + K / 0.333
+    assert smallest_fitted == pytest.approx(10.4, abs=0.2)
+
+    # One OKLab dE x100 unit, in CIELAB dE.
+    rng = random.Random(0)
+    ratios = []
+    for _ in range(4000):
+        a = [rng.randrange(256) for _ in range(3)]
+        b = [rng.randrange(256) for _ in range(3)]
+        la = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*a))
+        lb = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*b))
+        oklab = cp.delta_e(la, lb)
+        if oklab >= 1:
+            ratios.append(_de_lab(la, lb) / oklab)
+    ratios.sort()
+    per_unit = ratios[len(ratios) // 2]
+    assert per_unit == pytest.approx(2.94, abs=0.15), per_unit
+
+    # The finding: both existing floors clear the model's hardest requirement.
+    assert cp.NORMAL_FLOOR * per_unit > 4 * smallest_fitted
+    assert cp.CVD_TARGET * per_unit > 2 * smallest_fitted
+
+    # And the pair the discarded gate fired on, on a 1.6pt curve in the gallery.
+    green, sky = cp.hex_to_linear("#009e73"), cp.hex_to_linear("#56b4e9")
+    assert _de_lab(green, sky) > 5 * smallest_fitted, (
+        "the gallery pair the size gate flagged is no longer comfortably clear "
+        "of the size model's requirement, which is the whole reason the gate "
+        "was not shipped")
+
+
+def test_no_size_weighting_leaked_into_the_validator():
+    """The gate was measured and dropped. A helper left behind with no caller is
+    the shape of a thing that gets wired back in without the measurement."""
+    assert not hasattr(cp, "size_factor")
+    assert not hasattr(cp, "ND_SIZE_C")

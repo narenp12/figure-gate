@@ -1222,6 +1222,21 @@ EXTERNAL_CLAIMS = {
                  "that their recall after a two-to-three-week gap was "
                  "significantly better.",
     },
+    "colour difference and target size": {
+        "document": "style-guide.md",
+        "anchor": "Why there is no size-weighted separation gate",
+        "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
+                  "2014(1), 253-258",
+        "verified": "2026-07-31",
+        "quote": "In the paper, we describe a way to model discriminability as "
+                 "a function of size for target sizes ranging from 6 degrees "
+                 "to 1/3 of visual angle. ... A theoretical CIELAB JND, where "
+                 "p = 50% and s = 2 degrees, should correspond to a difference "
+                 "of 1 ... For practical design under uncontrolled conditions, "
+                 "we find the required difference, or in our notation, "
+                 "ND(50,2), is closer to 6 ... For 0.33 degrees, the required "
+                 "difference is closer to 11.",
+    },
     "cvd severity matrices": {
         "document": "style-guide.md",
         "anchor": "Dichromacy is not the worst case",

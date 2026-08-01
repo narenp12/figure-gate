@@ -369,6 +369,29 @@ the worst view found and names the severity it was found at, using the Machado, 
 dichromacy. The bundled cycle's worst adjacent pair reads 15.8, which is what says the
 stricter reading is not a floor nobody can satisfy.
 
+**Why there is no size-weighted separation gate.** A hue pair that reads as two on a
+filled band ought to read as one on a hairline, and that intuition is right — a small
+target does need more colour difference than a large one. Stone, Szafir & Setlur (2014)
+measured how much: the noticeable difference for half of observers rises as C + K/s,
+with s the target's visual angle in degrees, fitted from 0.333° to 6°, which comes to
+6.1 CIELAB ΔE at a two-degree patch and 10.4 at a third of a degree. A gate multiplying
+the floors above by that ratio was built and thrown away, because the two numbers are in
+different units and multiplying them is what made it fire.
+
+Measured over 20 000 random pairs, one OKLab ΔE ×100 unit is a median 2.94 CIELAB ΔE.
+So `NORMAL_FLOOR = 15.0` is about 44 CIELAB, and `CVD_TARGET = 8.0` about 24 — four
+times and twice the 10.4 the size model asks for at the smallest size it was fitted at.
+Okabe-Ito's green and sky blue, which the discarded gate flagged on a 1.6pt curve, are
+59.5 CIELAB apart: 5.7× the requirement. **The floors here already exceed what the size
+model demands at every size the model can speak to.** Publication line widths are well
+below that range — a 1pt stroke is 0.05° at reading distance, two decades outside the
+data — and extrapolating that fit there produces a number nothing supports.
+
+So the rule is a rule and not a gate: **a hairline is where a palette gets tested, so give
+thin strokes the widest-separated slots and do not lean on a pair that only just clears a
+floor.** `test_the_size_model_is_already_inside_the_normal_vision_floor` pins the
+arithmetic so the next person to propose the gate can re-derive this in one run.
+
 ### Text on fills
 
 4.5:1, or 3:1 at ≥14pt bold. `from check_palette import contrast; contrast("#471365", "#ffffff")`.
@@ -570,6 +593,13 @@ kinds, and the reason `misc` fails, comes from this literature.
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
   centre, and why a diverging map needs a meaningful zero to diverge around.
+- Stone, M., Szafir, D. A. & Setlur, V. (2014). An Engineering Model for Color
+  Difference as a Function of Size. In *Color and Imaging Conference* 2014(1),
+  253-258. — the size model. They fit the noticeable difference for 50% of
+  observers as a linear function of inverse size over 11 target sizes from
+  0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
+  about 11 at a third of a degree. The section above is why the numbers here
+  already clear that and there is no gate.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.

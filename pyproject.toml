@@ -215,9 +215,12 @@ ignore = ["E741", "B905"]
 #   commun      "Nat. Commun.", the abbreviated journal title in a citation.
 #   theses      the plural of thesis, in the list of documents a figure is made
 #               for. codespell reads it as a misspelling of "these".
+#   nd          "ND", Stone, Szafir & Setlur's notation for the noticeable
+#               difference, inside the passage EXTERNAL_CLAIMS quotes from them.
+#               A quote that is corrected is not a quote.
 [tool.codespell]
 skip = "./site,./.venv,./.git,uv.lock,*.png,*.svg"
-ignore-words-list = "vermillion,commun,theses"
+ignore-words-list = "vermillion,commun,theses,nd"
 
 [tool.mypy]
 python_version = "3.11"

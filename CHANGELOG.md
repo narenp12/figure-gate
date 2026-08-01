@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+**A size-weighted separation gate was built, measured, and not shipped.** The
+intuition is sound: a hue pair that reads as two on a filled band ought to read
+as one on a hairline, and a small target really does need more colour difference
+than a large one. Stone, Szafir & Setlur (2014) measured how much, fitting the
+noticeable difference as C + K/s over target sizes from 0.333 to 6 degrees of
+visual angle. A gate multiplying `NORMAL_FLOOR` by that ratio warned on
+`gallery-convergence` and on `demo.py` - on the Okabe-Ito cycle at the 1.6pt
+stroke this project recommends.
+
+That is not a threshold to tune, it is a unit error. The floors here are OKLab
+dE x100 and the model is CIELAB, and measured over 20000 random pairs one OKLab
+unit is a median 2.94 CIELAB. So `NORMAL_FLOOR = 15.0` is about 44 CIELAB and
+`CVD_TARGET = 8.0` about 24, against the 10.4 the size model asks for at the
+smallest size it was fitted at. The pair the gate flagged, Okabe-Ito's green and
+sky blue, are 59.5 CIELAB apart - 5.7 times the requirement. The floors already
+exceed what the size model demands at every size the model can speak to, and
+publication line widths sit two decades below its fitted range, where
+extrapolating an inverse-size fit produces a number nothing supports.
+
+So the finding ships and the gate does not. `test_the_size_model_is_already_
+inside_the_normal_vision_floor` pins the arithmetic, a second test asserts no
+size-weighting helper was left behind with no caller, and the style guide states
+the rule as a rule: a hairline is where a palette gets tested, so give thin
+strokes the widest-separated slots. CONTRIBUTING says to drop a gate that
+false-positives on the corpus, and this one did, on the corpus's own palette.
+
 **Dichromacy is not the worst case, and the CVD gate was reading only
 dichromacy.** Most colour vision deficiency is anomalous trichromacy - a cone
 whose peak sensitivity is shifted rather than one that is missing - and
