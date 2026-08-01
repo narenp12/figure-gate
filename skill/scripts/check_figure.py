@@ -1879,6 +1879,9 @@ def _series_distance(artist, bb, pts):
                    for p in artist.get_paths()):
                 return 0.0
         except Exception:
+            # A path that cannot be tested for containment is treated as a
+            # stroke and judged on outline distance, rather than failing the
+            # gate over geometry the reader cannot see anyway.
             pass
     return _box_distance(bb, pts)
 
