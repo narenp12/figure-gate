@@ -371,13 +371,89 @@ def _polar_radial_ticks(fig):
     return ids
 
 
+def _corners(t, bb, r):
+    """The four display-space corners of a text's box, rotation included.
+
+    `get_window_extent` returns the axis-aligned bounding box of the *rotated*
+    string, which for an oblique angle is mostly empty page. Measured on one
+    11pt string: 119.0 x 15.3 at 0 degrees, 15.3 x 119.0 at 90, and 94.9 x 94.9
+    at 45 - an area 5x the ink, made of two right triangles nothing is drawn in.
+    Two clearly separated parallel 45-degree labels are reported as colliding on
+    that box, and a 45-degree label near a corner is reported as clipped.
+
+    Reconstructed without private API or a rebuilt transform. Rotating a
+    rectangle about any point sends its centre to the centre of the result, so
+    the centre of the rotated AABB *is* the centre of the oriented box; the
+    unrotated extent supplies the side lengths. Turning the artist to 0 degrees
+    to read those is the one mutation, and it is undone in a `finally`.
+
+    The reconstruction is checked rather than trusted: the AABB of the corners
+    has to come back as the AABB matplotlib reported, and anything that does not
+    round-trip - a bbox patch, a layout this does not model - falls back to the
+    axis-aligned corners, which is what every caller used before.
+    """
+    import numpy as np
+    angle = float(t.get_rotation()) % 180.0
+    flat = np.array([(bb.x0, bb.y0), (bb.x1, bb.y0),
+                     (bb.x1, bb.y1), (bb.x0, bb.y1)])
+    if angle in (0.0, 90.0):
+        return flat
+    original = t.get_rotation()
+    try:
+        t.set_rotation(0)
+        upright = t.get_window_extent(renderer=r)
+        w, h = float(upright.width), float(upright.height)
+    except Exception:
+        return flat
+    finally:
+        t.set_rotation(original)
+
+    theta = math.radians(float(t.get_rotation()))
+    cos, sin = math.cos(theta), math.sin(theta)
+    centre = np.array([(bb.x0 + bb.x1) / 2.0, (bb.y0 + bb.y1) / 2.0])
+    local = np.array([(-w / 2, -h / 2), (w / 2, -h / 2),
+                      (w / 2, h / 2), (-w / 2, h / 2)])
+    rot = np.array([[cos, -sin], [sin, cos]])
+    out = centre + local @ rot.T
+    span = out.max(axis=0) - out.min(axis=0)
+    if (abs(span[0] - bb.width) > 1.0 or abs(span[1] - bb.height) > 1.0):
+        return flat
+    return out
+
+
 def _overlap(a, b):
-    dx = min(a.x1, b.x1) - max(a.x0, b.x0)
-    dy = min(a.y1, b.y1) - max(a.y0, b.y0)
-    return dx > 0 and dy > 0
+    """Whether two oriented boxes intersect, by the separating axis theorem.
+
+    Each box is (4, 2) display-space corners. Two convex polygons are disjoint
+    exactly when some axis separates their projections, and for rectangles the
+    only axes that can are the four edge normals. So four projections and no
+    approximation, which is the same answer the old min/max test gave whenever
+    both boxes were axis-aligned.
+    """
+    import numpy as np
+    for box in (a, b):
+        for edge in (box[1] - box[0], box[3] - box[0]):
+            axis = np.array([-edge[1], edge[0]])
+            norm = float(np.hypot(*axis))
+            if norm == 0:
+                continue
+            axis = axis / norm
+            pa, pb = a @ axis, b @ axis
+            if pa.min() >= pb.max() or pb.min() >= pa.max():
+                return False
+    return True
 
 
 def check_clipping(fig, r):
+    """Text that runs off the canvas.
+
+    Reads the axis-aligned box and is correct to: an AABB is the bounding box
+    of the oriented box's own corners, so its extremes are attained by real
+    corners of the label and a min/max test against the canvas gives the same
+    answer either way. Rotation costs this gate nothing, and only
+    `check_collisions` had to change, because two AABBs can overlap where the
+    boxes inside them do not.
+    """
     w, h = fig.canvas.get_width_height()
     ghosts = _ghost_ticks(fig)
     bad = []
@@ -393,9 +469,15 @@ def check_clipping(fig, r):
 
 def check_collisions(fig, r):
     """Text-on-text overlap. Tick labels on a shared axis are exempt: matplotlib
-    lays those out itself and a 1px touch there is not a defect."""
+    lays those out itself and a 1px touch there is not a defect.
+
+    Compared as oriented boxes, because the axis-aligned one is 5x the ink at
+    45 degrees and the extra area is two empty triangles. Two parallel oblique
+    labels with clear page between them collided on that box, which is the shape
+    of false positive that teaches people to skim the row."""
     ticks = _tick_texts(fig)
-    items = [(t, bb) for t, bb in _texts(fig, r) if id(t) not in ticks]
+    items = [(t, _corners(t, bb, r))
+             for t, bb in _texts(fig, r) if id(t) not in ticks]
     hits = []
     for (ta, ba), (tb, bb) in itertools.combinations(items, 2):
         if _overlap(ba, bb):

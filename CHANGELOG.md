@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+**Text collision compared the boxes rotation left behind, not the boxes.**
+`get_window_extent` returns the axis-aligned bounding box of the *rotated*
+string. Measured on one 11pt label: 119.0 x 15.3 at 0 degrees, 15.3 x 119.0 at
+90, and 94.9 x 94.9 at 45. That last one is five times the ink, and the extra
+area is two right triangles nothing is drawn in. Two parallel 45-degree labels
+with clear page between them were reported as colliding, which is the shape of
+false positive that teaches people to skim the row.
+
+`_corners` reconstructs the oriented box without private API or a rebuilt
+transform: rotating a rectangle about any point sends its centre to the centre
+of the result, so the centre of the rotated AABB is the centre of the oriented
+box, and the unrotated extent supplies the sides. The reconstruction is checked
+rather than trusted, and anything that does not round-trip to the extent
+matplotlib reported falls back to the axis-aligned corners. `_overlap` is now
+the separating axis theorem over four edge normals, which is exact for
+rectangles and gives the old min/max answer whenever both boxes are upright.
+
+`check_clipping` was left alone and a test says why. An AABB is the bounding
+box of the oriented box's own corners, so its extremes are attained by real
+corners of the label and a min/max test against the canvas gives the same
+answer on either shape. Rotation costs that gate nothing. `check_text_readability`
+still samples the axis-aligned block, so an oblique label's clutter fraction is
+measured over some page it does not cover; masking that block to the oriented
+box is a further change and is not in this one.
+
 **The contrast clause read a smooth backdrop as its own average, through the
 branch written to stop it doing that.** `_worst_backdrop` binned a label's box
 on `pix // 8` and took the worst bin covering at least

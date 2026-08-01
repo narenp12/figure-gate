@@ -1202,6 +1202,132 @@ def test_readability_catches_faint_text_on_the_page():
     assert gates(rows)["Text readability"] is False
 
 
+def _rotated_labels(rotation, places, figsize=(5, 4)):
+    fig, ax = plt.subplots(figsize=figsize, dpi=100)
+    ax.set_axis_off()
+    for text, x, y in places:
+        ax.text(x, y, text, rotation=rotation, transform=ax.transAxes,
+                fontsize=11)
+    return fig
+
+
+def test_oriented_box_round_trips_the_extent_matplotlib_reports():
+    """`_corners` reconstructs the oriented box from the rotated AABB and the
+    unrotated extent. The reconstruction is only sound if the AABB of the
+    corners comes back as the AABB matplotlib gave, so assert that across a
+    spread of angles rather than trusting the derivation.
+
+    The second assertion is the point of the exercise: the oriented box holds
+    the same area at every angle, because it is the same string, while the
+    axis-aligned one reaches 5x that at 45 degrees.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    ax.set_axis_off()
+    r, _ = cf._renderer(fig)
+    areas = {}
+    for rotation in (0, 15, 30, 45, 60, 90, 120, -37):
+        t = ax.text(0.4, 0.4, "ascending label", rotation=rotation,
+                    transform=ax.transAxes, fontsize=11)
+        bb = t.get_window_extent(renderer=r)
+        box = cf._corners(t, bb, r)
+        span = box.max(axis=0) - box.min(axis=0)
+        assert span[0] == pytest.approx(bb.width, abs=0.5)
+        assert span[1] == pytest.approx(bb.height, abs=0.5)
+        edge_a, edge_b = box[1] - box[0], box[3] - box[0]
+        areas[rotation] = float(np.hypot(*edge_a) * np.hypot(*edge_b))
+        t.remove()
+    plt.close(fig)
+    upright = areas[0]
+    for rotation, area in areas.items():
+        assert area == pytest.approx(upright, rel=0.02), (
+            f"the same string at {rotation} degrees came back as a box of "
+            f"{area:.0f} against {upright:.0f} upright")
+
+
+def test_collisions_do_not_fire_on_separated_oblique_labels():
+    """Two parallel 45-degree labels with clear page between them. Their
+    axis-aligned boxes overlap heavily and their ink does not touch, which is
+    the false positive the oriented box exists to remove."""
+    import numpy as np
+    places = [("ascending label", 0.05, 0.05), ("parallel label", 0.05, 0.28)]
+
+    def ink(one):
+        fig = _rotated_labels(45, [one])
+        fig.canvas.draw()
+        mask = np.asarray(fig.canvas.buffer_rgba())[..., :3].sum(axis=2) < 700
+        plt.close(fig)
+        return mask
+
+    assert not (ink(places[0]) & ink(places[1])).any(), (
+        "the fixture stopped being a false positive: the glyphs now touch")
+
+    fig = _rotated_labels(45, places)
+    r, _ = cf._renderer(fig)
+    ok, detail = cf.check_collisions(fig, r)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_collisions_still_fire_on_oblique_labels_that_do_overlap():
+    """The other half. Removing a false positive by never firing is not a fix,
+    so the same two labels moved on top of each other still collide."""
+    fig = _rotated_labels(45, [("ascending label", 0.30, 0.30),
+                               ("parallel label", 0.33, 0.27)])
+    r, _ = cf._renderer(fig)
+    ok, _detail = cf.check_collisions(fig, r)
+    plt.close(fig)
+    assert ok is False
+
+
+def test_clipping_is_unaffected_by_rotation():
+    """Why `check_clipping` was left on the axis-aligned box.
+
+    An AABB is the bounding box of the oriented box's own corners, so every
+    extreme it reports is attained by a real corner of the label and a min/max
+    test against the canvas gives the same answer on either shape. Asserted so
+    the next reader does not 'fix' this gate the way the collision gate needed
+    fixing, and so a change to `_corners` that broke the identity is caught.
+    """
+    fig = _rotated_labels(45, [("ascending label", 0.62, 0.62)])
+    r, _ = cf._renderer(fig)
+    for t, bb in cf._texts(fig, r):
+        box = cf._corners(t, bb, r)
+        assert box[:, 0].min() == pytest.approx(bb.x0, abs=0.5)
+        assert box[:, 0].max() == pytest.approx(bb.x1, abs=0.5)
+        assert box[:, 1].min() == pytest.approx(bb.y0, abs=0.5)
+        assert box[:, 1].max() == pytest.approx(bb.y1, abs=0.5)
+    plt.close(fig)
+
+
+def test_separating_axis_agrees_with_the_old_test_on_upright_boxes():
+    """`_overlap` used to be a min/max comparison of two axis-aligned boxes.
+    SAT has to give that same answer wherever both boxes are upright, or this
+    change moved verdicts on every figure that draws no rotated text."""
+    import numpy as np
+
+    def box(x0, y0, x1, y1):
+        return np.array([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], dtype=float)
+
+    def aabb_overlap(a, b):
+        dx = min(a[2][0], b[2][0]) - max(a[0][0], b[0][0])
+        dy = min(a[2][1], b[2][1]) - max(a[0][1], b[0][1])
+        return dx > 0 and dy > 0
+
+    cases = [
+        ((0, 0, 10, 10), (5, 5, 15, 15)),        # corner overlap
+        ((0, 0, 10, 10), (10, 0, 20, 10)),       # edge to edge, touching
+        ((0, 0, 10, 10), (11, 0, 20, 10)),       # clear
+        ((0, 0, 10, 10), (2, 2, 4, 4)),          # contained
+        ((0, 0, 10, 10), (0, 0, 10, 10)),        # identical
+        ((0, 0, 10, 2), (0, 1, 10, 3)),          # thin, overlapping
+        ((0, 0, 10, 2), (0, 2, 10, 4)),          # thin, touching
+    ]
+    for first, second in cases:
+        a, b = box(*first), box(*second)
+        assert cf._overlap(a, b) == bool(aabb_overlap(a, b)), (first, second)
+
+
 def test_contrast_field_agrees_with_the_scalar_helper():
     """`_contrast_field_255` is the vectorisation of `_contrast_255`, not a
     second definition of WCAG contrast. Walk a spread of colours through both
