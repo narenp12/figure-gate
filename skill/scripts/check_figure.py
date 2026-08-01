@@ -1042,6 +1042,27 @@ def check_mark_ratio(fig):
                else f"  <- cap at {MARK_RATIO_MAX}x"))
 
 
+def _radius_octaves(radius_px):
+    """The marks grouped so that radii inside a group vary by under 2x.
+
+    Keyed on `floor(log2(r))`, which is the octave the radius sits in. What the
+    grouping buys is a tight bound: for two groups the largest possible `r_i +
+    r_j` is `r_maxA + r_maxB`, so a range query at that radius is a superset of
+    the touching pairs between them and is not inflated by the largest mark in
+    the whole scatter. A count of groups is `log2(r_max / r_min)`, single digits
+    for any figure anybody draws.
+
+    A zero-radius mark takes a group of its own. It draws nothing, but it can
+    still be contacted -- `d < 0 + r_j` -- so it cannot be dropped, and
+    `log2(0)` is not an octave.
+    """
+    import numpy as np
+    positive = radius_px > 0
+    key = np.floor(np.log2(np.where(positive, radius_px, 1.0))).astype(np.int64)
+    key = np.where(positive, key, np.iinfo(np.int64).min)
+    return [np.flatnonzero(key == k) for k in np.unique(key)]
+
+
 def _contact_fraction(xy, radius_px, cKDTree):
     """Fraction of the marks at `xy` whose disc intersects another mark's.
 
@@ -1050,10 +1071,22 @@ def _contact_fraction(xy, radius_px, cKDTree):
 
     Uniform radii take the nearest-neighbour path. `r_i + r_j` is a constant
     there, so "some mark is within it" and "the nearest mark is within it" are
-    the same statement, and one k=2 query answers it. Mixed radii take the pair
-    path: every touching pair is inside `2 * r_max` because `r_i + r_j` cannot
-    exceed it, so one range query at that radius is a superset, and the exact
-    test then runs on each candidate's own two radii.
+    the same statement, and one k=2 query answers it.
+
+    Mixed radii are done a group at a time, over `_radius_octaves`. Against one
+    group, the nearest member is asked first and tested exactly, which settles
+    almost every mark; only a mark that is still unhit AND whose nearest member
+    lies inside `r_i + r_maxB` can have a contact that the nearest one missed,
+    and those get a ball query at that radius. Correct because `r_maxB` bounds
+    every `r_j` in the group, so nothing touching is outside the ball.
+
+    The bound is the point. Enumerating pairs at `2 * r_max` over the whole
+    scatter, which is what this did, is a superset that one oversized mark
+    inflates for every other mark in the figure: on 50000 uniform points at
+    r=3 with a single r=40 among them it produced 62 million candidate pairs
+    and a 994MB index array, and at 60000 points on a Gaussian cloud it did not
+    return. Grouped, that mark is a group of one, so it costs one query against
+    a one-point tree.
 
     `cKDTree` is passed in rather than imported so the caller decides once
     whether scipy is present; None falls back to the O(n^2) distance matrix,
@@ -1071,22 +1104,47 @@ def _contact_fraction(xy, radius_px, cKDTree):
         return float((d < radius_px[:, None] + radius_px[None, :]
                       ).any(axis=1).sum()) / n
 
-    tree = cKDTree(xy)
     if uniform:
-        dists, _idx = tree.query(xy, k=2)
+        dists, _idx = cKDTree(xy).query(xy, k=2)
         if dists.ndim < 2:
             return 0.0
         return float((dists[:, 1] < 2.0 * r_max).sum()) / n
 
-    pairs = tree.query_pairs(2.0 * r_max, output_type="ndarray")
-    if not len(pairs):
-        return 0.0
-    a, b = pairs[:, 0], pairs[:, 1]
-    touching = (np.hypot(xy[a, 0] - xy[b, 0], xy[a, 1] - xy[b, 1])
-                < radius_px[a] + radius_px[b])
+    everyone = np.arange(n)
     hit = np.zeros(n, dtype=bool)
-    hit[a[touching]] = True
-    hit[b[touching]] = True
+    for group in _radius_octaves(radius_px):
+        tree = cKDTree(xy[group])
+        group_r_max = float(radius_px[group].max())
+        # k=2 because one of the two may be the mark itself, for the marks that
+        # are in this group; the self hit is dropped and the other column is
+        # then the nearest OTHER member.
+        want = 2 if len(group) > 1 else 1
+        dist, near = tree.query(xy, k=want)
+        if dist.ndim < 2:
+            dist, near = dist[:, None], near[:, None]
+        # scipy reports a missing neighbour as index == tree size, distance inf.
+        missing = near >= len(group)
+        member = group[np.where(missing, 0, near)]
+        dist = np.where(missing | (member == everyone[:, None]), np.inf, dist)
+        column = dist.argmin(axis=1)
+        nearest_d = dist[everyone, column]
+        nearest_j = member[everyone, column]
+        reachable = np.isfinite(nearest_d)
+        hit |= reachable & (nearest_d < radius_px + radius_px[nearest_j])
+
+        # Everything still unhit whose nearest member is inside the group's own
+        # bound: the nearest was not in contact, but a slightly further member
+        # with a larger radius can be.
+        for i in np.flatnonzero(~hit & reachable
+                                & (nearest_d < radius_px + group_r_max)):
+            for k in tree.query_ball_point(xy[i], radius_px[i] + group_r_max):
+                j = group[k]
+                if j == i:
+                    continue
+                if (math.hypot(xy[i, 0] - xy[j, 0], xy[i, 1] - xy[j, 1])
+                        < radius_px[i] + radius_px[j]):
+                    hit[i] = True
+                    break
     return float(hit.sum()) / n
 
 
@@ -1119,11 +1177,11 @@ def check_overplotting(fig):
     Where every mark is the same size, nearest *is* the right neighbour: `r_i +
     r_j` is then a constant, so some mark is within it exactly when the nearest
     one is, and the 1-NN query answers the question outright. That is the common
-    case and it keeps the cheap path. Where radii differ, candidate pairs come
-    out of one range query at `2 * r_max`, which cannot miss a touching pair
-    because `r_i + r_j <= 2 * r_max`, and each candidate is then filtered on its
-    own two radii. Contact is symmetric, so the pair enumeration counts both
-    ends and no mark is judged twice.
+    case and it keeps the cheap path. Where radii differ the marks are grouped
+    into radius octaves and each group is asked separately; see
+    `_contact_fraction` for why the bound has to be the group's largest radius
+    rather than the scatter's, and what enumerating candidate pairs at
+    `2 * r_max` cost on a figure with one oversized mark in it.
     """
     import numpy as np
     try:

@@ -1072,6 +1072,67 @@ def test_contact_fraction_fast_path_agrees_with_the_exact_one():
         assert cf._contact_fraction(xy, radius, cKDTree) == pytest.approx(exact)
 
 
+def test_contact_fraction_is_exact_across_radius_octaves():
+    """The mixed-radii path groups marks by radius octave and bounds each group
+    by its own largest radius rather than the scatter's. That bound is the whole
+    correctness argument, so assert it against the full pair enumeration on the
+    shapes that stress it: graded radii spanning six octaves, a single oversized
+    mark among uniform ones, and zero-radius marks, which draw nothing and can
+    still be contacted."""
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rng = np.random.default_rng(11)
+    for trial in range(24):
+        n = int(rng.integers(2, 250))
+        xy = rng.uniform(0, 300, size=(n, 2))
+        shape = trial % 4
+        if shape == 0:              # graded, every octave populated
+            radius = np.exp(rng.uniform(np.log(0.5), np.log(32.0), n))
+        elif shape == 1:            # one mark far larger than the rest
+            radius = np.full(n, 4.0)
+            radius[rng.integers(0, n)] = 90.0
+        elif shape == 2:            # zero-radius marks mixed in
+            radius = rng.choice([0.0, 2.0, 50.0], n)
+        else:                       # everything sub-pixel
+            radius = rng.uniform(0.0, 2.0, n)
+        assert (cf._contact_fraction(xy, radius, cKDTree)
+                == cf._contact_fraction(xy, radius, None)), (
+            f"trial {trial}: shape {shape}, n {n}")
+
+
+def test_contact_fraction_does_not_inflate_the_query_radius():
+    """One oversized mark used to set the candidate radius for every other mark
+    in the scatter. At 50000 uniform points with a single mark 13x their radius
+    that enumerated 62 million candidate pairs into a 994MB array, and on a
+    Gaussian cloud of 60000 it did not return at all. Grouped by octave, the
+    oversized mark is a group of one. Asserted as a candidate count rather than
+    as a running time, because a timing threshold measures the CI runner."""
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rng = np.random.default_rng(3)
+    n = 20000
+    xy = rng.uniform(0, 600, size=(n, 2))
+    radius = np.full(n, 3.0)
+    radius[0] = 40.0
+
+    inflated = cKDTree(xy).count_neighbors(cKDTree(xy), 2.0 * radius.max())
+    assert inflated > 5_000_000, (
+        "this fixture no longer reproduces the blowup it was written for")
+
+    groups = cf._radius_octaves(radius)
+    assert sorted(len(g) for g in groups) == [1, n - 1]
+    # A mark in group A is asked about group B out to `r_i + max(r_B)`, and
+    # `r_i <= max(r_A)`, so `max(r_A) + max(r_B)` bounds every candidate the
+    # grouped path can look at. The oversized mark widens only the two pairings
+    # its own one-point group takes part in.
+    trees = {id(g): cKDTree(xy[g]) for g in groups}
+    bounded = sum(
+        trees[id(a)].count_neighbors(trees[id(b)],
+                                     radius[a].max() + radius[b].max())
+        for a in groups for b in groups)
+    assert bounded < inflated / 50, (inflated, bounded)
+
+
 # --- overplotting boundary conditions ---------------------------------------
 
 def test_overplotting_threshold_is_strict_greater_than():
