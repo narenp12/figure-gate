@@ -970,6 +970,18 @@ KNOWN_HEXES |= {h.lower() for h in
                 ("#ffffff", "#e6e5de", "#c3c2b7", "#95938b", "#898781",
                  "#fcfcfb", "#471365", "#2c718e", "#44bf70")}
 
+# Counter-examples: hues the guide names in order to say *not* this. The rule
+# above is that a hex a reader is offered has to be one they can obtain, and a
+# pair quoted to demonstrate a gate firing is the opposite of an offer -- but it
+# still has to be a real pair, or the demonstration is a story. Each of these
+# carries the measurement it appears with, and `test_palette.py` pins it.
+COUNTEREXAMPLE_HEXES = {
+    # 8.4 dE at dichromacy, 7.9 at severity 0.8: the pair that says dichromacy
+    # is not the worst case. See test_dichromacy_is_not_the_worst_case.
+    "#288ac6", "#fd00db",
+}
+KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
+
 
 def doc_hexes():
     return sorted({(path.name, h.lower())
@@ -1209,6 +1221,21 @@ EXTERNAL_CLAIMS = {
                  "embellished charts was no worse than for plain charts, and "
                  "that their recall after a two-to-three-week gap was "
                  "significantly better.",
+    },
+    "cvd severity matrices": {
+        "document": "style-guide.md",
+        "anchor": "Dichromacy is not the worst case",
+        "source": "Machado, Oliveira & Fernandes, IEEE TVCG 15(6), 2009, "
+                  "Table 1; coefficients read from the authors' page at "
+                  "inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/",
+        "verified": "2026-07-31",
+        # What was checked is the table, cell by cell, not a sentence about it:
+        # four matrices were read off the authors' page and asserted against the
+        # shipped constants in `test_the_severity_table_is_the_one_the_paper_
+        # publishes`. The first row of protanomaly at severity 0.1 is quoted
+        # here as the sample a later reader can re-check in one lookup.
+        "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
+                 "-0.038205.",
     },
     "graphical perception ordering": {
         "document": "choosing-a-form.md",

@@ -357,6 +357,18 @@ Gates: lightness band, chroma floor, CVD separation ≥ 8, normal-vision ≥ 15,
 tritan reported but not gated (~0.01%). Surface defaults to white; `--surface` for a
 tinted page.
 
+**Dichromacy is not the worst case, so the separation row is swept over severity.**
+Most colour vision deficiency is anomalous trichromacy — a cone whose peak sensitivity is
+shifted, not one that is missing — and simulating only the endpoint would be sound if the
+endpoint were the hardest view. Measured over 240 000 pairs of hues this validator would
+accept as series slots, 0.87% clear ΔE 8 under dichromacy and miss it at some lower
+severity, and dichromacy overstates separation by as much as 10.5 ΔE. `#288ac6` and
+`#fd00db` are one such pair: 8.4 at dichromacy, 7.9 at severity 0.8. So the row reports
+the worst view found and names the severity it was found at, using the Machado, Oliveira
+& Fernandes (2009) matrices for `ANOMALOUS_SEVERITIES` and the Viénot matrices at
+dichromacy. The bundled cycle's worst adjacent pair reads 15.8, which is what says the
+stricter reading is not a floor nobody can satisfy.
+
 ### Text on fills
 
 4.5:1, or 3:1 at ≥14pt bold. `from check_palette import contrast; contrast("#471365", "#ffffff")`.
@@ -558,6 +570,13 @@ kinds, and the reason `misc` fails, comes from this literature.
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
   centre, and why a diverging map needs a meaningful zero to diverge around.
+- Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
+  physiologically-based model for simulation of color vision deficiency. *IEEE
+  Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
+  doi:10.1109/TVCG.2009.113. — the severity model. Their Table 1 publishes a
+  simulation matrix at each severity from 0.0 to 1.0 in tenths, and severity
+  1.0 is calibrated against the same dichromacy model `simulate` uses, which is
+  what lets the two be read side by side.
 
 Two more, for claims the sections above make outside colour.
 

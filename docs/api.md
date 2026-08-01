@@ -64,6 +64,8 @@ functions to port if the checks are being reimplemented elsewhere.
 
 ::: check_palette.simulate
 
+::: check_palette.simulate_anomalous
+
 ::: check_palette.hex_to_linear
 
 ::: check_palette.linear_to_oklab

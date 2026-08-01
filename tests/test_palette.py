@@ -8,6 +8,8 @@ trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """
 
+import re
+
 import pytest
 
 import check_palette as cp
@@ -332,3 +334,133 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     assert imported <= {"argparse", "itertools", "math"}, imported
+
+
+# --- anomalous trichromacy ---------------------------------------------------
+
+def test_the_severity_table_is_the_one_the_paper_publishes():
+    """Four cells checked against Table 1 on the authors' own page, verified
+    2026-07-31. The table is the whole substance of this feature, so a
+    transcription slip would be a wrong answer wearing a citation."""
+    published = {
+        ("protan", 10): (0.152286, 1.052583, -0.204868,
+                         0.114503, 0.786281, 0.099216,
+                         -0.003882, -0.048116, 1.051998),
+        ("protan", 6): (0.385450, 0.769005, -0.154455,
+                        0.100526, 0.829802, 0.069673,
+                        -0.007442, -0.022190, 1.029632),
+        ("deutan", 10): (0.367322, 0.860646, -0.227968,
+                         0.280085, 0.672501, 0.047413,
+                         -0.011820, 0.042940, 0.968881),
+        ("deutan", 4): (0.605511, 0.528560, -0.134071,
+                        0.155318, 0.812366, 0.032316,
+                        -0.009376, 0.023176, 0.986200),
+    }
+    for (kind, tenths), want in published.items():
+        got = tuple(v for row in cp.MACHADO[kind][tenths] for v in row)
+        assert got == pytest.approx(want, abs=5e-7), (kind, tenths)
+
+    # every severity present, and each row a 3x3
+    for kind in ("protan", "deutan"):
+        assert sorted(cp.MACHADO[kind]) == list(range(1, 11))
+        for m in cp.MACHADO[kind].values():
+            assert len(m) == 3 and all(len(r) == 3 for r in m)
+
+
+def test_the_severity_matrices_belong_on_linear_light():
+    """Which transfer function the published table wants, settled by
+    measurement rather than by assumption.
+
+    The paper calibrates severity 1.0 against the same Brettel/Vienot
+    dichromacy `simulate` uses, so the domain that reproduces `simulate` is the
+    domain the matrices are written for. Applying them to gamma-encoded sRGB
+    instead is roughly twice as far off, which is the size of error that would
+    have sat under every number this feature produces.
+    """
+    def to_srgb(c):
+        return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+    def to_linear(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    swatches = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00",
+                "#cc79a7", "#7f3f1f", "#204080", "#b0d0a0", "#404040"]
+    for kind in ("protan", "deutan"):
+        on_linear = on_srgb = 0.0
+        for h in swatches:
+            lin = cp.hex_to_linear(h)
+            reference = cp.simulate(lin, kind)
+            on_linear += cp.delta_e(reference,
+                                    cp.simulate_anomalous(lin, kind, 1.0))
+            gamma = tuple(to_srgb(c) for c in lin)
+            wrong = cp.simulate_anomalous(gamma, kind, 1.0)
+            on_srgb += cp.delta_e(reference,
+                                  tuple(to_linear(c) for c in wrong))
+        assert on_linear < on_srgb / 1.3, (
+            f"{kind}: linear light {on_linear:.1f}, sRGB {on_srgb:.1f} - the "
+            "two domains stopped being distinguishable, so this test no longer "
+            "says which one the table wants")
+
+
+def test_dichromacy_is_not_the_worst_case():
+    """The named failure. Two hues this file would accept as series slots that
+    clear `CVD_TARGET` under both dichromacy models and miss it at severity
+    0.8, where far more readers actually sit.
+
+    Measured over 240000 such pairs, 0.87% of them do this, and dichromacy
+    overstates separation by up to 10.5 dE.
+    """
+    a, b = "#288ac6", "#fd00db"
+    la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+
+    # Every dichromacy view, not just the one that crosses: the gate takes the
+    # worst of them, so the claim is that all of them clear the floor.
+    at_dichromacy = min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind))
+                        for kind in ("protan", "deutan"))
+    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.8),
+                             cp.simulate_anomalous(lb, "protan", 0.8))
+    assert at_dichromacy >= cp.CVD_TARGET > at_severity, (
+        f"the fixture stopped crossing the floor: {at_dichromacy:.2f} at "
+        f"dichromacy, {at_severity:.2f} at severity 0.8")
+
+    ok, rows = cp.check([a, b])
+    assert ok is False
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert row[1] is False
+    assert "severity 0.8" in row[2], row[2]
+
+
+def test_the_bundled_cycle_survives_the_severity_sweep():
+    """The over-fire guard, and the one that matters most: a sweep that failed
+    the palette this project ships would be a gate nobody could satisfy.
+
+    The worst adjacent pair in the style sheet's own cycle reads 15.8 dE at
+    severity 0.9, which is not close to the 8.0 floor.
+    """
+    cycle = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
+    ok, rows = cp.check(cycle)
+    assert ok, rows
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    worst = float(re.search(r"dE ([\d.]+)", row[2]).group(1))
+    assert worst > cp.CVD_TARGET * 1.5, row[2]
+
+
+def test_severity_zero_is_normal_vision_and_the_ends_are_rejected_cleanly():
+    lin = cp.hex_to_linear("#e69f00")
+    assert cp.simulate_anomalous(lin, "protan", 0.0) == pytest.approx(lin)
+    # read at the nearest published tenth, with no interpolation invented
+    assert (cp.simulate_anomalous(lin, "deutan", 0.63)
+            == cp.simulate_anomalous(lin, "deutan", 0.6))
+    with pytest.raises(ValueError):
+        cp.simulate_anomalous(lin, "tritan", 0.5)
+    with pytest.raises(ValueError):
+        cp.simulate_anomalous(lin, "protan", 1.4)
+
+
+def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
+    """`ANOMALOUS_SEVERITIES` stops at 0.9 on purpose. Reading 1.0 under both
+    models would move every dichromacy number the style guide publishes, for a
+    view `simulate` already covers."""
+    assert 1.0 not in cp.ANOMALOUS_SEVERITIES
+    assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
+    assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)

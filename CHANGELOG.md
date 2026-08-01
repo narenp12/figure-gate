@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+**Dichromacy is not the worst case, and the CVD gate was reading only
+dichromacy.** Most colour vision deficiency is anomalous trichromacy - a cone
+whose peak sensitivity is shifted rather than one that is missing - and
+simulating the endpoint alone would be sound if the endpoint were the hardest
+view. It is not. Measured over 240000 pairs of hues `check_palette.py` would
+accept as series slots, 0.87% clear `CVD_TARGET` under dichromacy and miss it at
+some lower severity, and dichromacy overstates separation by as much as 10.5 dE.
+`#288ac6` and `#fd00db` is one such pair: 8.4 at dichromacy, 7.9 at severity 0.8,
+and it passed the gate.
+
+`MACHADO` ships Table 1 of Machado, Oliveira & Fernandes (2009) for protan and
+deutan at severities in tenths, and `simulate_anomalous` reads it. The
+separation row now takes the worst over `ANOMALOUS_SEVERITIES` alongside the
+existing dichromacy reading and names the severity its verdict came from.
+
+Three decisions here were settled by measurement rather than by assumption, and
+each has a test.
+
+- **The matrices belong on linear light.** The published table does not state a
+  transfer function. Machado calibrates severity 1.0 against the same
+  Brettel/Vienot dichromacy this file already uses, so the domain that
+  reproduces it is the domain the table is written for: on 4000 random hues the
+  severity-1.0 matrices land within a mean 2.84 dE (protan) and 2.44 (deutan) of
+  `simulate` when applied to linear light, against 3.89 and 4.97 on
+  gamma-encoded sRGB. Getting this backwards would have put an error of that
+  size under every number the feature produces.
+- **1.0 is left out of the sweep.** It is dichromacy, which `simulate` already
+  covers with the matrices every number in the style guide was measured on.
+  Reading it twice under two models would have moved published figures for a
+  view already gated.
+- **Protan and deutan only.** The repository already reports tritan without
+  gating it, and this model's own reference implementation notes that it does
+  not do tritanopia well. A tritan severity table would be spending credibility
+  on the one form neither model is validated for.
+
+The four matrices quoted in the suite were read off the authors' own page and
+are asserted against the shipped constants, because the table is the whole
+substance of this and a transcription slip would be a wrong answer wearing a
+citation. The bundled cycle's worst adjacent pair reads 15.8 dE under the sweep,
+which is what says the stricter reading is not a floor nobody can satisfy.
+
 **New gate: banking to 45 degrees.** The aspect ratio has been in
 `choosing-a-form.md` since that document existed and nothing measured it, which
 is the shape of guidance this project exists to replace.
