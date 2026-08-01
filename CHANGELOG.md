@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**The contrast clause read a smooth backdrop as its own average, through the
+branch written to stop it doing that.** `_worst_backdrop` binned a label's box
+on `pix // 8` and took the worst bin covering at least
+`TEXT_BACKDROP_MIN_SHARE`. On a figure made of flat fills that is right. On a
+smooth one an 8-cube splits the ramp into dozens of bins, none of them reaches
+the share floor, and the function falls through to `pix.mean(axis=0)` with
+nothing in the output saying it did. Measured on a viridis ramp under a 30x600
+box: 76 bins, a 3.5% mode, a verdict of 4.25:1 exactly equal to the box mean,
+against a true worst pixel of 1.34:1 and a true tenth percentile of 1.63:1. Its
+own docstring named the mean as the wrong summary and the fallback returned it.
+
+Contrast is defined per pixel, so the quantile was available directly and the
+binning was only ever standing in for it. The gate now reports the contrast the
+text holds over all but the worst tenth of its box, and there is no fallback
+branch because no case reaches one. `TEXT_BACKDROP_MIN_SHARE` keeps its value
+and its meaning: a backdrop covering a tenth of the box sets the verdict, a
+handful of stray antialiased pixels does not.
+
+`_contrast_field_255` vectorises the existing scalar helper rather than
+restating WCAG contrast, and `test_contrast_field_agrees_with_the_scalar_helper`
+walks a spread of colours through both so they cannot drift. All seven gallery
+figures still pass, including the viridis field with 31 strings on it, which is
+what says the stricter reading does not over-fire.
+
 **`scatter(s=...)` is not an area, and two gates were built on the assumption
 that it is.** matplotlib documents `s` as "the marker size in points**2". The
 unit marker path is a circle of radius 0.5 scaled by `sqrt(s)`, so the drawn

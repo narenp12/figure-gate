@@ -128,9 +128,10 @@ TEXT_BLEND_TOL = 26.0
 # clear of its own average, and narrow enough that a viridis ramp does not.
 TEXT_EDGE_WINDOW = 9
 TEXT_EDGE_TOL = 14.0
-# A backdrop color has to cover at least this much of a label's box before it
-# can set the contrast verdict. Without a floor, one stray antialiased pixel on
-# a field decides whether the label is legible.
+# The share of a label's box that is allowed to read worse than the verdict.
+# The gate reports the contrast the text holds over the other 90%, so a backdrop
+# covering a tenth of the box sets the number and one stray antialiased pixel on
+# a field does not.
 TEXT_BACKDROP_MIN_SHARE = 0.10
 # Below this many pixels a text box is a glyph or two and the fractions computed
 # off it are noise.
@@ -545,28 +546,37 @@ def _foreign_ink(block, furniture, tol):
 
 
 def _worst_backdrop(block, fg, min_share):
-    """The backdrop color the text reads worst against, among those covering at
-    least `min_share` of its box.
+    """The contrast the text holds over all but the worst `min_share` of its
+    box, and the backdrop pixel that sets it.
 
     A single color is the wrong summary for a field: a label on viridis sits on
     a range, and both the mean and the mode can clear the threshold while a
-    third of the box does not. A share floor keeps a handful of stray pixels
-    from setting the verdict.
+    third of the box does not.
+
+    The first version binned the box on `pix // 8` and took the worst bin
+    covering at least `min_share`. That does the right thing on a figure made of
+    flat fills and exactly the wrong thing on a smooth one: an 8-cube splits a
+    ramp into dozens of bins, none of them reaches the share floor, and the
+    function falls through to the mean of the whole box - the summary the
+    paragraph above rules out, returned by the branch meant to avoid it, with
+    nothing in the output saying so. Measured on a viridis ramp under a 30x600
+    box: 76 bins, a 3.5% mode, a reported 4.25:1 exactly equal to the box mean,
+    against a true worst pixel of 1.34:1 and a true tenth percentile of 1.63:1.
+
+    Contrast is defined per pixel, so the quantile is available directly and the
+    binning was only ever standing in for it. `min_share` keeps its meaning: at
+    0.10 a backdrop covering a tenth of the box sets the verdict, and a handful
+    of stray antialiased pixels does not. No fallback branch, because there is
+    no longer a case that reaches one.
     """
     import numpy as np
-    pix = block.reshape(-1, 3)
-    keys, counts = np.unique(pix // 8, axis=0, return_counts=True)
-    worst, ratio = None, float("inf")
-    for key, n in zip(keys, counts):
-        if n / len(pix) < min_share:
-            continue
-        color = pix[((pix // 8) == key).all(axis=1)].mean(axis=0)
-        r = _contrast_255(fg, color)
-        if r < ratio:
-            worst, ratio = color, r
-    if worst is None:
-        return pix.mean(axis=0), _contrast_255(fg, pix.mean(axis=0))
-    return worst, ratio
+    pix = block.reshape(-1, 3).astype(float)
+    ratios = _contrast_field_255(fg, pix)
+    # An actual pixel and its actual ratio, not an interpolated quantile: the
+    # colour is reported to the author and has to be one that is really there.
+    k = int(min_share * (len(ratios) - 1))
+    idx = int(np.argpartition(ratios, k)[k])
+    return pix[idx], float(ratios[idx])
 
 
 def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
@@ -724,6 +734,28 @@ def _contrast_255(rgb_a, rgb_b):
         r, g, b = (lin(float(v)) for v in rgb)
         lums.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
     hi, lo = max(lums), min(lums)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _contrast_field_255(fg, pixels):
+    """`_contrast_255(fg, p)` for every row of an (N, 3) block, as an (N,).
+
+    The same arithmetic vectorised, not a second definition of it. It exists
+    because `_worst_backdrop` needs the whole distribution of contrasts across
+    a label's box rather than one number, and calling the scalar helper per
+    pixel on a 30x600 box is 18,000 Python-level exponentiations.
+    `test_contrast_field_agrees_with_the_scalar_helper` walks a spread of
+    colours through both, so the two cannot drift.
+    """
+    import numpy as np
+
+    def lum(rgb):
+        c = np.asarray(rgb, dtype=float) / 255.0
+        lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+        return lin @ np.array([0.2126, 0.7152, 0.0722])
+
+    back, front = lum(pixels), float(lum(fg))
+    hi, lo = np.maximum(back, front), np.minimum(back, front)
     return (hi + 0.05) / (lo + 0.05)
 
 

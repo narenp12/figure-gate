@@ -96,6 +96,11 @@ NOT_A_THRESHOLD = {
         "and not from this project",
     ("check_figure.py", "lin", "c <= 0.04045"):
         "the same breakpoint, in the local helper `_contrast_255` defines",
+    ("check_figure.py", "_contrast_field_255", "c <= 0.04045"):
+        "the same breakpoint, vectorised",
+    ("check_figure.py", "lum", "c <= 0.04045"):
+        "the same breakpoint again, in the local helper "
+        "`_contrast_field_255` defines",
     ("check_palette.py", "_srgb_to_linear", "c <= 0.04045"):
         "the same sRGB breakpoint",
     ("check_figure.py", "check_ink", "np.abs(nm1 - m1).sum() < 0.5"):
