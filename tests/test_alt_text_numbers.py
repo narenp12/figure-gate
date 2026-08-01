@@ -26,6 +26,8 @@ to the wrong curve is the defect this file exists for.
 import ast
 import pathlib
 import re
+import sys
+from contextlib import contextmanager
 
 import numpy as np
 import pytest
@@ -39,39 +41,46 @@ from conftest import SKILL                                   # noqa: E402
 import check_figure as cf                                    # noqa: E402
 
 ROOT = SKILL.parent
+# Read as source, below, as well as imported: the descriptions are checked
+# against the string literals the examples actually pass.
 DEMO = ROOT / "examples" / "demo.py"
 GALLERY = ROOT / "examples" / "gallery.py"
+sys.path.insert(0, str(ROOT / "examples"))
+
+import demo                                                  # noqa: E402
+import gallery                                               # noqa: E402
 
 TOL = 0.01          # how close a quoted value has to sit to the plotted one
 
 
 # --- building the figures the descriptions belong to -------------------------
-# Both examples are scripts: `demo.py` runs at import and calls `sys.exit`, and
-# `gallery.py` drives every builder at the bottom. Rather than importing them,
-# each source is cut at its driver and the remainder executed, which gives the
-# figure objects without writing a PNG or exiting the interpreter.
+# Both examples are importable: the driver, the `sys.argv` read and the
+# `sys.exit` sit under `if __name__ == "__main__"`, and the style sheet is
+# scoped to the builders rather than applied at module scope. This file used to
+# cut each source at a marker string and execute the prefix, because importing
+# either one built every figure, rewrote the committed PNGs and then exited the
+# interpreter.
 
-def _exec_prefix(path, marker, extra=None):
-    source = path.read_text().split(marker)[0]
-    assert source != path.read_text(), (
-        f"{path.name} no longer contains {marker!r}, so this file is executing "
-        "the whole script rather than the part that builds the figures")
-    namespace = {"__name__": f"{path.stem}_under_test",
-                 "__file__": str(path)}
-    namespace.update(extra or {})
-    # Both examples call `plt.style.use`, which is global. Left to run outside
-    # a context this file quietly puts `figure.mplstyle` into effect for every
-    # other test in the process, and `check_style_sheet` -- whose whole job is
-    # noticing the sheet is *not* in effect -- stops being able to fail.
-    with plt.rc_context():
-        exec(compile(source, str(path), "exec"), namespace)
-    return namespace
+@contextmanager
+def _quiet_audit():
+    """Build without auditing.
+
+    The descriptions are what this file reads; the 20-odd gates behind
+    `cf.report` are checked by their own tests, and running them here would be
+    eight audits nothing looks at, printed to the test log.
+    """
+    original = cf.report
+    cf.report = lambda fig, name, **kwargs: True
+    try:
+        yield
+    finally:
+        cf.report = original
 
 
 def _demo():
     """The demo figure, described and not yet saved."""
-    namespace = _exec_prefix(DEMO, "passed = cf.report(")
-    fig = namespace["fig"]
+    with _quiet_audit():
+        fig, _passed = demo.build(out=None)
     alt = getattr(fig, cf.ALT_TEXT_ATTR, "")
     assert alt, "demo.py no longer describes its figure before saving it"
     return {"demo": (fig, " ".join(alt.split()))}
@@ -84,15 +93,18 @@ def _gallery():
     rewrites the committed PNGs nor pays for seven audits it is not reading.
     """
     captured = {}
-    namespace = _exec_prefix(GALLERY, "for build in (small_multiples")
+    original = gallery.finish
 
     def capture(fig, name, description, **_kwargs):
         captured[name] = (fig, " ".join(description.split()))
+        return fig
 
-    namespace["finish"] = capture
-    for name in ("small_multiples", "field", "schematic", "forms",
-                 "convergence", "orbit", "encoding"):
-        namespace[name]()
+    gallery.finish = capture
+    try:
+        for build in gallery.BUILDERS:
+            build()
+    finally:
+        gallery.finish = original
     return captured
 
 
