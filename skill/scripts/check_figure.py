@@ -444,6 +444,47 @@ def _overlap(a, b):
     return True
 
 
+def _oriented_mask(corners, x0, y1, shape):
+    """Which pixels of a sampled block the oriented label box actually covers.
+
+    `check_text_readability` slices an axis-aligned block out of the backdrop,
+    and for an oblique label most of that block is page the label does not sit
+    on. Measured on one 45-degree 11pt string: a 191.5 x 191.5 block, 36669
+    pixels, around an oriented box of 239.5 x 31.3, 7505 - four fifths of what
+    was sampled belonged to the label only through its bounding box. Six strokes
+    laid in the empty upper-left triangle, none of them within 30px of a glyph,
+    were reported as data ink over 14% of the label's box.
+
+    `corners` is `_corners`' output, in figure display space. `x0` is the block's
+    left edge and `y1` its top edge in that same space, which is what the slicing
+    in the caller starts from; Agg's rows run downwards, so a block row counts
+    down from `y1` while a block column counts up from `x0`.
+
+    Inside a rectangle is two dot products: with `e1` and `e2` the edges leaving
+    one corner, a point is in exactly when its offset from that corner projects
+    into `[0, |e|**2]` on both. A degenerate box - a zero-width extent, a
+    reconstruction that collapsed - returns None, and the caller reads that as
+    "sample the whole block", which is what every caller did before.
+    """
+    import numpy as np
+    h, w = shape
+    c0 = corners[0]
+    e1 = corners[1] - c0
+    e2 = corners[3] - c0
+    # Pixel centres: column j spans [x0 + j, x0 + j + 1], row i counts down.
+    xs = x0 + np.arange(w) + 0.5
+    ys = y1 - np.arange(h) - 0.5
+    dx = xs[None, :] - c0[0]
+    dy = ys[:, None] - c0[1]
+    p1 = dx * e1[0] + dy * e1[1]
+    p2 = dx * e2[0] + dy * e2[1]
+    n1 = float(e1 @ e1)
+    n2 = float(e2 @ e2)
+    if n1 <= 0 or n2 <= 0:
+        return None
+    return (p1 >= 0) & (p1 <= n1) & (p2 >= 0) & (p2 <= n2)
+
+
 def check_clipping(fig, r):
     """Text that runs off the canvas.
 
@@ -602,7 +643,7 @@ def _box_blur(field, size):
     return out
 
 
-def _foreign_ink(block, furniture, tol):
+def _foreign_ink(block, furniture, tol, mask=None):
     """Fraction of a backdrop patch that is a mark rather than ground.
 
     Ground is whatever varies slowly: the page, a flat fill, a viridis field.
@@ -615,19 +656,30 @@ def _foreign_ink(block, furniture, tol):
 
     Furniture is exempt at the second step rather than the first: a gridline IS
     an edge, and casing exists precisely so it can pass behind a label.
+
+    `mask` restricts which pixels count to the ones the label actually covers,
+    for an oblique box whose block is mostly empty page. It is applied after the
+    blur and not before: the local average is what says whether a pixel is an
+    edge, and a stroke that enters the box from outside has to be compared
+    against its neighbours out there or its leading pixels read as flat ground.
     """
     import numpy as np
 
     field = block.astype(float)
     local = _box_blur(field, TEXT_EDGE_WINDOW)
     edge = np.linalg.norm(field - local, axis=2) > TEXT_EDGE_TOL
-    if not edge.any():
+    if mask is not None:
+        edge = edge & mask
+        area = int(mask.sum())
+    else:
+        area = edge.size
+    if area == 0 or not edge.any():
         return 0.0
     pix = field[edge].reshape(-1, 3)
-    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / edge.size
+    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / area
 
 
-def _worst_backdrop(block, fg, min_share):
+def _worst_backdrop(block, fg, min_share, mask=None):
     """The contrast the text holds over all but the worst `min_share` of its
     box, and the backdrop pixel that sets it.
 
@@ -650,9 +702,16 @@ def _worst_backdrop(block, fg, min_share):
     0.10 a backdrop covering a tenth of the box sets the verdict, and a handful
     of stray antialiased pixels does not. No fallback branch, because there is
     no longer a case that reaches one.
+
+    `mask` selects the pixels the label covers. On an oblique box the corners of
+    the sampled block are page the label never reaches, and a dark field in one
+    of those corners would set the verdict for a string sitting on light ground.
     """
     import numpy as np
-    pix = block.reshape(-1, 3).astype(float)
+    if mask is not None:
+        pix = block[mask].reshape(-1, 3).astype(float)
+    else:
+        pix = block.reshape(-1, 3).astype(float)
     ratios = _contrast_field_255(fg, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
@@ -691,6 +750,13 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
     threshold (4.5:1, or 3:1 for large text) rather than the 3:1 mark threshold,
     because a glyph stem is thinner than a mark. Casing counts: a black label
     with a white halo on a dark field is read against the halo.
+
+    Both clauses are measured over the pixels the label covers, not over the box
+    that contains it. A 45-degree string reports an axis-aligned extent five
+    times its own ink, and the extra area is two triangles nothing is drawn in;
+    strokes laid in one of them read as ink on the label, and a dark field in one
+    of them sets the contrast verdict for a string sitting on light ground. See
+    `_oriented_mask`.
 
     Tick labels are included. They sit outside the axes on most figures and cost
     nothing to check there, and on the figures where they do not — an inset, a
@@ -750,8 +816,19 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
         # Agg's origin is top-left, the figure's is bottom-left
         block = backdrop[slice(H - yb, H - ya), slice(xa, xb)]
+        # An oblique label covers a band across that block and nothing in the
+        # two triangles either side of it. At 45 degrees those triangles are
+        # four fifths of what was sliced, and strokes laid in one of them were
+        # reported as ink on the label. Upright labels get no mask: `_corners`
+        # hands back the axis-aligned box for them, so a mask would only shave
+        # off the 1px ring the slice adds, and that is a number nobody measured.
+        angle = float(t.get_rotation()) % 180.0
+        mask = (None if angle in (0.0, 90.0)
+                else _oriented_mask(_corners(t, bb, r), xa, yb,
+                                    block.shape[:2]))
         # Below this the fractions are counting antialiasing, not measuring.
-        if block.size // 3 < TEXT_FOOTPRINT_MIN_PX:
+        covered = block.size // 3 if mask is None else int(mask.sum())
+        if covered < TEXT_FOOTPRINT_MIN_PX:
             continue
         checked += 1
 
@@ -759,7 +836,7 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         halo_color, _ = _halo(t)
         name = str(t.get_text())[:22]
 
-        frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL)
+        frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL, mask)
         if frac > TEXT_CLUTTER_MAX:
             cluttered.append(
                 f"{name!r} sits on data ink over {frac:.0%} of its box"
@@ -779,7 +856,8 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
             # the reader reads against.
             ratio = _contrast_255(fg, np.array(to_rgb(halo_color)) * 255.0)
         else:
-            _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE)
+            _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
+                                       mask)
         if ratio < floor:
             faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
                          f"(text needs {floor}:1)")

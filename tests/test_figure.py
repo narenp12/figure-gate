@@ -1300,6 +1300,117 @@ def test_clipping_is_unaffected_by_rotation():
     plt.close(fig)
 
 
+def _oblique_label_with_strokes(offsets):
+    """A 45-degree label with strokes laid parallel to it, `offsets` pixels off
+    perpendicular. Positive offsets put them in the empty upper-left triangle of
+    the label's axis-aligned box; offsets near zero run them through the glyphs.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=200)
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    t = ax.text(5, 5, "annotation text", rotation=45, ha="center", va="center",
+                fontsize=11, color="#000000")
+    r, _ = cf._renderer(fig)
+    bb = t.get_window_extent(renderer=r)
+    inv = ax.transData.inverted()
+    centre = np.array([(bb.x0 + bb.x1) / 2.0, (bb.y0 + bb.y1) / 2.0])
+    along = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    perp = np.array([-1.0, 1.0]) / np.sqrt(2.0)
+    for off in offsets:
+        mid = centre + off * perp
+        half = bb.width / np.sqrt(2.0) - abs(off) - 4
+        seg = inv.transform(np.array([mid - half * along, mid + half * along]))
+        ax.plot(seg[:, 0], seg[:, 1], color=OKABE[1], lw=2.0,
+                solid_capstyle="butt")
+    return fig
+
+
+def test_readability_does_not_sample_the_page_beside_an_oblique_label():
+    """The clutter fraction was measured over the axis-aligned block, which for
+    an oblique label is mostly page the label does not sit on.
+
+    Measured on this fixture: a 191.5 x 191.5 block, 36669 pixels, around an
+    oriented box of 239.5 x 31.3, 7505. Six strokes laid in the empty upper-left
+    triangle, none of them touching a glyph, came back as 'data ink over 14% of
+    its box'. The first assertion is what makes that a false positive rather
+    than a threshold argument: the mask the gate now measures over contains none
+    of the stroke ink.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgb
+    fig = _oblique_label_with_strokes((34, 44, 54, 64, 74, 84))
+    r, canvas = cf._renderer(fig)
+    backdrop = np.asarray(canvas.buffer_rgba())[..., :3]
+    H, W = backdrop.shape[:2]
+    (t, bb), = [(t, bb) for t, bb in cf._texts(fig, r)]
+    xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
+    ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
+    block = backdrop[H - yb:H - ya, xa:xb]
+    mask = cf._oriented_mask(cf._corners(t, bb, r), xa, yb, block.shape[:2])
+    stroke = (np.abs(block.astype(int)
+                     - np.array(to_rgb(OKABE[1])) * 255).sum(axis=2) < 30)
+    assert stroke.any(), "the fixture drew no strokes to be a false alarm about"
+    assert not (stroke & mask).any(), (
+        "the fixture stopped being a false positive: the strokes now cross the "
+        "label's oriented box")
+
+    ok, detail = cf.check_text_readability(fig, r, canvas)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_readability_still_catches_ink_crossing_an_oblique_label():
+    """The other half. Removing a false positive by never firing is not a fix,
+    so the same strokes moved onto the glyphs still fail."""
+    fig = _oblique_label_with_strokes((-12, -6, 0, 6, 12))
+    r, canvas = cf._renderer(fig)
+    ok, _detail = cf.check_text_readability(fig, r, canvas)
+    plt.close(fig)
+    assert ok is False
+
+
+def test_oriented_mask_covers_the_box_and_nothing_else():
+    """The mask is the oriented box rasterised, so its pixel count has to be
+    that box's area, and every pixel it selects has to be inside the corners.
+
+    Asserted against `_corners` rather than against a stored number: the two
+    have to stay the same rectangle, and a mask that quietly drifted a few
+    degrees off would still look plausible by area alone.
+    """
+    import numpy as np
+    fig = _rotated_labels(37, [("ascending label", 0.35, 0.35)])
+    r, _ = cf._renderer(fig)
+    (t, bb), = cf._texts(fig, r)
+    box = cf._corners(t, bb, r)
+    xa, yb = int(bb.x0) - 1, int(bb.y1) + 2
+    shape = (yb - (int(bb.y0) - 1), (int(bb.x1) + 2) - xa)
+    mask = cf._oriented_mask(box, xa, yb, shape)
+    plt.close(fig)
+
+    edge_a, edge_b = box[1] - box[0], box[3] - box[0]
+    area = float(np.hypot(*edge_a) * np.hypot(*edge_b))
+    assert int(mask.sum()) == pytest.approx(area, rel=0.02)
+
+    ys, xs = np.nonzero(mask)
+    pts = np.column_stack([xa + xs + 0.5, yb - ys - 0.5]) - box[0]
+    for edge in (edge_a, edge_b):
+        proj = pts @ edge
+        assert proj.min() >= 0 and proj.max() <= float(edge @ edge)
+
+
+def test_oriented_mask_is_the_whole_block_for_an_upright_box():
+    """An upright label keeps the numbers it was measured on. `_corners` hands
+    back the axis-aligned box there, and a mask built from it selects the block
+    entire, so the caller's shortcut of passing None costs nothing."""
+    import numpy as np
+    box = np.array([(10.0, 20.0), (70.0, 20.0), (70.0, 44.0), (10.0, 44.0)])
+    mask = cf._oriented_mask(box, 10, 44, (24, 60))
+    assert mask.all()
+
+
 def test_separating_axis_agrees_with_the_old_test_on_upright_boxes():
     """`_overlap` used to be a min/max comparison of two axis-aligned boxes.
     SAT has to give that same answer wherever both boxes are upright, or this

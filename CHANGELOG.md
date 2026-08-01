@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**Readability was measured over page the label does not sit on.** The oriented
+box landed in `check_collisions` and `check_text_readability` was left sampling
+the axis-aligned block, which the last notes said out loud and left open. On one
+45-degree 11pt string that block is 191.5 x 191.5, 36669 pixels, around an
+oriented box of 239.5 x 31.3, 7505: four fifths of what was sampled belonged to
+the label only through its bounding box. Six strokes laid in the empty
+upper-left triangle, none of them touching a glyph, were reported as data ink
+over 14% of the label's box.
+
+`_oriented_mask` rasterises `_corners` over the sampled block, and both clauses
+now read through it. The clutter fraction counts edge pixels inside the box
+against the box's own area, and the contrast quantile draws from the same
+pixels, so a dark field in a corner the label never reaches no longer sets the
+verdict for a string on light ground. The mask is applied after the blur rather
+than before, because the local average is what says whether a pixel is an edge
+and a stroke entering from outside has to be compared against its neighbours out
+there.
+
+Upright labels are handed `None` and stay on the code path they were measured
+on: `_corners` returns the axis-aligned box for them, so a mask would only shave
+off the 1px ring the slice adds, and that is a number nobody measured. The same
+strokes moved onto the glyphs still fail at 95%, which is what says the false
+positive went without the gate going with it.
+
 **Label attribution measured against strokes that are not on the page, and did
 not measure against half the ones that are.** Two defects in the same gate,
 both of them about what counts as a series.
@@ -45,9 +69,8 @@ rectangles and gives the old min/max answer whenever both boxes are upright.
 box of the oriented box's own corners, so its extremes are attained by real
 corners of the label and a min/max test against the canvas gives the same
 answer on either shape. Rotation costs that gate nothing. `check_text_readability`
-still samples the axis-aligned block, so an oblique label's clutter fraction is
-measured over some page it does not cover; masking that block to the oriented
-box is a further change and is not in this one.
+sampled the axis-aligned block, and masking it to the oriented box was a further
+change; it is the first entry above.
 
 **The contrast clause read a smooth backdrop as its own average, through the
 branch written to stop it doing that.** `_worst_backdrop` binned a label's box
