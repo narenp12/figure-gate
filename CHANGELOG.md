@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**A mark eclipsed by a mark that is not its nearest neighbour was not
+overplotting.** The last notes named this as the case no 1-NN test reaches and
+left it. Contact is `d < r_i + r_j`, and the `j` that minimises `d` need not be
+the `j` that maximises `r_j`, so a mark clears its nearest neighbour and is
+swallowed whole by a larger one further off. Measured on 60 marks - 40 small
+ones in pairs 8px apart, each pair under a 120px disc centred 20px away - every
+mark is in contact, 40 of them do not appear in the render at all, and
+`check_overplotting` returned "no scatter overplotting" off a 33% reading.
+
+Rendered coverage was the fix those notes proposed and it is not the one this
+takes, because the predicate was already exact and only asked of the wrong
+neighbour. `_contact_fraction` asks it of every neighbour. Where radii are
+uniform the nearest one still answers it outright, since `r_i + r_j` is then a
+constant and "some mark is within it" and "the nearest mark is within it" are
+the same statement; that keeps the common case on one k=2 query, and a test
+pins the two paths to the same number rather than trusting the argument. Where
+radii differ, candidates come out of one range query at `2 * r_max`, which
+cannot miss a touching pair, and each is filtered on its own two radii.
+
+The numpy fallback got the same treatment, because CI installs no scipy and a
+gate fixed only where scipy is present is fixed nowhere that matters. A short
+size list is now tiled over the offsets the way a `Collection` cycles it, so
+the radii the gate reads are the radii it drew.
+
 **Readability was measured over page the label does not sit on.** The oriented
 box landed in `check_collisions` and `check_text_readability` was left sampling
 the axis-aligned block, which the last notes said out loud and left open. On one
@@ -121,9 +145,9 @@ matplotlib rather than against a docstring.
   neighbour's own radius now comes from the index the query already returned,
   so a big mark beside a small one is judged on both.
 
-Measuring rendered coverage would catch a case no nearest-neighbour test can
-reach, a small mark covered by a large one that is not its nearest neighbour.
-That is a bigger change than this one and is not in it.
+A case no nearest-neighbour test can reach - a small mark covered by a large one
+that is not its nearest neighbour - was left standing here and is the second
+entry above.
 
 **Alt text is swept for the numbers it states.** `tests/test_docs_match_code.py`
 already held every description on the site to the string the example attaches,

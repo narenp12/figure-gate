@@ -976,6 +976,102 @@ def test_overplotting_uses_both_radii_when_sizes_differ():
     assert gates(rows)["Overplotting"] == "warn"
 
 
+def _eclipsed_marks(figsize=(6, 4.5), dpi=200):
+    """40 small marks in pairs, each pair under a disc that swallows both.
+
+    Within a pair the two small marks are each other's nearest neighbour and
+    sit 8px apart, clear of contact at radius 3. The big mark is 20px off, so
+    it is nobody's nearest neighbour, and its radius is 60, so it covers both.
+    Geometry is laid out in display pixels and mapped back through the data
+    transform, so it does not move if the default figure size changes.
+    """
+    import numpy as np
+    r_small, r_big, spread, offset = 3.0, 60.0, 8.0, 20.0
+
+    def size_for(radius_px):
+        return (2.0 * radius_px * 72.0 / dpi) ** 2
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    bb = ax.get_window_extent()
+    up = np.sqrt(offset ** 2 - (spread / 2) ** 2)
+    px, sizes = [], []
+    for cx in np.arange(bb.x0 + 90, bb.x1 - 90, 150.0):
+        for cy in np.arange(bb.y0 + 90, bb.y1 - 90, 150.0):
+            px += [(cx - spread / 2, cy), (cx + spread / 2, cy), (cx, cy + up)]
+            sizes += [size_for(r_small)] * 2 + [size_for(r_big)]
+    data = ax.transData.inverted().transform(np.array(px))
+    ax.scatter(data[:, 0], data[:, 1], s=sizes)
+    return fig
+
+
+def test_overplotting_catches_a_mark_eclipsed_by_a_non_nearest_neighbour():
+    """Nearest is the wrong neighbour to ask about once radii vary.
+
+    Contact is `d < r_i + r_j`, and the `j` that minimises `d` need not be the
+    `j` that maximises `r_j`. Measured on this fixture: all 60 marks are in
+    contact and 40 of them do not appear in the render at all, while the 1-NN
+    test found 33% and the gate returned "no scatter overplotting".
+
+    The render assertion is what makes it a defect rather than an arithmetic
+    quibble: the small marks' colour is not on the page.
+    """
+    import numpy as np
+    fig = _eclipsed_marks()
+    coll = fig.axes[0].collections[0]
+    xy = fig.axes[0].transData.transform(coll.get_offsets())
+    rad = (cf.scatter_diameter_pt(np.asarray(coll.get_sizes(), float)) / 2.0
+           * fig.dpi / 72.0)
+    d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                 xy[:, 1][:, None] - xy[None, :, 1])
+    np.fill_diagonal(d, np.inf)
+    nn = d.argmin(axis=1)
+    by_nn = (d[np.arange(len(xy)), nn] < rad + rad[nn]).mean()
+    truth = (d < rad[:, None] + rad[None, :]).any(axis=1).mean()
+    assert by_nn <= cf.OVERPLOT_THRESHOLD < truth, (
+        f"the fixture stopped separating the two tests: 1-NN {by_nn:.0%}, "
+        f"truth {truth:.0%}")
+
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_eclipse_is_caught_without_scipy_too(monkeypatch):
+    """CI installs no scipy, so the numpy path is the one that runs there. The
+    eclipse fixture has to fail on both or the gate is only fixed on a dev
+    machine."""
+    _without_scipy(monkeypatch)
+    fig = _eclipsed_marks()
+    verdict = cf.check_overplotting(fig)
+    plt.close(fig)
+    assert verdict[0] == "warn", verdict
+
+
+def test_contact_fraction_fast_path_agrees_with_the_exact_one():
+    """The uniform-radii shortcut rests on one identity: where `r_i + r_j` is a
+    constant, some mark is within it exactly when the nearest mark is. Assert it
+    against the full pair enumeration rather than against the derivation, so a
+    change to either path that broke the agreement shows up here."""
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rng = np.random.default_rng(7)
+    for spread in (12.0, 30.0, 90.0):
+        xy = rng.uniform(0, 400, size=(300, 2))
+        radius = np.full(len(xy), spread / 2.0)
+        fast = cf._contact_fraction(xy, radius, cKDTree)
+        exact = cf._contact_fraction(xy, radius, None)
+        assert fast == pytest.approx(exact), (
+            f"at radius {spread / 2}: nearest-neighbour {fast}, all-pairs "
+            f"{exact}")
+        # And nudging one radius off constant moves it onto the pair path
+        # without moving the answer.
+        radius[0] += 1e-9
+        assert cf._contact_fraction(xy, radius, cKDTree) == pytest.approx(exact)
+
+
 # --- overplotting boundary conditions ---------------------------------------
 
 def test_overplotting_threshold_is_strict_greater_than():

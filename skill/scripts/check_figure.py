@@ -1013,6 +1013,54 @@ def check_mark_ratio(fig):
                else f"  <- cap at {MARK_RATIO_MAX}x"))
 
 
+def _contact_fraction(xy, radius_px, cKDTree):
+    """Fraction of the marks at `xy` whose disc intersects another mark's.
+
+    Two discs intersect when `d < r_i + r_j`, which is symmetric, so a mark is
+    in contact exactly when it is one end of an intersecting pair.
+
+    Uniform radii take the nearest-neighbour path. `r_i + r_j` is a constant
+    there, so "some mark is within it" and "the nearest mark is within it" are
+    the same statement, and one k=2 query answers it. Mixed radii take the pair
+    path: every touching pair is inside `2 * r_max` because `r_i + r_j` cannot
+    exceed it, so one range query at that radius is a superset, and the exact
+    test then runs on each candidate's own two radii.
+
+    `cKDTree` is passed in rather than imported so the caller decides once
+    whether scipy is present; None falls back to the O(n^2) distance matrix,
+    which is the same answer and is only reached without scipy installed.
+    """
+    import numpy as np
+    n = len(xy)
+    r_max = float(radius_px.max())
+    uniform = bool(np.ptp(radius_px) == 0.0)
+
+    if cKDTree is None:
+        d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                     xy[:, 1][:, None] - xy[None, :, 1])
+        np.fill_diagonal(d, np.inf)
+        return float((d < radius_px[:, None] + radius_px[None, :]
+                      ).any(axis=1).sum()) / n
+
+    tree = cKDTree(xy)
+    if uniform:
+        dists, _idx = tree.query(xy, k=2)
+        if dists.ndim < 2:
+            return 0.0
+        return float((dists[:, 1] < 2.0 * r_max).sum()) / n
+
+    pairs = tree.query_pairs(2.0 * r_max, output_type="ndarray")
+    if not len(pairs):
+        return 0.0
+    a, b = pairs[:, 0], pairs[:, 1]
+    touching = (np.hypot(xy[a, 0] - xy[b, 0], xy[a, 1] - xy[b, 1])
+                < radius_px[a] + radius_px[b])
+    hit = np.zeros(n, dtype=bool)
+    hit[a[touching]] = True
+    hit[b[touching]] = True
+    return float(hit.sum()) / n
+
+
 def check_overplotting(fig):
     """Warn when scatter points overlap into an unreadable mass.
 
@@ -1030,12 +1078,23 @@ def check_overplotting(fig):
     against one radius rather than two, which is the condition for a mark's
     *centre* to be swallowed rather than for the two marks to touch.
 
-    Where radii vary the neighbour's own radius is used, taken from the index
-    the query already returns. That is exact for the nearest neighbour and can
-    still miss a case no 1-NN test reaches: a small mark whose nearest
-    neighbour is a hair outside contact while a much larger mark further off
-    covers it. Measuring rendered coverage instead of centre distances is the
-    fix for that and is a bigger change than this one.
+    Nearest is the wrong neighbour to ask about once radii vary. Contact is
+    `d < r_i + r_j`, and the `j` that minimises `d` need not be the `j` that
+    maximises `r_j`, so a mark can clear its nearest neighbour and be swallowed
+    whole by a larger one further off. Measured on a fixture of 60 marks - 40
+    small ones in pairs 8px apart, each pair under a 120px disc centred 20px
+    away - every mark is in contact and 40 of them are not visible in the render
+    at all, while the 1-NN test reported 33% and the gate returned "no scatter
+    overplotting".
+
+    Where every mark is the same size, nearest *is* the right neighbour: `r_i +
+    r_j` is then a constant, so some mark is within it exactly when the nearest
+    one is, and the 1-NN query answers the question outright. That is the common
+    case and it keeps the cheap path. Where radii differ, candidate pairs come
+    out of one range query at `2 * r_max`, which cannot miss a touching pair
+    because `r_i + r_j <= 2 * r_max`, and each candidate is then filtered on its
+    own two radii. Contact is symmetric, so the pair enumeration counts both
+    ends and no mark is judged twice.
     """
     import numpy as np
     try:
@@ -1062,33 +1121,17 @@ def check_overplotting(fig):
             if len(sizes) == 0:
                 continue
             sizes = np.asarray(sizes, dtype=float)
-            if sizes.size == 1:
-                sizes = np.full(len(offsets), sizes[0])
-            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
-
             n = len(xy)
             if n < 2:
                 continue
-            if cKDTree is not None:
-                dists, idx = cKDTree(xy).query(xy, k=2)
-                if dists.ndim < 2:
-                    continue
-                nn_dist, nn_idx = dists[:, 1], idx[:, 1]
-            else:
-                # Same nearest-neighbour distance and index, O(n^2). Only
-                # reached where scipy is absent, and only for the scatters this
-                # check looks at, so the cost lands on figures that already
-                # draw n points.
-                d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
-                             xy[:, 1][:, None] - xy[None, :, 1])
-                np.fill_diagonal(d, np.inf)
-                nn_idx = d.argmin(axis=1)
-                nn_dist = d[np.arange(n), nn_idx]
-            # Two discs intersect when their centres are closer than the radii
-            # summed. Comparing against one radius asks whether a centre landed
-            # inside the other mark, which is most of the way to total eclipse.
-            overlap = int((nn_dist < radius_px + radius_px[nn_idx]).sum())
-            frac = overlap / n
+            # A Collection cycles a short size list over its offsets, so the
+            # sizes it was handed are not the sizes it drew unless the lengths
+            # already match. `np.resize` tiles, which is that same cycle.
+            if sizes.size != n:
+                sizes = np.resize(sizes, n)
+            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
+
+            frac = _contact_fraction(xy, radius_px, cKDTree)
             if frac > OVERPLOT_THRESHOLD:
                 bad.append((i, j, frac))
 
