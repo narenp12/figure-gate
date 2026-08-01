@@ -111,6 +111,132 @@ def simulate(rgb, kind):
     return tuple(max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3)))) for i in range(3))
 
 
+# --- anomalous trichromacy (Machado, Oliveira & Fernandes 2009) --------------
+#
+# The matrices above model dichromacy: a cone class absent. Most colour vision
+# deficiency is not that. Anomalous trichromacy - a cone whose peak sensitivity
+# is shifted rather than missing - is the more common form, and simulating only
+# the endpoint would be sound if the endpoint were the worst case. It is not.
+# Measured over 240000 pairs of hues this file would accept as series slots,
+# 0.87% clear CVD_TARGET under dichromacy and miss it at some lower severity,
+# and dichromacy overstates separation by up to 10.5 dE.
+#
+# Published as Table 1 of Machado, Oliveira & Fernandes (2009), at severities in
+# tenths. Keyed by tenths so the lookup is an integer: severity 0.0 is the
+# identity and needs no matrix.
+#
+# Protan and deutan only. The repository already reports tritan without gating
+# it, and this model's own reference implementation notes that it does not do
+# tritanopia well, so shipping a tritan severity table here would be spending
+# credibility on the one form neither model is validated for.
+#
+# Applied on linear light, like `simulate`. The published table does not state a
+# transfer function, and the domain was settled by measurement rather than by
+# assumption: Machado calibrates severity 1.0 against the same Brettel/Vienot
+# dichromacy this file uses, and on 4000 random hues the severity-1.0 matrices
+# reproduce it to a mean dE of 2.84 (protan) and 2.44 (deutan) when applied to
+# linear light, against 3.89 and 4.97 when applied to gamma-encoded sRGB.
+MACHADO = {
+    "protan": {
+        1: (( 0.856167,  0.182038, -0.038205),
+            ( 0.029342,  0.955115,  0.015544),
+            (-0.002880, -0.001563,  1.004443)),
+        2: (( 0.734766,  0.334872, -0.069637),
+            ( 0.051840,  0.919198,  0.028963),
+            (-0.004928, -0.004209,  1.009137)),
+        3: (( 0.630323,  0.465641, -0.095964),
+            ( 0.069181,  0.890046,  0.040773),
+            (-0.006308, -0.007724,  1.014032)),
+        4: (( 0.539009,  0.579343, -0.118352),
+            ( 0.082546,  0.866121,  0.051332),
+            (-0.007136, -0.011959,  1.019095)),
+        5: (( 0.458064,  0.679578, -0.137642),
+            ( 0.092785,  0.846313,  0.060902),
+            (-0.007494, -0.016807,  1.024301)),
+        6: (( 0.385450,  0.769005, -0.154455),
+            ( 0.100526,  0.829802,  0.069673),
+            (-0.007442, -0.022190,  1.029632)),
+        7: (( 0.319627,  0.849633, -0.169261),
+            ( 0.106241,  0.815969,  0.077790),
+            (-0.007025, -0.028051,  1.035076)),
+        8: (( 0.259411,  0.923008, -0.182420),
+            ( 0.110296,  0.804340,  0.085364),
+            (-0.006276, -0.034346,  1.040622)),
+        9: (( 0.203876,  0.990338, -0.194214),
+            ( 0.112975,  0.794542,  0.092483),
+            (-0.005222, -0.041043,  1.046265)),
+        10: (( 0.152286,  1.052583, -0.204868),
+             ( 0.114503,  0.786281,  0.099216),
+             (-0.003882, -0.048116,  1.051998)),
+    },
+    "deutan": {
+        1: (( 0.866435,  0.177704, -0.044139),
+            ( 0.049567,  0.939063,  0.011370),
+            (-0.003453,  0.007233,  0.996220)),
+        2: (( 0.760729,  0.319078, -0.079807),
+            ( 0.090568,  0.889315,  0.020117),
+            (-0.006027,  0.013325,  0.992702)),
+        3: (( 0.675425,  0.433850, -0.109275),
+            ( 0.125303,  0.847755,  0.026942),
+            (-0.007950,  0.018572,  0.989378)),
+        4: (( 0.605511,  0.528560, -0.134071),
+            ( 0.155318,  0.812366,  0.032316),
+            (-0.009376,  0.023176,  0.986200)),
+        5: (( 0.547494,  0.607765, -0.155259),
+            ( 0.181692,  0.781742,  0.036566),
+            (-0.010410,  0.027275,  0.983136)),
+        6: (( 0.498864,  0.674741, -0.173604),
+            ( 0.205199,  0.754872,  0.039929),
+            (-0.011131,  0.030969,  0.980162)),
+        7: (( 0.457771,  0.731899, -0.189670),
+            ( 0.226409,  0.731012,  0.042579),
+            (-0.011595,  0.034333,  0.977261)),
+        8: (( 0.422823,  0.781057, -0.203881),
+            ( 0.245752,  0.709602,  0.044646),
+            (-0.011843,  0.037423,  0.974421)),
+        9: (( 0.392952,  0.823610, -0.216562),
+            ( 0.263559,  0.690210,  0.046232),
+            (-0.011910,  0.040281,  0.971630)),
+        10: (( 0.367322,  0.860646, -0.227968),
+             ( 0.280085,  0.672501,  0.047413),
+             (-0.011820,  0.042940,  0.968881)),
+    },
+}
+
+
+# The severities the gates sweep. 1.0 is left out on purpose: it is dichromacy,
+# which `simulate` already covers with the matrices the documented numbers were
+# measured on, and reading it twice under two models would move every published
+# figure in the style guide for no coverage gained.
+ANOMALOUS_SEVERITIES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+
+def simulate_anomalous(rgb, kind, severity):
+    """Linear-light RGB as an anomalous trichromat of this severity sees it.
+
+    `kind` is `"protan"` or `"deutan"`. `severity` runs 0.0 (normal vision) to
+    1.0 (dichromacy) and is read at the nearest tenth, which is where Machado,
+    Oliveira & Fernandes publish the table. No interpolation between two
+    published matrices, because that is a modelling claim the paper does not
+    make and this file would then be asserting.
+
+    `simulate` remains the dichromacy model and the anchor for every number the
+    style guide quotes. This is the range between the two ends, which is where
+    most colour vision deficiency actually sits.
+    """
+    if kind not in MACHADO:
+        raise ValueError(f"severity is modelled for protan and deutan only, "
+                         f"not {kind!r} - see the note above MACHADO")
+    if not 0.0 <= severity <= 1.0:
+        raise ValueError(f"severity runs 0.0 to 1.0, got {severity!r}")
+    tenths = int(round(severity * 10))
+    if tenths == 0:
+        return tuple(max(0.0, min(1.0, c)) for c in rgb)
+    m = MACHADO[kind][tenths]
+    return tuple(max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3))))
+                 for i in range(3))
+
+
 def delta_e(rgb_a, rgb_b):
     """OKLab distance between two linear-light colours, x100.
 
@@ -279,19 +405,30 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
     # reported but not gated: it is ~0.01% prevalence, and the Vienot matrix used
     # here is only validated for the red-green forms, so a tritan number is
     # indicative rather than decisive.
+    #
+    # Swept over severity, not read at the endpoint. Dichromacy is not the worst
+    # case: measured over 240000 pairs of hues this file would accept as series
+    # slots, 0.87% clear CVD_TARGET at dichromacy and miss it at some lower
+    # severity. See MACHADO.
     worst_cvd, worst_cvd_at = float("inf"), None
     for i, j in pairs:
         for kind in ("protan", "deutan"):
-            d = delta_e(simulate(lin[i], kind), simulate(lin[j], kind))
+            views = [(delta_e(simulate(lin[i], kind), simulate(lin[j], kind)),
+                      1.0)]
+            views += [(delta_e(simulate_anomalous(lin[i], kind, s),
+                               simulate_anomalous(lin[j], kind, s)), s)
+                      for s in ANOMALOUS_SEVERITIES]
+            d, at = min(views)
             if d < worst_cvd:
-                worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind)
+                worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
     worst_tri = min((delta_e(simulate(lin[i], "tritan"), simulate(lin[j], "tritan"))
                      for i, j in pairs), default=float("nan"))
     if worst_cvd_at:
-        a, b, kind = worst_cvd_at
+        a, b, kind, at = worst_cvd_at
         good = worst_cvd >= CVD_TARGET
         rows.append((f"CVD separation ({label})", good,
-                     f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind}) - tritan {worst_tri:.1f}"
+                     f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind} at severity "
+                     f"{at:.1f}) - tritan {worst_tri:.1f}"
                      + ("" if good else "  <- needs direct labels/gaps/texture, or re-step")))
 
     worst_n, worst_n_at = float("inf"), None

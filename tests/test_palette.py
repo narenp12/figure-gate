@@ -8,6 +8,10 @@ trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """
 
+import math
+import random
+import re
+
 import pytest
 
 import check_palette as cp
@@ -332,3 +336,218 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     assert imported <= {"argparse", "itertools", "math"}, imported
+
+
+# --- anomalous trichromacy ---------------------------------------------------
+
+def test_the_severity_table_is_the_one_the_paper_publishes():
+    """Four cells checked against Table 1 on the authors' own page, verified
+    2026-07-31. The table is the whole substance of this feature, so a
+    transcription slip would be a wrong answer wearing a citation."""
+    published = {
+        ("protan", 10): (0.152286, 1.052583, -0.204868,
+                         0.114503, 0.786281, 0.099216,
+                         -0.003882, -0.048116, 1.051998),
+        ("protan", 6): (0.385450, 0.769005, -0.154455,
+                        0.100526, 0.829802, 0.069673,
+                        -0.007442, -0.022190, 1.029632),
+        ("deutan", 10): (0.367322, 0.860646, -0.227968,
+                         0.280085, 0.672501, 0.047413,
+                         -0.011820, 0.042940, 0.968881),
+        ("deutan", 4): (0.605511, 0.528560, -0.134071,
+                        0.155318, 0.812366, 0.032316,
+                        -0.009376, 0.023176, 0.986200),
+    }
+    for (kind, tenths), want in published.items():
+        got = tuple(v for row in cp.MACHADO[kind][tenths] for v in row)
+        assert got == pytest.approx(want, abs=5e-7), (kind, tenths)
+
+    # every severity present, and each row a 3x3
+    for kind in ("protan", "deutan"):
+        assert sorted(cp.MACHADO[kind]) == list(range(1, 11))
+        for m in cp.MACHADO[kind].values():
+            assert len(m) == 3 and all(len(r) == 3 for r in m)
+
+
+def test_the_severity_matrices_belong_on_linear_light():
+    """Which transfer function the published table wants, settled by
+    measurement rather than by assumption.
+
+    The paper calibrates severity 1.0 against the same Brettel/Vienot
+    dichromacy `simulate` uses, so the domain that reproduces `simulate` is the
+    domain the matrices are written for. Applying them to gamma-encoded sRGB
+    instead is roughly twice as far off, which is the size of error that would
+    have sat under every number this feature produces.
+    """
+    def to_srgb(c):
+        return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+    def to_linear(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    swatches = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00",
+                "#cc79a7", "#7f3f1f", "#204080", "#b0d0a0", "#404040"]
+    for kind in ("protan", "deutan"):
+        on_linear = on_srgb = 0.0
+        for h in swatches:
+            lin = cp.hex_to_linear(h)
+            reference = cp.simulate(lin, kind)
+            on_linear += cp.delta_e(reference,
+                                    cp.simulate_anomalous(lin, kind, 1.0))
+            gamma = tuple(to_srgb(c) for c in lin)
+            wrong = cp.simulate_anomalous(gamma, kind, 1.0)
+            on_srgb += cp.delta_e(reference,
+                                  tuple(to_linear(c) for c in wrong))
+        assert on_linear < on_srgb / 1.3, (
+            f"{kind}: linear light {on_linear:.1f}, sRGB {on_srgb:.1f} - the "
+            "two domains stopped being distinguishable, so this test no longer "
+            "says which one the table wants")
+
+
+def test_dichromacy_is_not_the_worst_case():
+    """The named failure. Two hues this file would accept as series slots that
+    clear `CVD_TARGET` under both dichromacy models and miss it at severity
+    0.8, where far more readers actually sit.
+
+    Measured over 240000 such pairs, 0.87% of them do this, and dichromacy
+    overstates separation by up to 10.5 dE.
+    """
+    a, b = "#288ac6", "#fd00db"
+    la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+
+    # Every dichromacy view, not just the one that crosses: the gate takes the
+    # worst of them, so the claim is that all of them clear the floor.
+    at_dichromacy = min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind))
+                        for kind in ("protan", "deutan"))
+    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.8),
+                             cp.simulate_anomalous(lb, "protan", 0.8))
+    assert at_dichromacy >= cp.CVD_TARGET > at_severity, (
+        f"the fixture stopped crossing the floor: {at_dichromacy:.2f} at "
+        f"dichromacy, {at_severity:.2f} at severity 0.8")
+
+    ok, rows = cp.check([a, b])
+    assert ok is False
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert row[1] is False
+    assert "severity 0.8" in row[2], row[2]
+
+
+def test_the_bundled_cycle_survives_the_severity_sweep():
+    """The over-fire guard, and the one that matters most: a sweep that failed
+    the palette this project ships would be a gate nobody could satisfy.
+
+    The worst adjacent pair in the style sheet's own cycle reads 15.8 dE at
+    severity 0.9, which is not close to the 8.0 floor.
+    """
+    cycle = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
+    ok, rows = cp.check(cycle)
+    assert ok, rows
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    worst = float(re.search(r"dE ([\d.]+)", row[2]).group(1))
+    assert worst > cp.CVD_TARGET * 1.5, row[2]
+
+
+def test_severity_zero_is_normal_vision_and_the_ends_are_rejected_cleanly():
+    lin = cp.hex_to_linear("#e69f00")
+    assert cp.simulate_anomalous(lin, "protan", 0.0) == pytest.approx(lin)
+    # read at the nearest published tenth, with no interpolation invented
+    assert (cp.simulate_anomalous(lin, "deutan", 0.63)
+            == cp.simulate_anomalous(lin, "deutan", 0.6))
+    with pytest.raises(ValueError):
+        cp.simulate_anomalous(lin, "tritan", 0.5)
+    with pytest.raises(ValueError):
+        cp.simulate_anomalous(lin, "protan", 1.4)
+
+
+def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
+    """`ANOMALOUS_SEVERITIES` stops at 0.9 on purpose. Reading 1.0 under both
+    models would move every dichromacy number the style guide publishes, for a
+    view `simulate` already covers."""
+    assert 1.0 not in cp.ANOMALOUS_SEVERITIES
+    assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
+    assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)
+
+
+# --- the size-weighted gate that was measured and not shipped ----------------
+
+def _cielab(lin):
+    """CIELAB under D65, for comparing this file's units to a published model's.
+
+    Here rather than in `check_palette.py` on purpose: nothing in the validator
+    computes CIELAB, and shipping a conversion with no caller into a file whose
+    whole claim is that it is small and stdlib-only would be paying for an
+    argument this test settles once.
+    """
+    m = ((0.4124564, 0.3575761, 0.1804375),
+         (0.2126729, 0.7151522, 0.0721750),
+         (0.0193339, 0.1191920, 0.9503041))
+    white = [sum(row) for row in m]
+    xyz = [sum(m[i][j] * lin[j] for j in range(3)) / white[i] for i in range(3)]
+
+    def f(t):
+        return t ** (1 / 3) if t > (6 / 29) ** 3 else t / (3 * (6 / 29) ** 2) + 4 / 29
+
+    fx, fy, fz = (f(v) for v in xyz)
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+
+
+def _de_lab(a, b):
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(_cielab(a), _cielab(b))))
+
+
+def test_the_size_model_is_already_inside_the_normal_vision_floor():
+    """Why this project has no size-weighted separation gate.
+
+    A small target does need more colour difference than a large one, and Stone,
+    Szafir & Setlur (2014) measured how much: it rises as C + K/s with s the visual
+    angle in degrees, fitted from 0.333 to 6, giving 6.1 CIELAB at a two-degree
+    patch and 10.4 at a third of a degree. A gate that multiplied this file's
+    floors by that ratio was built and thrown away, because the floors are OKLab
+    and the model is CIELAB and multiplying across units is what made it fire --
+    on `examples/gallery.py`, on the palette this project recommends.
+
+    The arithmetic is pinned here so the next person to propose the gate
+    re-derives it in one run instead of rebuilding it. If a future change to the
+    colour maths moves these relationships, that is a real result and this test
+    is where it surfaces.
+    """
+    # C and K are the mean of Stone, Szafir & Setlur's Table 3 over L*, a*, b*.
+    C, K = (5.079 + 5.339 + 5.349) / 3, (0.751 + 1.541 + 2.871) / 3
+    assert C + K / 2.0 == pytest.approx(6.1, abs=0.1), (
+        "the mean of their three axes no longer reproduces the paper's own "
+        "'closer to 6' at two degrees")
+    smallest_fitted = C + K / 0.333
+    assert smallest_fitted == pytest.approx(10.4, abs=0.2)
+
+    # One OKLab dE x100 unit, in CIELAB dE.
+    rng = random.Random(0)
+    ratios = []
+    for _ in range(4000):
+        a = [rng.randrange(256) for _ in range(3)]
+        b = [rng.randrange(256) for _ in range(3)]
+        la = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*a))
+        lb = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*b))
+        oklab = cp.delta_e(la, lb)
+        if oklab >= 1:
+            ratios.append(_de_lab(la, lb) / oklab)
+    ratios.sort()
+    per_unit = ratios[len(ratios) // 2]
+    assert per_unit == pytest.approx(2.94, abs=0.15), per_unit
+
+    # The finding: both existing floors clear the model's hardest requirement.
+    assert cp.NORMAL_FLOOR * per_unit > 4 * smallest_fitted
+    assert cp.CVD_TARGET * per_unit > 2 * smallest_fitted
+
+    # And the pair the discarded gate fired on, on a 1.6pt curve in the gallery.
+    green, sky = cp.hex_to_linear("#009e73"), cp.hex_to_linear("#56b4e9")
+    assert _de_lab(green, sky) > 5 * smallest_fitted, (
+        "the gallery pair the size gate flagged is no longer comfortably clear "
+        "of the size model's requirement, which is the whole reason the gate "
+        "was not shipped")
+
+
+def test_no_size_weighting_leaked_into_the_validator():
+    """The gate was measured and dropped. A helper left behind with no caller is
+    the shape of a thing that gets wired back in without the measurement."""
+    assert not hasattr(cp, "size_factor")
+    assert not hasattr(cp, "ND_SIZE_C")

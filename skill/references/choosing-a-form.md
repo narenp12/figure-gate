@@ -213,6 +213,34 @@ height-to-width ratio so the typical line segment sits near 45 degrees — is wh
 slope discrimination is most accurate. A cycle that is obvious in one aspect ratio
 disappears in another, and the wrong one is usually the one the default produced.
 
+**The failure is a resolution failure.** Take a saw wave whose decay limbs alternate
+between two rates, one exactly twice the other. At 2.4 x 5.2 inches the two limbs
+land 1.6 degrees apart on the page and the alternation cannot be seen at all; at
+6.4 x 1.9 they land 10.6 degrees apart and it is the first thing you see. Same
+data, same axes, same limits — a 2:1 difference in rate, rendered as a difference
+no reader can resolve.
+
+`check_figure.py` gates this as an advisory row. It reads the median absolute
+segment slope of each panel's strokes in display space and warns outside a factor
+of `BANKING_SLOPE_MAX = 10.0` either side of banked, which is a typical segment
+past 84 degrees or under 6. Deliberately loose: the right aspect depends on what
+the reader's job is, and a script cannot know that. What it can say is that a
+panel is essentially vertical or essentially flat over its own typical step.
+
+The gate skips what banking does not apply to: a fixed aspect (`set_aspect("equal")`
+on a map or a phase portrait, where the ratio is a statement about the data), a
+line whose x does not run one way, and any stroke under `BANKING_MIN_POINTS = 8`
+vertices, which is furniture rather than a rate.
+
+Segments that render flat are culled, after Heer and Agrawala's "slopeless lines":
+a horizontal or vertical segment is unchanged by the aspect ratio, so it cannot
+help set one, and a tail of them drags the median that does. Generalized from
+exactly zero or infinite slope to *drawn* flat: a segment whose rise is under
+`BANKING_FLAT_PX = 0.5` display pixels cannot be told from flat at any aspect a
+reader will see. A converged training run is mostly a flat tail — 92 near-flat
+segments of 119 — and culling them is the difference between a median slope of
+0.0006 (warn: make the panel sixteen hundred times taller) and 1.30 (banked).
+
 ## The forms with no research-figure use
 
 - **Pie and donut.** Angle and area, the two weakest quantitative tasks, for a job a
@@ -233,7 +261,14 @@ disappears in another, and the wrong one is usually the one the default produced
 - Cleveland, W. S. & McGill, R. (1984). Graphical perception: theory,
   experimentation, and application to the development of graphical methods.
   *JASA* 79(387), 531-554. — the perceptual ordering above.
+- Cleveland, W. S., McGill, M. E. & McGill, R. (1988). The shape parameter of a
+  two-variable graph. *JASA* 83(402), 289-300. — the median-absolute-slope
+  criterion and the experiments behind banking to 45°.
 - Cleveland, W. S. (1993). *Visualizing Data.* — dot plots, Trellis display, banking.
+- Heer, J. & Agrawala, M. (2006). Multi-scale banking to 45 degrees. *IEEE
+  Transactions on Visualization and Computer Graphics* 12(4), 701-708. — the
+  "slopeless lines" culling the gate applies, and the survey of banking
+  criteria.
 - Tukey, J. W. (1977). *Exploratory Data Analysis.* — the box plot, and what it was
   for.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* — the decomposition `ggplot2`

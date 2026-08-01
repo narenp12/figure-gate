@@ -205,7 +205,8 @@ only value `savefig` accepts there; a jpeg rejects `metadata={}` as hard as a
 full dict.
 
 `check_figure.py` gates clipping, text collision, text readability, alpha
-stacking, mark ratio, overplotting, axis redundancy, type size, line weight, ink
+stacking, mark ratio, overplotting, axis redundancy, type size, line weight,
+banking, ink
 coverage, series color, dual axes, form, the identity channel, label
 attribution, whether the style sheet is the one actually in effect, contour
 dash, colormap kind, font embedding, and alt text — in that order. `check_palette.py` gates

@@ -970,6 +970,18 @@ KNOWN_HEXES |= {h.lower() for h in
                 ("#ffffff", "#e6e5de", "#c3c2b7", "#95938b", "#898781",
                  "#fcfcfb", "#471365", "#2c718e", "#44bf70")}
 
+# Counter-examples: hues the guide names in order to say *not* this. The rule
+# above is that a hex a reader is offered has to be one they can obtain, and a
+# pair quoted to demonstrate a gate firing is the opposite of an offer -- but it
+# still has to be a real pair, or the demonstration is a story. Each of these
+# carries the measurement it appears with, and `test_palette.py` pins it.
+COUNTEREXAMPLE_HEXES = {
+    # 8.4 dE at dichromacy, 7.9 at severity 0.8: the pair that says dichromacy
+    # is not the worst case. See test_dichromacy_is_not_the_worst_case.
+    "#288ac6", "#fd00db",
+}
+KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
+
 
 def doc_hexes():
     return sorted({(path.name, h.lower())
@@ -1210,6 +1222,36 @@ EXTERNAL_CLAIMS = {
                  "that their recall after a two-to-three-week gap was "
                  "significantly better.",
     },
+    "colour difference and target size": {
+        "document": "style-guide.md",
+        "anchor": "Why there is no size-weighted separation gate",
+        "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
+                  "2014(1), 253-258",
+        "verified": "2026-07-31",
+        "quote": "In the paper, we describe a way to model discriminability as "
+                 "a function of size for target sizes ranging from 6 degrees "
+                 "to 1/3 of visual angle. ... A theoretical CIELAB JND, where "
+                 "p = 50% and s = 2 degrees, should correspond to a difference "
+                 "of 1 ... For practical design under uncontrolled conditions, "
+                 "we find the required difference, or in our notation, "
+                 "ND(50,2), is closer to 6 ... For 0.33 degrees, the required "
+                 "difference is closer to 11.",
+    },
+    "cvd severity matrices": {
+        "document": "style-guide.md",
+        "anchor": "Dichromacy is not the worst case",
+        "source": "Machado, Oliveira & Fernandes, IEEE TVCG 15(6), 2009, "
+                  "Table 1; coefficients read from the authors' page at "
+                  "inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/",
+        "verified": "2026-07-31",
+        # What was checked is the table, cell by cell, not a sentence about it:
+        # four matrices were read off the authors' page and asserted against the
+        # shipped constants in `test_the_severity_table_is_the_one_the_paper_
+        # publishes`. The first row of protanomaly at severity 0.1 is quoted
+        # here as the sample a later reader can re-check in one lookup.
+        "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
+                 "-0.038205.",
+    },
     "graphical perception ordering": {
         "document": "choosing-a-form.md",
         "anchor": "six ranks and not",
@@ -1219,6 +1261,29 @@ EXTERNAL_CLAIMS = {
                  "along non-aligned scales; length, direction, angle; area; "
                  "volume, curvature; shading, colour saturation. Hue is not "
                  "ranked.",
+    },
+    "banking to 45 degrees": {
+        "document": "choosing-a-form.md",
+        "anchor": "Cleveland's banking to 45 degrees",
+        "source": "Cleveland, McGill & McGill, JASA 83(402), 1988, as "
+                  "surveyed by Heer & Agrawala 2006",
+        "verified": "2026-08-01",
+        "quote": "Cleveland et al. conducted human-subject experiments showing "
+                 "that viewers judge the ratio of the slopes of two adjacent "
+                 "line segments most accurately when the orientation "
+                 "resolution between them is maximized ... choosing the aspect "
+                 "ratio that sets the median absolute slope of the line "
+                 "segments to 1.",
+    },
+    "slopeless lines culling": {
+        "document": "choosing-a-form.md",
+        "anchor": "after Heer and Agrawala's \"slopeless lines\"",
+        "source": "Heer & Agrawala, IEEE TVCG 12(4), 2006, section 2.7",
+        "verified": "2026-08-01",
+        "quote": "an additional modification is to cull \"slopeless\" lines -- "
+                 "those with either zero or infinite slope. Horizontal and "
+                 "vertical lines remain unchanged by variations in aspect "
+                 "ratio, yet contribute to the banking criteria.",
     },
 }
 

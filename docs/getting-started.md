@@ -88,7 +88,7 @@ okabe = colormaps["okabe_ito"]          # matplotlib >= 3.11
 fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
 ax.plot(x, y, color=okabe(1))           # line width comes from the sheet
 
-report(fig, "my-figure")                # prints 20 rows, returns True if ok
+report(fig, "my-figure")                # prints 21 rows, returns True if ok
 ```
 
 Two details in that block carry weight. The style sheet is resolved relative to

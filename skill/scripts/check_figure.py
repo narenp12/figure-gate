@@ -27,17 +27,18 @@ Checks, in the order `audit` runs them
     7. Axis redundancy   - shared-axis panels do not repeat a tick label column
     8. Type size         - every rendered string clears the floor once scaled
     9. Line weight       - every stroke clears LINE_FLOOR_PT once scaled
-   10. Ink coverage      - the data region is neither empty nor packed
-   11. Series color      - the hues in each panel separate under color blindness
-   12. Dual axis         - no second y scale carrying data of its own
-   13. Form              - no pie, no 3D, no truncated bar baseline
-   14. Identity channel  - series are not told apart by color alone
-   15. Label attribution - each label is nearest the curve it names
-   16. Style sheet       - figure.mplstyle is the one actually in effect
-    17. Contour dash      - dashing is not spent on a signed contour's negatives
-    18. Colormap kind     - the colormaps in use are ones a reader can order
-    19. Fonts             - Type 42 embedding; the named face is installed
-    20. Alt text          - the figure carries a description
+   10. Banking           - the panel's aspect keeps segments near 45 degrees
+   11. Ink coverage      - the data region is neither empty nor packed
+   12. Series color      - the hues in each panel separate under color blindness
+   13. Dual axis         - no second y scale carrying data of its own
+   14. Form              - no pie, no 3D, no truncated bar baseline
+   15. Identity channel  - series are not told apart by color alone
+   16. Label attribution - each label is nearest the curve it names
+   17. Style sheet       - figure.mplstyle is the one actually in effect
+    18. Contour dash      - dashing is not spent on a signed contour's negatives
+    19. Colormap kind     - the colormaps in use are ones a reader can order
+    20. Fonts             - Type 42 embedding; the named face is installed
+    21. Alt text          - the figure carries a description
 """
 
 import itertools
@@ -166,6 +167,34 @@ PLACED_FRAC_WARN = 0.35
 # Stroke floor, in points ON THE PAGE. SIAM's instructions for authors: "lines
 # one point or thicker; thinner lines may break up or disappear."
 LINE_FLOOR_PT = 1.0
+
+# --- banking -----------------------------------------------------------------
+# How far the typical line segment may sit from 45 degrees before the panel's
+# aspect ratio is reported. Cleveland banks a panel by choosing the aspect that
+# puts the median absolute segment slope at 1, where slope discrimination is
+# most accurate; this is the factor either side of that at which the gate says
+# so, and it is one number rather than two because a slope of 10 and a slope of
+# 0.1 are the same misjudgement rotated.
+#
+# Deliberately loose. 10 is a segment at 84 degrees or at 6, which is a panel
+# that is essentially vertical or essentially flat over its own typical step,
+# and there is no argument about those. Tighter bands were measured against the
+# corpus first: the 14 series in `examples/` that this gate reads span 0.19 to
+# 2.95, so [0.25, 4] would have fired on one of them and [0.1, 10] leaves the
+# nearest legitimate case a factor of 1.9 clear.
+BANKING_SLOPE_MAX = 10.0
+# Below this many vertices a line is furniture, not a rate: a reference rule, a
+# leg of a schematic, the two points of an annotation leader. The corpus has 24
+# such strokes and none of them has a typical slope worth reporting.
+BANKING_MIN_POINTS = 8
+# A segment shorter than this in either axis, in display pixels, is drawn flat
+# or drawn upright and carries no orientation a reader can compare. Half a pixel
+# is the resolution the page has. Heer & Agrawala cull exactly-zero and
+# exactly-infinite slopes for the same reason - they are unchanged by the aspect
+# ratio and still move the median that sets it - and a segment that renders as
+# horizontal is the same case arrived at from the render instead of the
+# arithmetic. See `_banking_slopes`.
+BANKING_FLAT_PX = 0.5
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -444,6 +473,47 @@ def _overlap(a, b):
     return True
 
 
+def _oriented_mask(corners, x0, y1, shape):
+    """Which pixels of a sampled block the oriented label box actually covers.
+
+    `check_text_readability` slices an axis-aligned block out of the backdrop,
+    and for an oblique label most of that block is page the label does not sit
+    on. Measured on one 45-degree 11pt string: a 191.5 x 191.5 block, 36669
+    pixels, around an oriented box of 239.5 x 31.3, 7505 - four fifths of what
+    was sampled belonged to the label only through its bounding box. Six strokes
+    laid in the empty upper-left triangle, none of them within 30px of a glyph,
+    were reported as data ink over 14% of the label's box.
+
+    `corners` is `_corners`' output, in figure display space. `x0` is the block's
+    left edge and `y1` its top edge in that same space, which is what the slicing
+    in the caller starts from; Agg's rows run downwards, so a block row counts
+    down from `y1` while a block column counts up from `x0`.
+
+    Inside a rectangle is two dot products: with `e1` and `e2` the edges leaving
+    one corner, a point is in exactly when its offset from that corner projects
+    into `[0, |e|**2]` on both. A degenerate box - a zero-width extent, a
+    reconstruction that collapsed - returns None, and the caller reads that as
+    "sample the whole block", which is what every caller did before.
+    """
+    import numpy as np
+    h, w = shape
+    c0 = corners[0]
+    e1 = corners[1] - c0
+    e2 = corners[3] - c0
+    # Pixel centres: column j spans [x0 + j, x0 + j + 1], row i counts down.
+    xs = x0 + np.arange(w) + 0.5
+    ys = y1 - np.arange(h) - 0.5
+    dx = xs[None, :] - c0[0]
+    dy = ys[:, None] - c0[1]
+    p1 = dx * e1[0] + dy * e1[1]
+    p2 = dx * e2[0] + dy * e2[1]
+    n1 = float(e1 @ e1)
+    n2 = float(e2 @ e2)
+    if n1 <= 0 or n2 <= 0:
+        return None
+    return (p1 >= 0) & (p1 <= n1) & (p2 >= 0) & (p2 <= n2)
+
+
 def check_clipping(fig, r):
     """Text that runs off the canvas.
 
@@ -602,7 +672,7 @@ def _box_blur(field, size):
     return out
 
 
-def _foreign_ink(block, furniture, tol):
+def _foreign_ink(block, furniture, tol, mask=None):
     """Fraction of a backdrop patch that is a mark rather than ground.
 
     Ground is whatever varies slowly: the page, a flat fill, a viridis field.
@@ -615,19 +685,30 @@ def _foreign_ink(block, furniture, tol):
 
     Furniture is exempt at the second step rather than the first: a gridline IS
     an edge, and casing exists precisely so it can pass behind a label.
+
+    `mask` restricts which pixels count to the ones the label actually covers,
+    for an oblique box whose block is mostly empty page. It is applied after the
+    blur and not before: the local average is what says whether a pixel is an
+    edge, and a stroke that enters the box from outside has to be compared
+    against its neighbours out there or its leading pixels read as flat ground.
     """
     import numpy as np
 
     field = block.astype(float)
     local = _box_blur(field, TEXT_EDGE_WINDOW)
     edge = np.linalg.norm(field - local, axis=2) > TEXT_EDGE_TOL
-    if not edge.any():
+    if mask is not None:
+        edge = edge & mask
+        area = int(mask.sum())
+    else:
+        area = edge.size
+    if area == 0 or not edge.any():
         return 0.0
     pix = field[edge].reshape(-1, 3)
-    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / edge.size
+    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / area
 
 
-def _worst_backdrop(block, fg, min_share):
+def _worst_backdrop(block, fg, min_share, mask=None):
     """The contrast the text holds over all but the worst `min_share` of its
     box, and the backdrop pixel that sets it.
 
@@ -650,9 +731,16 @@ def _worst_backdrop(block, fg, min_share):
     0.10 a backdrop covering a tenth of the box sets the verdict, and a handful
     of stray antialiased pixels does not. No fallback branch, because there is
     no longer a case that reaches one.
+
+    `mask` selects the pixels the label covers. On an oblique box the corners of
+    the sampled block are page the label never reaches, and a dark field in one
+    of those corners would set the verdict for a string sitting on light ground.
     """
     import numpy as np
-    pix = block.reshape(-1, 3).astype(float)
+    if mask is not None:
+        pix = block[mask].reshape(-1, 3).astype(float)
+    else:
+        pix = block.reshape(-1, 3).astype(float)
     ratios = _contrast_field_255(fg, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
@@ -691,6 +779,13 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
     threshold (4.5:1, or 3:1 for large text) rather than the 3:1 mark threshold,
     because a glyph stem is thinner than a mark. Casing counts: a black label
     with a white halo on a dark field is read against the halo.
+
+    Both clauses are measured over the pixels the label covers, not over the box
+    that contains it. A 45-degree string reports an axis-aligned extent five
+    times its own ink, and the extra area is two triangles nothing is drawn in;
+    strokes laid in one of them read as ink on the label, and a dark field in one
+    of them sets the contrast verdict for a string sitting on light ground. See
+    `_oriented_mask`.
 
     Tick labels are included. They sit outside the axes on most figures and cost
     nothing to check there, and on the figures where they do not — an inset, a
@@ -750,8 +845,19 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
         # Agg's origin is top-left, the figure's is bottom-left
         block = backdrop[slice(H - yb, H - ya), slice(xa, xb)]
+        # An oblique label covers a band across that block and nothing in the
+        # two triangles either side of it. At 45 degrees those triangles are
+        # four fifths of what was sliced, and strokes laid in one of them were
+        # reported as ink on the label. Upright labels get no mask: `_corners`
+        # hands back the axis-aligned box for them, so a mask would only shave
+        # off the 1px ring the slice adds, and that is a number nobody measured.
+        angle = float(t.get_rotation()) % 180.0
+        mask = (None if angle in (0.0, 90.0)
+                else _oriented_mask(_corners(t, bb, r), xa, yb,
+                                    block.shape[:2]))
         # Below this the fractions are counting antialiasing, not measuring.
-        if block.size // 3 < TEXT_FOOTPRINT_MIN_PX:
+        covered = block.size // 3 if mask is None else int(mask.sum())
+        if covered < TEXT_FOOTPRINT_MIN_PX:
             continue
         checked += 1
 
@@ -759,7 +865,7 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         halo_color, _ = _halo(t)
         name = str(t.get_text())[:22]
 
-        frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL)
+        frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL, mask)
         if frac > TEXT_CLUTTER_MAX:
             cluttered.append(
                 f"{name!r} sits on data ink over {frac:.0%} of its box"
@@ -779,7 +885,8 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
             # the reader reads against.
             ratio = _contrast_255(fg, np.array(to_rgb(halo_color)) * 255.0)
         else:
-            _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE)
+            _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
+                                       mask)
         if ratio < floor:
             faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
                          f"(text needs {floor}:1)")
@@ -935,6 +1042,54 @@ def check_mark_ratio(fig):
                else f"  <- cap at {MARK_RATIO_MAX}x"))
 
 
+def _contact_fraction(xy, radius_px, cKDTree):
+    """Fraction of the marks at `xy` whose disc intersects another mark's.
+
+    Two discs intersect when `d < r_i + r_j`, which is symmetric, so a mark is
+    in contact exactly when it is one end of an intersecting pair.
+
+    Uniform radii take the nearest-neighbour path. `r_i + r_j` is a constant
+    there, so "some mark is within it" and "the nearest mark is within it" are
+    the same statement, and one k=2 query answers it. Mixed radii take the pair
+    path: every touching pair is inside `2 * r_max` because `r_i + r_j` cannot
+    exceed it, so one range query at that radius is a superset, and the exact
+    test then runs on each candidate's own two radii.
+
+    `cKDTree` is passed in rather than imported so the caller decides once
+    whether scipy is present; None falls back to the O(n^2) distance matrix,
+    which is the same answer and is only reached without scipy installed.
+    """
+    import numpy as np
+    n = len(xy)
+    r_max = float(radius_px.max())
+    uniform = bool(np.ptp(radius_px) == 0.0)
+
+    if cKDTree is None:
+        d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                     xy[:, 1][:, None] - xy[None, :, 1])
+        np.fill_diagonal(d, np.inf)
+        return float((d < radius_px[:, None] + radius_px[None, :]
+                      ).any(axis=1).sum()) / n
+
+    tree = cKDTree(xy)
+    if uniform:
+        dists, _idx = tree.query(xy, k=2)
+        if dists.ndim < 2:
+            return 0.0
+        return float((dists[:, 1] < 2.0 * r_max).sum()) / n
+
+    pairs = tree.query_pairs(2.0 * r_max, output_type="ndarray")
+    if not len(pairs):
+        return 0.0
+    a, b = pairs[:, 0], pairs[:, 1]
+    touching = (np.hypot(xy[a, 0] - xy[b, 0], xy[a, 1] - xy[b, 1])
+                < radius_px[a] + radius_px[b])
+    hit = np.zeros(n, dtype=bool)
+    hit[a[touching]] = True
+    hit[b[touching]] = True
+    return float(hit.sum()) / n
+
+
 def check_overplotting(fig):
     """Warn when scatter points overlap into an unreadable mass.
 
@@ -952,12 +1107,23 @@ def check_overplotting(fig):
     against one radius rather than two, which is the condition for a mark's
     *centre* to be swallowed rather than for the two marks to touch.
 
-    Where radii vary the neighbour's own radius is used, taken from the index
-    the query already returns. That is exact for the nearest neighbour and can
-    still miss a case no 1-NN test reaches: a small mark whose nearest
-    neighbour is a hair outside contact while a much larger mark further off
-    covers it. Measuring rendered coverage instead of centre distances is the
-    fix for that and is a bigger change than this one.
+    Nearest is the wrong neighbour to ask about once radii vary. Contact is
+    `d < r_i + r_j`, and the `j` that minimises `d` need not be the `j` that
+    maximises `r_j`, so a mark can clear its nearest neighbour and be swallowed
+    whole by a larger one further off. Measured on a fixture of 60 marks - 40
+    small ones in pairs 8px apart, each pair under a 120px disc centred 20px
+    away - every mark is in contact and 40 of them are not visible in the render
+    at all, while the 1-NN test reported 33% and the gate returned "no scatter
+    overplotting".
+
+    Where every mark is the same size, nearest *is* the right neighbour: `r_i +
+    r_j` is then a constant, so some mark is within it exactly when the nearest
+    one is, and the 1-NN query answers the question outright. That is the common
+    case and it keeps the cheap path. Where radii differ, candidate pairs come
+    out of one range query at `2 * r_max`, which cannot miss a touching pair
+    because `r_i + r_j <= 2 * r_max`, and each candidate is then filtered on its
+    own two radii. Contact is symmetric, so the pair enumeration counts both
+    ends and no mark is judged twice.
     """
     import numpy as np
     try:
@@ -984,33 +1150,17 @@ def check_overplotting(fig):
             if len(sizes) == 0:
                 continue
             sizes = np.asarray(sizes, dtype=float)
-            if sizes.size == 1:
-                sizes = np.full(len(offsets), sizes[0])
-            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
-
             n = len(xy)
             if n < 2:
                 continue
-            if cKDTree is not None:
-                dists, idx = cKDTree(xy).query(xy, k=2)
-                if dists.ndim < 2:
-                    continue
-                nn_dist, nn_idx = dists[:, 1], idx[:, 1]
-            else:
-                # Same nearest-neighbour distance and index, O(n^2). Only
-                # reached where scipy is absent, and only for the scatters this
-                # check looks at, so the cost lands on figures that already
-                # draw n points.
-                d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
-                             xy[:, 1][:, None] - xy[None, :, 1])
-                np.fill_diagonal(d, np.inf)
-                nn_idx = d.argmin(axis=1)
-                nn_dist = d[np.arange(n), nn_idx]
-            # Two discs intersect when their centres are closer than the radii
-            # summed. Comparing against one radius asks whether a centre landed
-            # inside the other mark, which is most of the way to total eclipse.
-            overlap = int((nn_dist < radius_px + radius_px[nn_idx]).sum())
-            frac = overlap / n
+            # A Collection cycles a short size list over its offsets, so the
+            # sizes it was handed are not the sizes it drew unless the lengths
+            # already match. `np.resize` tiles, which is that same cycle.
+            if sizes.size != n:
+                sizes = np.resize(sizes, n)
+            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
+
+            frac = _contact_fraction(xy, radius_px, cKDTree)
             if frac > OVERPLOT_THRESHOLD:
                 bad.append((i, j, frac))
 
@@ -1506,11 +1656,11 @@ def check_identity_channel(fig):
                     "blue are under 3:1 on white, where that step is hardest")
 
 
-def _polyline_px(line, ax):
-    """A line's vertices in display space, densified so no gap exceeds 2px.
+def _densify_px(pts):
+    """Display-space vertices with no gap over 2px, per run of finite ones.
 
-    Vertices alone are not enough on a sparsely sampled line: two points 200px
-    apart say nothing about the stroke between them, and that stroke is what the
+    Vertices alone are not enough on a sparsely sampled stroke: two points 200px
+    apart say nothing about the line between them, and that line is what the
     label actually lands next to.
 
     A break in the data is a break in the stroke, and the two sides of it are
@@ -1523,10 +1673,6 @@ def _polyline_px(line, ax):
     finite vertices instead.
     """
     import numpy as np
-    xy = np.asarray(line.get_xydata(), dtype=float)
-    if xy.ndim != 2 or len(xy) == 0:
-        return None
-    pts = ax.transData.transform(xy)
     finite = np.flatnonzero(np.isfinite(pts).all(axis=1))
     if not len(finite):
         return None
@@ -1545,6 +1691,93 @@ def _polyline_px(line, ax):
     return np.vstack(out)
 
 
+def _drawstyle_xy(line):
+    """A line's data vertices after its drawstyle, which is the shape drawn.
+
+    `get_xydata` returns what was passed in. `ax.step` keeps those same points
+    and draws a staircase through them, so densifying the raw vertices lays the
+    harvested geometry along the diagonal chord of each riser. Measured on a
+    six-point square wave: 836 harvested points, 785 of them on blank page.
+
+    matplotlib expands the drawstyle in `Line2D._transform_path`, using the
+    `pts_to_*step` helpers in `matplotlib.cbook`. Those are read here rather
+    than reimplemented, because a staircase written twice is a staircase that
+    can disagree with itself. The read is asserted in the suite: if a matplotlib
+    release moves them, that goes red rather than quietly reverting every step
+    plot to its chords.
+    """
+    import numpy as np
+    xy = np.asarray(line.get_xydata(), dtype=float)
+    style = str(line.get_drawstyle() or "default")
+    if style == "default" or xy.ndim != 2 or len(xy) < 2:
+        return xy
+    from matplotlib import cbook
+    fn = {"steps": cbook.pts_to_prestep,
+          "steps-pre": cbook.pts_to_prestep,
+          "steps-mid": cbook.pts_to_midstep,
+          "steps-post": cbook.pts_to_poststep}.get(style)
+    if fn is None:
+        return xy
+    return np.column_stack(fn(xy[:, 0], xy[:, 1]))
+
+
+def _polyline_px(line, ax):
+    """A `Line2D`'s stroke in display space, drawstyle expanded and densified."""
+    import numpy as np
+    xy = _drawstyle_xy(line)
+    if xy.ndim != 2 or len(xy) == 0:
+        return None
+    return _densify_px(np.asarray(ax.transData.transform(xy), dtype=float))
+
+
+def _path_px(artist, ax):
+    """A path-drawn collection's outline in display space.
+
+    `step`, `stackplot` and contour sets put their geometry in paths rather than
+    in offsets, so the offsets branch returned nothing for them and a label on a
+    stacked band or in a contour field was invisible to the attribution gate
+    twice over: the band could not own a label, and it could not be the
+    neighbour that made one ambiguous.
+
+    `Path.to_polygons` is what turns codes into vertex runs. Reading
+    `path.vertices` directly would take the dummy vertex a CLOSEPOLY carries and
+    the jump a MOVETO makes as points on the stroke, which is the same bridging
+    defect NaN handling exists to avoid, one level down.
+    """
+    import numpy as np
+    transform = artist.get_transform()
+    if transform is None:
+        transform = ax.transData
+    runs = []
+    for path in artist.get_paths():
+        if not len(path.vertices):
+            continue
+        for poly in path.to_polygons(closed_only=False):
+            if len(poly) < 1:
+                continue
+            got = _densify_px(np.asarray(transform.transform(poly),
+                                         dtype=float))
+            if got is not None and len(got):
+                runs.append(got)
+    if not runs:
+        return None
+    return np.vstack(runs)
+
+
+def _is_filled(artist):
+    """Whether a collection paints its interior rather than only its outline.
+
+    A `LineCollection` and an unfilled contour set report no face colours at
+    all; `stackplot`, `fill_between` and `contourf` report one per path.
+    """
+    import numpy as np
+    try:
+        faces = np.asarray(artist.get_facecolor(), dtype=float)
+    except Exception:
+        return False
+    return bool(faces.ndim == 2 and len(faces) and faces[:, 3].max() > 0)
+
+
 def _series_px(artist, ax):
     """The positions one series actually put on the page, in display pixels.
 
@@ -1554,28 +1787,43 @@ def _series_px(artist, ax):
     transform on an ordinary axes and is not on one with an offset transform of
     its own.
 
-    Recognised by carrying sizes, the same discriminator `check_overplotting`
-    uses. `fill_between` and the other `PolyCollection`s report a single zero
-    offset and no sizes; taking that at face value would plant a phantom series
-    at data (0, 0) in every figure with a shaded band in it.
+    A scatter is recognised by carrying sizes, the same discriminator
+    `check_overplotting` uses. Everything else with paths is read as paths.
+    `fill_between` and the other `PolyCollection`s report a single zero offset
+    and no sizes; taking that at face value would plant a phantom series at data
+    (0, 0) in every figure with a shaded band in it.
+
+    A filled collection has to carry a legend-visible label to count, and a
+    stroked one does not. A stroke is a series by construction. A filled region
+    is as often a band bound to somebody else's curve - a confidence interval, a
+    shaded span - and those are not what a reader resolves a direct label
+    against; letting them in fails the label on every curve that wears an error
+    band, since the band lies on top of the curve it belongs to. matplotlib's
+    own signal for which is which is the label, so that is the one used:
+    `stackplot(labels=...)` and a deliberate `fill_between(label=...)` are
+    series, `_child3` is not.
     """
     from matplotlib.lines import Line2D
     import numpy as np
     if isinstance(artist, Line2D):
         return _polyline_px(artist, ax)
     try:
-        if len(getattr(artist, "get_sizes", lambda: [])()) == 0:
+        if len(getattr(artist, "get_sizes", lambda: [])()):
+            offsets = np.asarray(artist.get_offsets(), dtype=float)
+            transform = (artist.get_offset_transform()
+                         if hasattr(artist, "get_offset_transform")
+                         else ax.transData)
+            pts = transform.transform(offsets)
+            if pts.ndim != 2 or not len(pts):
+                return None
+            return pts[np.isfinite(pts).all(axis=1)]
+        if not hasattr(artist, "get_paths"):
             return None
-        offsets = np.asarray(artist.get_offsets(), dtype=float)
-        transform = (artist.get_offset_transform()
-                     if hasattr(artist, "get_offset_transform")
-                     else ax.transData)
-        pts = transform.transform(offsets)
+        if _is_filled(artist) and str(artist.get_label() or "").startswith("_"):
+            return None
+        return _path_px(artist, ax)
     except Exception:
         return None
-    if pts.ndim != 2 or not len(pts):
-        return None
-    return pts[np.isfinite(pts).all(axis=1)]
 
 
 def _legend_text_ids(fig):
@@ -1611,6 +1859,33 @@ def _box_distance(bb, pts):
     return float(np.min(np.hypot(dx, dy)))
 
 
+def _series_distance(artist, bb, pts):
+    """How far a label's box is from one series, in px.
+
+    For a stroke or a set of marks that is the distance to the nearest ink. For
+    a filled region it is zero anywhere inside it, because the region's ink is
+    its interior and a label printed on a band belongs to that band.
+
+    Boundary distance alone gets adjacent bands exactly wrong. `stackplot`
+    hands neighbouring bands the same dividing edge, so a label inside the upper
+    band is the same distance from the lower band's outline as from its own, and
+    every stacked label reads as ambiguous.
+    """
+    centre = ((bb.x0 + bb.x1) / 2.0, (bb.y0 + bb.y1) / 2.0)
+    if _is_filled(artist):
+        try:
+            transform = artist.get_transform()
+            if any(p.contains_point(centre, transform=transform)
+                   for p in artist.get_paths()):
+                return 0.0
+        except Exception:
+            # A path that cannot be tested for containment is treated as a
+            # stroke and judged on outline distance, rather than failing the
+            # gate over geometry the reader cannot see anyway.
+            pass
+    return _box_distance(bb, pts)
+
+
 def check_label_attribution(fig, r):
     """A direct label sitting nearer some other series than the one it names.
 
@@ -1630,12 +1905,14 @@ def check_label_attribution(fig, r):
     plainly the closest thing to it, not when it is some absolute number of
     points away.
 
-    Scatters count as series alongside lines. Reading `ax.lines` alone left a
-    label sitting on top of a dense point cloud invisible to the gate twice
-    over: the cloud could not own a label, and it could not be the neighbour
-    that made one ambiguous. The premise here is that a reader resolves a
-    direct label by proximity, and a reader does not know what artist class
-    drew the ink.
+    Scatters count as series alongside lines, and so do the path-drawn ones:
+    `step`'s staircase, a `stackplot` band, a contour set. Reading `ax.lines`
+    and offsets alone left a label sitting on top of a dense point cloud or
+    inside a stacked band invisible to the gate twice over: the series could not
+    own a label, and it could not be the neighbour that made one ambiguous. The
+    premise here is that a reader resolves a direct label by proximity, and a
+    reader does not know what artist class drew the ink. See `_series_px` for
+    the one exception, an unlabelled fill, and why it is one.
     """
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig)
@@ -1667,7 +1944,7 @@ def check_label_attribution(fig, r):
             # A floor on the own-curve distance: without it a label printed
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
-            d_own = max(_box_distance(bb, px[own_line]), 0.5)
+            d_own = max(_series_distance(own_line, bb, px[own_line]), 0.5)
             # The minimum over every OTHER curve, box-to-polyline. A KD-tree
             # over the pooled points was tried here for speed and was wrong:
             # it returns the nearest *points*, so for a label sitting close to
@@ -1675,7 +1952,7 @@ def check_label_attribution(fig, r):
             # other curve is ever reached, and `d_other` stays infinite. Which
             # is to say it passed every label it was closest to — the common
             # case, and the one the gate exists for.
-            d_other = min(_box_distance(bb, p)
+            d_other = min(_series_distance(line, bb, p)
                           for line, p in px.items() if line is not own_line)
             if d_other < LABEL_MARGIN * d_own:
                 bad.append(f"{str(t.get_text())[:22]!r} is {d_own:.0f}px from "
@@ -1867,6 +2144,124 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
     return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
                    f"{seen[:4]}  <- SIAM: lines thinner than one point break up "
                    "or disappear in print")
+
+
+def _banking_slopes(ax):
+    """Absolute display-space segment slopes of the strokes in one panel, or
+    None where banking is not a question this panel answers.
+
+    Four exclusions, each measured against the corpus rather than reasoned into
+    existence. A line with `linestyle="none"` draws marks, not a stroke, and the
+    orbit figure's 168000-point cloud is one. A fixed aspect is a statement
+    about the data - a map, a phase portrait - and the whole point of banking is
+    that the aspect is free. Fewer than `BANKING_MIN_POINTS` vertices is
+    furniture rather than a rate. And an x that does not run one way is a
+    parametric curve, where "the typical slope" is not a rate of anything.
+
+    Slopes come off the vertices the author gave, not the densified stroke:
+    densifying makes every segment the same 2px length and the median of that
+    is an artefact of the densifier. For a `step` line that also reads the
+    treads rather than the risers, which is what the reader compares.
+
+    Segments that render flat or upright are culled. Heer & Agrawala cull
+    "slopeless" lines - zero or infinite slope - because they are unchanged by
+    the aspect ratio and still drag the median that sets it. Generalised here
+    from exactly horizontal to *drawn* horizontal, which is the same argument
+    against the page rather than against the arithmetic: a segment whose rise is
+    under `BANKING_FLAT_PX` cannot be told from flat at any aspect a reader
+    will see, and no rescaling of the panel makes it carry a rate.
+
+    That is not a nicety. A saturating curve - a converged training run, which
+    is about as common as figures get - is 92 near-flat segments out of 119, and
+    without the cull its median slope is 0.0006: the gate warned that a
+    perfectly ordinary figure needed to be sixteen hundred times taller. Culled, the
+    same panel reads 1.30, which is banked. The saw wave the gate exists to
+    catch has nothing culled and is unaffected.
+    """
+    import numpy as np
+    if ax.get_aspect() != "auto":
+        return None
+    runs = []
+    for line in ax.lines:
+        if not line.get_visible():
+            continue
+        if line.get_linestyle() in ("", " ", "None", "none", None):
+            continue
+        xy = np.asarray(line.get_xydata(), dtype=float)
+        if xy.ndim != 2 or len(xy) < BANKING_MIN_POINTS:
+            continue
+        pts = ax.transData.transform(xy)
+        pts = pts[np.isfinite(pts).all(axis=1)]
+        if len(pts) < BANKING_MIN_POINTS:
+            continue
+        dx = np.diff(pts[:, 0])
+        if not (np.all(dx > 0) or np.all(dx < 0)):
+            continue
+        dy = np.diff(pts[:, 1])
+        drawn = (np.abs(dy) >= BANKING_FLAT_PX) & (np.abs(dx) >= BANKING_FLAT_PX)
+        if not drawn.any():
+            continue
+        runs.append(np.abs(dy[drawn] / dx[drawn]))
+    if not runs:
+        return None
+    # Pooled across the panel's strokes, because the aspect is one choice made
+    # for all of them and banking each curve separately is not on offer.
+    return np.concatenate(runs)
+
+
+def check_banking(fig):
+    """Whether a panel's aspect ratio lets the reader compare rates of change.
+
+    Cleveland banks a panel to 45 degrees: choose the height-to-width ratio that
+    puts the median absolute segment slope at 1, because slope discrimination is
+    most accurate near 45 and falls away either side of it. A cycle that is
+    plain in one aspect ratio is invisible in another, and the wrong one is
+    usually the one the default produced.
+
+    The failure is a resolution failure, and it is measurable. On a saw wave
+    whose decay limbs alternate between two rates, one exactly twice the other:
+    at 2.4 x 5.2 inches the two limbs land 1.6 degrees apart on the page and the
+    alternation cannot be seen at all; at 6.4 x 1.9 they land 10.6 degrees
+    apart and it is the first thing you see. Same data, same axes, same limits.
+
+    Advisory, and loose, because the right aspect is a judgement about what the
+    reader's job is and this cannot know that. `BANKING_SLOPE_MAX` is a factor
+    of ten either side of banked - a typical segment steeper than 84 degrees or
+    flatter than 6 - which is a panel essentially vertical or essentially flat
+    over its own typical step. See `_banking_slopes` for what is excluded and
+    why; a scatter, a map at fixed aspect and a parametric curve are all cases
+    where the median slope means nothing.
+    """
+    import numpy as np
+    floor = 1.0 / BANKING_SLOPE_MAX
+    bad, seen = [], []
+    for i, ax in enumerate(fig.axes):
+        slopes = _banking_slopes(ax)
+        if slopes is None or not len(slopes):
+            continue
+        median = float(np.median(slopes))
+        seen.append(median)
+        if floor <= median <= BANKING_SLOPE_MAX:
+            continue
+        degrees = math.degrees(math.atan(median))
+        # Banking multiplies the height-to-width ratio by 1/median. Making the
+        # panel wider multiplies its width, dividing the ratio; making it
+        # taller multiplies the height, so the author acts on 1/median.
+        factor = 1.0 / median if median < 1 else median
+        bad.append(f"ax{i} typical segment at {degrees:.0f} deg "
+                   f"(slope {median:.2g}); banking wants the panel "
+                   f"{factor:g}x " + ("wider" if median > 1 else "taller"))
+    if not seen:
+        return True, "no line panel whose aspect encodes a rate"
+    if not bad:
+        return True, (f"{len(seen)} line panel"
+                      f"{'s' if len(seen) != 1 else ''}, typical segment "
+                      f"{math.degrees(math.atan(min(seen))):.0f}-"
+                      f"{math.degrees(math.atan(max(seen))):.0f} deg")
+    return "warn", ("; ".join(bad) + "  <- Cleveland banks to 45 degrees, "
+                    "where slope discrimination is most accurate; at this "
+                    "aspect two rates that differ by a factor of two can land "
+                    "under 2 degrees apart")
 
 
 # The names matplotlib gives a colormap it built itself, from colours the
@@ -2238,6 +2633,7 @@ GATES = (
          needs=("r", "scale", "placed_frac", "venue")),
     Gate("Line weight", check_line_weight,
          needs=("scale", "placed_frac", "venue")),
+    Gate("Banking", check_banking, advisory=True),
     Gate("Ink coverage", check_ink, advisory=True,
          needs=("context_axes", "canvas")),
     Gate("Series color", check_series_color),

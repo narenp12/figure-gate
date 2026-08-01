@@ -16,7 +16,7 @@ colors it was drawing.
 `check_series_color` closes that. It reads the hues off the figure's own
 artists, decides from the mark types whether the figure needs adjacent
 separation (lines, bars) or all-pairs separation (scatter), and runs them
-through the palette gates. That is row 11 of the 20.
+through the palette gates. That is row 12 of the 21.
 
 ## What each gate measures
 
@@ -27,7 +27,7 @@ and imports nothing outside the standard library. Distances are OKLab dE x100.
 |---|---|---|
 | Lightness band | `L_MIN, L_MAX = 0.43, 0.77` | OKLab lightness outside the band |
 | Chroma floor | `CHROMA_MIN = 0.10` | OKLab chroma below it, so the color reads as gray |
-| CVD separation | `CVD_TARGET = 8.0` | two hues under 8 dE in protan or deutan simulation |
+| CVD separation | `CVD_TARGET = 8.0` | two hues under 8 dE in protan or deutan simulation, at dichromacy or at any severity in `ANOMALOUS_SEVERITIES` |
 | Normal-vision floor | `NORMAL_FLOOR = 15.0` | two hues under 15 dE in full color |
 | Contrast vs surface | `CONTRAST_MIN = 3.0` | a hue under 3:1 on the page *(advisory)* |
 
@@ -39,8 +39,17 @@ not gated: prevalence is around 0.01%, and the Vienot matrix used here is
 validated only for the red-green forms, so the number is indicative rather than
 decisive.
 
+The separation row is swept over severity rather than read at dichromacy. Most
+colour vision deficiency is anomalous trichromacy, and dichromacy is not the
+worst case for it: measured over 240000 pairs of hues `check_palette.py` would
+accept as series slots, 0.87% clear the floor at dichromacy and miss it at some
+lower severity, and dichromacy overstates separation by up to 10.5 dE. The row
+names the severity its worst reading came from. `simulate_anomalous` is the
+Machado, Oliveira & Fernandes (2009) model; `simulate` remains Vienot dichromacy
+and is what every number quoted in the style guide was measured on.
+
 **`check_figure.py`** renders the figure through an Agg canvas, at the dpi it
-was authored at, and measures the result. `audit()` returns these 20 rows in
+was authored at, and measures the result. `audit()` returns these 21 rows in
 this order.
 
 | Gate | Threshold | Fails when |
@@ -50,10 +59,11 @@ this order.
 | Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
-| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points have a nearest neighbour close enough for the two marks to touch on the page *(advisory)* |
+| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points sit close enough to some other point for the two marks to touch on the page *(advisory)* |
 | Axis redundancy | shared scale | panels on a shared scale repeat tick labels or axis titles |
 | Type size | `TYPE_FLOOR_PT = 7.5` | a string renders under 7.5pt *on the printed page* |
 | Line weight | `LINE_FLOOR_PT = 1.0` | a stroke renders under 1pt on the printed page (SIAM's floor) |
+| Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
 | Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
 | Dual axis | none | a `twinx` second scale carries data of its own |
@@ -90,8 +100,8 @@ widths in points.
 ## What a passing run does not mean
 
 Every check is an elimination gate: each one forbids a single enumerated
-failure, and none looks at the figure as a whole. 20 passing rows means the
-figure avoids 20 named defects. It does not mean the figure is good, and the
+failure, and none looks at the figure as a whole. 21 passing rows means the
+figure avoids 21 named defects. It does not mean the figure is good, and the
 checker cannot see that an arrow points at the wrong object, that reading order
 runs backwards, or that a label is true of the concept and false of the curve
 beside it. Render it and look at it.
@@ -114,7 +124,7 @@ for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
 poles clear every gate in `check_palette.py` unmodified, and a windowed custom
 ramp discarded 35% of viridis for no measured gain.
 
-**WARN is not FAIL.** Seven of the 20 rows are advisory, in that they can
+**WARN is not FAIL.** Eight of the 21 rows are advisory, in that they can
 return `"warn"` but never `False`, and `ADVISORY_GATES` in `check_figure.py` is
 the list. A sub-3:1 hue is legal when it carries a direct label; a heatmap panel
 legitimately measures 0.98 ink coverage. Failing those would train people to
@@ -122,7 +132,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 1139 tests, and
+**Gates are tested for their ability to fail.** The suite is 1204 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

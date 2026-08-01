@@ -21,7 +21,7 @@ tables on [the gates](gates.md) list every one with its failure condition, and
 them in the source with `cf.TYPE_FLOOR_PT` and the like; they are meant to be
 changed.
 
-The **twenty gate functions**, meaning `check_clipping`, `check_type_size`,
+The **twenty-one gate functions**, meaning `check_clipping`, `check_type_size`,
 `check_series_color` and the rest, are deliberately not documented here.
 `audit()` runs all of them, in the order [the gates](gates.md) lists, and
 calling one directly means reproducing the renderer and scale arguments
@@ -63,6 +63,8 @@ functions to port if the checks are being reimplemented elsewhere.
 ::: check_palette.delta_e
 
 ::: check_palette.simulate
+
+::: check_palette.simulate_anomalous
 
 ::: check_palette.hex_to_linear
 

@@ -976,6 +976,102 @@ def test_overplotting_uses_both_radii_when_sizes_differ():
     assert gates(rows)["Overplotting"] == "warn"
 
 
+def _eclipsed_marks(figsize=(6, 4.5), dpi=200):
+    """40 small marks in pairs, each pair under a disc that swallows both.
+
+    Within a pair the two small marks are each other's nearest neighbour and
+    sit 8px apart, clear of contact at radius 3. The big mark is 20px off, so
+    it is nobody's nearest neighbour, and its radius is 60, so it covers both.
+    Geometry is laid out in display pixels and mapped back through the data
+    transform, so it does not move if the default figure size changes.
+    """
+    import numpy as np
+    r_small, r_big, spread, offset = 3.0, 60.0, 8.0, 20.0
+
+    def size_for(radius_px):
+        return (2.0 * radius_px * 72.0 / dpi) ** 2
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    bb = ax.get_window_extent()
+    up = np.sqrt(offset ** 2 - (spread / 2) ** 2)
+    px, sizes = [], []
+    for cx in np.arange(bb.x0 + 90, bb.x1 - 90, 150.0):
+        for cy in np.arange(bb.y0 + 90, bb.y1 - 90, 150.0):
+            px += [(cx - spread / 2, cy), (cx + spread / 2, cy), (cx, cy + up)]
+            sizes += [size_for(r_small)] * 2 + [size_for(r_big)]
+    data = ax.transData.inverted().transform(np.array(px))
+    ax.scatter(data[:, 0], data[:, 1], s=sizes)
+    return fig
+
+
+def test_overplotting_catches_a_mark_eclipsed_by_a_non_nearest_neighbour():
+    """Nearest is the wrong neighbour to ask about once radii vary.
+
+    Contact is `d < r_i + r_j`, and the `j` that minimises `d` need not be the
+    `j` that maximises `r_j`. Measured on this fixture: all 60 marks are in
+    contact and 40 of them do not appear in the render at all, while the 1-NN
+    test found 33% and the gate returned "no scatter overplotting".
+
+    The render assertion is what makes it a defect rather than an arithmetic
+    quibble: the small marks' colour is not on the page.
+    """
+    import numpy as np
+    fig = _eclipsed_marks()
+    coll = fig.axes[0].collections[0]
+    xy = fig.axes[0].transData.transform(coll.get_offsets())
+    rad = (cf.scatter_diameter_pt(np.asarray(coll.get_sizes(), float)) / 2.0
+           * fig.dpi / 72.0)
+    d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                 xy[:, 1][:, None] - xy[None, :, 1])
+    np.fill_diagonal(d, np.inf)
+    nn = d.argmin(axis=1)
+    by_nn = (d[np.arange(len(xy)), nn] < rad + rad[nn]).mean()
+    truth = (d < rad[:, None] + rad[None, :]).any(axis=1).mean()
+    assert by_nn <= cf.OVERPLOT_THRESHOLD < truth, (
+        f"the fixture stopped separating the two tests: 1-NN {by_nn:.0%}, "
+        f"truth {truth:.0%}")
+
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_eclipse_is_caught_without_scipy_too(monkeypatch):
+    """CI installs no scipy, so the numpy path is the one that runs there. The
+    eclipse fixture has to fail on both or the gate is only fixed on a dev
+    machine."""
+    _without_scipy(monkeypatch)
+    fig = _eclipsed_marks()
+    verdict = cf.check_overplotting(fig)
+    plt.close(fig)
+    assert verdict[0] == "warn", verdict
+
+
+def test_contact_fraction_fast_path_agrees_with_the_exact_one():
+    """The uniform-radii shortcut rests on one identity: where `r_i + r_j` is a
+    constant, some mark is within it exactly when the nearest mark is. Assert it
+    against the full pair enumeration rather than against the derivation, so a
+    change to either path that broke the agreement shows up here."""
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rng = np.random.default_rng(7)
+    for spread in (12.0, 30.0, 90.0):
+        xy = rng.uniform(0, 400, size=(300, 2))
+        radius = np.full(len(xy), spread / 2.0)
+        fast = cf._contact_fraction(xy, radius, cKDTree)
+        exact = cf._contact_fraction(xy, radius, None)
+        assert fast == pytest.approx(exact), (
+            f"at radius {spread / 2}: nearest-neighbour {fast}, all-pairs "
+            f"{exact}")
+        # And nudging one radius off constant moves it onto the pair path
+        # without moving the answer.
+        radius[0] += 1e-9
+        assert cf._contact_fraction(xy, radius, cKDTree) == pytest.approx(exact)
+
+
 # --- overplotting boundary conditions ---------------------------------------
 
 def test_overplotting_threshold_is_strict_greater_than():
@@ -1298,6 +1394,117 @@ def test_clipping_is_unaffected_by_rotation():
         assert box[:, 1].min() == pytest.approx(bb.y0, abs=0.5)
         assert box[:, 1].max() == pytest.approx(bb.y1, abs=0.5)
     plt.close(fig)
+
+
+def _oblique_label_with_strokes(offsets):
+    """A 45-degree label with strokes laid parallel to it, `offsets` pixels off
+    perpendicular. Positive offsets put them in the empty upper-left triangle of
+    the label's axis-aligned box; offsets near zero run them through the glyphs.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=200)
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    t = ax.text(5, 5, "annotation text", rotation=45, ha="center", va="center",
+                fontsize=11, color="#000000")
+    r, _ = cf._renderer(fig)
+    bb = t.get_window_extent(renderer=r)
+    inv = ax.transData.inverted()
+    centre = np.array([(bb.x0 + bb.x1) / 2.0, (bb.y0 + bb.y1) / 2.0])
+    along = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    perp = np.array([-1.0, 1.0]) / np.sqrt(2.0)
+    for off in offsets:
+        mid = centre + off * perp
+        half = bb.width / np.sqrt(2.0) - abs(off) - 4
+        seg = inv.transform(np.array([mid - half * along, mid + half * along]))
+        ax.plot(seg[:, 0], seg[:, 1], color=OKABE[1], lw=2.0,
+                solid_capstyle="butt")
+    return fig
+
+
+def test_readability_does_not_sample_the_page_beside_an_oblique_label():
+    """The clutter fraction was measured over the axis-aligned block, which for
+    an oblique label is mostly page the label does not sit on.
+
+    Measured on this fixture: a 191.5 x 191.5 block, 36669 pixels, around an
+    oriented box of 239.5 x 31.3, 7505. Six strokes laid in the empty upper-left
+    triangle, none of them touching a glyph, came back as 'data ink over 14% of
+    its box'. The first assertion is what makes that a false positive rather
+    than a threshold argument: the mask the gate now measures over contains none
+    of the stroke ink.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgb
+    fig = _oblique_label_with_strokes((34, 44, 54, 64, 74, 84))
+    r, canvas = cf._renderer(fig)
+    backdrop = np.asarray(canvas.buffer_rgba())[..., :3]
+    H, W = backdrop.shape[:2]
+    (t, bb), = [(t, bb) for t, bb in cf._texts(fig, r)]
+    xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
+    ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
+    block = backdrop[H - yb:H - ya, xa:xb]
+    mask = cf._oriented_mask(cf._corners(t, bb, r), xa, yb, block.shape[:2])
+    stroke = (np.abs(block.astype(int)
+                     - np.array(to_rgb(OKABE[1])) * 255).sum(axis=2) < 30)
+    assert stroke.any(), "the fixture drew no strokes to be a false alarm about"
+    assert not (stroke & mask).any(), (
+        "the fixture stopped being a false positive: the strokes now cross the "
+        "label's oriented box")
+
+    ok, detail = cf.check_text_readability(fig, r, canvas)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_readability_still_catches_ink_crossing_an_oblique_label():
+    """The other half. Removing a false positive by never firing is not a fix,
+    so the same strokes moved onto the glyphs still fail."""
+    fig = _oblique_label_with_strokes((-12, -6, 0, 6, 12))
+    r, canvas = cf._renderer(fig)
+    ok, _detail = cf.check_text_readability(fig, r, canvas)
+    plt.close(fig)
+    assert ok is False
+
+
+def test_oriented_mask_covers_the_box_and_nothing_else():
+    """The mask is the oriented box rasterised, so its pixel count has to be
+    that box's area, and every pixel it selects has to be inside the corners.
+
+    Asserted against `_corners` rather than against a stored number: the two
+    have to stay the same rectangle, and a mask that quietly drifted a few
+    degrees off would still look plausible by area alone.
+    """
+    import numpy as np
+    fig = _rotated_labels(37, [("ascending label", 0.35, 0.35)])
+    r, _ = cf._renderer(fig)
+    (t, bb), = cf._texts(fig, r)
+    box = cf._corners(t, bb, r)
+    xa, yb = int(bb.x0) - 1, int(bb.y1) + 2
+    shape = (yb - (int(bb.y0) - 1), (int(bb.x1) + 2) - xa)
+    mask = cf._oriented_mask(box, xa, yb, shape)
+    plt.close(fig)
+
+    edge_a, edge_b = box[1] - box[0], box[3] - box[0]
+    area = float(np.hypot(*edge_a) * np.hypot(*edge_b))
+    assert int(mask.sum()) == pytest.approx(area, rel=0.02)
+
+    ys, xs = np.nonzero(mask)
+    pts = np.column_stack([xa + xs + 0.5, yb - ys - 0.5]) - box[0]
+    for edge in (edge_a, edge_b):
+        proj = pts @ edge
+        assert proj.min() >= 0 and proj.max() <= float(edge @ edge)
+
+
+def test_oriented_mask_is_the_whole_block_for_an_upright_box():
+    """An upright label keeps the numbers it was measured on. `_corners` hands
+    back the axis-aligned box there, and a mask built from it selects the block
+    entire, so the caller's shortcut of passing None costs nothing."""
+    import numpy as np
+    box = np.array([(10.0, 20.0), (70.0, 20.0), (70.0, 44.0), (10.0, 44.0)])
+    mask = cf._oriented_mask(box, 10, 44, (24, 60))
+    assert mask.all()
 
 
 def test_separating_axis_agrees_with_the_old_test_on_upright_boxes():
@@ -1686,6 +1893,149 @@ def test_a_shaded_band_is_not_a_phantom_series_at_the_origin():
     assert taken == []
 
 
+def test_step_geometry_follows_the_staircase_not_the_chord():
+    """`get_xydata` returns what was passed in, and `ax.step` draws a staircase
+    through those points rather than the chords between them.
+
+    Measured on this square wave: 836 harvested points, 785 of them on blank
+    page. Asserted against the render rather than against a reimplementation of
+    the staircase — every point the gate would measure a label against has to
+    have ink within 2px of it, or the gate is judging a line nobody drew.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 3), dpi=150)
+    x = np.arange(6, dtype=float)
+    line, = ax.step(x, [1.0, 5.0, 1.0, 5.0, 1.0, 5.0], where="post",
+                    label="stepped")
+    fig.canvas.draw()
+    pts = cf._polyline_px(line, ax)
+    buf = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+    H = buf.shape[0]
+    ink = np.abs(buf.astype(int) - buf[0, 0]).sum(axis=2) > 40
+    plt.close(fig)
+
+    off = 0
+    for p in pts:
+        col, row = int(round(p[0])), H - int(round(p[1])) - 1
+        if not (0 <= row < ink.shape[0] and 0 <= col < ink.shape[1]):
+            continue
+        if not ink[max(row - 2, 0):row + 3, max(col - 2, 0):col + 3].any():
+            off += 1
+    assert off == 0, (
+        f"{off} of {len(pts)} harvested points sit on blank page, so the "
+        "geometry is the chord and not the staircase")
+
+
+def test_the_step_expansion_is_still_where_matplotlib_keeps_it():
+    """`_drawstyle_xy` reads `cbook.pts_to_*step` rather than reimplementing
+    the staircase.
+
+    That read has the dangerous failure shape: a rename upstream would not
+    raise, it would mean 'this line has no drawstyle', and every step plot would
+    quietly revert to its chords with correct work starting to fail and nothing
+    saying why. Assert the three helpers resolve and that the expansion they
+    give is the one matplotlib draws.
+    """
+    import numpy as np
+    from matplotlib import cbook
+    for name in ("pts_to_prestep", "pts_to_midstep", "pts_to_poststep"):
+        assert hasattr(cbook, name), f"matplotlib moved cbook.{name}"
+
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+    x = np.arange(5, dtype=float)
+    y = np.array([2.0, 4.0, 1.0, 5.0, 3.0])
+    for where, fn in (("pre", cbook.pts_to_prestep),
+                      ("mid", cbook.pts_to_midstep),
+                      ("post", cbook.pts_to_poststep)):
+        line, = ax.step(x, y, where=where)
+        assert cf._drawstyle_xy(line) == pytest.approx(
+            np.column_stack(fn(x, y)))
+        line.remove()
+    # and an ordinary line is left exactly as it came in
+    line, = ax.plot(x, y)
+    assert cf._drawstyle_xy(line) == pytest.approx(np.column_stack([x, y]))
+    plt.close(fig)
+
+
+def test_label_attribution_reads_a_stacked_band():
+    """A `stackplot` band is `PolyCollection` geometry with no offsets, so the
+    offsets harvest returned nothing for it and a label sitting in the wrong
+    band passed clean.
+
+    Bands share their dividing edge, which is why the filled case is judged on
+    containment: on boundary distance alone a label inside the upper band is
+    exactly as far from the lower band's outline as from its own, and every
+    stacked label reads as ambiguous.
+    """
+    import numpy as np
+    x = np.arange(6, dtype=float)
+    lower, upper = np.full(6, 4.0), np.full(6, 4.0)
+
+    def figure(text_y):
+        fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+        ax.stackplot(x, lower, upper, labels=("lower", "upper"),
+                     colors=(OKABE[0], OKABE[1]))
+        ax.text(2.5, text_y, "upper", ha="center", va="center")
+        return fig
+
+    fig = figure(2.0)                       # in the lower band, named "upper"
+    r, _ = cf._renderer(fig)
+    wrong = cf.check_label_attribution(fig, r)
+    plt.close(fig)
+
+    fig = figure(6.0)                       # in the upper band, named "upper"
+    r, _ = cf._renderer(fig)
+    right = cf.check_label_attribution(fig, r)
+    plt.close(fig)
+
+    assert wrong[0] is False, wrong
+    assert right[0] is True, right
+
+
+def test_label_attribution_reads_a_contour_set_as_a_neighbour():
+    """Contour lines are `LineCollection`-shaped geometry with no offsets and
+    no legend label, and they were harvested as nothing. A label on a curve
+    threading a contour field had no neighbour to be ambiguous against."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    g = np.linspace(-3, 3, 60)
+    X, Y = np.meshgrid(g, g)
+    cs = ax.contour(X, Y, X ** 2 + Y ** 2, levels=[1.0, 4.0])
+    plt.close(fig)
+    assert cf._series_px(cs, ax) is not None, (
+        "an unfilled contour set is a stroke and has to be read as one")
+
+
+def test_an_unlabelled_error_band_is_still_not_a_competing_series():
+    """The over-fire the path harvest could have introduced.
+
+    A confidence band lies on top of the curve it belongs to, so counting it as
+    a series puts a competitor at distance zero from every direct label on that
+    curve and fails correct work. A stroke is a series by construction; a fill
+    has to be declared one, and matplotlib's own signal for that is the label.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    x = np.linspace(0, 10, 200)
+    y = np.sin(x)
+    ax.plot(x, y, color=OKABE[0], label="Alpha")
+    ax.plot(x, y - 3.0, color=OKABE[1], label="Beta")
+    ax.fill_between(x, y - 0.4, y + 0.4, color=OKABE[0], alpha=0.25)
+    ax.annotate("Alpha", (5, np.sin(5.0)), ha="center", va="center")
+
+    assert [c for c in ax.collections if cf._series_px(c, ax) is not None] == []
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+    # and the same band, declared a series by its author, is read as one
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    band = ax.fill_between(x, y - 0.4, y + 0.4, label="Envelope")
+    got = cf._series_px(band, ax)
+    plt.close(fig)
+    assert got is not None and len(got)
+
+
 def test_label_attribution_catches_a_label_in_the_corridor():
     """The regression that motivated dropping the KD-tree. A label in the
     corridor between two curves, nearer its own but inside LABEL_MARGIN.
@@ -1829,6 +2179,209 @@ def test_line_weight_does_not_fire_on_the_grid():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Line weight"] is True
+
+
+# --- banking ---------------------------------------------------------------
+
+
+def _alternating_rates(figsize):
+    """A saw wave whose decay limbs alternate between two rates, one exactly
+    twice the other. Telling the two apart is the reader's whole job."""
+    import numpy as np
+    xs, ys = [0.0], [1.0]
+    for cycle in range(10):
+        steps = 12 if cycle % 2 == 0 else 6
+        for k in range(1, steps + 1):
+            xs.append(xs[-1] + 1.0)
+            ys.append(1.0 - k / steps)
+        xs.append(xs[-1] + 1.0)             # the rise back to 1, one step wide
+        ys.append(1.0)
+    x, y = np.array(xs), np.array(ys)
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
+    ax.plot(x, y, lw=1.2)
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    return fig, x, y
+
+
+def _limb_orientations(fig, x, y):
+    """Mean on-page orientation of the slow and the fast decay limbs, degrees."""
+    import numpy as np
+    ax = fig.axes[0]
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    ang = np.degrees(np.arctan2(d[:, 1], d[:, 0]))
+    dy = np.diff(y)
+    fast = (dy < 0) & (np.abs(dy) > 0.12)      # 1/6 = 0.167 against 1/12
+    slow = (dy < 0) & ~fast
+    return float(ang[slow].mean()), float(ang[fast].mean())
+
+
+def test_banking_warns_when_the_aspect_collapses_two_rates_into_one():
+    """The named failure, measured rather than asserted.
+
+    Two decay rates differing by exactly a factor of two. At 2.4 x 5.2 inches
+    they land 1.6 degrees apart on the page, which is not a difference any
+    reader resolves; the first assertion is what makes that a fact about the
+    figure rather than about the gate.
+    """
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    slow, fast = _limb_orientations(fig, x, y)
+    assert abs(slow - fast) < 3.0, (
+        f"the fixture stopped collapsing the two rates: {abs(slow - fast):.1f} "
+        "degrees apart")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_banking_is_quiet_on_the_same_data_banked():
+    """The other half, and the one that says the gate is about the aspect and
+    not about the data: same points, same limits, a shape that separates the
+    two rates by 10.6 degrees instead of 1.6."""
+    fig, x, y = _alternating_rates((6.4, 1.9))
+    slow, fast = _limb_orientations(fig, x, y)
+    assert abs(slow - fast) > 8.0, (
+        f"the banked fixture only separates the limbs by {abs(slow - fast):.1f}"
+        " degrees, so it is not the counter-example it claims to be")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] is True
+
+
+def test_banking_never_returns_a_hard_failure():
+    """Advisory by design. The right aspect is a judgement about what the
+    reader's job is, and a gate that failed a build over it would be turned
+    off."""
+    fig, _x, _y = _alternating_rates((2.4, 5.2))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
+    assert "Banking" in cf.ADVISORY_GATES
+    assert ok is not False or gates(rows)["Banking"] is not False
+
+
+def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
+    """Four exclusions, each with a case. A steep aspect is applied to all four
+    so that a panel which is *not* skipped would warn, which is what keeps this
+    from passing by drawing nothing."""
+    import numpy as np
+
+    def steep(build):
+        fig, ax = plt.subplots(figsize=(2.0, 6.0), dpi=100)
+        build(ax)
+        fig.canvas.draw()
+        return fig, cf._banking_slopes(ax)
+
+    # A full-amplitude zigzag, so the typical segment is far steeper than the
+    # panel's own diagonal and a panel that is read cannot help but warn.
+    x = np.arange(30, dtype=float)
+    y = np.tile([0.0, 100.0], 15)
+
+    cases = {
+        "marks, not a stroke":
+            lambda ax: ax.plot(x, y, linestyle="none", marker="."),
+        "fixed aspect":
+            lambda ax: (ax.plot(x, y), ax.set_aspect("equal")),
+        "furniture, under BANKING_MIN_POINTS vertices":
+            lambda ax: ax.plot(x[:4], y[:4]),
+        "parametric, x does not run one way":
+            lambda ax: ax.plot(np.cos(np.linspace(0, 6.2, 200)),
+                               np.sin(np.linspace(0, 6.2, 200))),
+    }
+    for why, build in cases.items():
+        fig, slopes = steep(build)
+        plt.close(fig)
+        assert slopes is None, f"{why}: got {slopes}"
+
+    # and the same aspect with an ordinary stroke in it is read, and warns
+    fig, slopes = steep(lambda ax: ax.plot(x, y))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert slopes is not None and len(slopes)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
+    """Densifying makes every segment 2px long, so a median taken over the
+    densified points measures the densifier rather than the data. The two
+    disagree by construction on a line whose segments differ in length."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    # Short steep steps and long shallow ones, in equal number: the authored
+    # median sits between them, the densified one is dominated by the long
+    # segments because densifying splits them into far more points.
+    x = np.cumsum([0.0] + [0.2, 8.0] * 15)
+    y = np.cumsum([0.0] + [4.0, 0.4] * 15)
+    line, = ax.plot(x, y)
+    fig.canvas.draw()
+    authored = float(np.median(cf._banking_slopes(ax)))
+
+    dense = cf._polyline_px(line, ax)
+    d = np.diff(dense, axis=0)
+    keep = np.abs(d[:, 0]) > 1e-9
+    densified = float(np.median(np.abs(d[keep, 1] / d[keep, 0])))
+    plt.close(fig)
+    assert authored != pytest.approx(densified, rel=0.2), (
+        f"authored {authored:.3f} and densified {densified:.3f} agree here, so "
+        "this fixture no longer distinguishes the two readings")
+
+
+def test_banking_culls_segments_that_render_flat():
+    """A saturating curve - a converged training run - is 92 near-flat
+    segments out of 119. Slope cannot tell the flat tail from flat at any
+    aspect, and banking a panel on it asks for something sixteen hundred times
+    taller; the cull has to happen before the median, or the gate warns on
+    the most ordinary figure there is."""
+    import numpy as np
+    x = np.arange(120, dtype=float)
+    y = 1.0 - np.exp(-x / 6.0)
+    fig, ax = plt.subplots(figsize=(6.4, 4.0), dpi=100)
+    ax.plot(x, y, lw=1.5)
+    fig.canvas.draw()
+
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    dx, dy = d[:, 0], d[:, 1]
+    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
+
+    # The docstring's numbers, measured rather than imported: most of the
+    # stroke renders flat, and the raw (unculled) median is below the floor.
+    assert drawn.sum() < 0.5 * len(dx), (
+        f"{drawn.sum()} of {len(dx)} segments drawn; the fixture stopped "
+        "being a saturating curve")
+    keep = np.abs(dx) > 1e-9
+    raw = float(np.median(np.abs(dy[keep] / dx[keep])))
+    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, (
+        f"raw median {raw:.4f}; the gate would not have warned anyway")
+
+    ok, rows = cf.audit(fig)
+    slopes = cf._banking_slopes(ax)
+    plt.close(fig)
+    assert gates(rows)["Banking"] is True, "the cull did not silence the warn"
+    assert slopes is not None and np.median(slopes) >= 1.0 / cf.BANKING_SLOPE_MAX
+    assert ok is True
+
+
+def test_banking_leaves_the_saw_wave_alone():
+    """The cull exists so that flat segments do not drown a real rate; it must
+    not have the side effect of swallowing the figure the gate exists for. The
+    saw wave renders nothing flat - every limb moves - so nothing is culled and
+    the failure still lands."""
+    import numpy as np
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    ax = fig.axes[0]
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    dx, dy = d[:, 0], d[:, 1]
+    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
+    assert drawn.all(), (
+        f"{int(drawn.sum())}/{len(dx)} segments drawn; the cull is eating the "
+        "figure the gate exists for")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
 
 
 # --- regressions: gates that fired on correct figures ----------------------
@@ -2189,7 +2742,7 @@ def test_the_gate_is_a_row_in_audit_between_contour_dash_and_fonts():
     finally:
         plt.close(fig)
     names = [n for n, _, _ in rows]
-    assert len(names) == 20, names
+    assert len(names) == 21, names
     assert names[names.index("Contour dash") + 1] == "Colormap kind"
     assert names[names.index("Colormap kind") + 1] == "Fonts"
 

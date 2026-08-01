@@ -361,6 +361,7 @@ def test_no_advisory_gate_ever_returns_false():
 
     by_gate = {
         "Overplotting": cf.check_overplotting,
+        "Banking": cf.check_banking,
         "Ink coverage": cf.check_ink,
         "Identity channel": cf.check_identity_channel,
         "Style sheet": cf.check_style_sheet,
@@ -721,6 +722,7 @@ FIGURE_PROSE = {
     "Axis redundancy": "axis redundancy",
     "Type size": "type size",
     "Line weight": "line weight",
+    "Banking": "banking",
     "Ink coverage": "ink coverage",
     "Series color": "series color",
     "Dual axis": "dual axes",
@@ -1190,7 +1192,7 @@ ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
     "the report() comment": (GETTING_STARTED,
                              r"prints (\d+) rows, returns True if ok"),
-    "the series-color row number": (GATES, r"That is row 11 of the (\d+)"),
+    "the series-color row number": (GATES, r"That is row 12 of the (\d+)"),
     "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
     "the elimination-gate claim": (GATES, r"(\d+) passing rows means the"),
     "the named-defect count": (GATES, r"figure avoids (\d+) named defects"),
@@ -1293,6 +1295,7 @@ GUIDANCE_ANCHORS = {
                    "Emphasis = shape or label, not 5× the area"),
     "Overplotting": ("choosing-a-form.md",
                      "At large n, marks stop being individually visible"),
+    "Banking": ("choosing-a-form.md", "The failure is a resolution failure"),
     "Axis redundancy": ("style-guide.md",
                         "Shared scale → shared axis furniture"),
     "Type size": ("style-guide.md", "fails any string under 7.5pt on page"),

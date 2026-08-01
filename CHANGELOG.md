@@ -2,6 +2,190 @@
 
 ## Unreleased
 
+**A size-weighted separation gate was built, measured, and not shipped.** The
+intuition is sound: a hue pair that reads as two on a filled band ought to read
+as one on a hairline, and a small target really does need more colour difference
+than a large one. Stone, Szafir & Setlur (2014) measured how much, fitting the
+noticeable difference as C + K/s over target sizes from 0.333 to 6 degrees of
+visual angle. A gate multiplying `NORMAL_FLOOR` by that ratio warned on
+`gallery-convergence` and on `demo.py` - on the Okabe-Ito cycle at the 1.6pt
+stroke this project recommends.
+
+That is not a threshold to tune, it is a unit error. The floors here are OKLab
+dE x100 and the model is CIELAB, and measured over 20000 random pairs one OKLab
+unit is a median 2.94 CIELAB. So `NORMAL_FLOOR = 15.0` is about 44 CIELAB and
+`CVD_TARGET = 8.0` about 24, against the 10.4 the size model asks for at the
+smallest size it was fitted at. The pair the gate flagged, Okabe-Ito's green and
+sky blue, are 59.5 CIELAB apart - 5.7 times the requirement. The floors already
+exceed what the size model demands at every size the model can speak to, and
+publication line widths sit two decades below its fitted range, where
+extrapolating an inverse-size fit produces a number nothing supports.
+
+So the finding ships and the gate does not. `test_the_size_model_is_already_
+inside_the_normal_vision_floor` pins the arithmetic, a second test asserts no
+size-weighting helper was left behind with no caller, and the style guide states
+the rule as a rule: a hairline is where a palette gets tested, so give thin
+strokes the widest-separated slots. CONTRIBUTING says to drop a gate that
+false-positives on the corpus, and this one did, on the corpus's own palette.
+
+**Dichromacy is not the worst case, and the CVD gate was reading only
+dichromacy.** Most colour vision deficiency is anomalous trichromacy - a cone
+whose peak sensitivity is shifted rather than one that is missing - and
+simulating the endpoint alone would be sound if the endpoint were the hardest
+view. It is not. Measured over 240000 pairs of hues `check_palette.py` would
+accept as series slots, 0.87% clear `CVD_TARGET` under dichromacy and miss it at
+some lower severity, and dichromacy overstates separation by as much as 10.5 dE.
+`#288ac6` and `#fd00db` is one such pair: 8.4 at dichromacy, 7.9 at severity 0.8,
+and it passed the gate.
+
+`MACHADO` ships Table 1 of Machado, Oliveira & Fernandes (2009) for protan and
+deutan at severities in tenths, and `simulate_anomalous` reads it. The
+separation row now takes the worst over `ANOMALOUS_SEVERITIES` alongside the
+existing dichromacy reading and names the severity its verdict came from.
+
+Three decisions here were settled by measurement rather than by assumption, and
+each has a test.
+
+- **The matrices belong on linear light.** The published table does not state a
+  transfer function. Machado calibrates severity 1.0 against the same
+  Brettel/Vienot dichromacy this file already uses, so the domain that
+  reproduces it is the domain the table is written for: on 4000 random hues the
+  severity-1.0 matrices land within a mean 2.84 dE (protan) and 2.44 (deutan) of
+  `simulate` when applied to linear light, against 3.89 and 4.97 on
+  gamma-encoded sRGB. Getting this backwards would have put an error of that
+  size under every number the feature produces.
+- **1.0 is left out of the sweep.** It is dichromacy, which `simulate` already
+  covers with the matrices every number in the style guide was measured on.
+  Reading it twice under two models would have moved published figures for a
+  view already gated.
+- **Protan and deutan only.** The repository already reports tritan without
+  gating it, and this model's own reference implementation notes that it does
+  not do tritanopia well. A tritan severity table would be spending credibility
+  on the one form neither model is validated for.
+
+The four matrices quoted in the suite were read off the authors' own page and
+are asserted against the shipped constants, because the table is the whole
+substance of this and a transcription slip would be a wrong answer wearing a
+citation. The bundled cycle's worst adjacent pair reads 15.8 dE under the sweep,
+which is what says the stricter reading is not a floor nobody can satisfy.
+
+**New gate: banking to 45 degrees.** The aspect ratio has been in
+`choosing-a-form.md` since that document existed and nothing measured it, which
+is the shape of guidance this project exists to replace.
+
+The failure is a resolution failure and it is measurable. On a saw wave whose
+decay limbs alternate between two rates, one exactly twice the other: at
+2.4 x 5.2 inches the two limbs land 1.6 degrees apart on the page and the
+alternation cannot be seen at all; at 6.4 x 1.9 they land 10.6 degrees apart and
+it is the first thing you see. Same data, same axes, same limits. Both numbers
+are asserted in the fixtures, so a change that stopped the tall figure
+collapsing the rates fails the test that calls it a defect rather than quietly
+testing nothing.
+
+`GATES` gained a row and every row after `Line weight` moved down one, which is
+a break for anything that indexes that tuple rather than reading it by name;
+`audit()` returns 21 rows now and not 20.
+
+`check_banking` reads the median absolute segment slope of each panel's strokes
+in display space, and is advisory. `BANKING_SLOPE_MAX = 10.0` is a factor of ten
+either side of banked - a typical segment past 84 degrees or under 6 - which is
+a panel essentially vertical or essentially flat over its own typical step. The
+band was picked against the corpus rather than argued: the 14 series in
+`examples/` that this gate reads span 0.19 to 2.95, so [0.25, 4] would have
+fired on one of them and [0.1, 10] leaves the nearest legitimate case a factor
+of 1.9 clear. The gallery test now asserts no banking warning, because an
+advisory row does not fail a run and an over-firing advisory would have been
+invisible there.
+
+Four exclusions, each measured rather than reasoned into existence. A line with
+`linestyle="none"` draws marks; the orbit figure's 168000-point cloud is one. A
+fixed aspect is a statement about the data. Under `BANKING_MIN_POINTS = 8`
+vertices is furniture rather than a rate, and the corpus has 24 such strokes. An
+x that does not run one way is a parametric curve, where the typical slope is
+not a rate of anything. Slopes come off the authored vertices and not the
+densified stroke, because densifying makes every segment 2px and the median of
+that measures the densifier.
+
+**`step`, `stackplot` and contour sets are read now.** The last notes left these
+three as geometry the attribution harvest does not reach, and each was unread
+for its own reason.
+
+`ax.step` keeps the points it was handed and draws a staircase through them, so
+densifying `get_xydata` lays the harvested geometry along the diagonal chord of
+every riser. Measured on a six-point square wave: 836 harvested points, 785 of
+them on blank page. `_drawstyle_xy` runs the vertices through the `pts_to_*step`
+helpers in `matplotlib.cbook`, which is what `Line2D` itself does, rather than
+writing a second staircase that can disagree with the first. A test asserts
+those helpers still resolve, because a rename upstream would not raise - it
+would mean "this line has no drawstyle" and quietly revert every step plot to
+its chords.
+
+`stackplot` bands and contour sets carry paths and no offsets, so `_series_px`
+returned None for them and the offsets branch was the only branch. `_path_px`
+reads `Path.to_polygons`, not `path.vertices`, because the dummy vertex a
+CLOSEPOLY carries and the jump a MOVETO makes are not points on the stroke -
+the same bridging defect NaN handling exists to avoid, one level down.
+
+Filled series are judged on containment rather than on distance to their
+outline. `stackplot` hands neighbouring bands the same dividing edge, so on
+boundary distance a label inside the upper band is exactly as far from the lower
+band's outline as from its own and every stacked label reads as ambiguous.
+
+A fill has to carry a legend-visible label to count as a series and a stroke
+does not, which is the one asymmetry here and it is deliberate. A confidence
+band lies on top of the curve it belongs to, so counting an anonymous
+`fill_between` puts a competitor at distance zero from every direct label on
+that curve. `stackplot(labels=...)` and a deliberate `fill_between(label=...)`
+are series; `_child3` is a band bound to somebody else's line.
+
+**A mark eclipsed by a mark that is not its nearest neighbour was not
+overplotting.** The last notes named this as the case no 1-NN test reaches and
+left it. Contact is `d < r_i + r_j`, and the `j` that minimises `d` need not be
+the `j` that maximises `r_j`, so a mark clears its nearest neighbour and is
+swallowed whole by a larger one further off. Measured on 60 marks - 40 small
+ones in pairs 8px apart, each pair under a 120px disc centred 20px away - every
+mark is in contact, 40 of them do not appear in the render at all, and
+`check_overplotting` returned "no scatter overplotting" off a 33% reading.
+
+Rendered coverage was the fix those notes proposed and it is not the one this
+takes, because the predicate was already exact and only asked of the wrong
+neighbour. `_contact_fraction` asks it of every neighbour. Where radii are
+uniform the nearest one still answers it outright, since `r_i + r_j` is then a
+constant and "some mark is within it" and "the nearest mark is within it" are
+the same statement; that keeps the common case on one k=2 query, and a test
+pins the two paths to the same number rather than trusting the argument. Where
+radii differ, candidates come out of one range query at `2 * r_max`, which
+cannot miss a touching pair, and each is filtered on its own two radii.
+
+The numpy fallback got the same treatment, because CI installs no scipy and a
+gate fixed only where scipy is present is fixed nowhere that matters. A short
+size list is now tiled over the offsets the way a `Collection` cycles it, so
+the radii the gate reads are the radii it drew.
+
+**Readability was measured over page the label does not sit on.** The oriented
+box landed in `check_collisions` and `check_text_readability` was left sampling
+the axis-aligned block, which the last notes said out loud and left open. On one
+45-degree 11pt string that block is 191.5 x 191.5, 36669 pixels, around an
+oriented box of 239.5 x 31.3, 7505: four fifths of what was sampled belonged to
+the label only through its bounding box. Six strokes laid in the empty
+upper-left triangle, none of them touching a glyph, were reported as data ink
+over 14% of the label's box.
+
+`_oriented_mask` rasterises `_corners` over the sampled block, and both clauses
+now read through it. The clutter fraction counts edge pixels inside the box
+against the box's own area, and the contrast quantile draws from the same
+pixels, so a dark field in a corner the label never reaches no longer sets the
+verdict for a string on light ground. The mask is applied after the blur rather
+than before, because the local average is what says whether a pixel is an edge
+and a stroke entering from outside has to be compared against its neighbours out
+there.
+
+Upright labels are handed `None` and stay on the code path they were measured
+on: `_corners` returns the axis-aligned box for them, so a mask would only shave
+off the 1px ring the slice adds, and that is a number nobody measured. The same
+strokes moved onto the glyphs still fail at 95%, which is what says the false
+positive went without the gate going with it.
+
 **Label attribution measured against strokes that are not on the page, and did
 not measure against half the ones that are.** Two defects in the same gate,
 both of them about what counts as a series.
@@ -20,9 +204,9 @@ both of them about what counts as a series.
   already uses and which keeps `fill_between` from planting a phantom series at
   data (0, 0) off its single zero offset.
 
-`step`, `stackplot` and contour sets are still unread. They are `PolyCollection`
-and `LineCollection` geometry rather than offsets, and reaching them is a
-different harvest than this one.
+`step`, `stackplot` and contour sets were left unread here - `PolyCollection` and
+`LineCollection` geometry rather than offsets, a different harvest than this one.
+They are the first entry above.
 
 **Text collision compared the boxes rotation left behind, not the boxes.**
 `get_window_extent` returns the axis-aligned bounding box of the *rotated*
@@ -45,9 +229,8 @@ rectangles and gives the old min/max answer whenever both boxes are upright.
 box of the oriented box's own corners, so its extremes are attained by real
 corners of the label and a min/max test against the canvas gives the same
 answer on either shape. Rotation costs that gate nothing. `check_text_readability`
-still samples the axis-aligned block, so an oblique label's clutter fraction is
-measured over some page it does not cover; masking that block to the oriented
-box is a further change and is not in this one.
+sampled the axis-aligned block, and masking it to the oriented box was a further
+change; it is the first entry above.
 
 **The contrast clause read a smooth backdrop as its own average, through the
 branch written to stop it doing that.** `_worst_backdrop` binned a label's box
@@ -98,9 +281,9 @@ matplotlib rather than against a docstring.
   neighbour's own radius now comes from the index the query already returned,
   so a big mark beside a small one is judged on both.
 
-Measuring rendered coverage would catch a case no nearest-neighbour test can
-reach, a small mark covered by a large one that is not its nearest neighbour.
-That is a bigger change than this one and is not in it.
+A case no nearest-neighbour test can reach - a small mark covered by a large one
+that is not its nearest neighbour - was left standing here and is the second
+entry above.
 
 **Alt text is swept for the numbers it states.** `tests/test_docs_match_code.py`
 already held every description on the site to the string the example attaches,
