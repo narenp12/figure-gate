@@ -542,7 +542,7 @@ def check_clipping(fig, r):
             bad.append(str(t.get_text())[:32])
     return (not bad,
             "no text past the canvas" if not bad
-            else f"clipped: {bad}  <- add constrained_layout or widen the figure")
+            else f"clipped: {bad}  [FIX] add constrained_layout or widen the figure")
 
 
 def check_collisions(fig, r):
@@ -909,7 +909,7 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
         return True, (f"{checked} strings read clean against their backdrop"
                       + skipped)
     return False, ("; ".join(bad[:3])
-                   + "  <- move the label to clear ground; casing rescues a "
+                   + "  [FIX] move the label to clear ground; casing rescues a "
                      "gridline, not a curve")
 
 
@@ -975,9 +975,10 @@ def check_contrast_stack(fig):
     ok = len(levels) <= ALPHA_LEVELS_MAX and solid
     note = ""
     if not solid:
-        note = "  <- nothing is opaque, so the figure has no focal point"
+        note = ("  [FIX] raise the artist that carries the point to alpha 1"
+                "  [WHY] nothing is opaque, so the figure has no focal point")
     elif len(levels) > ALPHA_LEVELS_MAX:
-        note = f"  <- {len(levels)} levels reads as haze; keep to {ALPHA_LEVELS_MAX}"
+        note = f"  [FIX] {len(levels)} levels reads as haze; keep to {ALPHA_LEVELS_MAX}"
     return ok, f"alpha levels {levels}{note}"
 
 
@@ -1047,7 +1048,7 @@ def check_mark_ratio(fig):
             f"largest/smallest mark area {ratio:.1f}x  "
             f"(drawn area {lo:.0f} to {hi:.0f} pt^2)"
             + ("" if ratio <= MARK_RATIO_MAX
-               else f"  <- cap at {MARK_RATIO_MAX}x"))
+               else f"  [FIX] cap at {MARK_RATIO_MAX}x"))
 
 
 def _radius_octaves(radius_px):
@@ -1233,9 +1234,10 @@ def check_overplotting(fig):
     if not bad:
         return True, "no scatter overplotting"
     detail = "; ".join(f"ax{i}.col{j} {f:.0%}" for i, j, f in bad)
-    return "warn", (f"overplotting: {detail} — marks merge into blob; "
-                    "thin counts, use hollow markers, add transparency, "
-                    "or switch to hexbin")
+    return "warn", (f"overplotting: {detail} — marks merge into blob"
+                    "  [FIX] thin counts or switch to hexbin. This measures how "
+                    "close the marks are, so transparency and hollow markers "
+                    "do not move it")
 
 
 def check_redundancy(fig, r):
@@ -1281,7 +1283,7 @@ def check_redundancy(fig, r):
     if ok:
         return True, "axis furniture not duplicated"
     bits = dupes + ([f"repeated y tick column x{dup_ticks}"] if dup_ticks else [])
-    return False, "; ".join(bits) + "  <- use sharex/sharey"
+    return False, "; ".join(bits) + "  [FIX] use sharex/sharey"
 
 
 def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
@@ -1309,7 +1311,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
                            " width it ships at")
         return True, detail
     return False, (f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: {small[:4]}"
-                   "  <- cut words, do not shrink type")
+                   "  [FIX] cut words, do not shrink type")
 
 
 def _axes_drew_anything(ax):
@@ -1421,7 +1423,7 @@ def check_ink(fig, context_axes=None, canvas=None):
     if not odd:
         return True, f"ink fraction: {detail} (typical {INK_MIN}-{INK_MAX})"
     return "warn", (f"ink fraction: {detail} (typical {INK_MIN}-{INK_MAX})"
-                    f" - look at ax{odd}: empty panels and saturated ones both"
+                    f"  [FIX] look at ax{odd}: empty panels and saturated ones both"
                     " read badly, though a heatmap legitimately runs high")
 
 
@@ -1587,7 +1589,7 @@ def check_series_color(fig):
 
         if len(distinct) > MAX_SERIES_HUES:
             fails.append(f"{len(distinct)} distinct data hues in one panel, "
-                         f"theme has {MAX_SERIES_HUES}  <- fold the tail into "
+                         f"theme has {MAX_SERIES_HUES}  [FIX] fold the tail into "
                          "'Other' or facet")
 
         # One hue carrying two identities is what a seventh series looks like
@@ -1604,7 +1606,8 @@ def check_series_color(fig):
             if len(labels) > 1:
                 fails.append(f"{h} carries {len(labels)} identities "
                              f"{sorted(labels)} on {kind} artists"
-                             "  <- the color cycle wrapped")
+                             "  [FIX] set an explicit color per series, or facet"
+                             "  [WHY] the color cycle wrapped")
 
         if len(distinct) >= 2 and cp is not None:
             _, rows = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
@@ -1614,7 +1617,7 @@ def check_series_color(fig):
                 if status is False:
                     fails.append(detail)
                 else:
-                    notes.append(detail.split("  <-")[0].strip())
+                    notes.append(detail.split("  [FIX]")[0].strip())
 
     max_per_panel = max(
         (len(list(dict.fromkeys(h for h, _, _ in items)))
@@ -1659,7 +1662,7 @@ def check_dual_axis(fig):
     # "two scales", not "two y scales": `twiny` lands here on exactly the same
     # argument, and naming the wrong axis sends the reader looking for a defect
     # on the one that is fine.
-    return False, (f"two data scales sharing a frame: {', '.join(pairs)}  <- "
+    return False, (f"two data scales sharing a frame: {', '.join(pairs)}  [FIX] "
                    "the crossing point is set by the limits, not the data. Two "
                    "panels, small multiples, or index both to a common base")
 
@@ -1693,7 +1696,7 @@ def check_form(fig):
                 bad.append(
                     f"ax{i} bars on a truncated {axis} axis (starts at "
                     f"{min(lim):.4g}): bar length encodes the value, so a "
-                    "cut baseline misstates every ratio  <- the fix is the "
+                    "cut baseline misstates every ratio  [FIX] the fix is the "
                     "form, not the axis - use a dot plot")
             break
     if not bad:
@@ -1717,9 +1720,10 @@ def check_identity_channel(fig):
     if any(ax.texts for ax in fig.axes):
         return True, f"{len(labeled)} series, in-axes text (assumed direct labels)"
     return "warn", (f"{len(labeled)} series told apart by hue alone - no legend "
-                    "and no text in the axes. Direct labels beat a legend here: "
-                    "they remove the match-the-swatch step, and orange and sky "
-                    "blue are under 3:1 on white, where that step is hardest")
+                    "and no text in the axes"
+                    "  [FIX] add direct labels rather than a legend: they remove "
+                    "the match-the-swatch step, and orange and sky blue are "
+                    "under 3:1 on white, where that step is hardest")
 
 
 def _densify_px(pts):
@@ -2094,7 +2098,7 @@ def check_label_attribution(fig, r):
     if not bad:
         return True, f"{checked} direct label{'s' if checked != 1 else ''}, "\
                      f"each nearest the curve it names"
-    return False, ("; ".join(bad) + "  <- the reader resolves a direct label "
+    return False, ("; ".join(bad) + "  [FIX] the reader resolves a direct label "
                    "by proximity, so it has to be plainly nearest its own "
                    "curve. Move it to where that curve is furthest from its "
                    "neighbours, or draw a leader line to the anchor")
@@ -2202,8 +2206,8 @@ def check_contour_dash(fig):
             if _negative_levels_are_dashed(c):
                 warned.append(
                     f"ax{i}: negative-level contours auto-dashed — dashing "
-                    "reads as projected/unobserved here; pass "
-                    'linestyles="solid" to contour on signed data')
+                    "reads as projected/unobserved here"
+                    '  [FIX] pass linestyles="solid" to contour on signed data')
                 break
 
     if not warned:
@@ -2274,8 +2278,10 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
                       f"page (floor {LINE_FLOOR_PT})")
     seen = list(dict.fromkeys(thin))
     return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
-                   f"{seen[:4]}  <- SIAM: lines thinner than one point break up "
-                   "or disappear in print")
+                   f"{seen[:4]}  [FIX] set linewidth to at least "
+                   f"{LINE_FLOOR_PT / scale:.2f} at this scale"
+                   "  [WHY] SIAM: lines thinner than one point break up or "
+                   "disappear in print")
 
 
 def _banking_slopes(ax):
@@ -2390,10 +2396,13 @@ def check_banking(fig):
                       f"{'s' if len(seen) != 1 else ''}, typical segment "
                       f"{math.degrees(math.atan(min(seen))):.0f}-"
                       f"{math.degrees(math.atan(max(seen))):.0f} deg")
-    return "warn", ("; ".join(bad) + "  <- Cleveland banks to 45 degrees, "
-                    "where slope discrimination is most accurate; at this "
-                    "aspect two rates that differ by a factor of two can land "
-                    "under 2 degrees apart")
+    return "warn", ("; ".join(bad)
+                    + "  [FIX] set the panel aspect, or the figure size, to the "
+                      "ratio named above"
+                      "  [WHY] Cleveland banks to 45 degrees, where slope "
+                      "discrimination is most accurate; at this aspect two "
+                      "rates that differ by a factor of two can land under 2 "
+                      "degrees apart")
 
 
 # The names matplotlib gives a colormap it built itself, from colours the
@@ -2456,22 +2465,24 @@ def check_colormap(fig):
         if kind == "misc":
             fails.append(
                 f"{name}: lightness reverses over "
-                f"{cp.cmap_back_travel(levels):.0%} of its span  <- a reader "
+                f"{cp.cmap_back_travel(levels):.0%} of its span  [FIX] a reader "
                 "cannot order two values in it. viridis for sequential, RdBu "
                 "for diverging, twilight for cyclic")
             continue
 
         if kind == "qualitative":
             _, rows = cp.check(levels, all_pairs=True)
-            bad = [detail.split("  <-")[0].strip()
+            bad = [detail.split("  [FIX]")[0].strip()
                    for row_name, status, detail in rows
                    if row_name.startswith(("CVD separation",
                                             "Normal-vision floor"))
                    and status is False]
             if bad:
                 fails.append(f"{name} ({cmap.N} categories): " + "; ".join(bad)
-                             + "  <- an image puts every category beside every "
-                             "other, so every pair has to separate")
+                             + "  [FIX] re-step the categories onto hues that "
+                               "separate at every pair, or cut their number"
+                               "  [WHY] an image puts every category beside every "
+                               "other, so every pair has to separate")
                 continue
 
         notes.append(f"{name} {kind}")
@@ -2519,7 +2530,7 @@ def check_fonts(fig):
     type3 = [k for k in ("pdf.fonttype", "ps.fonttype")
              if int(mpl.rcParams[k]) == 3]
     if type3:
-        notes.append(f"{' and '.join(type3)} = 3 (Type 3)  <- IEEE PDF eXpress "
+        notes.append(f"{' and '.join(type3)} = 3 (Type 3)  [FIX] IEEE PDF eXpress "
                      "refuses the upload and ACM/Elsevier catch it in "
                      "production; set both to 42")
 
@@ -2669,7 +2680,7 @@ def check_alt_text(fig):
     """
     text = str(getattr(fig, ALT_TEXT_ATTR, "") or "").strip()
     if not text:
-        return "warn", ("no description attached  <- describe(fig, \"...\") "
+        return "warn", ("no description attached  [FIX] describe(fig, \"...\") "
                         "and pass alt_metadata(fig, path) to savefig; if the "
                         "document's caption carries it, this row is discharged")
     if len(text) < ALT_TEXT_MIN_CHARS:
@@ -2719,7 +2730,7 @@ def check_style_sheet(fig):
         return True, f"all {len(written)} keys match {path.name}"
     return "warn", (f"{len(drift)} of {len(written)} keys differ from "
                     f"{path.name}: {sorted(drift)[:5]}"
-                    f"{' ...' if len(drift) > 5 else ''}  <- the sheet is not "
+                    f"{' ...' if len(drift) > 5 else ''}  [FIX] the sheet is not "
                     "the one in effect: check plt.style.use, and check no color "
                     "in the sheet was written with a leading #")
 
@@ -2820,12 +2831,18 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
 
 
 def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
-           venue=None):
+           venue=None, suggest=False):
     """`audit()`, printed. Returns the same `ok` bool and nothing else.
 
     The arguments are `audit`'s, plus `name` for the heading. Advisory rows
     print as WARN and do not change the verdict, so a figure can be COMPOSED
     with advisories; only a hard FAIL makes this return False.
+
+    `suggest=True` prints what `suggest_fixes.py` has to offer for the marked
+    rows, under the table. Off by default and kept in that file rather than
+    this one: a gate measures, and what to do about it is a separate claim that
+    can be wrong on its own. Several rows get more than one suggestion, because
+    the choice between them is the author's.
 
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
@@ -2841,7 +2858,31 @@ def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
     if ok and warned:
         verdict += " (with advisories)"
     print(f"\n  -> {verdict}\n")
+    if suggest:
+        _print_suggestions(rows)
     return ok
+
+
+def _print_suggestions(rows):
+    """The suggestion block, when `report` was asked for one.
+
+    Imported here rather than at module scope, the way `check_palette` is: these
+    scripts are meant to be copied into a project one at a time, and a top-level
+    import would make the audit unrunnable without a file that only adds advice.
+    """
+    try:
+        import suggest_fixes
+    except ImportError:
+        print("  suggest_fixes.py is not importable beside this file, so no "
+              "remedies were offered\n")
+        return
+    lines = suggest_fixes.format_suggestions(rows, indent="  ")
+    if not lines:
+        return
+    print("  What to do about the marked rows:")
+    for line in lines:
+        print(line)
+    print()
 
 
 def self_test_figure():

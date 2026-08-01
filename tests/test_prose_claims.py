@@ -1473,21 +1473,39 @@ def test_both_entry_points_are_documented():
         assert (func.__doc__ or "").strip(), f"{name} has no docstring"
 
 
-# Gates whose message carries no `  <- ` remediation clause. Fifteen of twenty
-# do. The five here are named rather than quietly tolerated, because the
-# guide's clipping section is built on the premise that a gate's own message
-# routes the reader, and for these it does not. `check_ink` is the odd one: it
-# says `- look at ax[...]`, which does the same job in a different shape.
+# Gates whose message stops at what broke. Every other gate appends a FIX_MARK
+# clause, so the guide's premise - that a gate's own message routes the reader -
+# holds for all but the one named here.
+#
+# The set was five. Four of those did route the reader and were misfiled: they
+# wrote the fix as prose without adopting the marker, and a test reading for
+# the marker reported "no remediation" when the remediation was right there.
+# `check_contour_dash` was the sharpest case, exempted as "advisory" while
+# naming an exact call. Rather than teach the detector to sniff prose for
+# imperatives, which is a guess about intent that rots, those four adopted the
+# marker. What is left is the gate that genuinely says nothing.
+#
+# The opposite error followed, and cost the marker its meaning: six clauses wore
+# the remediation marker while naming no action, only the reason the row fired.
+# `check_banking` said "Cleveland banks to 45 degrees", `check_line_weight`
+# cited SIAM, the normal-vision floor said "hard to tell apart in full color".
+# True, and not a fix, and the detector counted every one of them as one.
+#
+# So the one marker became two, and both are named rather than drawn. The old
+# `  <- ` said nothing about which of the two things it introduced, and a split
+# that turned on one glyph - an arrow against a tilde - would have been a
+# distinction no reader scanning a wall of detail text could hold. `[FIX]` and
+# `[WHY]` say it, and read against the `[PASS]`/`[FAIL]` the report already
+# prints. A message may hold both, in that order.
+# `test_a_reason_clause_never_stands_in_for_a_fix` stops the reasons drifting
+# back into the fix mark.
+FIX_MARK, WHY_MARK = "  [FIX] ", "  [WHY] "
+
 MESSAGES_WITHOUT_A_FIX_CLAUSE = {
-    "check_collisions": "the message names the colliding strings, and the fix "
-                        "depends on which two they are",
-    "check_overplotting": "reports the density; the choice between alpha, "
-                          "hexbin and a density estimate is the reader's",
-    "check_ink": "advisory, and points at the offending axes with `- look at "
-                 "ax[...]` instead",
-    "check_identity_channel": "advisory; the second channel to add is a design "
-                              "decision",
-    "check_contour_dash": "advisory",
+    "check_collisions": "names the two colliding strings and stops. Which of "
+                        "the pair is free to move is a fact about the figure's "
+                        "layout that the gate cannot see, and 'move one of "
+                        "these' is not a fix, it is a restatement",
 }
 
 
@@ -1496,19 +1514,102 @@ def _gate_functions():
             if name.startswith("check_")}
 
 
+def _message_strings(func):
+    """Every string in a gate that can reach the detail a reader is shown.
+
+    The docstring is excluded, and that exclusion is the point. It is the one
+    string in a gate that nobody reading a failing build ever sees, and several
+    of them explain the fix at length: `check_overplotting`'s names alpha,
+    hexbin and hollow markers. Walking it would pass a gate whose actual
+    message said nothing, which is the failure mode this detector exists to
+    catch.
+    """
+    tree = ast.parse(inspect.getsource(func).lstrip())
+    body = tree.body[0].body
+    if (body and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)):
+        body = body[1:]
+    return [node.value for stmt in body for node in ast.walk(stmt)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+
+
+def test_the_fix_clause_detector_ignores_the_docstring():
+    """The detector's one assumption, asserted rather than trusted."""
+    doc = cf.check_overplotting.__doc__
+    assert doc and "hexbin" in doc, (
+        "this test rides on check_overplotting's docstring naming a fix; it "
+        "no longer does, so pick another gate or drop this")
+    assert doc not in _message_strings(cf.check_overplotting), (
+        "the docstring reached the detector, so a gate can now pass on prose "
+        "its reader never sees")
+
+
 @pytest.mark.parametrize("gate", sorted(_gate_functions()))
 def test_a_gates_message_either_names_a_fix_or_is_named_here(gate):
-    tree = ast.parse(inspect.getsource(_gate_functions()[gate]).lstrip())
-    has_clause = any("<-" in node.value for node in ast.walk(tree)
-                     if isinstance(node, ast.Constant)
-                     and isinstance(node.value, str))
+    has_clause = any(FIX_MARK in s
+                     for s in _message_strings(_gate_functions()[gate]))
     excused = gate in MESSAGES_WITHOUT_A_FIX_CLAUSE
     assert has_clause != excused, (
-        f"{gate} {'carries' if has_clause else 'carries no'} a `<-` "
+        f"{gate} {'carries' if has_clause else 'carries no'} a `{FIX_MARK}` "
         f"remediation clause and is {'named' if excused else 'not named'} in "
         "MESSAGES_WITHOUT_A_FIX_CLAUSE. A gate that tells a reader what broke "
         "and not what to do is the gap; a gate that grew a clause should come "
         "out of the set")
+
+
+@pytest.mark.parametrize("gate", sorted(_gate_functions()))
+def test_a_reason_clause_never_stands_in_for_a_fix(gate):
+    """The split's whole content. WHY_MARK explains why the row fired, which is
+    worth saying and is not a fix, so a gate that carries one and no FIX_MARK
+    has told the reader nothing to do while looking like it has. That is the
+    state the six converted clauses were in, and the shape a seventh would
+    arrive in."""
+    strings = _message_strings(_gate_functions()[gate])
+    if not any(WHY_MARK in s for s in strings):
+        return
+    assert any(FIX_MARK in s for s in strings), (
+        f"{gate} carries a `{WHY_MARK}` reason clause and no `{FIX_MARK}` "
+        "fix clause. A reason is an addition to a fix, never a substitute: "
+        "before the markers split, six clauses read as remediation while "
+        "naming only why the row fired")
+
+
+def test_the_reason_marker_does_not_read_as_a_fix_marker():
+    """The two markers have to stay disjoint as substrings, or the detector
+    above scores every reason clause as a fix and the split buys nothing."""
+    assert FIX_MARK not in WHY_MARK and WHY_MARK not in FIX_MARK, (
+        f"{FIX_MARK!r} and {WHY_MARK!r} now contain one another")
+
+
+def test_the_palette_rows_split_their_markers_too():
+    """`check_palette.check` writes rows that `check_colormap` splices
+    into its own detail, so its clauses are read under the same convention and
+    are not reached by the gate-function walk above."""
+    tree = ast.parse(inspect.getsource(cp.check).lstrip())
+    strings = [node.value for node in ast.walk(tree)
+               if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+    reasons = [s for s in strings if WHY_MARK in s]
+    assert reasons, (
+        f"no check_palette row carries a `{WHY_MARK}` reason clause; the "
+        "normal-vision floor's did, so either it moved or the marker changed")
+    stranded = [s for s in reasons if not any(FIX_MARK in t for t in strings)]
+    assert not stranded, f"{stranded} explain without routing"
+
+
+def test_the_colormap_gate_strips_a_spliced_rows_whole_clause():
+    """`check_colormap` quotes failing palette rows and cuts them at the
+    fix mark. The reason clause sits after the fix clause precisely so that one
+    cut takes both; a row that ordered them the other way would leak its reason
+    into a message that then appends its own."""
+    ok, rows = cp.check(["#E69F00", "#E8A00A"], all_pairs=True)
+    floor = [d for name, status, d in rows
+             if name.startswith("Normal-vision floor") and status is False]
+    assert floor, "two near-identical hues no longer fail the normal-vision floor"
+    assert FIX_MARK in floor[0] and WHY_MARK in floor[0], (
+        f"the floor row is now {floor[0]!r}, which no longer carries both marks")
+    assert WHY_MARK not in floor[0].split(FIX_MARK)[0], (
+        "the reason survives the cut check_colormap makes at the fix mark")
 
 
 @pytest.mark.parametrize("gate", cf.GATES, ids=lambda g: g.name)

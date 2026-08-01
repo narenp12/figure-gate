@@ -143,7 +143,27 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 1254 tests, and
+**A row's detail carries two marks, and they mean different things.** [FIX]
+introduces an action, and nothing else is allowed to wear it. [WHY] introduces
+the reason the row fired: the published floor, the perceptual fact, what a
+reader loses. A detail may carry both, in that order, and the fix mark is where
+`check_colormap` cuts when it quotes a palette row inside its own message.
+
+    under 1.0pt on page at scale 0.50: ['a stroke at 0.40pt']
+      [FIX] set linewidth to at least 2.00 at this scale
+      [WHY] SIAM: lines thinner than one point break up or disappear in print
+
+Every gate but `check_collisions` names a fix; that one names the two colliding
+strings and stops, because which of the pair is free to move is a fact about the
+layout it cannot see. A reason never appears without a fix beside it, and that
+rule has a history. The two marks were one mark, an arrow, that said nothing
+about which of the two things followed it, and six clauses wore it while naming
+only why: `check_banking` cited Cleveland, `check_line_weight` cited SIAM, and
+neither told anyone what to change. Splitting an arrow against a tilde would
+have put the whole distinction on one glyph in a wall of detail text, so the
+marks are words.
+
+**Gates are tested for their ability to fail.** The suite is 1300 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

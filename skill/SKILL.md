@@ -180,9 +180,29 @@ python check_palette.py "#471365,#2c718e,#44bf70" --ordinal     # ordered ramp
 ```python
 from check_figure import report, audit, describe, alt_metadata
 report(fig, "my-figure")             # PASS/WARN/FAIL per check
+report(fig, suggest=True)            # and what to do about the marked rows
 ok, rows = audit(fig)                # same, programmatically
 ok, rows = audit(fig, venue="neurips")   # measure type against \textwidth
 ```
+
+A marked row's detail says what broke, then carries two marks that mean
+different things. [FIX] introduces an action and nothing else wears it; [WHY]
+introduces the reason the row fired, the published floor or the perceptual fact
+behind it. Read the first, keep the second for the sentence you write in the
+caption.
+
+```
+[FAIL] Line weight  under 1.0pt on page at scale 0.50: ['fit at 0.20pt']
+       [FIX] set linewidth to at least 2.00 at this scale
+       [WHY] SIAM: lines thinner than one point break up or disappear in print
+```
+
+`suggest=True` prints remedies from `suggest_fixes.py`, which is separate from
+the gates on purpose: a gate measures, and what to do about it is a claim that
+can be wrong on its own. Some rows carry more than one, because the choice
+between them is yours. Every remedy that ships a code snippet is executed by
+the test suite against a figure that fails its gate, and the gate has to pass
+afterwards.
 
 **Describe the figure for a reader who cannot see it.** Across 100,000 public
 notebooks, 99.81% of generated images shipped with no alt text, nearly all of
