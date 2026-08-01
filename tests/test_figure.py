@@ -1944,14 +1944,26 @@ def test_a_shaded_band_is_not_a_phantom_series_at_the_origin():
     """`fill_between` and the other `PolyCollection`s report a single zero
     offset and no sizes. Taking that at face value plants a series at data
     (0, 0) in every figure with a band in it, which is a neighbour no reader
-    can see and the gate would measure every label against."""
+    can see and the gate would measure every label against. A band is read
+    through its paths, so what comes back is the outline actually drawn."""
+    import numpy as np
     fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
     ax.plot([1, 2, 3], [1, 2, 3], label="A")
     ax.plot([1, 2, 3], [3, 2, 1], label="B")
-    ax.fill_between([1, 2, 3], [0.5, 1.5, 2.5], [1.5, 2.5, 3.5], alpha=0.3)
-    taken = [c for c in ax.collections if cf._series_px(c, ax) is not None]
+    band = ax.fill_between([1, 2, 3], [0.5, 1.5, 2.5], [1.5, 2.5, 3.5],
+                           alpha=0.3)
+    fig.canvas.draw()
+    got = cf._series_px(band, ax)
+    origin = ax.transData.transform((0, 0))
+    inside = ax.transData.transform([(1, 0.5), (3, 3.5)])
     plt.close(fig)
-    assert taken == []
+
+    assert got is not None and len(got) > 2
+    assert not (np.hypot(got[:, 0] - origin[0],
+                         got[:, 1] - origin[1]) < 1.0).any(), (
+        "the band is being read as a single offset at data (0, 0)")
+    assert got[:, 0].min() >= inside[0, 0] - 1
+    assert got[:, 1].max() <= inside[1, 1] + 1
 
 
 def test_step_geometry_follows_the_staircase_not_the_chord():
@@ -2067,13 +2079,19 @@ def test_label_attribution_reads_a_contour_set_as_a_neighbour():
         "an unfilled contour set is a stroke and has to be read as one")
 
 
-def test_an_unlabelled_error_band_is_still_not_a_competing_series():
+@pytest.mark.parametrize("band_label", [None, "95% CI"])
+def test_an_error_band_is_not_a_rival_for_its_own_curves_label(band_label):
     """The over-fire the path harvest could have introduced.
 
     A confidence band lies on top of the curve it belongs to, so counting it as
-    a series puts a competitor at distance zero from every direct label on that
-    curve and fails correct work. A stroke is a series by construction; a fill
-    has to be declared one, and matplotlib's own signal for that is the label.
+    a rival puts a competitor at distance zero from every direct label on that
+    curve and fails correct work.
+
+    Parametrised because the first fix for this asked whether the band carried
+    a legend-visible label, and that got the labelled case exactly backwards:
+    labelling a band for the legend is the normal reason to label one, and it
+    made the gate fail a figure it had passed unlabelled. The band's relation to
+    the curve is the same either way, so the verdict has to be too.
     """
     import numpy as np
     fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
@@ -2081,20 +2099,41 @@ def test_an_unlabelled_error_band_is_still_not_a_competing_series():
     y = np.sin(x)
     ax.plot(x, y, color=OKABE[0], label="Alpha")
     ax.plot(x, y - 3.0, color=OKABE[1], label="Beta")
-    ax.fill_between(x, y - 0.4, y + 0.4, color=OKABE[0], alpha=0.25)
+    ax.fill_between(x, y - 0.4, y + 0.4, color=OKABE[0], alpha=0.25,
+                    **({"label": band_label} if band_label else {}))
     ax.annotate("Alpha", (5, np.sin(5.0)), ha="center", va="center")
 
-    assert [c for c in ax.collections if cf._series_px(c, ax) is not None] == []
-    ok, rows = cf.audit(fig)
+    fig.canvas.draw()
+    band = ax.collections[0]
+    line = ax.lines[0]
+    assert cf._encloses(band, cf._series_px(line, ax)), (
+        "the band does not read as enclosing the curve it was drawn around")
+    _ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Label attribution"] is True
 
-    # and the same band, declared a series by its author, is read as one
+
+def test_adjacent_stacked_bands_stay_rivals():
+    """The other side of `SERIES_ENCLOSED_FRAC`. Neighbouring `stackplot` bands
+    share a dividing edge, so each holds part of the other's outline; dismissing
+    them as each other's bands would pass every mislabelled stackplot. The
+    swapped-label figure below is the defect the gate exists for."""
+    import numpy as np
     fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
-    band = ax.fill_between(x, y - 0.4, y + 0.4, label="Envelope")
-    got = cf._series_px(band, ax)
+    xs = np.arange(20)
+    ax.stackplot(xs, np.ones(20), np.ones(20) * 3, labels=["low", "high"])
+    low, high = ax.collections[0], ax.collections[1]
+    fig.canvas.draw()
+    assert not cf._encloses(low, cf._series_px(high, ax))
+    assert not cf._encloses(high, cf._series_px(low, ax))
+
+    # Labels on the wrong bands, which is only reachable while they are rivals.
+    ax.text(10, 2.5, "low", ha="center", va="center")
+    ax.text(10, 0.5, "high", ha="center", va="center")
+    r, _ = cf._renderer(fig)
+    ok, detail = cf.check_label_attribution(fig, r)
     plt.close(fig)
-    assert got is not None and len(got)
+    assert ok is False, detail
 
 
 def test_label_attribution_catches_a_label_in_the_corridor():

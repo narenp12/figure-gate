@@ -69,7 +69,7 @@ this order.
 | Dual axis | none | a `twinx` second scale carries data of its own |
 | Form | none | pie, 3D, or bars on a truncated baseline |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
-| Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest other series, line or scatter, is closer than 2x its distance to the one it names |
+| Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
 | Contour dash | none | a signed contour set dashes its negative levels *(advisory)* |
 | Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation |
@@ -80,6 +80,17 @@ Thresholds cite a published floor where one exists: SIAM's one point, WCAG's
 4.5:1, the Nature/Science/PNAS type minima. The rest were measured, and
 [the style guide](style-guide.md) records the measurement and the figure that
 motivated each one.
+
+Label attribution reads filled regions as series, and a filled region holding
+at least `SERIES_ENCLOSED_FRAC = 0.7` of another series' ink is that series'
+band rather than a rival for its label. A confidence band lies on top of the
+curve it belongs to, so without that rule every direct label under a band ties
+with its own curve at zero and fails. The floor separates two measured shapes:
+adjacent `stackplot` bands share a dividing edge and read at most 43.9% of each
+other over 200 random figures, and a `fill_between` band over its curve's whole
+range reads 100.0%. A band covering only part of its curve reads in proportion
+(88.1% over nine tenths of the range, 48.3% over half), so below the floor it
+goes back to competing with the curve it belongs to.
 
 ## The gate that catches people
 
@@ -132,7 +143,7 @@ ignore the row, and an ignored gate is worth less than no gate. Type size is
 the one row that does both: it fails under the floor, and warns on a figure
 placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 1206 tests, and
+**Gates are tested for their ability to fail.** The suite is 1222 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

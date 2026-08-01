@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+**A band is now told from a rival by what it encloses, not by whether it was
+labelled.** `check_label_attribution` skipped a filled collection unless it
+carried a legend-visible label. The intent was right, since a confidence band
+lies on top of the curve it belongs to and counting it as a rival ties every
+direct label with its own curve at zero. The discriminator was not: labelling a
+band for the legend is the normal reason to label one, and `plot(label=
+"signal")` under `fill_between(label="95% CI")`, with "signal" printed on the
+curve, returned "0px from its own curve and 0px from another". The label also
+decided visibility rather than only rivalry, so an unlabelled band could drop a
+panel below the two-series minimum and the gate skipped that panel outright.
+
+Fills are harvested like anything else now, and the band relation is tested
+where rivals are chosen: a filled region holding at least
+`SERIES_ENCLOSED_FRAC = 0.7` of another series' ink is that series' band. The
+threshold separates two measured shapes. Adjacent `stackplot` bands share a
+dividing edge, so each holds part of the other's outline and they have to stay
+rivals; the worst reading over 200 random stackplots, two to five bands each and
+degenerate near-flat ones included, is 43.9%. A `fill_between` band over its
+curve's whole range reads 100.0%. The residual is recorded rather than fixed: a
+band covering part of its curve reads in proportion, 88.1% over nine tenths of
+the range, and below the floor goes back to competing with the curve it belongs
+to. The Label attribution row is unchanged on all seven gallery figures and on
+`demo.py`.
+
+**Constants quoted in prose are pinned against the code, not just the ones in
+the table.** CONTRIBUTING.md has been telling contributors that a constant
+written `` `NAME = value` `` is held to the code by the doc suite. That was true
+of the gate table's threshold column and of nowhere else, and
+`SERIES_ENCLOSED_FRAC = 0.7` in the paragraph beneath that table passed the
+whole suite with a deliberately wrong value. Seventeen prose constants across
+the documentation files are now checked the same way the column is.
+
 **One oversized mark no longer sets the overplotting query radius for the whole
 scatter.** `_contact_fraction` enumerated candidate pairs at `2 * r_max`. The
 bound is correct, since `r_i + r_j` cannot exceed it, but a single large mark
