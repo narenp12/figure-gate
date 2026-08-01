@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+**`scatter(s=...)` is not an area, and two gates were built on the assumption
+that it is.** matplotlib documents `s` as "the marker size in points**2". The
+unit marker path is a circle of radius 0.5 scaled by `sqrt(s)`, so the drawn
+diameter is `sqrt(s)` points and the drawn area is `pi * s / 4`. Measured, not
+inferred: at 200 dpi `scatter(s=100)` and `plot(markersize=10)` each lay down
+741 pixels of ink. `scatter_diameter_pt` now carries the conversion, and
+`test_scatter_size_is_a_squared_diameter_not_an_area` pins it against
+matplotlib rather than against a docstring.
+
+- **Mark ratio reported 1.3x on two marks of identical drawn area.** The 4/pi
+  bias the 0.3.0 notes describe was corrected on the `markersize` side and left
+  standing on the `s` side, so the ratio it printed was wrong by exactly the
+  factor that release set out to remove, on exactly the figures it named. Both
+  operands now convert to the area of the disc actually drawn, and the row
+  reports that area rather than a raw `s`.
+- **Overplotting needed the marks to be roughly 1.8x past contact before it
+  said anything.** Two errors compounded: the radius came from
+  `sqrt(s / pi)`, 12.8% too large, and the comparison was `nn_dist <
+  radius_px`, which is the condition for a mark's *centre* to be swallowed
+  rather than for two marks to touch. A grid of 64 discs each overlapping its
+  neighbours by a quarter of their diameter renders as one solid square and
+  returned "no scatter overplotting". Contact is `d < r_i + r_j`, and the
+  neighbour's own radius now comes from the index the query already returned,
+  so a big mark beside a small one is judged on both.
+
+Measuring rendered coverage would catch a case no nearest-neighbour test can
+reach, a small mark covered by a large one that is not its nearest neighbour.
+That is a bigger change than this one and is not in it.
+
 **Alt text is swept for the numbers it states.** `tests/test_docs_match_code.py`
 already held every description on the site to the string the example attaches,
 so the page could not drift from the code. Nothing read either against the

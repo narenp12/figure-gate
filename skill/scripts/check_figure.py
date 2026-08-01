@@ -58,8 +58,9 @@ INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
 # reader can see. The measurement `check_ink` reports is a count of pixels over
 # this line, so it is the gate's other threshold and was written inline.
 INK_DELTA_MIN = 24
-# Share of a scatter's points whose nearest neighbour sits inside one marker
-# radius before the cloud is called an unreadable mass. Up here with its
+# Share of a scatter's points whose nearest neighbour sits close enough for the
+# two marks to touch on the page before the cloud is called an unreadable mass.
+# Touching, not centre-inside-mark: see `check_overplotting`. Up here with its
 # siblings rather than inside `check_overplotting`, because the README's claim
 # is that every threshold is a module-level constant you can read and change,
 # and this was the one that was not.
@@ -751,35 +752,60 @@ def check_contrast_stack(fig):
     return ok, f"alpha levels {levels}{note}"
 
 
+def scatter_diameter_pt(size):
+    """The diameter in points that `scatter(s=size)` actually draws.
+
+    matplotlib documents `s` as "the marker size in points**2", which reads as
+    an area and is not one. The unit marker path for 'o' is a circle of radius
+    0.5, and scatter scales it by `sqrt(s)`: the drawn diameter is `sqrt(s)`
+    points and the drawn area is `pi * s / 4`, a factor 4/pi below the nominal
+    number.
+
+    Measured rather than inferred. At 200 dpi, `scatter(s=100)` and
+    `plot(markersize=10)` each lay down 741 pixels of ink, which is what makes
+    `markersize` and `sqrt(s)` the same quantity and `s` an area only up to
+    that constant. `test_scatter_size_is_a_squared_diameter` pins it against
+    matplotlib rather than against this docstring.
+
+    Accepts a float or a numpy array, and is public because both
+    `check_mark_ratio` and `check_overplotting` decide on it.
+    """
+    return size ** 0.5
+
+
 def check_mark_ratio(fig):
     """One mark far larger than the rest stops reading as a mark and starts
     reading as an ornament stuck on top of the plot.
 
-    Reads scatter sizes (already an area in pt^2) and line markers (a diameter
-    in points, converted to the area of the disc it draws). Bars and other
-    patches are deliberately NOT counted: a bar thirty times another bar is the
-    encoding working, not a defect. This gate is about marks whose size is not
-    carrying the value.
+    Reads scatter sizes and line markers, both converted to the area of the
+    disc actually drawn. Bars and other patches are deliberately NOT counted: a
+    bar thirty times another bar is the encoding working, not a defect. This
+    gate is about marks whose size is not carrying the value.
 
-    The conversion used to be `markersize ** 2`, which is the bounding square
-    rather than the mark, and it is 4/pi = 1.27x too large. On a figure drawing
-    only one artist type the bias cancels in the ratio and nothing shows; on one
-    mixing `scatter` with `plot(marker=...)` it does not, and two marks of
-    identical drawn area reported 1.3x. Against a 5.0 threshold that is enough
-    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x.
+    Both operands go through one conversion because the two APIs take different
+    quantities and neither is an area. `markersize` is a diameter in points.
+    `scatter(s=...)` is a *squared* diameter, not the area its own
+    documentation calls it - see `scatter_diameter_pt`. Converting one side and
+    not the other leaves a standing 4/pi = 1.27x error on any figure mixing
+    `scatter` with `plot(marker=...)`, which is enough against a 5.0 threshold
+    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x. That
+    error was fixed on the `markersize` side first and survived on the `s` side
+    until this change, where two marks of measurably identical drawn area -
+    741 pixels each - still reported 1.3x.
     """
     worst = None
     for ax in fig.axes:
         sizes = []
         for c in ax.collections:
             s = getattr(c, "get_sizes", lambda: [])()
-            sizes.extend(float(v) for v in s if v > 0)
+            sizes.extend(math.pi * (scatter_diameter_pt(float(v)) / 2.0) ** 2
+                         for v in s if v > 0)
         for ln in ax.lines:
             if not ln.get_visible() or ln.get_marker() in ("", "None", None):
                 continue
             ms = float(ln.get_markersize())
             if ms > 0:
-                sizes.append((ms / 2.0) ** 2 * math.pi)
+                sizes.append(math.pi * (ms / 2.0) ** 2)
         if len(sizes) < 2:
             continue
         ratio = max(sizes) / min(sizes)
@@ -789,7 +815,8 @@ def check_mark_ratio(fig):
         return True, "fewer than two mark sizes"
     ratio, lo, hi = worst
     return (ratio <= MARK_RATIO_MAX,
-            f"largest/smallest mark area {ratio:.1f}x  (s={lo:.0f} to {hi:.0f})"
+            f"largest/smallest mark area {ratio:.1f}x  "
+            f"(drawn area {lo:.0f} to {hi:.0f} pt^2)"
             + ("" if ratio <= MARK_RATIO_MAX
                else f"  <- cap at {MARK_RATIO_MAX}x"))
 
@@ -797,10 +824,26 @@ def check_mark_ratio(fig):
 def check_overplotting(fig):
     """Warn when scatter points overlap into an unreadable mass.
 
-    For each PathCollection with offsets (a scatter), estimates the fraction of
-    points whose nearest neighbour in display pixels is within one marker
-    radius. Above the threshold the marks merge into a blob — thin the count,
-    use hollow markers, add transparency, or switch to hexbin.
+    For each PathCollection with offsets (a scatter), the fraction of points
+    whose nearest neighbour in display pixels sits closer than the two marks'
+    radii summed - which is exactly when the two discs intersect on the page.
+    Above the threshold the marks merge into a blob — thin the count, use
+    hollow markers, add transparency, or switch to hexbin.
+
+    Two separate errors used to make this roughly 1.8x too lenient, and a
+    scatter of 64 discs each overlapping its neighbours by a quarter of their
+    diameter rendered as one solid square while the gate returned clean. The
+    radius came from `sqrt(s / pi)`, treating `s` as an area it is not (see
+    `scatter_diameter_pt`), which is 12.8% too large; and the comparison was
+    against one radius rather than two, which is the condition for a mark's
+    *centre* to be swallowed rather than for the two marks to touch.
+
+    Where radii vary the neighbour's own radius is used, taken from the index
+    the query already returns. That is exact for the nearest neighbour and can
+    still miss a case no 1-NN test reaches: a small mark whose nearest
+    neighbour is a hair outside contact while a much larger mark further off
+    covers it. Measuring rendered coverage instead of centre distances is the
+    fix for that and is a bigger change than this one.
     """
     import numpy as np
     try:
@@ -829,25 +872,30 @@ def check_overplotting(fig):
             sizes = np.asarray(sizes, dtype=float)
             if sizes.size == 1:
                 sizes = np.full(len(offsets), sizes[0])
-            radius_px = np.sqrt(sizes / np.pi) * dpi / 72.0
+            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
 
             n = len(xy)
             if n < 2:
                 continue
             if cKDTree is not None:
-                dists, _ = cKDTree(xy).query(xy, k=2)
+                dists, idx = cKDTree(xy).query(xy, k=2)
                 if dists.ndim < 2:
                     continue
-                nn_dist = dists[:, 1]
+                nn_dist, nn_idx = dists[:, 1], idx[:, 1]
             else:
-                # Same nearest-neighbour distance, O(n^2). Only reached where
-                # scipy is absent, and only for the scatters this check looks
-                # at, so the cost lands on figures that already draw n points.
+                # Same nearest-neighbour distance and index, O(n^2). Only
+                # reached where scipy is absent, and only for the scatters this
+                # check looks at, so the cost lands on figures that already
+                # draw n points.
                 d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
                              xy[:, 1][:, None] - xy[None, :, 1])
                 np.fill_diagonal(d, np.inf)
-                nn_dist = d.min(axis=1)
-            overlap = int((nn_dist < radius_px).sum())
+                nn_idx = d.argmin(axis=1)
+                nn_dist = d[np.arange(n), nn_idx]
+            # Two discs intersect when their centres are closer than the radii
+            # summed. Comparing against one radius asks whether a centre landed
+            # inside the other mark, which is most of the way to total eclipse.
+            overlap = int((nn_dist < radius_px + radius_px[nn_idx]).sum())
             frac = overlap / n
             if frac > OVERPLOT_THRESHOLD:
                 bad.append((i, j, frac))

@@ -45,6 +45,8 @@ what it renders, at the size it will print.
 
 ::: check_figure.content_width_pt
 
+::: check_figure.scatter_diameter_pt
+
 ## check_palette
 
 The colour side. Standard library only, so these run anywhere and are also the
