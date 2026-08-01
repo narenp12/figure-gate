@@ -511,6 +511,67 @@ def test_the_quoted_threshold_is_the_constants_value(gate, name, quoted):
         "not automatically the table")
 
 
+# --- constants quoted in prose, not in the table -----------------------------
+# The column above is gated; the paragraphs around it were not, and a constant
+# is a constant wherever it is written. `SERIES_ENCLOSED_FRAC = 0.7` went into
+# the prose under the gate table and a deliberately wrong value passed the whole
+# suite - which is the same hole the threshold column had before it was closed,
+# one paragraph further down the page. CONTRIBUTING.md already told contributors
+# that "the doc suite pins them against the code", which was true of the table
+# and of nowhere else.
+
+# A doubled span is markdown for "show the backticks", so its contents are an
+# example of the notation rather than a claim in it - CONTRIBUTING.md documents
+# this very convention that way.
+ESCAPED_SPAN = re.compile(r"``.*?``")
+
+
+def prose_constants():
+    """(file, constant, quoted value) for every `NAME = value` outside a table.
+
+    Table rows are skipped because they have their own parser above, and
+    parsing them twice would report one disagreement as two. Everything else in
+    every documentation file is fair game: prose, list items, headings.
+    """
+    out = []
+    for path in (GATES, README, GETTING_STARTED, GUIDE, SKILL / "SKILL.md",
+                 ROOT / "CONTRIBUTING.md"):
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            if line.lstrip().startswith("|"):
+                continue
+            line = ESCAPED_SPAN.sub("", line)
+            for names, values in THRESHOLD_CONST.findall(line):
+                pairs = list(zip(names.split(","), values.split(",")))
+                if len(pairs) != len(names.split(",")):
+                    continue
+                for name, value in pairs:
+                    out.append((path.name, name.strip(), value.strip()))
+    return out
+
+
+def test_the_prose_quotes_at_least_the_constants_it_used_to():
+    """A guard on the parser rather than on the prose. If a rewrite of the
+    regex or of the file list quietly matched nothing, every test below would
+    pass by having nothing to assert."""
+    found = prose_constants()
+    assert len(found) >= 3, found
+    assert any(name == "SERIES_ENCLOSED_FRAC" for _f, name, _v in found), found
+
+
+@pytest.mark.parametrize("where,name,quoted", prose_constants())
+def test_a_constant_quoted_in_prose_is_the_constants_value(where, name, quoted):
+    module, actual = constant_value(name)
+    try:
+        agrees = float(quoted) == float(actual)
+    except (TypeError, ValueError):
+        agrees = quoted == str(actual)
+    assert agrees, (
+        f"{where} quotes {name} = {quoted}; {module}.{name} is {actual!r}. "
+        "One of the two is wrong, and it is not automatically the prose")
+
+
 def test_the_style_sheet_row_states_the_number_of_keys_the_sheet_sets():
     """"40 keys" is a measurement in prose, in a column this file now checks
     everywhere else. The sheet is the thing that can change under it."""

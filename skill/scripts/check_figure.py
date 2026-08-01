@@ -112,6 +112,14 @@ FRAME_TOL = 1e-3
 # that curve or this one?"
 LABEL_MARGIN = 2.0
 
+# How much of a series' ink a filled region has to hold before that region is
+# read as the series' own band rather than as a rival for its label. Measured
+# against the two shapes that have to end up on opposite sides of it: adjacent
+# `stackplot` bands, which share a dividing edge and top out at 43.9%, and a
+# `fill_between` band over its curve's whole range, which reads 100.0%. See
+# `_encloses` for the sweep and for what falls in the gap.
+SERIES_ENCLOSED_FRAC = 0.7
+
 # --- text readability --------------------------------------------------------
 # Data ink inside a label's box, as a fraction of that box. Calibrated against
 # a lw=1.6 curve at 150 dpi: crossing a label horizontally is ~14% of the box,
@@ -1851,15 +1859,20 @@ def _series_px(artist, ax):
     and no sizes; taking that at face value would plant a phantom series at data
     (0, 0) in every figure with a shaded band in it.
 
-    A filled collection has to carry a legend-visible label to count, and a
-    stroked one does not. A stroke is a series by construction. A filled region
-    is as often a band bound to somebody else's curve - a confidence interval, a
-    shaded span - and those are not what a reader resolves a direct label
-    against; letting them in fails the label on every curve that wears an error
-    band, since the band lies on top of the curve it belongs to. matplotlib's
-    own signal for which is which is the label, so that is the one used:
-    `stackplot(labels=...)` and a deliberate `fill_between(label=...)` are
-    series, `_child3` is not.
+    Filled collections are harvested like any other. A filled region is often a
+    band bound to somebody else's curve - a confidence interval, a shaded span -
+    and a band lies on top of the curve it belongs to, so counting it as a rival
+    fails the label on every curve that wears one. That is handled where it
+    belongs, by `_encloses` at the point rivals are chosen, and not here by
+    refusing to see the band at all.
+
+    Requiring a fill to carry a legend-visible label was tried here first and
+    did not work. A band labelled for the legend, which is the normal reason to
+    label one, went straight back to failing its own curve: `plot(label=
+    "signal")` under `fill_between(label="95% CI")` with the word "signal"
+    printed on the curve returned "0px from its own curve and 0px from another".
+    Whether a band is a rival is a question about geometry, and the label is not
+    evidence about geometry.
     """
     from matplotlib.lines import Line2D
     import numpy as np
@@ -1876,8 +1889,6 @@ def _series_px(artist, ax):
                 return None
             return pts[np.isfinite(pts).all(axis=1)]
         if not hasattr(artist, "get_paths"):
-            return None
-        if _is_filled(artist) and str(artist.get_label() or "").startswith("_"):
             return None
         return _path_px(artist, ax)
     except Exception:
@@ -1915,6 +1926,44 @@ def _box_distance(bb, pts):
     dy = np.maximum.reduce([bb.y0 - pts[:, 1], pts[:, 1] - bb.y1,
                             np.zeros(len(pts))])
     return float(np.min(np.hypot(dx, dy)))
+
+
+def _encloses(artist, pts):
+    """Whether a filled region holds essentially all of another series' ink.
+
+    This is what tells a band apart from a rival, and it is the relation the
+    reader is using: ink drawn *inside* a region is that region's own, so a
+    curve under its confidence band is not two series competing for one label.
+    Geometric, so it holds whether or not the band was labelled for a legend.
+
+    `SERIES_ENCLOSED_FRAC` is measured, not chosen. Two neighbouring
+    `stackplot` bands share a dividing edge, so each holds part of the other's
+    outline and they must stay rivals; over 200 random stackplots, of two to
+    five bands each and including degenerate near-flat ones, the largest such
+    reading was 43.9%. A `fill_between` band drawn over its curve's whole range
+    reads 100.0%. The floor sits between them with the wider margin on the side
+    that would break a figure: at 0.7 the adjacency ceiling is clear by a factor
+    of 1.6, and a rival wrongly dismissed is a defect shipped, where a band
+    wrongly kept is a false failure the author can see is false.
+
+    The residual is a band covering only part of its curve, which reads in
+    proportion: 88.1% over nine tenths of the range, 48.3% over half. Below the
+    floor those go back to failing the label on the curve they belong to. Not
+    fixed here, and worth fixing only with a figure that actually does it.
+    """
+    import numpy as np
+    if not _is_filled(artist) or pts is None or not len(pts):
+        return False
+    try:
+        transform = artist.get_transform()
+        inside = np.zeros(len(pts), dtype=bool)
+        for path in artist.get_paths():
+            inside |= path.contains_points(pts, transform=transform)
+        return bool(inside.mean() >= SERIES_ENCLOSED_FRAC)
+    except Exception:
+        # Geometry that cannot be tested for containment is not evidence of a
+        # band, so the two stay rivals and the gate keeps judging them.
+        return False
 
 
 def _series_distance(artist, bb, pts):
@@ -1969,8 +2018,15 @@ def check_label_attribution(fig, r):
     inside a stacked band invisible to the gate twice over: the series could not
     own a label, and it could not be the neighbour that made one ambiguous. The
     premise here is that a reader resolves a direct label by proximity, and a
-    reader does not know what artist class drew the ink. See `_series_px` for
-    the one exception, an unlabelled fill, and why it is one.
+    reader does not know what artist class drew the ink.
+
+    A filled region that encloses the named series is not a rival for its label,
+    and neither is a series enclosed by a named region. A confidence band lies
+    on top of the curve it belongs to, so on distance alone it is always tied
+    with that curve at zero and every direct label under a band failed. The test
+    is `_encloses`, and it is geometric: an unlabelled band and one labelled for
+    the legend get the same answer, which the label-based test this replaced did
+    not - it passed `_child3` and failed `95% CI`.
     """
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig)
@@ -2010,8 +2066,16 @@ def check_label_attribution(fig, r):
             # other curve is ever reached, and `d_other` stays infinite. Which
             # is to say it passed every label it was closest to — the common
             # case, and the one the gate exists for.
-            d_other = min(_series_distance(line, bb, p)
-                          for line, p in px.items() if line is not own_line)
+            # Rivals only. A band that encloses this series, or a series this
+            # one encloses, is the same thing on the page and cannot be the
+            # neighbour a reader confuses it with.
+            rivals = [(line, p) for line, p in px.items()
+                      if line is not own_line
+                      and not _encloses(line, px[own_line])
+                      and not _encloses(own_line, p)]
+            if not rivals:
+                continue
+            d_other = min(_series_distance(line, bb, p) for line, p in rivals)
             if d_other < LABEL_MARGIN * d_own:
                 bad.append(f"{str(t.get_text())[:22]!r} is {d_own:.0f}px from "
                            f"its own curve and {d_other:.0f}px from another")
