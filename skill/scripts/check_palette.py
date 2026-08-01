@@ -429,7 +429,7 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
         rows.append((f"CVD separation ({label})", good,
                      f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind} at severity "
                      f"{at:.1f}) - tritan {worst_tri:.1f}"
-                     + ("" if good else "  <- needs direct labels/gaps/texture, or re-step")))
+                     + ("" if good else "  [FIX] needs direct labels/gaps/texture, or re-step")))
 
     worst_n, worst_n_at = float("inf"), None
     for i, j in pairs:
@@ -441,7 +441,10 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
         good = worst_n >= NORMAL_FLOOR
         rows.append((f"Normal-vision floor ({label})", good,
                      f"worst {a} vs {b} dE {worst_n:.1f}"
-                     + ("" if good else f"  <- below {NORMAL_FLOOR}, hard to tell apart in full color")))
+                     + ("" if good else
+                        "  [FIX] move one of the pair, or re-step the ramp"
+                        f"  [WHY] below {NORMAL_FLOOR}, hard to tell apart in "
+                        "full color")))
 
     # Advisory, not a gate: a sub-3:1 hue is legal, it just obligates a visible
     # direct label. Reporting it as FAIL while the run still passes reads as a

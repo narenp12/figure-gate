@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**The remediation marker became two marks, `[FIX]` and `[WHY]`.** A gate's
+detail appended `  <- ` and everything after it was read, by the guide and by
+`test_a_gates_message_either_names_a_fix_or_is_named_here`, as what to do. Six
+clauses named no action. `check_line_weight` cited SIAM on strokes under a
+point, `check_banking` cited Cleveland on 45 degrees, `check_colormap`'s
+qualitative-on-image branch explained that an image puts every category beside
+every other, the normal-vision floor said two hues are hard to tell apart, and
+`check_contrast_stack` and `check_series_color` each had a branch doing the
+same. All six are true and none is a fix, so the test counted six explanations
+as six routes to a fix, and the count of gates that route the reader was wrong
+by six.
+
+`[FIX]` now introduces an action and only an action; `[WHY]` introduces the
+reason the row fired. A detail may carry both, in that order, which is what
+keeps `check_colormap`'s existing cut at the fix mark taking the whole
+clause when it quotes a palette row. The marks are words rather than glyphs
+because the arrow never said which of the two it was introducing, and splitting
+it against a tilde would have put the distinction on one character in a wall of
+detail text; `[FIX]` and `[WHY]` read against the `[PASS]`/`[FAIL]` the report
+already prints. The six converted clauses gained a real action each: a minimum
+linewidth computed at the figure's own scale, the panel aspect, an explicit
+color per series. `test_a_reason_clause_never_stands_in_for_a_fix` is the new
+direction, and it fails a gate that explains without routing.
+
 **Four gallery figures, added for the rows that had never measured anything.**
 Every gate returns a detail string, and reading all 21 of them across the seven
 figures showed five rows passing without having run the code that decides: no
