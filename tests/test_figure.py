@@ -1893,6 +1893,149 @@ def test_a_shaded_band_is_not_a_phantom_series_at_the_origin():
     assert taken == []
 
 
+def test_step_geometry_follows_the_staircase_not_the_chord():
+    """`get_xydata` returns what was passed in, and `ax.step` draws a staircase
+    through those points rather than the chords between them.
+
+    Measured on this square wave: 836 harvested points, 785 of them on blank
+    page. Asserted against the render rather than against a reimplementation of
+    the staircase — every point the gate would measure a label against has to
+    have ink within 2px of it, or the gate is judging a line nobody drew.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 3), dpi=150)
+    x = np.arange(6, dtype=float)
+    line, = ax.step(x, [1.0, 5.0, 1.0, 5.0, 1.0, 5.0], where="post",
+                    label="stepped")
+    fig.canvas.draw()
+    pts = cf._polyline_px(line, ax)
+    buf = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+    H = buf.shape[0]
+    ink = np.abs(buf.astype(int) - buf[0, 0]).sum(axis=2) > 40
+    plt.close(fig)
+
+    off = 0
+    for p in pts:
+        col, row = int(round(p[0])), H - int(round(p[1])) - 1
+        if not (0 <= row < ink.shape[0] and 0 <= col < ink.shape[1]):
+            continue
+        if not ink[max(row - 2, 0):row + 3, max(col - 2, 0):col + 3].any():
+            off += 1
+    assert off == 0, (
+        f"{off} of {len(pts)} harvested points sit on blank page, so the "
+        "geometry is the chord and not the staircase")
+
+
+def test_the_step_expansion_is_still_where_matplotlib_keeps_it():
+    """`_drawstyle_xy` reads `cbook.pts_to_*step` rather than reimplementing
+    the staircase.
+
+    That read has the dangerous failure shape: a rename upstream would not
+    raise, it would mean 'this line has no drawstyle', and every step plot would
+    quietly revert to its chords with correct work starting to fail and nothing
+    saying why. Assert the three helpers resolve and that the expansion they
+    give is the one matplotlib draws.
+    """
+    import numpy as np
+    from matplotlib import cbook
+    for name in ("pts_to_prestep", "pts_to_midstep", "pts_to_poststep"):
+        assert hasattr(cbook, name), f"matplotlib moved cbook.{name}"
+
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+    x = np.arange(5, dtype=float)
+    y = np.array([2.0, 4.0, 1.0, 5.0, 3.0])
+    for where, fn in (("pre", cbook.pts_to_prestep),
+                      ("mid", cbook.pts_to_midstep),
+                      ("post", cbook.pts_to_poststep)):
+        line, = ax.step(x, y, where=where)
+        assert cf._drawstyle_xy(line) == pytest.approx(
+            np.column_stack(fn(x, y)))
+        line.remove()
+    # and an ordinary line is left exactly as it came in
+    line, = ax.plot(x, y)
+    assert cf._drawstyle_xy(line) == pytest.approx(np.column_stack([x, y]))
+    plt.close(fig)
+
+
+def test_label_attribution_reads_a_stacked_band():
+    """A `stackplot` band is `PolyCollection` geometry with no offsets, so the
+    offsets harvest returned nothing for it and a label sitting in the wrong
+    band passed clean.
+
+    Bands share their dividing edge, which is why the filled case is judged on
+    containment: on boundary distance alone a label inside the upper band is
+    exactly as far from the lower band's outline as from its own, and every
+    stacked label reads as ambiguous.
+    """
+    import numpy as np
+    x = np.arange(6, dtype=float)
+    lower, upper = np.full(6, 4.0), np.full(6, 4.0)
+
+    def figure(text_y):
+        fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+        ax.stackplot(x, lower, upper, labels=("lower", "upper"),
+                     colors=(OKABE[0], OKABE[1]))
+        ax.text(2.5, text_y, "upper", ha="center", va="center")
+        return fig
+
+    fig = figure(2.0)                       # in the lower band, named "upper"
+    r, _ = cf._renderer(fig)
+    wrong = cf.check_label_attribution(fig, r)
+    plt.close(fig)
+
+    fig = figure(6.0)                       # in the upper band, named "upper"
+    r, _ = cf._renderer(fig)
+    right = cf.check_label_attribution(fig, r)
+    plt.close(fig)
+
+    assert wrong[0] is False, wrong
+    assert right[0] is True, right
+
+
+def test_label_attribution_reads_a_contour_set_as_a_neighbour():
+    """Contour lines are `LineCollection`-shaped geometry with no offsets and
+    no legend label, and they were harvested as nothing. A label on a curve
+    threading a contour field had no neighbour to be ambiguous against."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    g = np.linspace(-3, 3, 60)
+    X, Y = np.meshgrid(g, g)
+    cs = ax.contour(X, Y, X ** 2 + Y ** 2, levels=[1.0, 4.0])
+    plt.close(fig)
+    assert cf._series_px(cs, ax) is not None, (
+        "an unfilled contour set is a stroke and has to be read as one")
+
+
+def test_an_unlabelled_error_band_is_still_not_a_competing_series():
+    """The over-fire the path harvest could have introduced.
+
+    A confidence band lies on top of the curve it belongs to, so counting it as
+    a series puts a competitor at distance zero from every direct label on that
+    curve and fails correct work. A stroke is a series by construction; a fill
+    has to be declared one, and matplotlib's own signal for that is the label.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    x = np.linspace(0, 10, 200)
+    y = np.sin(x)
+    ax.plot(x, y, color=OKABE[0], label="Alpha")
+    ax.plot(x, y - 3.0, color=OKABE[1], label="Beta")
+    ax.fill_between(x, y - 0.4, y + 0.4, color=OKABE[0], alpha=0.25)
+    ax.annotate("Alpha", (5, np.sin(5.0)), ha="center", va="center")
+
+    assert [c for c in ax.collections if cf._series_px(c, ax) is not None] == []
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Label attribution"] is True
+
+    # and the same band, declared a series by its author, is read as one
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    band = ax.fill_between(x, y - 0.4, y + 0.4, label="Envelope")
+    got = cf._series_px(band, ax)
+    plt.close(fig)
+    assert got is not None and len(got)
+
+
 def test_label_attribution_catches_a_label_in_the_corridor():
     """The regression that motivated dropping the KD-tree. A label in the
     corridor between two curves, nearer its own but inside LABEL_MARGIN.

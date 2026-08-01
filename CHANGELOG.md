@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+**`step`, `stackplot` and contour sets are read now.** The last notes left these
+three as geometry the attribution harvest does not reach, and each was unread
+for its own reason.
+
+`ax.step` keeps the points it was handed and draws a staircase through them, so
+densifying `get_xydata` lays the harvested geometry along the diagonal chord of
+every riser. Measured on a six-point square wave: 836 harvested points, 785 of
+them on blank page. `_drawstyle_xy` runs the vertices through the `pts_to_*step`
+helpers in `matplotlib.cbook`, which is what `Line2D` itself does, rather than
+writing a second staircase that can disagree with the first. A test asserts
+those helpers still resolve, because a rename upstream would not raise - it
+would mean "this line has no drawstyle" and quietly revert every step plot to
+its chords.
+
+`stackplot` bands and contour sets carry paths and no offsets, so `_series_px`
+returned None for them and the offsets branch was the only branch. `_path_px`
+reads `Path.to_polygons`, not `path.vertices`, because the dummy vertex a
+CLOSEPOLY carries and the jump a MOVETO makes are not points on the stroke -
+the same bridging defect NaN handling exists to avoid, one level down.
+
+Filled series are judged on containment rather than on distance to their
+outline. `stackplot` hands neighbouring bands the same dividing edge, so on
+boundary distance a label inside the upper band is exactly as far from the lower
+band's outline as from its own and every stacked label reads as ambiguous.
+
+A fill has to carry a legend-visible label to count as a series and a stroke
+does not, which is the one asymmetry here and it is deliberate. A confidence
+band lies on top of the curve it belongs to, so counting an anonymous
+`fill_between` puts a competitor at distance zero from every direct label on
+that curve. `stackplot(labels=...)` and a deliberate `fill_between(label=...)`
+are series; `_child3` is a band bound to somebody else's line.
+
 **A mark eclipsed by a mark that is not its nearest neighbour was not
 overplotting.** The last notes named this as the case no 1-NN test reaches and
 left it. Contact is `d < r_i + r_j`, and the `j` that minimises `d` need not be
@@ -68,9 +100,9 @@ both of them about what counts as a series.
   already uses and which keeps `fill_between` from planting a phantom series at
   data (0, 0) off its single zero offset.
 
-`step`, `stackplot` and contour sets are still unread. They are `PolyCollection`
-and `LineCollection` geometry rather than offsets, and reaching them is a
-different harvest than this one.
+`step`, `stackplot` and contour sets were left unread here - `PolyCollection` and
+`LineCollection` geometry rather than offsets, a different harvest than this one.
+They are the first entry above.
 
 **Text collision compared the boxes rotation left behind, not the boxes.**
 `get_window_extent` returns the axis-aligned bounding box of the *rotated*

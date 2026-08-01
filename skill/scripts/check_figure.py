@@ -1627,11 +1627,11 @@ def check_identity_channel(fig):
                     "blue are under 3:1 on white, where that step is hardest")
 
 
-def _polyline_px(line, ax):
-    """A line's vertices in display space, densified so no gap exceeds 2px.
+def _densify_px(pts):
+    """Display-space vertices with no gap over 2px, per run of finite ones.
 
-    Vertices alone are not enough on a sparsely sampled line: two points 200px
-    apart say nothing about the stroke between them, and that stroke is what the
+    Vertices alone are not enough on a sparsely sampled stroke: two points 200px
+    apart say nothing about the line between them, and that line is what the
     label actually lands next to.
 
     A break in the data is a break in the stroke, and the two sides of it are
@@ -1644,10 +1644,6 @@ def _polyline_px(line, ax):
     finite vertices instead.
     """
     import numpy as np
-    xy = np.asarray(line.get_xydata(), dtype=float)
-    if xy.ndim != 2 or len(xy) == 0:
-        return None
-    pts = ax.transData.transform(xy)
     finite = np.flatnonzero(np.isfinite(pts).all(axis=1))
     if not len(finite):
         return None
@@ -1666,6 +1662,93 @@ def _polyline_px(line, ax):
     return np.vstack(out)
 
 
+def _drawstyle_xy(line):
+    """A line's data vertices after its drawstyle, which is the shape drawn.
+
+    `get_xydata` returns what was passed in. `ax.step` keeps those same points
+    and draws a staircase through them, so densifying the raw vertices lays the
+    harvested geometry along the diagonal chord of each riser. Measured on a
+    six-point square wave: 836 harvested points, 785 of them on blank page.
+
+    matplotlib expands the drawstyle in `Line2D._transform_path`, using the
+    `pts_to_*step` helpers in `matplotlib.cbook`. Those are read here rather
+    than reimplemented, because a staircase written twice is a staircase that
+    can disagree with itself. The read is asserted in the suite: if a matplotlib
+    release moves them, that goes red rather than quietly reverting every step
+    plot to its chords.
+    """
+    import numpy as np
+    xy = np.asarray(line.get_xydata(), dtype=float)
+    style = str(line.get_drawstyle() or "default")
+    if style == "default" or xy.ndim != 2 or len(xy) < 2:
+        return xy
+    from matplotlib import cbook
+    fn = {"steps": cbook.pts_to_prestep,
+          "steps-pre": cbook.pts_to_prestep,
+          "steps-mid": cbook.pts_to_midstep,
+          "steps-post": cbook.pts_to_poststep}.get(style)
+    if fn is None:
+        return xy
+    return np.column_stack(fn(xy[:, 0], xy[:, 1]))
+
+
+def _polyline_px(line, ax):
+    """A `Line2D`'s stroke in display space, drawstyle expanded and densified."""
+    import numpy as np
+    xy = _drawstyle_xy(line)
+    if xy.ndim != 2 or len(xy) == 0:
+        return None
+    return _densify_px(np.asarray(ax.transData.transform(xy), dtype=float))
+
+
+def _path_px(artist, ax):
+    """A path-drawn collection's outline in display space.
+
+    `step`, `stackplot` and contour sets put their geometry in paths rather than
+    in offsets, so the offsets branch returned nothing for them and a label on a
+    stacked band or in a contour field was invisible to the attribution gate
+    twice over: the band could not own a label, and it could not be the
+    neighbour that made one ambiguous.
+
+    `Path.to_polygons` is what turns codes into vertex runs. Reading
+    `path.vertices` directly would take the dummy vertex a CLOSEPOLY carries and
+    the jump a MOVETO makes as points on the stroke, which is the same bridging
+    defect NaN handling exists to avoid, one level down.
+    """
+    import numpy as np
+    transform = artist.get_transform()
+    if transform is None:
+        transform = ax.transData
+    runs = []
+    for path in artist.get_paths():
+        if not len(path.vertices):
+            continue
+        for poly in path.to_polygons(closed_only=False):
+            if len(poly) < 1:
+                continue
+            got = _densify_px(np.asarray(transform.transform(poly),
+                                         dtype=float))
+            if got is not None and len(got):
+                runs.append(got)
+    if not runs:
+        return None
+    return np.vstack(runs)
+
+
+def _is_filled(artist):
+    """Whether a collection paints its interior rather than only its outline.
+
+    A `LineCollection` and an unfilled contour set report no face colours at
+    all; `stackplot`, `fill_between` and `contourf` report one per path.
+    """
+    import numpy as np
+    try:
+        faces = np.asarray(artist.get_facecolor(), dtype=float)
+    except Exception:
+        return False
+    return bool(faces.ndim == 2 and len(faces) and faces[:, 3].max() > 0)
+
+
 def _series_px(artist, ax):
     """The positions one series actually put on the page, in display pixels.
 
@@ -1675,28 +1758,43 @@ def _series_px(artist, ax):
     transform on an ordinary axes and is not on one with an offset transform of
     its own.
 
-    Recognised by carrying sizes, the same discriminator `check_overplotting`
-    uses. `fill_between` and the other `PolyCollection`s report a single zero
-    offset and no sizes; taking that at face value would plant a phantom series
-    at data (0, 0) in every figure with a shaded band in it.
+    A scatter is recognised by carrying sizes, the same discriminator
+    `check_overplotting` uses. Everything else with paths is read as paths.
+    `fill_between` and the other `PolyCollection`s report a single zero offset
+    and no sizes; taking that at face value would plant a phantom series at data
+    (0, 0) in every figure with a shaded band in it.
+
+    A filled collection has to carry a legend-visible label to count, and a
+    stroked one does not. A stroke is a series by construction. A filled region
+    is as often a band bound to somebody else's curve - a confidence interval, a
+    shaded span - and those are not what a reader resolves a direct label
+    against; letting them in fails the label on every curve that wears an error
+    band, since the band lies on top of the curve it belongs to. matplotlib's
+    own signal for which is which is the label, so that is the one used:
+    `stackplot(labels=...)` and a deliberate `fill_between(label=...)` are
+    series, `_child3` is not.
     """
     from matplotlib.lines import Line2D
     import numpy as np
     if isinstance(artist, Line2D):
         return _polyline_px(artist, ax)
     try:
-        if len(getattr(artist, "get_sizes", lambda: [])()) == 0:
+        if len(getattr(artist, "get_sizes", lambda: [])()):
+            offsets = np.asarray(artist.get_offsets(), dtype=float)
+            transform = (artist.get_offset_transform()
+                         if hasattr(artist, "get_offset_transform")
+                         else ax.transData)
+            pts = transform.transform(offsets)
+            if pts.ndim != 2 or not len(pts):
+                return None
+            return pts[np.isfinite(pts).all(axis=1)]
+        if not hasattr(artist, "get_paths"):
             return None
-        offsets = np.asarray(artist.get_offsets(), dtype=float)
-        transform = (artist.get_offset_transform()
-                     if hasattr(artist, "get_offset_transform")
-                     else ax.transData)
-        pts = transform.transform(offsets)
+        if _is_filled(artist) and str(artist.get_label() or "").startswith("_"):
+            return None
+        return _path_px(artist, ax)
     except Exception:
         return None
-    if pts.ndim != 2 or not len(pts):
-        return None
-    return pts[np.isfinite(pts).all(axis=1)]
 
 
 def _legend_text_ids(fig):
@@ -1732,6 +1830,30 @@ def _box_distance(bb, pts):
     return float(np.min(np.hypot(dx, dy)))
 
 
+def _series_distance(artist, bb, pts):
+    """How far a label's box is from one series, in px.
+
+    For a stroke or a set of marks that is the distance to the nearest ink. For
+    a filled region it is zero anywhere inside it, because the region's ink is
+    its interior and a label printed on a band belongs to that band.
+
+    Boundary distance alone gets adjacent bands exactly wrong. `stackplot`
+    hands neighbouring bands the same dividing edge, so a label inside the upper
+    band is the same distance from the lower band's outline as from its own, and
+    every stacked label reads as ambiguous.
+    """
+    centre = ((bb.x0 + bb.x1) / 2.0, (bb.y0 + bb.y1) / 2.0)
+    if _is_filled(artist):
+        try:
+            transform = artist.get_transform()
+            if any(p.contains_point(centre, transform=transform)
+                   for p in artist.get_paths()):
+                return 0.0
+        except Exception:
+            pass
+    return _box_distance(bb, pts)
+
+
 def check_label_attribution(fig, r):
     """A direct label sitting nearer some other series than the one it names.
 
@@ -1751,12 +1873,14 @@ def check_label_attribution(fig, r):
     plainly the closest thing to it, not when it is some absolute number of
     points away.
 
-    Scatters count as series alongside lines. Reading `ax.lines` alone left a
-    label sitting on top of a dense point cloud invisible to the gate twice
-    over: the cloud could not own a label, and it could not be the neighbour
-    that made one ambiguous. The premise here is that a reader resolves a
-    direct label by proximity, and a reader does not know what artist class
-    drew the ink.
+    Scatters count as series alongside lines, and so do the path-drawn ones:
+    `step`'s staircase, a `stackplot` band, a contour set. Reading `ax.lines`
+    and offsets alone left a label sitting on top of a dense point cloud or
+    inside a stacked band invisible to the gate twice over: the series could not
+    own a label, and it could not be the neighbour that made one ambiguous. The
+    premise here is that a reader resolves a direct label by proximity, and a
+    reader does not know what artist class drew the ink. See `_series_px` for
+    the one exception, an unlabelled fill, and why it is one.
     """
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig)
@@ -1788,7 +1912,7 @@ def check_label_attribution(fig, r):
             # A floor on the own-curve distance: without it a label printed
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
-            d_own = max(_box_distance(bb, px[own_line]), 0.5)
+            d_own = max(_series_distance(own_line, bb, px[own_line]), 0.5)
             # The minimum over every OTHER curve, box-to-polyline. A KD-tree
             # over the pooled points was tried here for speed and was wrong:
             # it returns the nearest *points*, so for a label sitting close to
@@ -1796,7 +1920,7 @@ def check_label_attribution(fig, r):
             # other curve is ever reached, and `d_other` stays infinite. Which
             # is to say it passed every label it was closest to — the common
             # case, and the one the gate exists for.
-            d_other = min(_box_distance(bb, p)
+            d_other = min(_series_distance(line, bb, p)
                           for line, p in px.items() if line is not own_line)
             if d_other < LABEL_MARGIN * d_own:
                 bad.append(f"{str(t.get_text())[:22]!r} is {d_own:.0f}px from "
