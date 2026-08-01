@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+**One oversized mark no longer sets the overplotting query radius for the whole
+scatter.** `_contact_fraction` enumerated candidate pairs at `2 * r_max`. The
+bound is correct, since `r_i + r_j` cannot exceed it, but a single large mark
+inflates it for every other mark in the figure, and a highlighted point in a
+large scatter is an ordinary thing to draw. Measured: 50000 uniform points at
+r=3 with one r=40 among them produced 62 million candidate pairs in a 994MB
+array, and 60000 points on a Gaussian cloud with one r=100 mark did not return
+in 120 seconds. The gate is advisory, but it runs inside `audit`, so what it
+takes down is the whole audit.
+
+Marks are grouped by radius octave, so radii inside a group vary by under 2x and
+a group is bounded by its own largest radius. The nearest member of a group is
+tested exactly first, which settles almost every mark, and only a mark still
+unhit whose nearest member lies inside `r_i + max(r_B)` needs a ball query. The
+oversized mark becomes a group of one. Same answers, asserted exact against the
+full pair enumeration over 24 random scatters spanning graded radii, a single
+oversized mark, zero-radius marks and sub-pixel marks; the uniform-radii fast
+path and the scipy-absent fallback are untouched. The three cases above now run
+in 0.06s, 0.07s and 0.21s.
+
 **The examples are importable, so the corpus can be measured.** `gallery.py` and
 `demo.py` did their work at import: every figure built, all eight committed PNGs
 overwritten, `sys.argv[1]` read as an output directory, the style sheet applied
