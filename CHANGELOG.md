@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+**Label attribution measured against strokes that are not on the page, and did
+not measure against half the ones that are.** Two defects in the same gate,
+both of them about what counts as a series.
+
+- **A break in the data was bridged.** `_polyline_px` dropped non-finite
+  vertices and then densified across what was left, which joins the two sides
+  of every hole. A 100-point sine with `y[40:60] = nan` came back with 326
+  invented points strung across blank page, and a label sitting in that gap was
+  judged against a curve that is not there. Masked arrays arrive the same way,
+  because `Line2D` fills a masked input with NaN on recache. Densifying per run
+  of consecutive finite vertices fixes both spellings.
+- **Only `ax.lines` was read.** A point cloud could not own a direct label and
+  could not be the neighbour that made one ambiguous, so a label sitting on top
+  of a dense scatter passed clean. `_series_px` now takes scatters too,
+  recognised by carrying sizes, which is the discriminator `check_overplotting`
+  already uses and which keeps `fill_between` from planting a phantom series at
+  data (0, 0) off its single zero offset.
+
+`step`, `stackplot` and contour sets are still unread. They are `PolyCollection`
+and `LineCollection` geometry rather than offsets, and reaching them is a
+different harvest than this one.
+
 **Text collision compared the boxes rotation left behind, not the boxes.**
 `get_window_extent` returns the axis-aligned bounding box of the *rotated*
 string. Measured on one 11pt label: 119.0 x 15.3 at 0 degrees, 15.3 x 119.0 at

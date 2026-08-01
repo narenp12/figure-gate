@@ -1512,22 +1512,70 @@ def _polyline_px(line, ax):
     Vertices alone are not enough on a sparsely sampled line: two points 200px
     apart say nothing about the stroke between them, and that stroke is what the
     label actually lands next to.
+
+    A break in the data is a break in the stroke, and the two sides of it are
+    not joined on the page. The first version dropped non-finite vertices and
+    then densified across what was left, which bridges every gap: a 100-point
+    sine with `y[40:60] = nan` came back with 326 invented points strung across
+    the hole, and `check_label_attribution` measured a label against a curve
+    that is not there. Masked arrays land here the same way, because `Line2D`
+    fills a masked input with NaN on recache. Densify per run of consecutive
+    finite vertices instead.
     """
     import numpy as np
     xy = np.asarray(line.get_xydata(), dtype=float)
     if xy.ndim != 2 or len(xy) == 0:
         return None
     pts = ax.transData.transform(xy)
-    pts = pts[np.isfinite(pts).all(axis=1)]
-    if len(pts) < 2:
-        return pts if len(pts) else None
-    step = pts[1:] - pts[:-1]
-    counts = np.maximum(1, np.ceil(np.hypot(step[:, 0], step[:, 1]) / 2.0)
-                        ).astype(int)
-    out = [p + (np.arange(k) / k)[:, None] * d
-           for p, d, k in zip(pts[:-1], step, counts)]
-    out.append(pts[-1:])
+    finite = np.flatnonzero(np.isfinite(pts).all(axis=1))
+    if not len(finite):
+        return None
+    out = []
+    for run in np.split(finite, np.flatnonzero(np.diff(finite) != 1) + 1):
+        seg = pts[run]
+        if len(seg) < 2:
+            out.append(seg)
+            continue
+        step = seg[1:] - seg[:-1]
+        counts = np.maximum(1, np.ceil(np.hypot(step[:, 0], step[:, 1]) / 2.0)
+                            ).astype(int)
+        out.extend(p + (np.arange(k) / k)[:, None] * d
+                   for p, d, k in zip(seg[:-1], step, counts))
+        out.append(seg[-1:])
     return np.vstack(out)
+
+
+def _series_px(artist, ax):
+    """The positions one series actually put on the page, in display pixels.
+
+    A `Line2D` is a stroke and gets densified. A scatter is a set of marks and
+    is already the answer, so its offsets go through the transform its own
+    collection uses rather than through `ax.transData`, which is the same
+    transform on an ordinary axes and is not on one with an offset transform of
+    its own.
+
+    Recognised by carrying sizes, the same discriminator `check_overplotting`
+    uses. `fill_between` and the other `PolyCollection`s report a single zero
+    offset and no sizes; taking that at face value would plant a phantom series
+    at data (0, 0) in every figure with a shaded band in it.
+    """
+    from matplotlib.lines import Line2D
+    import numpy as np
+    if isinstance(artist, Line2D):
+        return _polyline_px(artist, ax)
+    try:
+        if len(getattr(artist, "get_sizes", lambda: [])()) == 0:
+            return None
+        offsets = np.asarray(artist.get_offsets(), dtype=float)
+        transform = (artist.get_offset_transform()
+                     if hasattr(artist, "get_offset_transform")
+                     else ax.transData)
+        pts = transform.transform(offsets)
+    except Exception:
+        return None
+    if pts.ndim != 2 or not len(pts):
+        return None
+    return pts[np.isfinite(pts).all(axis=1)]
 
 
 def _legend_text_ids(fig):
@@ -1581,18 +1629,25 @@ def check_label_attribution(fig, r):
     reader makes is comparative: a label is unambiguous when its own curve is
     plainly the closest thing to it, not when it is some absolute number of
     points away.
+
+    Scatters count as series alongside lines. Reading `ax.lines` alone left a
+    label sitting on top of a dense point cloud invisible to the gate twice
+    over: the cloud could not own a label, and it could not be the neighbour
+    that made one ambiguous. The premise here is that a reader resolves a
+    direct label by proximity, and a reader does not know what artist class
+    drew the ink.
     """
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig)
     all_texts = _texts(fig, r)
     for ax in fig.axes:
         px = {}
-        for line in ax.lines:
-            if not line.get_visible():
+        for artist in (*ax.lines, *ax.collections):
+            if not artist.get_visible():
                 continue
-            p = _polyline_px(line, ax)
+            p = _series_px(artist, ax)
             if p is not None and len(p):
-                px[line] = p
+                px[artist] = p
         if len(px) < 2:
             continue
 

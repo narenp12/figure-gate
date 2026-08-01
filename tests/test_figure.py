@@ -1623,6 +1623,69 @@ def test_placed_frac_without_any_width_still_refuses():
 
 # --- label attribution: the case a KD-tree silently passed -------------------
 
+def test_polyline_does_not_bridge_a_gap_in_the_data():
+    """A break in the data is a break in the stroke.
+
+    Dropping non-finite vertices and then densifying across what is left joins
+    the two sides of every hole: a 100-point sine with `y[40:60] = nan` came
+    back with 326 invented points strung across a stretch of blank page, and
+    `check_label_attribution` measured labels against a curve that is not
+    there. Both spellings of a break are checked, because `Line2D` fills a
+    masked array with NaN on recache and they arrive here as the same thing.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+    x = np.linspace(0, 10, 101)
+
+    nan_y = np.sin(x)
+    nan_y[40:60] = np.nan
+    masked_y = np.ma.masked_where((x >= x[40]) & (x <= x[59]), np.sin(x))
+
+    edges = ax.transData.transform(np.column_stack([x, np.zeros_like(x)]))[:, 0]
+    lo, hi = edges[39], edges[60]
+
+    for label, y in (("nan", nan_y), ("masked", masked_y)):
+        line, = ax.plot(x, y)
+        pts = cf._polyline_px(line, ax)
+        inside = int(((pts[:, 0] > lo + 2) & (pts[:, 0] < hi - 2)).sum())
+        assert inside == 0, f"{label}: {inside} points invented across the gap"
+        # and the stroke that IS drawn is still densified on both sides
+        assert len(pts) > 101
+        line.remove()
+    plt.close(fig)
+
+
+def test_label_attribution_sees_a_scatter_as_a_series():
+    """`ax.lines` alone left a point cloud invisible twice over: it could not
+    own a label, and it could not be the neighbour that made one ambiguous. A
+    reader resolving a direct label by proximity does not know what artist
+    class drew the ink."""
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    ax.plot([0, 1, 2, 3], [0, 1, 2, 3], label="Line")
+    ax.scatter([0, 0.5, 1, 1.5, 2], [2.2, 2.3, 2.4, 2.5, 2.6], s=40,
+               label="Cloud")
+    ax.text(1.0, 2.0, "Line", ha="center")
+    r, _ = cf._renderer(fig)
+    ok, detail = cf.check_label_attribution(fig, r)
+    plt.close(fig)
+    assert ok is False, detail
+    assert "another" in detail
+
+
+def test_a_shaded_band_is_not_a_phantom_series_at_the_origin():
+    """`fill_between` and the other `PolyCollection`s report a single zero
+    offset and no sizes. Taking that at face value plants a series at data
+    (0, 0) in every figure with a band in it, which is a neighbour no reader
+    can see and the gate would measure every label against."""
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    ax.plot([1, 2, 3], [1, 2, 3], label="A")
+    ax.plot([1, 2, 3], [3, 2, 1], label="B")
+    ax.fill_between([1, 2, 3], [0.5, 1.5, 2.5], [1.5, 2.5, 3.5], alpha=0.3)
+    taken = [c for c in ax.collections if cf._series_px(c, ax) is not None]
+    plt.close(fig)
+    assert taken == []
+
+
 def test_label_attribution_catches_a_label_in_the_corridor():
     """The regression that motivated dropping the KD-tree. A label in the
     corridor between two curves, nearer its own but inside LABEL_MARGIN.
