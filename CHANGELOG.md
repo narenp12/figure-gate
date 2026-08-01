@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+**The examples are importable, so the corpus can be measured.** `gallery.py` and
+`demo.py` did their work at import: every figure built, all eight committed PNGs
+overwritten, `sys.argv[1]` read as an output directory, the style sheet applied
+to the importing process for good, and then `sys.exit`. That made the corpus,
+which is the evidence every gate is checked against, the one thing hardest to
+get at; `test_alt_text_numbers.py` worked around it by cutting each source at a
+marker string and executing the prefix. The driver, the argv read and the exit
+are under `__main__` now, the sheet is scoped to the builders, and the builders
+return their figures and write nothing with `OUT`/`out` set to None. All eight
+figures render byte-identical to the previous code.
+
 **A size-weighted separation gate was built, measured, and not shipped.** The
 intuition is sound: a hue pair that reads as two on a filled band ought to read
 as one on a hairline, and a small target really does need more colour difference
