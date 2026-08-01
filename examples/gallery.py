@@ -16,7 +16,21 @@ compositions where the checks have somewhere to hide:
     gallery-encoding.png          three colormap kinds, one per panel
 
 Each one is audited and the script exits non-zero if any figure fails, so these
-are regression tests with pictures attached rather than decoration. Writing them
+are regression tests with pictures attached rather than decoration.
+
+Importing this file builds nothing. The seven builders are importable and each
+returns its figure, so a change to a gate can be measured against the corpus:
+
+    import gallery
+    gallery.OUT = None                  # build, audit, write nothing
+    fig = gallery.field()
+
+That is the point of the corpus, and it used to be the one thing this file made
+hard. Importing it ran every builder, overwrote all seven committed PNGs, read
+`sys.argv[1]` as an output directory, put the style sheet into the importing
+process for good, and then called `sys.exit`.
+
+Writing them
 found six defects in the checks themselves, and the comments below say which:
 the readability gate reported a schematic's invisible tick labels, `check_ink`
 called every colorbar a saturated panel, the line-weight gate measured a
@@ -33,6 +47,7 @@ is why the procedure has a step 7.
 """
 
 from pathlib import Path
+import functools
 import sys
 
 import matplotlib
@@ -43,38 +58,72 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
 HERE = Path(__file__).resolve().parent
-# Same optional argument as `demo.py`, and for the same reason: the test that
-# runs this file used to rewrite all seven committed PNGs on every `pytest`.
-OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE
 SKILL = HERE.parent / "skill"
 sys.path.insert(0, str(SKILL / "scripts"))
 
 import check_figure as cf          # noqa: E402
 
-plt.style.use(str(SKILL / "assets" / "figure.mplstyle"))
+STYLE = SKILL / "assets" / "figure.mplstyle"
 
-SERIES = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+# Where `finish` writes. Same optional argument as `demo.py`, and for the same
+# reason: the test that runs this file used to rewrite all seven committed PNGs
+# on every `pytest`. Resolved in `main` rather than from `sys.argv` at import,
+# because under a test runner `sys.argv[1]` is the runner's own argument and
+# this file would take it for an output directory.
+OUT = HERE
+
+# Read under the sheet, not with it left in effect. `plt.style.use` at module
+# scope put the sheet into every process that imported this file, and
+# `check_style_sheet` -- whose whole job is noticing the sheet is NOT in effect
+# -- stopped being able to fail in that process. See `styled`.
+with plt.style.context(str(STYLE)):
+    SERIES = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    SURFACE = plt.rcParams["axes.facecolor"]
 INK = "#000000"
 MUTED = "#777570"
-SURFACE = plt.rcParams["axes.facecolor"]
 
 results: list[tuple[str, bool]] = []
+
+
+def styled(build):
+    """Run one builder with the skill's sheet in effect, and only then.
+
+    The sheet has to be live while the figure is constructed, and it has to be
+    live through `finish`, because `check_style_sheet` compares the rcParams
+    that are in effect against the sheet on disk. Both happen inside the
+    builder, so wrapping the builder covers both and leaves the import inert.
+    """
+    @functools.wraps(build)
+    def run(*args, **kwargs):
+        with plt.style.context(str(STYLE)):
+            return build(*args, **kwargs)
+    return run
 
 
 def finish(fig, name, description, **audit_kw):
     """Describe, audit, save. In that order, on purpose — `describe` before
     `audit` because the alt-text row is part of what is being checked, and
     `audit` before `savefig` because a figure that fails should still be
-    written out so you can look at what failed."""
+    written out so you can look at what failed.
+
+    Returns the figure, and with `OUT` set to None writes nothing and leaves it
+    open. That is the mode for measuring a change against this corpus: the
+    seven figures are the evidence a gate is checked against, and getting at
+    them used to mean either rewriting the committed PNGs or not getting at
+    them at all.
+    """
     cf.describe(fig, description)
     ok = cf.report(fig, name, **audit_kw)
+    results.append((name, ok))
+    if OUT is None:
+        return fig
     out = OUT / f"{name}.png"
     # `alt_metadata` takes the path so it can pick a key the format has. PNG
     # takes `Description`; PDF's info dictionary does not have one, and asking
     # for it there makes matplotlib warn on every save.
     fig.savefig(out, metadata=cf.alt_metadata(fig, out))
     plt.close(fig)
-    results.append((name, ok))
+    return fig
 
 
 # --- 1. small multiples ------------------------------------------------------
@@ -83,6 +132,7 @@ def finish(fig, name, description, **audit_kw):
 # (`check_redundancy`) is the reason this is a `subplots(..., sharex, sharey)`
 # rather than four independently labelled axes.
 
+@styled
 def small_multiples():
     rng = np.random.default_rng(11)
     epochs = np.arange(1, 41)
@@ -128,7 +178,7 @@ def small_multiples():
     fig.supxlabel("Training epoch")
     fig.supylabel("Validation loss")
 
-    finish(fig, "gallery-small-multiples",
+    return finish(fig, "gallery-small-multiples",
            "Validation loss against training epoch on four datasets, SGD "
            "against Adam. Adam falls faster on all four and reaches a lower "
            "floor on CIFAR-10 and SVHN; on CIFAR-100 and Tiny-ImageNet the two "
@@ -142,6 +192,7 @@ def small_multiples():
 # ground rather than figure, and the ink fraction is measured off what sits on
 # top of it.
 
+@styled
 def field():
     gx, gy = np.meshgrid(np.linspace(-2.2, 2.2, 400),
                          np.linspace(-1.6, 2.4, 400))
@@ -210,7 +261,7 @@ def field():
     # foreground color, which on this sheet is the axis rule already.
     bar.outline.set_linewidth(0.0)
 
-    finish(fig, "gallery-field",
+    return finish(fig, "gallery-field",
            "Rosenbrock function on a log scale as a filled viridis field with "
            "isolines, and a 6000-step gradient descent path from "
            "(-1.75, 2.15). The path drops into the curved valley within two "
@@ -226,6 +277,7 @@ def field():
 # whether the ink is legible; those are the ones that break schematics in
 # practice, and they are exactly the ones that survive `ax.axis("off")`.
 
+@styled
 def schematic():
     fig, ax = plt.subplots(figsize=(7.2, 2.6), constrained_layout=True)
     ax.set_xlim(0, 100)
@@ -276,7 +328,7 @@ def schematic():
             "measured labels retrain the surrogate",
             ha="center", va="top", color=INK)
 
-    finish(fig, "gallery-schematic",
+    return finish(fig, "gallery-schematic",
            "A four-stage active learning loop: a candidate pool feeds a "
            "surrogate model, an acquisition function ranks its predictions, "
            "and the top candidates go to the wet lab. Measured labels return "
@@ -289,6 +341,7 @@ def schematic():
 # Each panel is a form `choosing-a-form.md` argues for against a more obvious
 # alternative, and the caption of each names the alternative it beats.
 
+@styled
 def forms():
     rng = np.random.default_rng(4)
     fig, (a, b, c) = plt.subplots(1, 3, figsize=(7.6, 2.9),
@@ -345,7 +398,7 @@ def forms():
     c.set_aspect("equal")
     c.set_title("(c) against the ideal", loc="left")
 
-    finish(fig, "gallery-forms",
+    return finish(fig, "gallery-forms",
            "Three panels. (a) Binding fraction for 14 controls and 14 treated "
            "samples, every point shown: the treated group is bimodal, which a "
            "box plot would hide. (b) Twelve paired before-and-after "
@@ -362,6 +415,7 @@ def forms():
 # and on log-log a power law is a straight line whose SLOPE is the answer. Every
 # rule below follows from that one fact.
 
+@styled
 def convergence():
     h = np.logspace(-3.2, -0.6, 12)
     methods = (("forward Euler", 1, 0.55),
@@ -417,7 +471,7 @@ def convergence():
     # protractor would be useless and a comparison against the triangle is not.
     ax.set_xlim(h[0] / 1.6, h[-1] * 1.6)
 
-    finish(fig, "gallery-convergence",
+    return finish(fig, "gallery-convergence",
            "Maximum global error against step size for forward Euler, Heun and "
            "RK4 on log-log axes, over step sizes from 1e-3.2 to 1e-0.6. Each "
            "method is a straight line of slope 1, 2 and 4 respectively; a slope "
@@ -432,6 +486,7 @@ def convergence():
 # — which is the whole reason the context-dependent checks warn instead of
 # failing. A gate everyone learns to ignore is worse than no gate.
 
+@styled
 def orbit():
     rs = np.linspace(2.5, 4.0, 1400)
     keep, burn = 120, 400
@@ -466,7 +521,7 @@ def orbit():
     ax.set_ylim(0, 1)
     ax.grid(False)
 
-    finish(fig, "gallery-orbit",
+    return finish(fig, "gallery-orbit",
            "Orbit diagram of the logistic map for r from 2.5 to 4. A single "
            "fixed point splits at r = 3, doubles repeatedly at an accelerating "
            "rate, and dissolves into a dense chaotic band at r about 3.57, with "
@@ -476,6 +531,7 @@ def orbit():
 
 # --- 7. three encodings, three colormap kinds --------------------------------
 
+@styled
 def encoding():
     UNMEASURED = "#d9d7d2"
     from matplotlib.patches import Patch
@@ -569,7 +625,7 @@ def encoding():
     bar_c.set_label(r"$\arg f(z)$")
     bar_c.outline.set_linewidth(0.0)
 
-    finish(fig, "gallery-encoding",
+    return finish(fig, "gallery-encoding",
            "Three complex-plane images, each on a colormap matched to what it "
            "encodes, and each with the key that kind of encoding takes. (a) "
            "Mandelbrot escape time in viridis, a sequential ramp, read against "
@@ -585,12 +641,34 @@ def encoding():
            context_axes=[a, b, c])
 
 
-for build in (small_multiples, field, schematic, forms, convergence, orbit,
-              encoding):
-    build()
+BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
+            encoding)
 
-print("\n" + "=" * 62)
-for name, ok in results:
-    print(f"  {'PASS' if ok else 'FAIL'}  {name}.png")
-print("=" * 62 + "\n")
-sys.exit(0 if all(ok for _, ok in results) else 1)
+
+def main(argv=None):
+    """Build all seven, audit each, and report. Returns a process exit code.
+
+    Under `if __name__ == "__main__"`, so that importing this file builds
+    nothing, writes no PNG, reads no `sys.argv` and does not exit the
+    interpreter. Importing it used to do all four, which is why the test that
+    reads these figures cut the source at a marker string and executed the
+    prefix instead of importing it, and why measuring a gate against this
+    corpus overwrote the seven committed PNGs as a side effect.
+    """
+    global OUT
+    argv = sys.argv[1:] if argv is None else list(argv)
+    OUT = Path(argv[0]) if argv else HERE
+
+    results.clear()
+    for build in BUILDERS:
+        build()
+
+    print("\n" + "=" * 62)
+    for name, ok in results:
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}.png")
+    print("=" * 62 + "\n")
+    return 0 if all(ok for _, ok in results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
