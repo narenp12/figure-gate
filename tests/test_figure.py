@@ -2331,7 +2331,7 @@ def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
 def test_banking_culls_segments_that_render_flat():
     """A saturating curve - a converged training run - is 92 near-flat
     segments out of 119. Slope cannot tell the flat tail from flat at any
-    aspect, and banking a panel on it asks for something six hundred times
+    aspect, and banking a panel on it asks for something sixteen hundred times
     taller; the cull has to happen before the median, or the gate warns on
     the most ordinary figure there is."""
     import numpy as np

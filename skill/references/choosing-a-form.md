@@ -239,7 +239,7 @@ exactly zero or infinite slope to *drawn* flat: a segment whose rise is under
 `BANKING_FLAT_PX = 0.5` display pixels cannot be told from flat at any aspect a
 reader will see. A converged training run is mostly a flat tail — 92 near-flat
 segments of 119 — and culling them is the difference between a median slope of
-0.0006 (warn: make the panel six hundred times taller) and 1.30 (banked).
+0.0006 (warn: make the panel sixteen hundred times taller) and 1.30 (banked).
 
 ## The forms with no research-figure use
 

@@ -2171,7 +2171,7 @@ def _banking_slopes(ax):
     That is not a nicety. A saturating curve - a converged training run, which
     is about as common as figures get - is 92 near-flat segments out of 119, and
     without the cull its median slope is 0.0006: the gate warned that a
-    perfectly ordinary figure needed to be six hundred times taller. Culled, the
+    perfectly ordinary figure needed to be sixteen hundred times taller. Culled, the
     same panel reads 1.30, which is banked. The saw wave the gate exists to
     catch has nothing culled and is unaffected.
     """
@@ -2241,11 +2241,13 @@ def check_banking(fig):
         if floor <= median <= BANKING_SLOPE_MAX:
             continue
         degrees = math.degrees(math.atan(median))
-        # Banking multiplies the height-to-width ratio by 1/median, which is
-        # the number the author can act on.
+        # Banking multiplies the height-to-width ratio by 1/median. Making the
+        # panel wider multiplies its width, dividing the ratio; making it
+        # taller multiplies the height, so the author acts on 1/median.
+        factor = 1.0 / median if median < 1 else median
         bad.append(f"ax{i} typical segment at {degrees:.0f} deg "
                    f"(slope {median:.2g}); banking wants the panel "
-                   f"{median:.2g}x " + ("wider" if median > 1 else "taller"))
+                   f"{factor:g}x " + ("wider" if median > 1 else "taller"))
     if not seen:
         return True, "no line panel whose aspect encodes a rate"
     if not bad:
