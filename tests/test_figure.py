@@ -152,31 +152,74 @@ def test_mark_ratio_sees_line_markers_not_only_scatter():
     assert gates(rows)["Mark ratio"] is False
 
 
-def test_mark_ratio_measures_both_mark_kinds_in_the_same_unit():
-    """`scatter(s=...)` is an area in pt^2; `plot(markersize=...)` is a
-    diameter in points. Squaring the diameter gives the bounding square rather
-    than the disc, which is 4/pi = 1.27x too large — invisible on a figure
-    drawing one kind, because the bias cancels in the ratio, and a standing 27%
-    error on any figure mixing the two.
+def test_scatter_size_is_a_squared_diameter_not_an_area():
+    """The premise `scatter_diameter_pt` rests on, pinned against matplotlib
+    rather than against its own docstring.
 
-    The figure is sized so the two formulas straddle the threshold: the marks
-    are truly 4.0x apart in drawn area, which is legal, and 5.09x apart under
-    the old squaring, which is not. So this asserts the verdict rather than a
-    substring of the message -- a test matching "1.0x" in the detail string
-    passes or fails on the format spec, and would have to be rewritten the next
-    time anyone changes how the row is phrased.
+    matplotlib documents `s` as "the marker size in points**2", and every
+    conversion in this module would be wrong by 4/pi if that were an area. It
+    is not: `scatter(s=d**2)` and `plot(markersize=d)` draw the same disc. This
+    asserts it in ink, so a matplotlib release that changed the scaling would
+    land here rather than silently re-skewing two gates.
     """
-    import math
-    area = 40.0                                  # scatter s, already pt^2
-    diameter = math.sqrt(16.0 * area / math.pi)  # a disc of exactly 4x that
+    import numpy as np
+
+    def ink(draw):
+        fig, ax = plt.subplots(figsize=(3, 3), dpi=200)
+        ax.set_axis_off()
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        draw(ax)
+        fig.canvas.draw()
+        buf = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+        plt.close(fig)
+        return int((buf.sum(axis=2) < 400).sum())
+
+    scatter = ink(lambda ax: ax.scatter([0.5], [0.5], s=100.0, color="k"))
+    line = ink(lambda ax: ax.plot([0.5], [0.5], marker="o", markersize=10.0,
+                                  color="k")[0])
+    assert scatter == line, (
+        f"scatter(s=100) drew {scatter}px and plot(markersize=10) drew "
+        f"{line}px; scatter_diameter_pt assumes markersize == sqrt(s)")
+    assert cf.scatter_diameter_pt(100.0) == 10.0
+
+
+def test_mark_ratio_measures_both_mark_kinds_in_the_same_unit():
+    """`plot(markersize=...)` is a diameter in points and `scatter(s=...)` is
+    that diameter squared, despite matplotlib calling `s` an area. Feeding `s`
+    straight in as an area leaves the operands 4/pi = 1.27x apart — invisible
+    on a figure drawing one kind, because the bias cancels in the ratio, and a
+    standing 27% error on any figure mixing the two.
+
+    Two assertions, because one alone is satisfiable by a broken conversion.
+    Marks of identical drawn area must report 1.0x, which the old code failed
+    at 1.3x on two marks measurably 741 pixels each. And the second figure is
+    sized so the two formulas straddle the threshold: truly 4.5x apart in drawn
+    area, which is legal, and 5.73x apart if `s` is read as an area, which is
+    not. It asserts the verdict rather than a substring of the message, so it
+    does not have to be rewritten the next time anyone changes how the row is
+    phrased.
+    """
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-    ax.scatter([1, 2], [1, 2], s=area)
-    ax.plot([1, 2], [2, 1], marker="o", markersize=diameter, linestyle="none")
+    ax.scatter([1, 2], [1, 2], s=100.0)
+    ax.plot([1, 2], [2, 1], marker="o", markersize=10.0, linestyle="none")
+    ok, rows = cf.audit(fig)
+    detail = {r[0]: r[2] for r in rows}["Mark ratio"]
+    plt.close(fig)
+    assert "1.0x" in detail, (
+        f"scatter(s=100) and plot(markersize=10) draw the same disc, so the "
+        f"ratio is 1.0x; got {detail!r}")
+
+    # markersize 10 draws a disc of area pi * 25; s = 450 draws pi * 450 / 4,
+    # which is 4.5x it. Reading `s` as an area makes the same pair 5.73x.
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.scatter([1, 2], [1, 2], s=450.0)
+    ax.plot([1, 2], [2, 1], marker="o", markersize=10.0, linestyle="none")
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Mark ratio"] is True, (
-        "4.0x apart in drawn area is inside MARK_RATIO_MAX; only the bounding "
-        "square puts it over")
+        "4.5x apart in drawn area is inside MARK_RATIO_MAX; only reading `s` "
+        "as an area puts it over")
 
 
 def test_mark_ratio_ignores_bar_height():
@@ -874,6 +917,63 @@ def test_overplotting_clean_on_spread_scatter():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Overplotting"] is True
+
+
+def test_overplotting_catches_discs_that_touch_without_swallowing_centres():
+    """The regression the radius arithmetic was hiding.
+
+    A grid of marks spaced at 1.5x the drawn radius: every disc overlaps each
+    neighbour by a quarter of its diameter, and the 64 of them render as one
+    solid square. The old test was `nn_dist < radius_px` on a radius computed
+    as `sqrt(s / pi)`, so it wanted the centres 1.13 radii apart when contact
+    happens at 2, and it called this figure clean.
+
+    Spacing is set in display pixels and mapped back through the data
+    transform, so the geometry does not move if the figure size or the default
+    dpi changes underneath it.
+    """
+    import numpy as np
+    size = 400.0
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+    ax.set_xlim(0, 400)
+    ax.set_ylim(0, 400)
+    radius_px = cf.scatter_diameter_pt(size) / 2.0 * fig.dpi / 72.0
+    inv = ax.transData.inverted()
+    origin = inv.transform((100.0, 100.0))
+    step = inv.transform((100.0 + 1.5 * radius_px,
+                          100.0 + 1.5 * radius_px)) - origin
+    grid = np.arange(8)
+    x, y = np.meshgrid(origin[0] + step[0] * grid, origin[1] + step[1] * grid)
+    ax.scatter(x.ravel(), y.ravel(), s=size)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn", (
+        "discs 1.5 radii apart overlap by a quarter of their diameter and "
+        "render as one blob")
+
+
+def test_overplotting_uses_both_radii_when_sizes_differ():
+    """Contact is `d < r_i + r_j`. With one big mark and one small one, testing
+    against a single radius asks the wrong question of whichever point it is
+    reading, and which one that is depends on iteration order."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    big, small = 900.0, 25.0          # radii 15.0 and 2.5 pt
+    r_big = cf.scatter_diameter_pt(big) / 2.0 * fig.dpi / 72.0
+    r_small = cf.scatter_diameter_pt(small) / 2.0 * fig.dpi / 72.0
+    # Sit them where the discs plainly overlap but the centres are further
+    # apart than either radius alone.
+    gap = 0.95 * (r_big + r_small)
+    assert gap > r_big and gap > r_small
+    inv = ax.transData.inverted()
+    a = inv.transform((150.0, 150.0))
+    b = inv.transform((150.0 + gap, 150.0))
+    ax.scatter([a[0], b[0]], [a[1], b[1]], s=np.array([big, small]))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
 
 
 # --- overplotting boundary conditions ---------------------------------------
