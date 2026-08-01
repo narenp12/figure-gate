@@ -2181,6 +2181,153 @@ def test_line_weight_does_not_fire_on_the_grid():
     assert gates(rows)["Line weight"] is True
 
 
+# --- banking ---------------------------------------------------------------
+
+
+def _alternating_rates(figsize):
+    """A saw wave whose decay limbs alternate between two rates, one exactly
+    twice the other. Telling the two apart is the reader's whole job."""
+    import numpy as np
+    xs, ys = [0.0], [1.0]
+    for cycle in range(10):
+        steps = 12 if cycle % 2 == 0 else 6
+        for k in range(1, steps + 1):
+            xs.append(xs[-1] + 1.0)
+            ys.append(1.0 - k / steps)
+        xs.append(xs[-1] + 1.0)             # the rise back to 1, one step wide
+        ys.append(1.0)
+    x, y = np.array(xs), np.array(ys)
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
+    ax.plot(x, y, lw=1.2)
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    return fig, x, y
+
+
+def _limb_orientations(fig, x, y):
+    """Mean on-page orientation of the slow and the fast decay limbs, degrees."""
+    import numpy as np
+    ax = fig.axes[0]
+    p = ax.transData.transform(np.column_stack([x, y]))
+    d = np.diff(p, axis=0)
+    ang = np.degrees(np.arctan2(d[:, 1], d[:, 0]))
+    dy = np.diff(y)
+    fast = (dy < 0) & (np.abs(dy) > 0.12)      # 1/6 = 0.167 against 1/12
+    slow = (dy < 0) & ~fast
+    return float(ang[slow].mean()), float(ang[fast].mean())
+
+
+def test_banking_warns_when_the_aspect_collapses_two_rates_into_one():
+    """The named failure, measured rather than asserted.
+
+    Two decay rates differing by exactly a factor of two. At 2.4 x 5.2 inches
+    they land 1.6 degrees apart on the page, which is not a difference any
+    reader resolves; the first assertion is what makes that a fact about the
+    figure rather than about the gate.
+    """
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    slow, fast = _limb_orientations(fig, x, y)
+    assert abs(slow - fast) < 3.0, (
+        f"the fixture stopped collapsing the two rates: {abs(slow - fast):.1f} "
+        "degrees apart")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_banking_is_quiet_on_the_same_data_banked():
+    """The other half, and the one that says the gate is about the aspect and
+    not about the data: same points, same limits, a shape that separates the
+    two rates by 10.6 degrees instead of 1.6."""
+    fig, x, y = _alternating_rates((6.4, 1.9))
+    slow, fast = _limb_orientations(fig, x, y)
+    assert abs(slow - fast) > 8.0, (
+        f"the banked fixture only separates the limbs by {abs(slow - fast):.1f}"
+        " degrees, so it is not the counter-example it claims to be")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] is True
+
+
+def test_banking_never_returns_a_hard_failure():
+    """Advisory by design. The right aspect is a judgement about what the
+    reader's job is, and a gate that failed a build over it would be turned
+    off."""
+    fig, _x, _y = _alternating_rates((2.4, 5.2))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Banking"] == "warn"
+    assert "Banking" in cf.ADVISORY_GATES
+    assert ok is not False or gates(rows)["Banking"] is not False
+
+
+def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
+    """Four exclusions, each with a case. A steep aspect is applied to all four
+    so that a panel which is *not* skipped would warn, which is what keeps this
+    from passing by drawing nothing."""
+    import numpy as np
+
+    def steep(build):
+        fig, ax = plt.subplots(figsize=(2.0, 6.0), dpi=100)
+        build(ax)
+        fig.canvas.draw()
+        return fig, cf._banking_slopes(ax)
+
+    # A full-amplitude zigzag, so the typical segment is far steeper than the
+    # panel's own diagonal and a panel that is read cannot help but warn.
+    x = np.arange(30, dtype=float)
+    y = np.tile([0.0, 100.0], 15)
+
+    cases = {
+        "marks, not a stroke":
+            lambda ax: ax.plot(x, y, linestyle="none", marker="."),
+        "fixed aspect":
+            lambda ax: (ax.plot(x, y), ax.set_aspect("equal")),
+        "furniture, under BANKING_MIN_POINTS vertices":
+            lambda ax: ax.plot(x[:4], y[:4]),
+        "parametric, x does not run one way":
+            lambda ax: ax.plot(np.cos(np.linspace(0, 6.2, 200)),
+                               np.sin(np.linspace(0, 6.2, 200))),
+    }
+    for why, build in cases.items():
+        fig, slopes = steep(build)
+        plt.close(fig)
+        assert slopes is None, f"{why}: got {slopes}"
+
+    # and the same aspect with an ordinary stroke in it is read, and warns
+    fig, slopes = steep(lambda ax: ax.plot(x, y))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert slopes is not None and len(slopes)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
+    """Densifying makes every segment 2px long, so a median taken over the
+    densified points measures the densifier rather than the data. The two
+    disagree by construction on a line whose segments differ in length."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    # Short steep steps and long shallow ones, in equal number: the authored
+    # median sits between them, the densified one is dominated by the long
+    # segments because densifying splits them into far more points.
+    x = np.cumsum([0.0] + [0.2, 8.0] * 15)
+    y = np.cumsum([0.0] + [4.0, 0.4] * 15)
+    line, = ax.plot(x, y)
+    fig.canvas.draw()
+    authored = float(np.median(cf._banking_slopes(ax)))
+
+    dense = cf._polyline_px(line, ax)
+    d = np.diff(dense, axis=0)
+    keep = np.abs(d[:, 0]) > 1e-9
+    densified = float(np.median(np.abs(d[keep, 1] / d[keep, 0])))
+    plt.close(fig)
+    assert authored != pytest.approx(densified, rel=0.2), (
+        f"authored {authored:.3f} and densified {densified:.3f} agree here, so "
+        "this fixture no longer distinguishes the two readings")
+
+
 # --- regressions: gates that fired on correct figures ----------------------
 
 
@@ -2539,7 +2686,7 @@ def test_the_gate_is_a_row_in_audit_between_contour_dash_and_fonts():
     finally:
         plt.close(fig)
     names = [n for n, _, _ in rows]
-    assert len(names) == 20, names
+    assert len(names) == 21, names
     assert names[names.index("Contour dash") + 1] == "Colormap kind"
     assert names[names.index("Colormap kind") + 1] == "Fonts"
 

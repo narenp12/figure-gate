@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+**New gate: banking to 45 degrees.** The aspect ratio has been in
+`choosing-a-form.md` since that document existed and nothing measured it, which
+is the shape of guidance this project exists to replace.
+
+The failure is a resolution failure and it is measurable. On a saw wave whose
+decay limbs alternate between two rates, one exactly twice the other: at
+2.4 x 5.2 inches the two limbs land 1.6 degrees apart on the page and the
+alternation cannot be seen at all; at 6.4 x 1.9 they land 10.6 degrees apart and
+it is the first thing you see. Same data, same axes, same limits. Both numbers
+are asserted in the fixtures, so a change that stopped the tall figure
+collapsing the rates fails the test that calls it a defect rather than quietly
+testing nothing.
+
+`check_banking` reads the median absolute segment slope of each panel's strokes
+in display space, and is advisory. `BANKING_SLOPE_MAX = 10.0` is a factor of ten
+either side of banked - a typical segment past 84 degrees or under 6 - which is
+a panel essentially vertical or essentially flat over its own typical step. The
+band was picked against the corpus rather than argued: the 14 series in
+`examples/` that this gate reads span 0.19 to 2.95, so [0.25, 4] would have
+fired on one of them and [0.1, 10] leaves the nearest legitimate case a factor
+of 1.9 clear. The gallery test now asserts no banking warning, because an
+advisory row does not fail a run and an over-firing advisory would have been
+invisible there.
+
+Four exclusions, each measured rather than reasoned into existence. A line with
+`linestyle="none"` draws marks; the orbit figure's 168000-point cloud is one. A
+fixed aspect is a statement about the data. Under `BANKING_MIN_POINTS = 8`
+vertices is furniture rather than a rate, and the corpus has 24 such strokes. An
+x that does not run one way is a parametric curve, where the typical slope is
+not a rate of anything. Slopes come off the authored vertices and not the
+densified stroke, because densifying makes every segment 2px and the median of
+that measures the densifier.
+
 **`step`, `stackplot` and contour sets are read now.** The last notes left these
 three as geometry the attribution harvest does not reach, and each was unread
 for its own reason.

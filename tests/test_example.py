@@ -63,6 +63,12 @@ def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
     assert result.stdout.count("PASS  gallery-") == 7, result.stdout[-4000:]
     assert len(list(tmp_path.glob("gallery-*.png"))) == 7, result.stdout[-4000:]
+    # An advisory row does not fail the run, so a gate that over-fires here
+    # would be invisible to the assertions above. Banking is the newest and the
+    # loosest, and the corpus is the only evidence that its band is not a
+    # nuisance: the 14 series it reads across these figures span 0.19 to 2.95,
+    # inside a band of 0.1 to 10.
+    assert "[WARN] Banking" not in result.stdout, result.stdout[-4000:]
 
 
 def test_running_the_scripts_elsewhere_leaves_the_committed_pngs_alone(tmp_path):

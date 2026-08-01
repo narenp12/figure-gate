@@ -27,17 +27,18 @@ Checks, in the order `audit` runs them
     7. Axis redundancy   - shared-axis panels do not repeat a tick label column
     8. Type size         - every rendered string clears the floor once scaled
     9. Line weight       - every stroke clears LINE_FLOOR_PT once scaled
-   10. Ink coverage      - the data region is neither empty nor packed
-   11. Series color      - the hues in each panel separate under color blindness
-   12. Dual axis         - no second y scale carrying data of its own
-   13. Form              - no pie, no 3D, no truncated bar baseline
-   14. Identity channel  - series are not told apart by color alone
-   15. Label attribution - each label is nearest the curve it names
-   16. Style sheet       - figure.mplstyle is the one actually in effect
-    17. Contour dash      - dashing is not spent on a signed contour's negatives
-    18. Colormap kind     - the colormaps in use are ones a reader can order
-    19. Fonts             - Type 42 embedding; the named face is installed
-    20. Alt text          - the figure carries a description
+   10. Banking           - the panel's aspect keeps segments near 45 degrees
+   11. Ink coverage      - the data region is neither empty nor packed
+   12. Series color      - the hues in each panel separate under color blindness
+   13. Dual axis         - no second y scale carrying data of its own
+   14. Form              - no pie, no 3D, no truncated bar baseline
+   15. Identity channel  - series are not told apart by color alone
+   16. Label attribution - each label is nearest the curve it names
+   17. Style sheet       - figure.mplstyle is the one actually in effect
+    18. Contour dash      - dashing is not spent on a signed contour's negatives
+    19. Colormap kind     - the colormaps in use are ones a reader can order
+    20. Fonts             - Type 42 embedding; the named face is installed
+    21. Alt text          - the figure carries a description
 """
 
 import itertools
@@ -166,6 +167,26 @@ PLACED_FRAC_WARN = 0.35
 # Stroke floor, in points ON THE PAGE. SIAM's instructions for authors: "lines
 # one point or thicker; thinner lines may break up or disappear."
 LINE_FLOOR_PT = 1.0
+
+# --- banking -----------------------------------------------------------------
+# How far the typical line segment may sit from 45 degrees before the panel's
+# aspect ratio is reported. Cleveland banks a panel by choosing the aspect that
+# puts the median absolute segment slope at 1, where slope discrimination is
+# most accurate; this is the factor either side of that at which the gate says
+# so, and it is one number rather than two because a slope of 10 and a slope of
+# 0.1 are the same misjudgement rotated.
+#
+# Deliberately loose. 10 is a segment at 84 degrees or at 6, which is a panel
+# that is essentially vertical or essentially flat over its own typical step,
+# and there is no argument about those. Tighter bands were measured against the
+# corpus first: the 14 series in `examples/` that this gate reads span 0.19 to
+# 2.95, so [0.25, 4] would have fired on one of them and [0.1, 10] leaves the
+# nearest legitimate case a factor of 1.9 clear.
+BANKING_SLOPE_MAX = 10.0
+# Below this many vertices a line is furniture, not a rate: a reference rule, a
+# leg of a schematic, the two points of an annotation leader. The corpus has 24
+# such strokes and none of them has a typical slope worth reporting.
+BANKING_MIN_POINTS = 8
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -2114,6 +2135,103 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
                    "or disappear in print")
 
 
+def _banking_slopes(ax):
+    """Absolute display-space segment slopes of the strokes in one panel, or
+    None where banking is not a question this panel answers.
+
+    Four exclusions, each measured against the corpus rather than reasoned into
+    existence. A line with `linestyle="none"` draws marks, not a stroke, and the
+    orbit figure's 168000-point cloud is one. A fixed aspect is a statement
+    about the data - a map, a phase portrait - and the whole point of banking is
+    that the aspect is free. Fewer than `BANKING_MIN_POINTS` vertices is
+    furniture rather than a rate. And an x that does not run one way is a
+    parametric curve, where "the typical slope" is not a rate of anything.
+
+    Slopes come off the vertices the author gave, not the densified stroke:
+    densifying makes every segment the same 2px length and the median of that
+    is an artefact of the densifier. For a `step` line that also reads the
+    treads rather than the risers, which is what the reader compares.
+    """
+    import numpy as np
+    if ax.get_aspect() != "auto":
+        return None
+    runs = []
+    for line in ax.lines:
+        if not line.get_visible():
+            continue
+        if line.get_linestyle() in ("", " ", "None", "none", None):
+            continue
+        xy = np.asarray(line.get_xydata(), dtype=float)
+        if xy.ndim != 2 or len(xy) < BANKING_MIN_POINTS:
+            continue
+        pts = ax.transData.transform(xy)
+        pts = pts[np.isfinite(pts).all(axis=1)]
+        if len(pts) < BANKING_MIN_POINTS:
+            continue
+        dx = np.diff(pts[:, 0])
+        if not (np.all(dx > 0) or np.all(dx < 0)):
+            continue
+        runs.append(np.abs(np.diff(pts[:, 1]) / dx))
+    if not runs:
+        return None
+    # Pooled across the panel's strokes, because the aspect is one choice made
+    # for all of them and banking each curve separately is not on offer.
+    return np.concatenate(runs)
+
+
+def check_banking(fig):
+    """Whether a panel's aspect ratio lets the reader compare rates of change.
+
+    Cleveland banks a panel to 45 degrees: choose the height-to-width ratio that
+    puts the median absolute segment slope at 1, because slope discrimination is
+    most accurate near 45 and falls away either side of it. A cycle that is
+    plain in one aspect ratio is invisible in another, and the wrong one is
+    usually the one the default produced.
+
+    The failure is a resolution failure, and it is measurable. On a saw wave
+    whose decay limbs alternate between two rates, one exactly twice the other:
+    at 2.4 x 5.2 inches the two limbs land 1.6 degrees apart on the page and the
+    alternation cannot be seen at all; at 6.4 x 1.9 they land 10.6 degrees
+    apart and it is the first thing you see. Same data, same axes, same limits.
+
+    Advisory, and loose, because the right aspect is a judgement about what the
+    reader's job is and this cannot know that. `BANKING_SLOPE_MAX` is a factor
+    of ten either side of banked - a typical segment steeper than 84 degrees or
+    flatter than 6 - which is a panel essentially vertical or essentially flat
+    over its own typical step. See `_banking_slopes` for what is excluded and
+    why; a scatter, a map at fixed aspect and a parametric curve are all cases
+    where the median slope means nothing.
+    """
+    import numpy as np
+    floor = 1.0 / BANKING_SLOPE_MAX
+    bad, seen = [], []
+    for i, ax in enumerate(fig.axes):
+        slopes = _banking_slopes(ax)
+        if slopes is None or not len(slopes):
+            continue
+        median = float(np.median(slopes))
+        seen.append(median)
+        if floor <= median <= BANKING_SLOPE_MAX:
+            continue
+        degrees = math.degrees(math.atan(median))
+        # Banking multiplies the height-to-width ratio by 1/median, which is
+        # the number the author can act on.
+        bad.append(f"ax{i} typical segment at {degrees:.0f} deg "
+                   f"(slope {median:.2g}); banking wants the panel "
+                   f"{median:.2g}x " + ("wider" if median > 1 else "taller"))
+    if not seen:
+        return True, "no line panel whose aspect encodes a rate"
+    if not bad:
+        return True, (f"{len(seen)} line panel"
+                      f"{'s' if len(seen) != 1 else ''}, typical segment "
+                      f"{math.degrees(math.atan(min(seen))):.0f}-"
+                      f"{math.degrees(math.atan(max(seen))):.0f} deg")
+    return "warn", ("; ".join(bad) + "  <- Cleveland banks to 45 degrees, "
+                    "where slope discrimination is most accurate; at this "
+                    "aspect two rates that differ by a factor of two can land "
+                    "under 2 degrees apart")
+
+
 # The names matplotlib gives a colormap it built itself, from colours the
 # author handed to an artist. `contour(colors=[...])` produces one, and it must
 # not be read as a colour encoding: three near-black levels are one encoding in
@@ -2483,6 +2601,7 @@ GATES = (
          needs=("r", "scale", "placed_frac", "venue")),
     Gate("Line weight", check_line_weight,
          needs=("scale", "placed_frac", "venue")),
+    Gate("Banking", check_banking, advisory=True),
     Gate("Ink coverage", check_ink, advisory=True,
          needs=("context_axes", "canvas")),
     Gate("Series color", check_series_color),

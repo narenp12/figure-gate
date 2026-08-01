@@ -213,6 +213,25 @@ height-to-width ratio so the typical line segment sits near 45 degrees — is wh
 slope discrimination is most accurate. A cycle that is obvious in one aspect ratio
 disappears in another, and the wrong one is usually the one the default produced.
 
+**The failure is a resolution failure.** Take a saw wave whose decay limbs alternate
+between two rates, one exactly twice the other. At 2.4 x 5.2 inches the two limbs
+land 1.6 degrees apart on the page and the alternation cannot be seen at all; at
+6.4 x 1.9 they land 10.6 degrees apart and it is the first thing you see. Same
+data, same axes, same limits — a 2:1 difference in rate, rendered as a difference
+no reader can resolve.
+
+`check_figure.py` gates this as an advisory row. It reads the median absolute
+segment slope of each panel's strokes in display space and warns outside a factor
+of `BANKING_SLOPE_MAX = 10.0` either side of banked, which is a typical segment
+past 84 degrees or under 6. Deliberately loose: the right aspect depends on what
+the reader's job is, and a script cannot know that. What it can say is that a
+panel is essentially vertical or essentially flat over its own typical step.
+
+The gate skips what banking does not apply to: a fixed aspect (`set_aspect("equal")`
+on a map or a phase portrait, where the ratio is a statement about the data), a
+line whose x does not run one way, and any stroke under `BANKING_MIN_POINTS = 8`
+vertices, which is furniture rather than a rate.
+
 ## The forms with no research-figure use
 
 - **Pie and donut.** Angle and area, the two weakest quantitative tasks, for a job a

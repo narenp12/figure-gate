@@ -6,7 +6,7 @@
 [![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
 
 **Two scripts that read a built matplotlib figure and report which gates it
-fails.** `audit(fig)` returns `(ok, rows)`, 20 rows, one per gate, each a
+fails.** `audit(fig)` returns `(ok, rows)`, 21 rows, one per gate, each a
 `(label, status, detail)` triple where `status` is `True`, `False`, or
 `"warn"`. `check(colors)` gates a palette the same way in 5 rows and returns
 the same shape. Every threshold is a module-level constant you can read and
