@@ -1202,6 +1202,74 @@ def test_readability_catches_faint_text_on_the_page():
     assert gates(rows)["Text readability"] is False
 
 
+def test_contrast_field_agrees_with_the_scalar_helper():
+    """`_contrast_field_255` is the vectorisation of `_contrast_255`, not a
+    second definition of WCAG contrast. Walk a spread of colours through both
+    and they cannot drift apart without this going red."""
+    import numpy as np
+    swatches = np.array([
+        [0, 0, 0], [255, 255, 255], [128, 128, 128], [10, 10, 10],
+        [253, 231, 37], [68, 1, 84], [33, 145, 140], [0, 114, 178],
+        [1, 2, 3], [254, 0, 128],
+    ], dtype=float)
+    for fg in ([255, 255, 255], [0, 0, 0], [230, 159, 0]):
+        field = cf._contrast_field_255(fg, swatches)
+        for row, got in zip(swatches, field):
+            assert got == pytest.approx(cf._contrast_255(fg, row), rel=1e-12)
+
+
+def test_worst_backdrop_reads_a_smooth_field_not_its_mean():
+    """The regression the `pix // 8` binning was hiding.
+
+    A viridis ramp under a label's box splits into dozens of 8-cubes, none of
+    them covering `TEXT_BACKDROP_MIN_SHARE` of it, so the old code fell through
+    to the mean of the whole box -- the summary its own docstring rules out,
+    returned by the branch written to avoid it. Measured there: 76 bins, a 3.5%
+    mode, and a verdict identical to the mean against a true worst pixel of
+    1.34:1.
+
+    Asserted as a bound rather than a fixed number: the point is that the
+    verdict tracks the dark tenth of the box and not its average, and pinning
+    the exact ratio would make this a test of viridis's sample values.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=200)
+    Z = np.linspace(0, 1, 200)[None, :].repeat(200, 0)
+    ax.imshow(Z, cmap="viridis", aspect="auto")
+    r, canvas = cf._renderer(fig)
+    block = np.asarray(canvas.buffer_rgba())[..., :3][100:130, 100:700]
+    plt.close(fig)
+
+    fg = np.array([255.0, 255.0, 255.0])
+    _, ratio = cf._worst_backdrop(block, fg, cf.TEXT_BACKDROP_MIN_SHARE)
+
+    pix = block.reshape(-1, 3).astype(float)
+    per_pixel = cf._contrast_field_255(fg, pix)
+    mean_of_box = cf._contrast_255(fg, pix.mean(axis=0))
+
+    assert ratio < mean_of_box / 2, (
+        f"the box mean reads {mean_of_box:.2f}:1 and the verdict came back "
+        f"{ratio:.2f}:1, which is the mean again rather than the dark tenth")
+    assert per_pixel.min() <= ratio <= float(np.percentile(per_pixel, 15))
+
+    # And the colour reported alongside it is a pixel that is really there.
+    color, _ = cf._worst_backdrop(block, fg, cf.TEXT_BACKDROP_MIN_SHARE)
+    assert (pix == color).all(axis=1).any()
+
+
+def test_worst_backdrop_still_reads_a_flat_fill_as_itself():
+    """The case the binning got right has to keep working: a box entirely on
+    one colour reports that colour's contrast, with no quantile artefact."""
+    import numpy as np
+    block = np.full((30, 60, 3), 0x00, dtype=np.int16)
+    block[..., 1] = 0x72
+    block[..., 2] = 0xB2                                    # solid #0072b2
+    fg = np.array([255.0, 255.0, 255.0])
+    color, ratio = cf._worst_backdrop(block, fg, cf.TEXT_BACKDROP_MIN_SHARE)
+    assert list(color) == [0x00, 0x72, 0xB2]
+    assert ratio == pytest.approx(cf._contrast_255(fg, (0x00, 0x72, 0xB2)))
+
+
 def test_uniform_fill_under_a_label_is_a_background_not_clutter():
     """A label on a heatmap cell has the cell as its surface. Only the contrast
     clause governs there, which is the correct division: a flat fill is a
