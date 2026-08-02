@@ -91,7 +91,7 @@ def test_audit_api_passes_when_no_breaks(tmp_path, monkeypatch):
     assert exc_info.value.code == 0
 
 
-def test_audit_api_fails_on_grifte_tool_failure(tmp_path, monkeypatch):
+def test_audit_api_fails_on_griffe_tool_failure(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         _changelog("## Unreleased\n\nIrrelevant.\n")
@@ -112,12 +112,14 @@ def test_audit_api_fails_on_grifte_tool_failure(tmp_path, monkeypatch):
 def test_audit_api_fails_when_no_git_tag(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
+    original_run = subprocess.run
+
     def no_tag_run(cmd, **kwargs):
         if cmd[0] == "git":
             return subprocess.CompletedProcess(
                 cmd, 1, "", "fatal: No names found, cannot describe anything.\n"
             )
-        return subprocess.run(cmd, **kwargs)
+        return original_run(cmd, **kwargs)
 
     mod = _load_audit_api()
     with patch("subprocess.run", side_effect=no_tag_run):
