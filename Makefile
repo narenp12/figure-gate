@@ -52,10 +52,7 @@ audit-docs:
 # Static, so it needs neither the project installed nor a network. It does need
 # tags: a shallow clone has nothing to compare against and will say so.
 audit-api:
-	@uv run --only-group api python -c "import subprocess, sys; \
-tag = subprocess.run(['git','describe','--tags','--abbrev=0'], capture_output=True, text=True).stdout.strip(); \
-sys.exit('no release tag to compare against') if not tag else None; \
-[print(f'--- {m} against {tag} ---') or subprocess.run(['griffe','check','-s','skill/scripts',m,'-a',tag]) for m in ('check_figure','check_palette')]"
+	uv run --only-group api python skill/scripts/audit_api.py
 
 test:
 	uv run pytest tests/ -n auto -q
