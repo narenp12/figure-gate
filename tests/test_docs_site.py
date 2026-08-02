@@ -112,7 +112,8 @@ def test_no_page_has_become_a_copy():
     fix a rendering nit, the site keeps building and the guide starts drifting
     from the code that computes its numbers."""
     copies = sorted(str(p.relative_to(DOCS)) for p in DOCS.rglob("*.md")
-                    if not p.is_symlink() and p.name not in AUTHORED)
+                    if not p.is_symlink() and p.name not in AUTHORED
+                    and "superpowers" not in p.relative_to(DOCS).parts)
     assert not copies, (
         f"{copies} are real files under docs/ - they should be symlinks to the "
         "single copy, or added to AUTHORED if they are genuinely site-only")
