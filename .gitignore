@@ -23,3 +23,7 @@ opencode.json
 # and the one that was tracked still read "status": "pending" three merges after
 # its gate was in main. Git has the history if it is ever wanted.
 plans/
+
+# Design docs and plans live under docs/superpowers/ alongside the site.
+# They are not site content and should not be tracked.
+docs/superpowers/
