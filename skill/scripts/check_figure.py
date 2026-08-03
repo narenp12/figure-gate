@@ -253,7 +253,17 @@ VENUE_WIDTH_PT = {
 
 
 def content_width_pt(venue=None):
-    """The usable page width to measure against, in points."""
+    """The usable page width to measure against, in points.
+
+    Args:
+        venue: A key of `VENUE_WIDTH_PT`. `None` reads `CONTENT_WIDTH_PT`.
+
+    Returns:
+        The width in points, or `None` when neither is set.
+
+    Raises:
+        KeyError: The venue is not in `VENUE_WIDTH_PT`.
+    """
     if venue is None:
         return CONTENT_WIDTH_PT
     try:
@@ -279,6 +289,18 @@ def page_scale(fig, placed_frac=1.0, venue=None):
     `venue` names a row of `VENUE_WIDTH_PT` and overrides `CONTENT_WIDTH_PT` for
     this call, which is the usual way in: the width is a property of the
     document, not of the checkout.
+
+    Args:
+        fig: The figure, read for its authored width in inches.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+
+    Returns:
+        Points on the page per authored inch. `1.0` when no content width is
+        set, which measures the figure at the size it was authored.
+
+    Raises:
+        ValueError: `placed_frac` is not 1.0 and no content width is set.
     """
     width = content_width_pt(venue)
     if width is None:
@@ -997,8 +1019,15 @@ def scatter_diameter_pt(size):
     that constant. `test_scatter_size_is_a_squared_diameter` pins it against
     matplotlib rather than against this docstring.
 
-    Accepts a float or a numpy array, and is public because both
-    `check_mark_ratio` and `check_overplotting` decide on it.
+    Args:
+        size: The value passed to `scatter(s=)`. A float or a numpy array.
+
+    Returns:
+        The drawn diameter in points, `sqrt(size)`, in the same shape as
+        `size` was given.
+
+    Public because both `check_mark_ratio` and `check_overplotting` decide on
+    it.
     """
     return size ** 0.5
 
@@ -2584,6 +2613,13 @@ def describe(fig, text):
     Say what the reader would have taken from looking, not what the figure is
     made of. "A line chart with three lines" describes the file; the numbers
     and the direction describe the finding.
+
+    Args:
+        fig: The figure to attach the description to.
+        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor.
+
+    Returns:
+        `None`. The description is stashed on `fig` for `alt_metadata` to read.
     """
     setattr(fig, ALT_TEXT_ATTR, str(text))
     return fig
@@ -2662,6 +2698,14 @@ def alt_metadata(fig, path=None):
     Called without a path, or with a buffer whose format cannot be read, it
     returns `Description`. That is right for PNG and SVG and is what every
     earlier version returned unconditionally.
+
+    Args:
+        fig: The figure `describe` was called on.
+        path: The path about to be saved to. The suffix picks the key.
+
+    Returns:
+        A dict for `savefig(metadata=)`, or `None` for a format that carries
+        no description. Empty when `describe` was never called.
     """
     # Before the empty-description check, because a format that rejects the
     # kwarg rejects `{}` too -- the figure having nothing to say does not make
@@ -2825,6 +2869,18 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     calculation outright. `context_axes` names axes whose fill is a context
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
+
+    Args:
+        fig: The built figure. Measured through an Agg canvas at its authored
+            dpi, so the verdict does not depend on the backend it was made on.
+        scale: Points per authored inch, overriding `page_scale` outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+
+    Returns:
+        `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
+        report order; `ok` is False only when a row is a hard False.
     """
     r, canvas = _renderer(fig)
     available = dict(zip(GATE_INPUTS,
@@ -2857,6 +2913,18 @@ def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
 
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
+
+    Args:
+        fig: The built figure.
+        name: A heading for the table.
+        scale: Points per authored inch, overriding `page_scale` outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+        suggest: Print `suggest_fixes` remedies under the table.
+
+    Returns:
+        `audit`'s `ok` bool. Advisory rows print as WARN without changing it.
     """
     ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
     print(f"\nComposition audit{': ' + name if name else ''}")

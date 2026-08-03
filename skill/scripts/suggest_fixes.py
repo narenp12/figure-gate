@@ -138,6 +138,14 @@ def suggest(rows):
     `[(gate_name, [Remedy, ...]), ...]` in the order the gates reported, and
     skips gates with nothing to offer rather than padding them with a
     restatement of the failure.
+
+    Args:
+        rows: `(label, status, detail)` triples, as `audit` or `check`
+            returned them. Passing rows are ignored.
+
+    Returns:
+        `[(gate_name, [Remedy, ...]), ...]`, in the order the gates reported.
+        Empty when nothing fired that this file has an answer for.
     """
     marked = [name for name, status, _ in rows if status is not True]
     out = []
@@ -149,8 +157,16 @@ def suggest(rows):
 
 
 def format_suggestions(rows, indent="      "):
-    """`suggest`, as lines ready to print under a report. Empty when nothing
-    fired that this file has an answer for."""
+    """`suggest`, as lines ready to print under a report.
+
+    Args:
+        rows: `(label, status, detail)` triples, as `audit` returned them.
+        indent: Leading whitespace for each line.
+
+    Returns:
+        A list of lines. Empty when nothing fired that this file has an
+        answer for.
+    """
     lines = []
     for name, remedies in suggest(rows):
         lines.append(f"{indent}{name}:")
