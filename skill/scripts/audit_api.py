@@ -8,7 +8,7 @@ CHANGED = (
     r"break|broke|removed|renamed|replaced|deleted|deprecated|"
     r"moved|changed|gained|added|no longer"
 )
-MODULES = ("check_figure", "check_palette")
+MODULES = ("check_figure", "check_palette", "suggest_fixes")
 
 
 def _existed_at(tag: str, module: str) -> bool:

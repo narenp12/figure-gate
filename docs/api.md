@@ -5,14 +5,16 @@ signature or a default shown below is the one the code has. That is the point
 of the page: a hand-written reference is a second copy of every default, and
 this project has a test file about prose drifting from the code it describes.
 
-Two modules, and they are files rather than a package. `check_palette.py`
+Three modules, and they are files rather than a package. `check_palette.py`
 imports nothing outside the standard library, which is what makes it
-vendorable into a non-Python toolchain; `check_figure.py` needs matplotlib.
-Copy them, or `pip install figure-gate` and import them by name:
+vendorable into a non-Python toolchain; `check_figure.py` needs matplotlib,
+and `suggest_fixes.py` turns the rows it returns into things to do. Copy them,
+or `pip install figure-gate` and import them by name:
 
 ```python
 import check_figure as cf
 import check_palette as cp
+import suggest_fixes as sf
 ```
 
 The **thresholds are module-level constants** and are not repeated here. The
@@ -71,3 +73,13 @@ functions to port if the checks are being reimplemented elsewhere.
 ::: check_palette.linear_to_oklab
 
 ::: check_palette.relative_luminance
+
+## suggest_fixes
+
+What to do about a row that failed. Both take the rows `audit()` returned
+rather than the figure: what is on offer depends on which gates fired, and
+nothing here looks at the figure again.
+
+::: suggest_fixes.suggest
+
+::: suggest_fixes.format_suggestions

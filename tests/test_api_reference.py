@@ -27,7 +27,7 @@ ROOT = SCRIPTS.parent.parent
 PAGE = ROOT / "docs" / "api.md"
 CONFIG = ROOT / "zensical.toml"
 
-MODULES = ("check_figure", "check_palette")
+MODULES = ("check_figure", "check_palette", "suggest_fixes")
 
 # Public callables the page deliberately does not document.
 #
