@@ -238,11 +238,16 @@ ignore-words-list = "vermillion,commun,theses,nd"
 python_version = "3.11"
 files = ["conda", "examples", "skill", "tests"]
 
-# The code is unannotated by choice, so the strict flags are off: the value here
-# is catching a real contradiction (an attribute that cannot exist, a return
-# that cannot happen), not pressure to annotate. matplotlib and scipy ship
-# incomplete stubs and pytest plugins ship none, and nothing is gained by
-# reporting that.
+# Every function in `skill/scripts` is annotated now, which the API page was
+# what finally paid for: the reference renders parameter and return types out
+# of the source, and an unannotated signature showed an empty Type column.
+# Annotating them turned two real contradictions into errors mypy could state
+# -- `Gate.func` declared `object` and then called, and a `check` row that
+# returns "warn" against a docstring promising True or False.
+#
+# The strict flags stay off regardless. matplotlib and scipy ship incomplete
+# stubs and pytest plugins ship none, so `disallow_untyped_defs` and friends
+# would report the ecosystem rather than this project.
 ignore_missing_imports = true
 
 # Third-party types are not read at all, which is a larger hammer than it looks

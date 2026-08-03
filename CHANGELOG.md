@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-**The public API is annotated, and the API page renders as a reference.** The
-19 documented callables carry parameter and return types and Google-style
+**Every function in the three modules is annotated, and the API page renders
+as a reference.** The 19 documented callables carry Google-style
 `Args:` and `Returns:` sections, so each entry on the page is a signature and
 two tables rather than three paragraphs. `check_figure.py` and
 `suggest_fixes.py` gained `from __future__ import annotations`;
 `check_palette.py` gained it too, which is what keeps `tuple[float, float,
-float]` from being evaluated on the 3.8 the file still claims.
+float]` from being evaluated on the 3.8 the file still claims. The 21 gates
+and every private helper are annotated as well, so the whole of
+`skill/scripts` type checks rather than the documented surface of it.
 
 Annotating found one wrong claim. `check_palette.check` documented `status` as
 True or False, and the contrast row has returned `"warn"` since it became

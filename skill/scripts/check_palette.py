@@ -30,7 +30,7 @@ from collections.abc import Collection, Sequence
 # --- color conversion -------------------------------------------------------
 
 
-def _srgb_to_linear(c):
+def _srgb_to_linear(c: float) -> float:
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
@@ -50,7 +50,8 @@ def hex_to_linear(h: str) -> tuple[float, float, float]:
     h = h.lstrip("#")
     if len(h) != 6:
         raise ValueError(f"expected 6-digit hex, got {h!r}")
-    return tuple(_srgb_to_linear(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4))
+    r, g, b = (_srgb_to_linear(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4))
+    return r, g, b
 
 
 def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
@@ -312,7 +313,7 @@ CMAP_BACKTRAVEL_MAX = 0.02
 CMAP_WRAP_DE_MAX = 3.0
 
 
-def _back_travel(ls):
+def _back_travel(ls: Sequence[float]) -> float:
     steps = [b - a for a, b in zip(ls, ls[1:])]
     if not steps:
         return 0.0
@@ -545,7 +546,7 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     return ok, rows
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description="Validate a figure palette.")
     ap.add_argument("colors", help="comma-separated hex colors")
     # White, because that is what `figure.mplstyle` renders and what the page
