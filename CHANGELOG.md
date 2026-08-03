@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+**The API gate stopped existing twice.** `ci.yml` carried an inline copy of
+`skill/scripts/audit_api.py`, and the two had drifted: the copy accepted six
+changelog verbs where the script accepts twelve, missed an `Unreleased` section
+that was last in the file, and had no branch for griffe being absent. A release
+note saying a symbol "gained" a row passed `make audit-api` and failed CI. The
+job now runs the script, which is the copy with tests.
+
+`suggest_fixes` joins the compared modules. It was in neither roster, so
+`suggest` was advertised as public and covered by nothing. Comparing it against
+a tag older than the file needed a new branch: a module with no history at the
+tag is reported as new rather than as griffe failing to run.
+
+**What the API promises is now written down**, in the README and in the getting
+started guide: every non-underscore name in the three modules, breakable by a
+minor bump below 1.0, with the row *shape* rather than the row *count* being
+what callers can rely on.
+
 **The wheel stopped shipping release tooling, and the style sheet moved into a
 figure_gate_data directory.** Through 0.6.0 an install put four modules at the
 root of site-packages, one of them `audit_api.py`, which compares this project's

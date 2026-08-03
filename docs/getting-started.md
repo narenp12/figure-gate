@@ -158,3 +158,26 @@ all, because "standard library only" is what makes the file usable from a
 non-Python toolchain and a claim nobody tests is a claim. The test job runs
 against the current matplotlib and pins one row to 3.8.4, so a break in either
 direction shows up.
+
+## What the API promises
+
+The public API is every name without a leading underscore in `check_figure.py`,
+`check_palette.py` and `suggest_fixes.py`. That is broader than the handful you
+would guess, and it is deliberately the same set the release gate compares, so
+the statement and the enforcement cannot drift apart.
+
+Below 1.0, a minor bump may break it. Every break is named in the changelog
+under its release heading, and no change reaches `main` whose `## Unreleased`
+section fails to name what moved: CI runs
+[`audit_api.py`](https://github.com/narenp12/figure-gate/blob/main/skill/scripts/audit_api.py)
+against the last tag on every pull request, and a symbol that changed without
+being written down fails the build.
+
+The number of rows is not part of the contract. The shape is: `audit` returns
+`(ok, rows)`, each row a `(label, status, detail)` triple whose `status` is
+`True`, `False` or `"warn"`, and `check` returns the same shape. Gates get
+added; `check_banking` arrived after 0.6.0 and moved the count.
+
+What is not enforced is the sentence rather than the symbol. The gate checks
+that a changed name appears in `## Unreleased` next to a word admitting a
+change. It cannot check that the sentence describes the change accurately.

@@ -65,6 +65,29 @@ result and reports what it fails, which is the only thing here, so a style
 sheet and this are complementary: set defaults with one, verify them with the
 other.
 
+## What the API promises
+
+The public API is every name without a leading underscore in `check_figure.py`,
+`check_palette.py` and `suggest_fixes.py`. That is broader than the handful you
+would guess, and it is deliberately the same set the release gate compares, so
+the statement and the enforcement cannot drift apart.
+
+Below 1.0, a minor bump may break it. Every break is named in the changelog
+under its release heading, and no change reaches `main` whose `## Unreleased`
+section fails to name what moved: CI runs
+[`audit_api.py`](https://github.com/narenp12/figure-gate/blob/main/skill/scripts/audit_api.py)
+against the last tag on every pull request, and a symbol that changed without
+being written down fails the build.
+
+The number of rows is not part of the contract. The shape is: `audit` returns
+`(ok, rows)`, each row a `(label, status, detail)` triple whose `status` is
+`True`, `False` or `"warn"`, and `check` returns the same shape. Gates get
+added; `check_banking` arrived after 0.6.0 and moved the count.
+
+What is not enforced is the sentence rather than the symbol. The gate checks
+that a changed name appears in `## Unreleased` next to a word admitting a
+change. It cannot check that the sentence describes the change accurately.
+
 ## Contributing
 
 New gates are welcome at the bar the project holds itself to: a test proving
