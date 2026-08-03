@@ -13,6 +13,7 @@ jobs:
   publish:
     name: Build and publish to TestPyPI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: testpypi
       url: https://test.pypi.org/p/figure-gate

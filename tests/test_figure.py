@@ -7,6 +7,9 @@ only "audit returned False" would pass even if every check had silently broken
 except one, which is close to what happened twice while the checker was written.
 """
 
+import shutil
+
+import matplotlib
 import matplotlib.pyplot as plt
 import pytest
 
@@ -1823,8 +1826,19 @@ def test_pgf_rejects_the_metadata_kwarg_at_any_value(clean, tmp_path):
 
     Stated as a test because a skip would assert nothing: if matplotlib gives
     PGF the kwarg later, this goes red and the row comes out of the table.
+
+    Running it needs a real TeX on PATH, which is why CI installs texlive-xetex
+    on one leg. `clean` is a constrained_layout figure with axis labels, so the
+    PGF renderer measures its text through `pgf.texsystem` before savefig gets
+    near the kwarg. With no xelatex the call still raises, but it raises
+    LatexManager's "'xelatex' not found", which says nothing about the row this
+    test guards. That is a missing tool, not a broken claim, so it skips.
     """
     pytest.importorskip("matplotlib.backends.backend_pgf")
+    texsystem = matplotlib.rcParams["pgf.texsystem"]
+    if shutil.which(texsystem) is None:
+        pytest.skip(f"{texsystem} is not installed, so the PGF renderer cannot "
+                    "measure text and savefig fails before reaching the kwarg")
     cf.describe(clean, "x" * 80)
     path = tmp_path / "fig.pgf"
     assert cf.alt_metadata(clean, path) is None

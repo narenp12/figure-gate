@@ -19,6 +19,7 @@ jobs:
   stdlib-only:
     name: check_palette on Python ${{ matrix.python }} (no dependencies)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +44,7 @@ jobs:
   lint:
     name: ruff and mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -72,6 +74,7 @@ jobs:
   api:
     name: A break in the public API is one the changelog admits to
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # Tags, not just the tip. The default checkout has neither the history
       # nor the tags, so the comparison would have nothing to compare against
@@ -97,6 +100,10 @@ jobs:
   test:
     name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
     runs-on: ubuntu-latest
+    # The suite runs in a couple of minutes. Without this, a stalled apt mirror
+    # in the TeX step below is not a failure, it is a job that sits on a runner
+    # until GitHub's six-hour cap, and the run stays yellow the whole time.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -137,9 +144,44 @@ jobs:
       - name: Install the differential oracle (this job only)
         if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: uv pip install --system cmasher
-      - name: Install TeX (for PGF test that tests the real backend)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq texlive-xetex
+      # Same shape, same reason, for the one test that needs a real TeX:
+      # `test_pgf_rejects_the_metadata_kwarg_at_any_value` asserts that
+      # matplotlib's PGF backend still refuses `metadata=`, which is a fact
+      # about the backend and not about the matplotlib version pinned on a leg.
+      # Newest matplotlib is where a change to it would surface first, so this
+      # leg is the one that needs the several hundred megabytes of TeX, and the
+      # other two skip the test.
+      #
+      # Every part of the command below is there for a reason the hang taught:
+      # `timeout` because a stalled mirror is not an error and apt will wait on
+      # it forever, the loop because the next mirror usually works, and no `-qq`
+      # on the install because a silent step gives a reader nothing to look at
+      # when it does stall again.
+      - name: Install TeX (for the PGF test, this leg only)
+        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -qq \
+               && timeout 600 sudo apt-get install -y --no-install-recommends texlive-xetex; then
+              exit 0
+            fi
+            echo "::warning::apt-get failed or stalled on attempt $attempt"
+            sleep $((attempt * 15))
+          done
+          echo "::error::could not install texlive-xetex in three attempts"
+          exit 1
       - run: pytest -n auto -q
+
+      # The test above skips itself when xelatex is missing, and a skip is
+      # invisible in a green run: that is exactly how test_palette_oracle.py sat
+      # dead for months. This leg is the only one that can assert the row, so
+      # assert here that it did, rather than trusting the step above ran.
+      - name: The PGF test ran here rather than skipping
+        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        run: |
+          pytest tests/test_figure.py::test_pgf_rejects_the_metadata_kwarg_at_any_value \
+            -q -rs | tee "$RUNNER_TEMP/pgf.log"
+          grep -q "1 passed" "$RUNNER_TEMP/pgf.log"
 
       - name: The checker rejects a deliberately bad figure
         run: python skill/scripts/check_figure.py
@@ -159,6 +201,7 @@ jobs:
   package:
     name: The wheel gates a figure the way the checkout does
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -214,6 +257,7 @@ jobs:
   skill:
     name: Skill metadata is valid
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
