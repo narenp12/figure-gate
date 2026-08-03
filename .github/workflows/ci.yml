@@ -238,16 +238,20 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
       - run: uv python install 3.13
       - run: uv build --wheel
-      - name: The wheel ships figure.mplstyle beside the checkers
+      - name: The wheel ships figure.mplstyle, and ships nothing else it should not
         run: |
           python - <<'PY'
           import glob, sys, zipfile
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           print("\n".join(sorted(names)))
-          if "figure.mplstyle" not in names:
-              sys.exit(f"{wheel} has no figure.mplstyle at the root, so "
+          if "figure_gate_data/figure.mplstyle" not in names:
+              sys.exit(f"{wheel} has no figure_gate_data/figure.mplstyle, so "
                        "_style_sheet finds nothing once installed")
+          # Release tooling. It has no caller outside this repository, and
+          # through 0.6.0 it landed on every installing user's import path.
+          if "audit_api.py" in names:
+              sys.exit(f"{wheel} ships audit_api.py")
           PY
       - name: A figure with no plt.style.use fails the gate on the install path
         run: |
