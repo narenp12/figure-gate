@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+**The wheel stopped shipping release tooling, and the style sheet moved into a
+figure_gate_data directory.** Through 0.6.0 an install put four modules at the
+root of site-packages, one of them `audit_api.py`, which compares this project's
+public API against its last tag and has no caller outside this repository. It
+also put the sheet there as a bare `figure.mplstyle`, a name generic enough that
+another distribution could claim it, in a directory every distribution shares.
+
+`_style_sheet` now probes the installed location first, then the two locations
+it already knew. Nothing changes for a vendored copy: no such directory sits
+beside a copied checker, so the first candidate misses and the second answers,
+which is the case the documentation describes. What changes is an install that
+referred to the sheet by its old path. The gate finds it either way; a
+`plt.style.use` naming the root-level file does not.
+
+The order is load-bearing rather than incidental. On the install path the
+script's own directory *is* the root of site-packages, so probing the bare name
+first would let another distribution's sheet win over this one's. It can still
+happen in an installation missing its own sheet, which is a narrower hole than
+the one it replaces, not a closed one.
+
 **The remediation marker became two marks, `[FIX]` and `[WHY]`.** A gate's
 detail appended `  <- ` and everything after it was read, by the guide and by
 `test_a_gates_message_either_names_a_fix_or_is_named_here`, as what to do. Six

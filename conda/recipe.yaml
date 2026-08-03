@@ -14,8 +14,10 @@ source:
   sha256: 57efcc97312b1c93de1b7266f607d6dc8a0ab6deca263435028a99b8a19d589b
 
 build:
-  # Three unnamespaced entries in site-packages, deliberately: the scripts are
-  # meant to be vendored as single files and the sheet is found beside them.
+  # Three unnamespaced modules in site-packages, deliberately: they are meant to
+  # be vendored as single files, so the installed import line and the vendored
+  # one are the same. The sheet is not among them; it sits in figure_gate_data/,
+  # because its name is generic and the root of site-packages is shared.
   noarch: python
   number: 0
   script: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation

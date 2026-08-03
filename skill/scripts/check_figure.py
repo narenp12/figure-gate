@@ -2107,18 +2107,28 @@ def check_label_attribution(fig, r):
 # --- the sheet itself -------------------------------------------------------
 
 def _style_sheet():
-    """`STYLE_SHEET` if the project set one, else `figure.mplstyle` as the skill
-    tells you to lay it out (beside this script), and as this repository lays it
-    out (`assets/` next to `scripts/`).
+    """`STYLE_SHEET` if the project set one, else `figure.mplstyle` in the three
+    places it is laid out: `figure_gate_data/` as the wheel installs it, beside
+    this script as the skill tells you to vendor it, and `assets/` next to
+    `scripts/` as this repository keeps it.
 
     A configured path is returned whether or not it exists: a sheet named and
     missing is a mistake worth a row, not a silent fall-through to a sheet the
     project did not ask for.
+
+    The installed location is probed first, and the order is load-bearing. On
+    the install path `here` is the root of `site-packages`, so a
+    `figure.mplstyle` dropped there by another distribution would otherwise win
+    over this project's own. Probing the namespaced directory first means that
+    can only happen in an installation missing its own sheet. Vendored layouts
+    are unaffected: no `figure_gate_data/` sits beside a copied checker, so the
+    first candidate misses and the second answers.
     """
     if STYLE_SHEET is not None:
         return Path(STYLE_SHEET)
     here = Path(__file__).resolve().parent
-    for cand in (here / "figure.mplstyle",
+    for cand in (here / "figure_gate_data" / "figure.mplstyle",
+                 here / "figure.mplstyle",
                  here.parent / "assets" / "figure.mplstyle"):
         if cand.is_file():
             return cand
@@ -2707,7 +2717,8 @@ def check_style_sheet(fig):
     import matplotlib as mpl
     path = _style_sheet()
     if path is None:
-        return True, "no figure.mplstyle beside this script, nothing to compare"
+        return True, ("no figure.mplstyle in figure_gate_data/, beside this "
+                      "script, or in assets/, nothing to compare")
     if not path.is_file():
         return "warn", (f"STYLE_SHEET is set to {path}, which is not a file: "
                         "nothing was compared, and the sheet you meant is not "
