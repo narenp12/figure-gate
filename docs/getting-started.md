@@ -22,10 +22,12 @@ uv add figure-gate          # or: uv tool install figure-gate
 conda install -c conda-forge figure-gate
 ```
 
-The install ships `figure.mplstyle` beside the checkers, which is where the
-style-sheet gate looks for it. Without that the gate has nothing to compare and
-reports a pass, including for the figure it exists to catch: one drawn with
-`plt.style.use` forgotten entirely.
+The install ships `figure.mplstyle` in a figure_gate_data directory, which is
+the first place the style-sheet gate looks. Without it the gate has nothing to
+compare and reports a pass, including for the figure it exists to catch: one
+drawn with `plt.style.use` forgotten entirely. The directory is named for the
+distribution because the sheet's own name is generic enough that another
+package could ship one, and the root of site-packages is shared.
 
 Copying is the default because a vendored checker is one you can read and edit
 beside the figures it gates, and the thresholds are meant to be edited.
