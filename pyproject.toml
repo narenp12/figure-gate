@@ -56,14 +56,26 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 only-include = ["skill/scripts"]
 sources = ["skill/scripts"]
+# Release tooling, not something a caller imports. It reaches the checkout
+# through the `audit-api` target in the Makefile and through its own test, and
+# shipping it put a script nobody installs for on every user's import path.
+exclude = ["skill/scripts/audit_api.py"]
 
-# The sheet ships beside the scripts, which is the first location `_style_sheet`
+# The sheet ships inside the wheel, which is the first location `_style_sheet`
 # probes. Without it the style-sheet gate cannot fire on the install path: no
 # sheet is found, so the row reads "nothing to compare" and a figure drawn on
 # stock matplotlib -- the forgotten `plt.style.use` the gate exists to catch --
 # passes it.
+#
+# It goes in a directory named for the distribution rather than at the wheel
+# root, because a bare `figure.mplstyle` sitting in `site-packages` is a generic
+# name any other distribution could also claim, and the setuptools guidance for
+# run-time data files has no exemption for it. The filename does not change:
+# `tests/test_prose_claims.py` resolves `figure.mplstyle` against the tracked
+# `skill/assets/figure.mplstyle`, and a name that exists only inside a built
+# wheel resolves to nothing.
 [tool.hatch.build.targets.wheel.force-include]
-"skill/assets/figure.mplstyle" = "figure.mplstyle"
+"skill/assets/figure.mplstyle" = "figure_gate_data/figure.mplstyle"
 
 # Keeps the skill, the tests and the examples -- the tests are what make the
 # thresholds checkable by someone who did not write them. Drops agent scratch
