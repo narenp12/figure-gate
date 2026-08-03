@@ -15,6 +15,10 @@ jobs:
   test:
     name: Tests before release
     runs-on: ubuntu-latest
+    # This job takes two minutes. Unbounded, the apt step below could hold a
+    # runner for six hours, and it would hold the release with it: every job
+    # in this file waits on this one.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -22,14 +26,38 @@ jobs:
           enable-cache: true
       - run: uv python install 3.13
       - run: uv sync --extra fast --dev
+      # `timeout` because a mirror that stalls returns no error for a retry
+      # loop to catch, the loop because the next mirror usually answers, and
+      # the output left visible because a silent step tells a reader nothing
+      # about where it stopped. Same command as ci.yml's, for the same test.
       - name: Install xelatex for PGF backend test
-        run: sudo apt-get update && sudo apt-get install -y texlive-xetex
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -qq \
+               && timeout 600 sudo apt-get install -y --no-install-recommends texlive-xetex; then
+              exit 0
+            fi
+            echo "::warning::apt-get failed or stalled on attempt $attempt"
+            sleep $((attempt * 15))
+          done
+          echo "::error::could not install texlive-xetex in three attempts"
+          exit 1
       - run: uv run pytest tests -q
+
+      # The PGF test skips itself when xelatex is missing, so a release could
+      # otherwise ship green with that assertion never made. Releasing is the
+      # last place to accept a silent skip.
+      - name: The PGF test ran rather than skipping
+        run: |
+          uv run pytest tests/test_figure.py::test_pgf_rejects_the_metadata_kwarg_at_any_value \
+            -q -rs | tee "$RUNNER_TEMP/pgf.log"
+          grep -q "1 passed" "$RUNNER_TEMP/pgf.log"
 
   build:
     name: Build sdist and wheel
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -61,6 +89,10 @@ jobs:
     # guard workflow_dispatch is a publish button.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    # Shortest job in the file, and the one holding `id-token: write`. A job
+    # that can upload to PyPI as this project should not be able to sit idle
+    # with that token for hours.
+    timeout-minutes: 15
     environment:
       name: pypi
       url: https://pypi.org/p/figure-gate
@@ -92,6 +124,7 @@ jobs:
     needs: publish
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
