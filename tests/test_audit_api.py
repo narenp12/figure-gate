@@ -15,12 +15,18 @@ def _load_audit_api():
     return mod
 
 
-def _fake_run_factory(griffe_output: dict[str, tuple[int, str, str]]):
+def _fake_run_factory(griffe_output: dict[str, tuple[int, str, str]],
+                      missing_at_tag: tuple[str, ...] = ()):
     original_run = subprocess.run
 
     def fake_run(cmd, **kwargs):
-        if cmd[0] == "git":
+        if cmd[0] == "git" and cmd[1] == "describe":
             return subprocess.CompletedProcess(cmd, 0, "v0.1.0\n", "")
+        if cmd[0] == "git" and cmd[1] == "ls-tree":
+            path = cmd[-1]
+            absent = any(f"{m}.py" in path for m in missing_at_tag)
+            return subprocess.CompletedProcess(
+                cmd, 0, "" if absent else f"{path}\n", "")
         if cmd[0] == "griffe":
             assert cmd[1] == "check"
             assert cmd[2] == "-s" and cmd[3] == "skill/scripts"
@@ -204,3 +210,29 @@ def test_audit_api_changelog_accepts_other_break_words(tmp_path, monkeypatch):
         with pytest.raises(SystemExit) as exc_info:
             mod.main()
     assert exc_info.value.code == 0
+
+
+def test_audit_api_skips_a_module_that_did_not_exist_at_the_tag(tmp_path, monkeypatch,
+                                                                capsys):
+    """`suggest_fixes.py` landed after v0.6.0. Comparing a module against a tag
+    that has no such file makes griffe exit non-zero with an ImportError and no
+    finding, which this script correctly refuses as the tool failing. A module
+    with no history at the tag has no API that could have broken, and saying so
+    is not the same as saying nothing broke."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(_changelog("## Unreleased\n\nNothing.\n"))
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (0, "", ""),
+        "check_palette": (0, "", ""),
+    }
+
+    mod = _load_audit_api()
+    mod.MODULES = ("check_figure", "check_palette", "suggest_fixes")
+    fake = _fake_run_factory(griffe_output, missing_at_tag=("suggest_fixes",))
+    with patch("subprocess.run", side_effect=fake):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code == 0
+    assert "new since" in capsys.readouterr().out
