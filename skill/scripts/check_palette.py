@@ -20,36 +20,52 @@ not apply). They are still counted for CVD/normal separation and contrast agains
 the surface, mirroring `check_figure`'s own `INK_TOKENS` intent.
 """
 
+from __future__ import annotations
+
 import argparse
 import itertools
 import math
+from collections.abc import Collection, Sequence
 
 # --- color conversion -------------------------------------------------------
 
 
-def _srgb_to_linear(c):
+def _srgb_to_linear(c: float) -> float:
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
-def hex_to_linear(h):
+def hex_to_linear(h: str) -> tuple[float, float, float]:
     """A `#rrggbb` string as linear-light RGB, each channel in 0..1.
 
     Linear light, not the 0..255 the hex digits carry: every distance and
     luminance below is defined on it, and averaging or mixing gamma-encoded
     values is the usual source of a wrong answer that looks plausible.
+
+    Args:
+        h: A `#rrggbb` string. The leading `#` is optional.
+
+    Returns:
+        `(r, g, b)`, each channel linear-light in 0..1.
     """
     h = h.lstrip("#")
     if len(h) != 6:
         raise ValueError(f"expected 6-digit hex, got {h!r}")
-    return tuple(_srgb_to_linear(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4))
+    r, g, b = (_srgb_to_linear(int(h[i:i + 2], 16) / 255) for i in (0, 2, 4))
+    return r, g, b
 
 
-def linear_to_oklab(rgb):
+def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
     """Linear-light RGB as OKLab `(L, a, b)`.
 
     OKLab rather than CIELAB because its lightness tracks perceived lightness
     across hues, which is what every gate here asks about. `l, m, s` below are
     the cone responses the published matrix names, not a lint slip.
+
+    Args:
+        rgb: Linear-light `(r, g, b)`, each channel in 0..1.
+
+    Returns:
+        `(L, a, b)` in OKLab. `L` is 0..1.
     """
     r, g, b = rgb
     l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
@@ -63,22 +79,35 @@ def linear_to_oklab(rgb):
     )
 
 
-def relative_luminance(rgb):
+def relative_luminance(rgb: Sequence[float]) -> float:
     """WCAG relative luminance of linear-light RGB.
 
     The WCAG coefficients, and deliberately not OKLab's `L`: the contrast
     ratios this project cites are defined against this number, so computing
     them from a perceptual lightness would report figures no standard backs.
+
+    Args:
+        rgb: Linear-light `(r, g, b)`, each channel in 0..1.
+
+    Returns:
+        Relative luminance in 0..1, by the WCAG coefficients.
     """
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def contrast(hex_a, hex_b):
+def contrast(hex_a: str, hex_b: str) -> float:
     """WCAG contrast ratio between two hex colours, from 1.0 to 21.0.
 
     The floors it is compared against: 4.5 for text, 3.0 for a hue against the
     surface it sits on.
+
+    Args:
+        hex_a: A `#rrggbb` string.
+        hex_b: The colour to measure it against.
+
+    Returns:
+        The ratio, 1.0 (identical) to 21.0 (black on white).
     """
     la, lb = relative_luminance(hex_to_linear(hex_a)), relative_luminance(hex_to_linear(hex_b))
     hi, lo = max(la, lb), min(la, lb)
@@ -100,15 +129,24 @@ CVD = {
 }
 
 
-def simulate(rgb, kind):
+def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
     """Linear-light RGB as a `"protan"`, `"deutan"` or `"tritan"` viewer sees it.
 
     Vienot, Brettel & Mollon (1999), applied on linear light. Protan and deutan
     are what the gates decide on; the tritan matrix is validated only for the
     red-green forms, so its distances are printed and never gated.
+
+    Args:
+        rgb: Linear-light `(r, g, b)`, each channel in 0..1.
+        kind: `"protan"`, `"deutan"` or `"tritan"`.
+
+    Returns:
+        Linear-light `(r, g, b)` as that viewer sees it.
     """
     m = CVD[kind]
-    return tuple(max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3)))) for i in range(3))
+    r, g, b = (max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3))))
+               for i in range(3))
+    return r, g, b
 
 
 # --- anomalous trichromacy (Machado, Oliveira & Fernandes 2009) --------------
@@ -211,7 +249,8 @@ MACHADO = {
 ANOMALOUS_SEVERITIES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
-def simulate_anomalous(rgb, kind, severity):
+def simulate_anomalous(rgb: Sequence[float], kind: str,
+                       severity: float) -> tuple[float, float, float]:
     """Linear-light RGB as an anomalous trichromat of this severity sees it.
 
     `kind` is `"protan"` or `"deutan"`. `severity` runs 0.0 (normal vision) to
@@ -223,6 +262,15 @@ def simulate_anomalous(rgb, kind, severity):
     `simulate` remains the dichromacy model and the anchor for every number the
     style guide quotes. This is the range between the two ends, which is where
     most colour vision deficiency actually sits.
+
+    Args:
+        rgb: Linear-light `(r, g, b)`, each channel in 0..1.
+        kind: `"protan"` or `"deutan"`.
+        severity: 0.0 (normal vision) to 1.0 (dichromacy), read at the
+            nearest tenth.
+
+    Returns:
+        Linear-light `(r, g, b)` as that viewer sees it.
     """
     if kind not in MACHADO:
         raise ValueError(f"severity is modelled for protan and deutan only, "
@@ -231,17 +279,26 @@ def simulate_anomalous(rgb, kind, severity):
         raise ValueError(f"severity runs 0.0 to 1.0, got {severity!r}")
     tenths = int(round(severity * 10))
     if tenths == 0:
-        return tuple(max(0.0, min(1.0, c)) for c in rgb)
+        r, g, b = (max(0.0, min(1.0, c)) for c in rgb)
+        return r, g, b
     m = MACHADO[kind][tenths]
-    return tuple(max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3))))
-                 for i in range(3))
+    r, g, b = (max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3))))
+               for i in range(3))
+    return r, g, b
 
 
-def delta_e(rgb_a, rgb_b):
+def delta_e(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
     """OKLab distance between two linear-light colours, x100.
 
     Scaled by 100 so the thresholds read as whole numbers: `CVD_TARGET = 8.0`
     for two hues under a simulation, `NORMAL_FLOOR = 15.0` in full colour.
+
+    Args:
+        rgb_a: Linear-light `(r, g, b)`.
+        rgb_b: The colour to measure it against.
+
+    Returns:
+        OKLab euclidean distance, x100.
     """
     a, b = linear_to_oklab(rgb_a), linear_to_oklab(rgb_b)
     return 100 * math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
@@ -256,7 +313,7 @@ CMAP_BACKTRAVEL_MAX = 0.02
 CMAP_WRAP_DE_MAX = 3.0
 
 
-def _back_travel(ls):
+def _back_travel(ls: Sequence[float]) -> float:
     steps = [b - a for a, b in zip(ls, ls[1:])]
     if not steps:
         return 0.0
@@ -273,17 +330,24 @@ def _back_travel(ls):
     return sum(abs(s) for s in steps if s * sign < 0) / span
 
 
-def cmap_back_travel(samples):
+def cmap_back_travel(samples: Sequence[str]) -> float:
     """How much of a ramp's lightness runs backwards, as a fraction of its span.
 
     0.0 is monotone. `CMAP_BACKTRAVEL_MAX = 0.02` is where a ramp stops
     counting as ordered, because lightness that reverses makes two different
     values render at the same lightness.
+
+    Args:
+        samples: Hex strings sampled along the ramp, in ramp order.
+
+    Returns:
+        Backward lightness travel as a fraction of the ramp's span. 0.0 is
+        monotone.
     """
     return _back_travel([linear_to_oklab(hex_to_linear(h))[0] for h in samples])
 
 
-def cmap_kind(samples):
+def cmap_kind(samples: Sequence[str]) -> str:
     """Classify hex samples as `qualitative`, `sequential`, `diverging`,
     `cyclic` or `misc`.
 
@@ -293,6 +357,13 @@ def cmap_kind(samples):
 
     Fewer than `CMAP_QUALITATIVE_N = 40` samples is read as a set of category
     colours rather than a ramp, and gated on separation instead.
+
+    Args:
+        samples: Hex strings sampled along the colormap, in order.
+
+    Returns:
+        One of `"qualitative"`, `"sequential"`, `"diverging"`, `"cyclic"` or
+        `"misc"`.
     """
     if len(samples) < CMAP_QUALITATIVE_N:
         return "qualitative"
@@ -330,7 +401,10 @@ ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
 
 
-def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozenset()):
+def check(colors: Sequence[str], surface: str = "#ffffff",
+          all_pairs: bool = False, ordinal: bool = False,
+          ink: Collection[str] = frozenset(),
+          ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Gate a palette. Returns `(ok, rows)`.
 
     The order matches `check_figure.audit`. It did not until 0.4.0: this
@@ -339,8 +413,9 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
     one the wrong way binds a bool to the rows and raises nothing, so the two
     were made the same rather than described.
 
-    `rows` are `(name, status, detail)`, one per gate, with `status` True or
-    False. `ok` is False when any row is.
+    `rows` are `(name, status, detail)`, one per gate. `status` is True,
+    False, or the string "warn" for the advisory contrast row, and only a
+    hard False sets `ok` to False.
 
     `colors` are hex strings. `surface` is the page they are drawn on and sets
     what the contrast row measures against. `all_pairs` gates every pair rather
@@ -348,10 +423,23 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
     not. `ordinal` swaps the categorical separation rows for the ramp rows:
     monotone lightness, even steps, a light end that still holds contrast.
     `ink` names colours to treat as furniture rather than data.
+
+    Args:
+        colors: Hex strings, the palette to gate.
+        surface: The page colour they are drawn on.
+        all_pairs: Gate every pair rather than adjacent ones.
+        ordinal: Swap the categorical rows for the ramp rows.
+        ink: Colours to treat as furniture rather than data.
+
+    Returns:
+        `(ok, rows)`. `rows` are `(name, status, detail)`, one per gate;
+        `status` is True, False or "warn", and `ok` is False only when a
+        row is a hard False.
     """
     lin = [hex_to_linear(c) for c in colors]
     lab = [linear_to_oklab(v) for v in lin]
-    rows, ok = [], True
+    rows: list[tuple[str, bool | str, str]] = []
+    ok = True
 
     if ordinal:
         ls = [v[0] for v in lab]
@@ -458,7 +546,7 @@ def check(colors, surface="#ffffff", all_pairs=False, ordinal=False, ink=frozens
     return ok, rows
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description="Validate a figure palette.")
     ap.add_argument("colors", help="comma-separated hex colors")
     # White, because that is what `figure.mplstyle` renders and what the page

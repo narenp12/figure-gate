@@ -41,11 +41,22 @@ Checks, in the order `audit` runs them
     21. Alt text          - the figure carries a description
 """
 
+from __future__ import annotations
+
 import itertools
 import math
 from collections import Counter
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+# The annotations below name these; the code imports numpy and matplotlib
+# inside the functions that use them, and `from __future__ import
+# annotations` keeps that true by making every annotation a string.
+if TYPE_CHECKING:
+    import numpy as np
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -91,7 +102,7 @@ MAX_SERIES_HUES = 6
 # whether it is advisory beside the function that decides it. It was a second
 # hand-maintained list of the same twenty names for a while, which is two places
 # to update and one of them silently optional.
-def _advisory_gates():
+def _advisory_gates() -> frozenset[str]:
     return frozenset(gate.name for gate in GATES if gate.advisory)
 
 # Ink and furniture from `figure.mplstyle`. These land in `ax.lines` and
@@ -252,8 +263,18 @@ VENUE_WIDTH_PT = {
 }
 
 
-def content_width_pt(venue=None):
-    """The usable page width to measure against, in points."""
+def content_width_pt(venue: str | None = None) -> float | None:
+    """The usable page width to measure against, in points.
+
+    Args:
+        venue: A key of `VENUE_WIDTH_PT`. `None` reads `CONTENT_WIDTH_PT`.
+
+    Returns:
+        The width in points, or `None` when neither is set.
+
+    Raises:
+        KeyError: The venue is not in `VENUE_WIDTH_PT`.
+    """
     if venue is None:
         return CONTENT_WIDTH_PT
     try:
@@ -266,7 +287,8 @@ def content_width_pt(venue=None):
             "CONTENT_WIDTH_PT to what it says.") from None
 
 
-def page_scale(fig, placed_frac=1.0, venue=None):
+def page_scale(fig: Figure, placed_frac: float = 1.0,
+               venue: str | None = None) -> float:
     """Scale from authored inches to points on the page.
 
     `placed_frac` is the fraction of the content width the figure is placed at,
@@ -279,6 +301,18 @@ def page_scale(fig, placed_frac=1.0, venue=None):
     `venue` names a row of `VENUE_WIDTH_PT` and overrides `CONTENT_WIDTH_PT` for
     this call, which is the usual way in: the width is a property of the
     document, not of the checkout.
+
+    Args:
+        fig: The figure, read for its authored width in inches.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+
+    Returns:
+        Points on the page per authored inch. `1.0` when no content width is
+        set, which measures the figure at the size it was authored.
+
+    Raises:
+        ValueError: `placed_frac` is not 1.0 and no content width is set.
     """
     width = content_width_pt(venue)
     if width is None:
@@ -294,7 +328,7 @@ def page_scale(fig, placed_frac=1.0, venue=None):
     return width * placed_frac / (fig.get_size_inches()[0] * 72)
 
 
-def _renderer(fig):
+def _renderer(fig: Figure) -> tuple[Any, Any]:
     """Return (renderer, canvas): an Agg canvas at the authored dpi, drawn.
 
     Text extents need a renderer that can measure, and the SVG canvas cannot,
@@ -329,7 +363,7 @@ def _renderer(fig):
     return canvas.get_renderer(), canvas
 
 
-def _texts(fig, r):
+def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
     """Visible, non-empty Text artists with their window extents.
 
     Matched on the concrete class, not on `hasattr(get_text)` - a ContourSet
@@ -353,20 +387,20 @@ def _texts(fig, r):
     return out
 
 
-def _tick_texts(fig):
-    ids = set()
+def _tick_texts(fig: Figure) -> set[int]:
+    ids: set[int] = set()
     for ax in fig.axes:
         for t in ax.get_xticklabels() + ax.get_yticklabels():
             ids.add(id(t))
     return ids
 
 
-def _ghost_ticks(fig):
+def _ghost_ticks(fig: Figure) -> set[int]:
     """Tick artists that exist on an axes but never reach the page: those on a
     hidden axes (`ax.axis("off")`), and those at locations outside the current
     view. Counting either as clipped text reports a defect that is not there.
     """
-    ids = set()
+    ids: set[int] = set()
     for ax in fig.axes:
         if not ax.axison:
             ids.update(id(t) for t in
@@ -383,7 +417,7 @@ def _ghost_ticks(fig):
     return ids
 
 
-def _polar_radial_ticks(fig):
+def _polar_radial_ticks(fig: Figure) -> set[int]:
     """Radial tick labels on polar axes.
 
     matplotlib places these inside the disc, because on a polar plot there is
@@ -401,14 +435,14 @@ def _polar_radial_ticks(fig):
     The count is reported rather than dropped, so the author is told these
     strings went unjudged instead of assuming they passed.
     """
-    ids = set()
+    ids: set[int] = set()
     for ax in fig.axes:
         if getattr(ax, "name", "") == "polar":
             ids.update(id(t) for t in ax.get_yticklabels())
     return ids
 
 
-def _corners(t, bb, r):
+def _corners(t: Any, bb: Any, r: Any) -> np.ndarray:
     """The four display-space corners of a text's box, rotation included.
 
     `get_window_extent` returns the axis-aligned bounding box of the *rotated*
@@ -458,7 +492,7 @@ def _corners(t, bb, r):
     return out
 
 
-def _overlap(a, b):
+def _overlap(a: np.ndarray, b: np.ndarray) -> bool:
     """Whether two oriented boxes intersect, by the separating axis theorem.
 
     Each box is (4, 2) display-space corners. Two convex polygons are disjoint
@@ -481,7 +515,8 @@ def _overlap(a, b):
     return True
 
 
-def _oriented_mask(corners, x0, y1, shape):
+def _oriented_mask(corners: np.ndarray, x0: float, y1: float,
+                   shape: tuple[int, ...]) -> np.ndarray | None:
     """Which pixels of a sampled block the oriented label box actually covers.
 
     `check_text_readability` slices an axis-aligned block out of the backdrop,
@@ -522,7 +557,7 @@ def _oriented_mask(corners, x0, y1, shape):
     return (p1 >= 0) & (p1 <= n1) & (p2 >= 0) & (p2 <= n2)
 
 
-def check_clipping(fig, r):
+def check_clipping(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """Text that runs off the canvas.
 
     Reads the axis-aligned box and is correct to: an AABB is the bounding box
@@ -545,7 +580,7 @@ def check_clipping(fig, r):
             else f"clipped: {bad}  [FIX] add constrained_layout or widen the figure")
 
 
-def check_collisions(fig, r):
+def check_collisions(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """Text-on-text overlap. Tick labels on a shared axis are exempt: matplotlib
     lays those out itself and a 1px touch there is not a defect.
 
@@ -565,7 +600,7 @@ def check_collisions(fig, r):
             else f"overlapping: {hits[:4]}")
 
 
-def _halo(t):
+def _halo(t: Any) -> tuple[Any, float]:
     """(color, linewidth) of a stroke path effect, when the text wears casing.
 
     Casing — the cartographic term for a contrasting outline around a label —
@@ -598,7 +633,7 @@ def _halo(t):
     return None, 0.0
 
 
-def _furniture(fig):
+def _furniture(fig: Figure) -> list[tuple[float, ...]]:
     """Colors a label is allowed to sit on, read off the figure that drew them.
 
     Casing exists precisely so a gridline can pass behind a label; the axis rule
@@ -626,7 +661,8 @@ def _furniture(fig):
     return [tuple(c * 255.0 for c in rgb) for rgb in out]
 
 
-def _near_any(pixels, anchors, tol):
+def _near_any(pixels: np.ndarray, anchors: Sequence[tuple[float, ...]],
+              tol: float) -> np.ndarray:
     """Which of an (N, 3) block of pixels a blend of `anchors` explains.
 
     Antialiasing puts pixels on the straight line between two colors that meet,
@@ -651,7 +687,7 @@ def _near_any(pixels, anchors, tol):
     return best <= tol
 
 
-def _box_blur(field, size):
+def _box_blur(field: np.ndarray, size: int) -> np.ndarray:
     """Moving average over an (H, W, 3) block, edges extended.
 
     `scipy.ndimage.uniform_filter` does this and is what the first version
@@ -680,7 +716,8 @@ def _box_blur(field, size):
     return out
 
 
-def _foreign_ink(block, furniture, tol, mask=None):
+def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
+                 tol: float, mask: np.ndarray | None = None) -> float:
     """Fraction of a backdrop patch that is a mark rather than ground.
 
     Ground is whatever varies slowly: the page, a flat fill, a viridis field.
@@ -716,7 +753,8 @@ def _foreign_ink(block, furniture, tol, mask=None):
     return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / area
 
 
-def _worst_backdrop(block, fg, min_share, mask=None):
+def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
+                    mask: np.ndarray | None = None) -> tuple[np.ndarray, float]:
     """The contrast the text holds over all but the worst `min_share` of its
     box, and the backdrop pixel that sets it.
 
@@ -757,8 +795,10 @@ def _worst_backdrop(block, fg, min_share, mask=None):
     return pix[idx], float(ratios[idx])
 
 
-def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
-                           venue=None):
+def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
+                           scale: float | None = None,
+                           placed_frac: float = 1.0,
+                           venue: str | None = None) -> tuple[bool | str, str]:
     """Whether each string can be read where it sits.
 
     `check_label_attribution` asks which curve a label belongs to. This asks the
@@ -913,7 +953,7 @@ def check_text_readability(fig, r, canvas=None, scale=None, placed_frac=1.0,
                      "gridline, not a curve")
 
 
-def _contrast_255(rgb_a, rgb_b):
+def _contrast_255(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
     """WCAG contrast for two 0-255 RGB triples.
 
     Duplicated from `check_palette.contrast` rather than imported: this file
@@ -922,7 +962,7 @@ def _contrast_255(rgb_a, rgb_b):
     when a sibling file is absent is the kind of decoration this repo exists to
     argue against.
     """
-    def lin(c):
+    def lin(c: float) -> float:
         c = c / 255.0
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
@@ -934,7 +974,7 @@ def _contrast_255(rgb_a, rgb_b):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def _contrast_field_255(fg, pixels):
+def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
     """`_contrast_255(fg, p)` for every row of an (N, 3) block, as an (N,).
 
     The same arithmetic vectorised, not a second definition of it. It exists
@@ -946,7 +986,7 @@ def _contrast_field_255(fg, pixels):
     """
     import numpy as np
 
-    def lum(rgb):
+    def lum(rgb: np.ndarray) -> np.ndarray:
         c = np.asarray(rgb, dtype=float) / 255.0
         lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
         return lin @ np.array([0.2126, 0.7152, 0.0722])
@@ -956,7 +996,7 @@ def _contrast_field_255(fg, pixels):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def check_contrast_stack(fig):
+def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy."""
     alphas = []
@@ -982,7 +1022,7 @@ def check_contrast_stack(fig):
     return ok, f"alpha levels {levels}{note}"
 
 
-def scatter_diameter_pt(size):
+def scatter_diameter_pt(size: float | np.ndarray) -> float | np.ndarray:
     """The diameter in points that `scatter(s=size)` actually draws.
 
     matplotlib documents `s` as "the marker size in points**2", which reads as
@@ -997,13 +1037,20 @@ def scatter_diameter_pt(size):
     that constant. `test_scatter_size_is_a_squared_diameter` pins it against
     matplotlib rather than against this docstring.
 
-    Accepts a float or a numpy array, and is public because both
-    `check_mark_ratio` and `check_overplotting` decide on it.
+    Args:
+        size: The value passed to `scatter(s=)`. A float or a numpy array.
+
+    Returns:
+        The drawn diameter in points, `sqrt(size)`, in the same shape as
+        `size` was given.
+
+    Public because both `check_mark_ratio` and `check_overplotting` decide on
+    it.
     """
     return size ** 0.5
 
 
-def check_mark_ratio(fig):
+def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     """One mark far larger than the rest stops reading as a mark and starts
     reading as an ornament stuck on top of the plot.
 
@@ -1025,9 +1072,9 @@ def check_mark_ratio(fig):
     """
     worst = None
     for ax in fig.axes:
-        sizes = []
+        sizes: list[float] = []
         for c in ax.collections:
-            s = getattr(c, "get_sizes", lambda: [])()
+            s: Any = getattr(c, "get_sizes", lambda: [])()
             sizes.extend(math.pi * (scatter_diameter_pt(float(v)) / 2.0) ** 2
                          for v in s if v > 0)
         for ln in ax.lines:
@@ -1051,7 +1098,7 @@ def check_mark_ratio(fig):
                else f"  [FIX] cap at {MARK_RATIO_MAX}x"))
 
 
-def _radius_octaves(radius_px):
+def _radius_octaves(radius_px: np.ndarray) -> list[np.ndarray]:
     """The marks grouped so that radii inside a group vary by under 2x.
 
     Keyed on `floor(log2(r))`, which is the octave the radius sits in. What the
@@ -1072,7 +1119,7 @@ def _radius_octaves(radius_px):
     return [np.flatnonzero(key == k) for k in np.unique(key)]
 
 
-def _contact_fraction(xy, radius_px, cKDTree):
+def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> float:
     """Fraction of the marks at `xy` whose disc intersects another mark's.
 
     Two discs intersect when `d < r_i + r_j`, which is symmetric, so a mark is
@@ -1157,7 +1204,7 @@ def _contact_fraction(xy, radius_px, cKDTree):
     return float(hit.sum()) / n
 
 
-def check_overplotting(fig):
+def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     """Warn when scatter points overlap into an unreadable mass.
 
     For each PathCollection with offsets (a scatter), the fraction of points
@@ -1213,7 +1260,7 @@ def check_overplotting(fig):
                 xy = ax.transData.transform(offsets)
             except Exception:
                 continue
-            sizes = getattr(coll, "get_sizes", lambda: [])()
+            sizes: Any = getattr(coll, "get_sizes", lambda: [])()
             if len(sizes) == 0:
                 continue
             sizes = np.asarray(sizes, dtype=float)
@@ -1240,13 +1287,14 @@ def check_overplotting(fig):
                     "do not move it")
 
 
-def check_redundancy(fig, r):
+def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """Side-by-side panels on the same scale should share their axis furniture.
     Two identical tick columns and two identical axis labels is duplicated ink."""
     # Only same-row panels can share a y axis, and only same-column panels can
     # share an x axis. Two panels side by side each legitimately need their own
     # x label; repeating the y label between them is the duplication.
-    rows, cols = {}, {}
+    rows: dict[Any, list[Any]] = {}
+    cols: dict[Any, list[Any]] = {}
     for ax in fig.axes:
         ss = ax.get_subplotspec()
         if ss is None:
@@ -1286,7 +1334,9 @@ def check_redundancy(fig, r):
     return False, "; ".join(bits) + "  [FIX] use sharex/sharey"
 
 
-def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
+def check_type_size(fig: Figure, r: Any, scale: float | None = None,
+                    placed_frac: float = 1.0,
+                    venue: str | None = None) -> tuple[bool | str, str]:
     """Every rendered string clears the legibility floor once the figure is
     scaled into the document.
 
@@ -1314,7 +1364,7 @@ def check_type_size(fig, r, scale=None, placed_frac=1.0, venue=None):
                    "  [FIX] cut words, do not shrink type")
 
 
-def _axes_drew_anything(ax):
+def _axes_drew_anything(ax: Axes) -> bool:
     """Whether anything was drawn into this axes.
 
     Not `_has_data`, which is a different question defined further down this
@@ -1333,7 +1383,8 @@ def _axes_drew_anything(ax):
                 "tables", "artists"))
 
 
-def check_ink(fig, context_axes=None, canvas=None):
+def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
+              canvas: Any = None) -> tuple[bool | str, str]:
     """Ink as a fraction of each plotting area, measured off the rendered
     pixels rather than estimated from artist properties.
 
@@ -1429,7 +1480,7 @@ def check_ink(fig, context_axes=None, canvas=None):
 
 # --- color ------------------------------------------------------------------
 
-def _hex(c):
+def _hex(c: Any) -> str | None:
     """A drawn color as lowercase 6-digit hex, or None if it never reaches the
     page. Fully transparent is the case that matters: a bar's default edge color
     is `none`, and reading it as black would put the ink token on every bar."""
@@ -1441,7 +1492,7 @@ def _hex(c):
     return None if a == 0 else to_hex((r, g, b))
 
 
-def _colors_of(value):
+def _colors_of(value: Any) -> list[Any]:
     """Normalize the several shapes matplotlib returns a color in: a string from
     `Line2D`, an RGBA tuple from `Patch`, an Nx4 array from a `Collection`."""
     if isinstance(value, str):
@@ -1458,7 +1509,7 @@ def _colors_of(value):
     return []
 
 
-def _artist_kind(artist):
+def _artist_kind(artist: Any) -> str:
     """A coarse artist family: a line, a scatter's marks, or a filled area.
 
     The wrap check needs it. A cycler that wraps reuses one artist *type* - two
@@ -1480,7 +1531,8 @@ def _artist_kind(artist):
     return "area"          # bars, fill_between polys, other patches
 
 
-def _data_colors_by_axes(fig):
+def _data_colors_by_axes(
+        fig: Figure) -> dict[Axes, list[tuple[str, str | None, str]]]:
     """`{axes: [(hex, label, kind), ...]}` - the categorical colors on the
     figure, kept apart by the panel they were drawn in and tagged with the kind
     of artist that drew them. `label` is None for an artist matplotlib named
@@ -1531,14 +1583,14 @@ def _data_colors_by_axes(fig):
     return out
 
 
-def _data_colors(fig):
+def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
     """Flat `(hex, label)` across the whole figure, for the checks that only
     need the bag of identified hues and not the panel each lives in."""
     return [(h, label) for items in _data_colors_by_axes(fig).values()
             for h, label, _ in items]
 
 
-def _axes_all_pairs(ax):
+def _axes_all_pairs(ax: Axes) -> bool:
     """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
     drawn as; a built figure does say. Scatter puts every series next to every
@@ -1552,7 +1604,7 @@ def _axes_all_pairs(ax):
     return any(isinstance(c, PathCollection) for c in ax.collections)
 
 
-def check_series_color(fig):
+def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     """The hues actually drawn, put through the palette gates.
 
     The hole this closes: `check_palette.py` judges a list of hexes someone
@@ -1577,9 +1629,9 @@ def check_series_color(fig):
         return True, "no categorical series colors"
 
     fails, notes = [], []
-    cp = None
+    cp: Any = None
     try:
-        import check_palette as cp
+        import check_palette as cp  # type: ignore[no-redef]
     except ImportError:
         notes.append("check_palette.py is not importable beside this file, "
                      "so separation went unchecked")
@@ -1598,7 +1650,7 @@ def check_series_color(fig):
         # *same kind*: a wrap reuses one artist type, whereas a band, its mean
         # line and its points in one hue is one series shown three ways, each
         # legitimately labelled. Keyed on kind, that reads as one identity.
-        by_hue_kind = {}
+        by_hue_kind: dict[Any, set[Any]] = {}
         for h, label, kind in items:
             if label:
                 by_hue_kind.setdefault((h, kind), set()).add(label)
@@ -1630,13 +1682,13 @@ def check_series_color(fig):
 
 # --- structure --------------------------------------------------------------
 
-def _has_data(ax):
+def _has_data(ax: Axes) -> bool:
     return any(a.get_visible() for a in
                list(ax.lines) + list(ax.patches)
                + list(ax.collections) + list(ax.images))
 
 
-def check_dual_axis(fig):
+def check_dual_axis(fig: Figure) -> tuple[bool | str, str]:
     """Two y scales in one frame, which nothing in this project banned and a
     `twinx` figure sailed straight through.
 
@@ -1667,7 +1719,7 @@ def check_dual_axis(fig):
                    "panels, small multiples, or index both to a common base")
 
 
-def check_form(fig):
+def check_form(fig: Figure) -> tuple[bool | str, str]:
     """The mechanical subset of form choice - the three cases where the form is
     wrong no matter what the data is. `references/choosing-a-form.md` carries
     the judgement calls this cannot make.
@@ -1704,7 +1756,7 @@ def check_form(fig):
     return False, "; ".join(bad)
 
 
-def check_identity_channel(fig):
+def check_identity_channel(fig: Figure) -> tuple[bool | str, str]:
     """Identity carried by color and nothing else.
 
     A warning rather than a gate, and the reason is honesty about what the
@@ -1726,7 +1778,7 @@ def check_identity_channel(fig):
                     "under 3:1 on white, where that step is hardest")
 
 
-def _densify_px(pts):
+def _densify_px(pts: np.ndarray) -> np.ndarray | None:
     """Display-space vertices with no gap over 2px, per run of finite ones.
 
     Vertices alone are not enough on a sparsely sampled stroke: two points 200px
@@ -1761,7 +1813,7 @@ def _densify_px(pts):
     return np.vstack(out)
 
 
-def _drawstyle_xy(line):
+def _drawstyle_xy(line: Any) -> np.ndarray:
     """A line's data vertices after its drawstyle, which is the shape drawn.
 
     `get_xydata` returns what was passed in. `ax.step` keeps those same points
@@ -1791,7 +1843,7 @@ def _drawstyle_xy(line):
     return np.column_stack(fn(xy[:, 0], xy[:, 1]))
 
 
-def _polyline_px(line, ax):
+def _polyline_px(line: Any, ax: Axes) -> np.ndarray | None:
     """A `Line2D`'s stroke in display space, drawstyle expanded and densified."""
     import numpy as np
     xy = _drawstyle_xy(line)
@@ -1800,7 +1852,7 @@ def _polyline_px(line, ax):
     return _densify_px(np.asarray(ax.transData.transform(xy), dtype=float))
 
 
-def _path_px(artist, ax):
+def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
     """A path-drawn collection's outline in display space.
 
     `step`, `stackplot` and contour sets put their geometry in paths rather than
@@ -1834,7 +1886,7 @@ def _path_px(artist, ax):
     return np.vstack(runs)
 
 
-def _is_filled(artist):
+def _is_filled(artist: Any) -> bool:
     """Whether a collection paints its interior rather than only its outline.
 
     A `LineCollection` and an unfilled contour set report no face colours at
@@ -1848,7 +1900,7 @@ def _is_filled(artist):
     return bool(faces.ndim == 2 and len(faces) and faces[:, 3].max() > 0)
 
 
-def _series_px(artist, ax):
+def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
     """The positions one series actually put on the page, in display pixels.
 
     A `Line2D` is a stroke and gets densified. A scatter is a set of marks and
@@ -1899,7 +1951,7 @@ def _series_px(artist, ax):
         return None
 
 
-def _legend_text_ids(fig):
+def _legend_text_ids(fig: Figure) -> set[int]:
     """Ids of every Text that belongs to a legend, figure-level or axes-level.
 
     A legend is a lookup key placed *away* from the curves by design, so its
@@ -1907,7 +1959,7 @@ def _legend_text_ids(fig):
     ax` guard, because a legend child's `.axes` resolves to the parent axes. The
     attribution check has to drop them explicitly or it fails every figure that
     keeps a legend."""
-    ids = set()
+    ids: set[int] = set()
     legends = list(fig.legends)
     for ax in fig.axes:
         lg = ax.get_legend()
@@ -1919,7 +1971,7 @@ def _legend_text_ids(fig):
     return ids
 
 
-def _box_distance(bb, pts):
+def _box_distance(bb: Any, pts: np.ndarray) -> float:
     """Shortest distance from a text's box to any point on a polyline, in px.
     Zero when the stroke passes under the text."""
     import numpy as np
@@ -1932,7 +1984,7 @@ def _box_distance(bb, pts):
     return float(np.min(np.hypot(dx, dy)))
 
 
-def _encloses(artist, pts):
+def _encloses(artist: Any, pts: np.ndarray) -> bool:
     """Whether a filled region holds essentially all of another series' ink.
 
     This is what tells a band apart from a rival, and it is the relation the
@@ -1980,7 +2032,7 @@ def _encloses(artist, pts):
         return False
 
 
-def _series_distance(artist, bb, pts):
+def _series_distance(artist: Any, bb: Any, pts: np.ndarray) -> float:
     """How far a label's box is from one series, in px.
 
     For a stroke or a set of marks that is the distance to the nearest ink. For
@@ -2007,7 +2059,7 @@ def _series_distance(artist, bb, pts):
     return _box_distance(bb, pts)
 
 
-def check_label_attribution(fig, r):
+def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """A direct label sitting nearer some other series than the one it names.
 
     `check_collisions` compares text against text, so a label that clears every
@@ -2057,7 +2109,7 @@ def check_label_attribution(fig, r):
             continue
 
         lines_list = list(px.keys())
-        owners = {}
+        owners: dict[Any, Any] = {}
         for i, line in enumerate(lines_list):
             owners.setdefault(str(line.get_label()).strip(), []).append(i)
 
@@ -2106,7 +2158,7 @@ def check_label_attribution(fig, r):
 
 # --- the sheet itself -------------------------------------------------------
 
-def _style_sheet():
+def _style_sheet() -> Path | None:
     """`STYLE_SHEET` if the project set one, else `figure.mplstyle` in the three
     places it is laid out: `figure_gate_data/` as the wheel installs it, beside
     this script as the skill tells you to vendor it, and `assets/` next to
@@ -2135,7 +2187,7 @@ def _style_sheet():
     return None
 
 
-def _is_dashed_linestyle(ls):
+def _is_dashed_linestyle(ls: Any) -> bool:
     """True if a linestyle value is not solid.
 
     Accepts strings ('dashed', '--', '-.', ':') and (offset, dashes) tuples.
@@ -2150,7 +2202,7 @@ def _is_dashed_linestyle(ls):
     return False
 
 
-def _negative_levels_are_dashed(cs):
+def _negative_levels_are_dashed(cs: Any) -> bool:
     """Whether a ContourSet ships its negative levels dashed.
 
     Asked of the strokes the set actually drew — `get_linestyle()` returns one
@@ -2188,7 +2240,7 @@ def _negative_levels_are_dashed(cs):
     return any(_is_dashed_linestyle(s) for s in styles)
 
 
-def check_contour_dash(fig):
+def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
     """Negative-level contours auto-dash via matplotlib default.
 
     In a monochrome contour, `rcParams["contour.negative_linestyle"]` is
@@ -2225,7 +2277,9 @@ def check_contour_dash(fig):
     return "warn", "; ".join(warned)
 
 
-def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
+def check_line_weight(fig: Figure, scale: float | None = None,
+                      placed_frac: float = 1.0,
+                      venue: str | None = None) -> tuple[bool | str, str]:
     """Every drawn stroke against the printer's floor, measured ON THE PAGE.
 
     SIAM states it plainly in its instructions for authors: illustrations must
@@ -2294,7 +2348,7 @@ def check_line_weight(fig, scale=None, placed_frac=1.0, venue=None):
                    "disappear in print")
 
 
-def _banking_slopes(ax):
+def _banking_slopes(ax: Axes) -> np.ndarray | None:
     """Absolute display-space segment slopes of the strokes in one panel, or
     None where banking is not a question this panel answers.
 
@@ -2357,7 +2411,7 @@ def _banking_slopes(ax):
     return np.concatenate(runs)
 
 
-def check_banking(fig):
+def check_banking(fig: Figure) -> tuple[bool | str, str]:
     """Whether a panel's aspect ratio lets the reader compare rates of change.
 
     Cleveland banks a panel to 45 degrees: choose the height-to-width ratio that
@@ -2431,7 +2485,7 @@ def check_banking(fig):
 ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
-def check_colormap(fig):
+def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     try:
         import check_palette as cp
     except ImportError:
@@ -2440,7 +2494,7 @@ def check_colormap(fig):
 
     from matplotlib.colors import to_hex
 
-    seen = {}
+    seen: dict[Any, Any] = {}
     for ax in fig.axes:
         if ax.get_label() == "<colorbar>":
             continue
@@ -2502,7 +2556,7 @@ def check_colormap(fig):
     return True, ", ".join(notes)
 
 
-def check_fonts(fig):
+def check_fonts(fig: Figure) -> tuple[bool | str, str]:
     """Two silent failures between the figure on screen and the file you submit.
 
     *Type 3.* Matplotlib defaults `pdf.fonttype` and `ps.fonttype` to 3. IEEE
@@ -2568,7 +2622,7 @@ ALT_TEXT_ATTR = "_figure_gate_alt"
 ALT_TEXT_MIN_CHARS = 60
 
 
-def describe(fig, text):
+def describe(fig: Figure, text: str) -> None:
     """Attach a text description to a figure, for readers who cannot see it.
 
     Across 100,000 public Jupyter notebooks, 99.81% of programmatically
@@ -2584,6 +2638,13 @@ def describe(fig, text):
     Say what the reader would have taken from looking, not what the figure is
     made of. "A line chart with three lines" describes the file; the numbers
     and the direction describe the finding.
+
+    Args:
+        fig: The figure to attach the description to.
+        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor.
+
+    Returns:
+        `None`. The description is stashed on `fig` for `alt_metadata` to read.
     """
     setattr(fig, ALT_TEXT_ATTR, str(text))
     return fig
@@ -2625,7 +2686,7 @@ ALT_TEXT_UNSUPPORTED_SUFFIXES = frozenset({
 })
 
 
-def _savefig_suffix(path):
+def _savefig_suffix(path: Any) -> str | None:
     """The lowercased suffix of a savefig target, or None when there is not one.
 
     `savefig` also takes an open file or a buffer. An open file knows the name
@@ -2641,7 +2702,7 @@ def _savefig_suffix(path):
     return Path(os.fspath(name)).suffix.lower() or None
 
 
-def alt_metadata(fig, path=None):
+def alt_metadata(fig: Figure, path: Any = None) -> dict[str, str] | None:
     """The `metadata=` dict for `savefig`, carrying whatever `describe` set.
 
     Pass the same `path` you are about to save to, so the description lands in
@@ -2662,6 +2723,14 @@ def alt_metadata(fig, path=None):
     Called without a path, or with a buffer whose format cannot be read, it
     returns `Description`. That is right for PNG and SVG and is what every
     earlier version returned unconditionally.
+
+    Args:
+        fig: The figure `describe` was called on.
+        path: The path about to be saved to. The suffix picks the key.
+
+    Returns:
+        A dict for `savefig(metadata=)`, or `None` for a format that carries
+        no description. Empty when `describe` was never called.
     """
     # Before the empty-description check, because a format that rejects the
     # kwarg rejects `{}` too -- the figure having nothing to say does not make
@@ -2677,7 +2746,7 @@ def alt_metadata(fig, path=None):
     return {ALT_TEXT_KEY_BY_SUFFIX.get(suffix, ALT_TEXT_KEY_DEFAULT): text}
 
 
-def check_alt_text(fig):
+def check_alt_text(fig: Figure) -> tuple[bool | str, str]:
     """Whether the figure carries a description for a reader who cannot see it.
 
     A warning rather than a gate, and deliberately: on a paper the description
@@ -2700,7 +2769,7 @@ def check_alt_text(fig):
     return True, f"described in {len(text)} characters"
 
 
-def check_style_sheet(fig):
+def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     """Every key in the sheet against the rcParams that are actually in effect.
 
     Three separate silent failures land here at once: a color written with a
@@ -2769,9 +2838,9 @@ class Gate(NamedTuple):
     context object would cost more than the uniformity is worth.
     """
     name: str
-    func: object
+    func: Callable[..., tuple[bool | str, str]]
     advisory: bool = False
-    needs: tuple = ()
+    needs: tuple[str, ...] = ()
 
 
 GATES = (
@@ -2805,7 +2874,10 @@ GATES = (
 ADVISORY_GATES = _advisory_gates()
 
 
-def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
+def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
+          context_axes: Sequence[Axes] | None = None,
+          venue: str | None = None,
+          ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Run every gate over a figure. Returns `(ok, rows)`.
 
     `check_palette.check` returns the same shape. It returned `(rows, ok)`
@@ -2825,6 +2897,18 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     calculation outright. `context_axes` names axes whose fill is a context
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
+
+    Args:
+        fig: The built figure. Measured through an Agg canvas at its authored
+            dpi, so the verdict does not depend on the backend it was made on.
+        scale: Points per authored inch, overriding `page_scale` outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+
+    Returns:
+        `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
+        report order; `ok` is False only when a row is a hard False.
     """
     r, canvas = _renderer(fig)
     available = dict(zip(GATE_INPUTS,
@@ -2841,8 +2925,10 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     return all(s is not False for _, s, _ in rows), rows
 
 
-def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
-           venue=None, suggest=False):
+def report(fig: Figure, name: str = "", scale: float | None = None,
+           placed_frac: float = 1.0,
+           context_axes: Sequence[Axes] | None = None,
+           venue: str | None = None, suggest: bool = False) -> bool:
     """`audit()`, printed. Returns the same `ok` bool and nothing else.
 
     The arguments are `audit`'s, plus `name` for the heading. Advisory rows
@@ -2857,6 +2943,18 @@ def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
 
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
+
+    Args:
+        fig: The built figure.
+        name: A heading for the table.
+        scale: Points per authored inch, overriding `page_scale` outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+        suggest: Print `suggest_fixes` remedies under the table.
+
+    Returns:
+        `audit`'s `ok` bool. Advisory rows print as WARN without changing it.
     """
     ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
     print(f"\nComposition audit{': ' + name if name else ''}")
@@ -2874,7 +2972,7 @@ def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
     return ok
 
 
-def _print_suggestions(rows):
+def _print_suggestions(rows: Sequence[tuple[str, bool | str, str]]) -> None:
     """The suggestion block, when `report` was asked for one.
 
     Imported here rather than at module scope, the way `check_palette` is: these
@@ -2896,7 +2994,7 @@ def _print_suggestions(rows):
     print()
 
 
-def self_test_figure():
+def self_test_figure() -> Figure:
     """A figure that breaks several checks on purpose.
 
     Kept as a function rather than inlined under __main__ so the test suite can
@@ -2914,7 +3012,7 @@ def self_test_figure():
     return fig
 
 
-def main():
+def main() -> None:
     """Run the self-test. Exits 0 when the gate correctly rejects a bad figure,
     so `check-figure` in a build verifies the checker itself is still working."""
     import sys

@@ -115,10 +115,27 @@ paths = ["skill/scripts"]
 
 [project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python.options]
 docstring_style = "google"
-# The page names what it documents; a second copy of the module name above each
-# block is noise between the reader and the signature.
-show_root_heading = false
-show_root_toc_entry = false
+# The page is a reference, and a reference is looked things up in rather than
+# read. The `Args:` and `Returns:` sections render as tables, which is the part
+# a caller scans; the narrative under each stays for the reader who wants the
+# why. The symbol type shows in the heading and in the table of contents, so
+# the contents list doubles as the index of what each module exports.
+#
+# `summary` is deliberately absent. It renders an index of a rendered object's
+# members, and every directive on the page names one function, so there is no
+# parent to summarise: switched on, it emitted nothing at all.
+docstring_section_style = "table"
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+# `brief` over `full`: these are loose files, so a fully qualified annotation
+# path names a module the reader would import as a single file anyway.
+annotations_path = "brief"
+# On, and this is what makes the page a reference rather than an essay. Each
+# `:::` here names one function, so the root heading is that function's name
+# and its signature; with it off, every entry rendered as an unheaded block of
+# description with no signature above it and no ToC entry to reach it by.
+show_root_heading = true
+show_root_toc_entry = true
 show_source = true
 # Signatures carry the defaults, which for `audit()` and `check()` are half of
 # what a caller needs to know: `placed_frac=1.0` and `all_pairs=False` are

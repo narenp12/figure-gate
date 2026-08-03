@@ -24,6 +24,9 @@ distance in pixels, so alpha could never have moved it. A round-trip test is the
 only thing that catches a suggestion that does not work.
 """
 
+from __future__ import annotations
+
+from collections.abc import Sequence
 from typing import NamedTuple
 
 
@@ -130,7 +133,8 @@ REMEDIES = (
 )
 
 
-def suggest(rows):
+def suggest(rows: Sequence[tuple[str, bool | str, str]],
+            ) -> list[tuple[str, list[Remedy]]]:
     """Remedies for the rows of an `audit` that are not passing.
 
     Takes `rows` rather than the figure: what is on offer depends on which
@@ -138,6 +142,14 @@ def suggest(rows):
     `[(gate_name, [Remedy, ...]), ...]` in the order the gates reported, and
     skips gates with nothing to offer rather than padding them with a
     restatement of the failure.
+
+    Args:
+        rows: `(label, status, detail)` triples, as `audit` or `check`
+            returned them. Passing rows are ignored.
+
+    Returns:
+        `[(gate_name, [Remedy, ...]), ...]`, in the order the gates reported.
+        Empty when nothing fired that this file has an answer for.
     """
     marked = [name for name, status, _ in rows if status is not True]
     out = []
@@ -148,9 +160,18 @@ def suggest(rows):
     return out
 
 
-def format_suggestions(rows, indent="      "):
-    """`suggest`, as lines ready to print under a report. Empty when nothing
-    fired that this file has an answer for."""
+def format_suggestions(rows: Sequence[tuple[str, bool | str, str]],
+                       indent: str = "      ") -> list[str]:
+    """`suggest`, as lines ready to print under a report.
+
+    Args:
+        rows: `(label, status, detail)` triples, as `audit` returned them.
+        indent: Leading whitespace for each line.
+
+    Returns:
+        A list of lines. Empty when nothing fired that this file has an
+        answer for.
+    """
     lines = []
     for name, remedies in suggest(rows):
         lines.append(f"{indent}{name}:")
