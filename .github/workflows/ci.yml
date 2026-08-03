@@ -19,6 +19,7 @@ jobs:
   stdlib-only:
     name: check_palette on Python ${{ matrix.python }} (no dependencies)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +44,7 @@ jobs:
   lint:
     name: ruff and mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -72,6 +74,7 @@ jobs:
   api:
     name: A break in the public API is one the changelog admits to
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # Tags, not just the tip. The default checkout has neither the history
       # nor the tags, so the comparison would have nothing to compare against
@@ -269,6 +272,7 @@ jobs:
   package:
     name: The wheel gates a figure the way the checkout does
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -324,6 +328,7 @@ jobs:
   skill:
     name: Skill metadata is valid
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
