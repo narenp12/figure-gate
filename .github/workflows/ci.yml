@@ -87,86 +87,15 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "pyproject.toml"
 
-      - name: Compare both modules against the last release
-        run: |
-          uv run --only-group api python - <<'PY'
-          import re, subprocess, sys, pathlib
-
-          tag = subprocess.run(["git", "describe", "--tags", "--abbrev=0"],
-                               capture_output=True, text=True)
-          if tag.returncode != 0:
-              sys.exit("no release tag to compare against")
-          tag = tag.stdout.strip()
-
-          # `skill/scripts/check_palette.py:0: contrast: Public object was
-          # removed` -- the third field is the name a caller would have used,
-          # and it is what the changelog has to say out loud.
-          #
-          # griffe writes its findings to stderr, not stdout. Reading stdout
-          # alone gives an empty report for every run, which this job would have
-          # read as "nothing broke" -- a check that cannot fail, arrived at by
-          # not looking at where the answer is written. Both streams, and a
-          # non-zero exit with nothing parsed out of either is griffe failing to
-          # run rather than the API being clean.
-          REPORTED = re.compile(r"^\S+?:\d+: (\S+?): ", re.M)
-
-          broken = {}
-          for module in ("check_figure", "check_palette"):
-              result = subprocess.run(
-                  ["griffe", "check", "-s", "skill/scripts", module, "-a", tag],
-                  capture_output=True, text=True)
-              report = (result.stdout + result.stderr).strip()
-              print(f"--- {module} against {tag} ---")
-              print(report or "  no breaking change")
-              found = REPORTED.findall(report)
-              if result.returncode != 0 and not found:
-                  sys.exit(f"griffe exited {result.returncode} for {module} "
-                           f"without reporting a finding:\n{report}\n"
-                           "That is the tool failing, not the API passing.")
-              for name in found:
-                  broken[name] = module
-
-          if not broken:
-              print(f"\nNothing a caller could do at {tag} has stopped working.")
-              sys.exit(0)
-
-          # There is a break. That is allowed, and it has to be written down --
-          # by name, in a paragraph that says something broke.
-          #
-          # Neither half is enough alone. A search for "breaking" is satisfied
-          # by any paragraph using the word, and a changelog entry about this
-          # job would satisfy it every release. A search for the name alone is
-          # satisfied by a paragraph listing the function for an unrelated
-          # reason, which is exactly what happened the first time this was
-          # tested: `contrast` was named in the API-page entry, so renaming it
-          # passed.
-          #
-          # Both, in one paragraph, can still be satisfied by coincidence. What
-          # it cannot be satisfied by is silence, which is the failure that
-          # actually reaches a reader who vendored the file.
-          CHANGED = r"break|broke|removed|renamed|replaced|no longer"
-
-          changelog = pathlib.Path("CHANGELOG.md").read_text()
-          unreleased = re.search(r"^## Unreleased\n(.*?)(?=^## )", changelog,
-                                 re.S | re.M)
-          section = unreleased.group(1) if unreleased else ""
-          paragraphs = section.split("\n\n")
-          silent = sorted(
-              name for name in broken
-              if not any(re.search(rf"\b{re.escape(name)}\b", para)
-                         and re.search(CHANGED, para, re.I)
-                         for para in paragraphs))
-          if not silent:
-              print("\nBreaking, and the Unreleased section names every one.")
-              sys.exit(0)
-          sys.exit(
-              "\nThese changed in a way a caller would notice, and "
-              "CHANGELOG.md's Unreleased section does not name them:\n"
-              + "\n".join(f"  {name} ({broken[name]})" for name in silent)
-              + "\n\nThese modules are vendored by copy. A reader who pasted "
-                "one into their toolchain finds out at import, so the break "
-                "belongs in the changelog before it belongs in a release.")
-          PY
+      # The gate itself lives in skill/scripts/audit_api.py, which `make
+      # audit-api` also runs and tests/test_audit_api.py covers. This job used
+      # to carry its own copy of the same logic, and the two drifted: the copy
+      # here accepted six changelog verbs where the script accepts twelve, so a
+      # release note saying a symbol "gained" a row passed locally and failed
+      # here. One gate, one implementation, and the implementation is the one
+      # with tests.
+      - name: Compare every module against the last release
+        run: uv run --only-group api python skill/scripts/audit_api.py
 
   test:
     name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}

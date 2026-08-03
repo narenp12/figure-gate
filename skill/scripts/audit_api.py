@@ -8,7 +8,23 @@ CHANGED = (
     r"break|broke|removed|renamed|replaced|deleted|deprecated|"
     r"moved|changed|gained|added|no longer"
 )
-MODULES = ("check_figure", "check_palette")
+MODULES = ("check_figure", "check_palette", "suggest_fixes")
+
+
+def _existed_at(tag: str, module: str) -> bool:
+    """Whether `module` was a file in `skill/scripts` at `tag`.
+
+    griffe resolves a module by importing it out of a worktree checked out at
+    the tag, so a module added since then raises ModuleNotFoundError: a
+    non-zero exit with no finding in it, which `main` refuses as the tool
+    failing. That refusal is right for a broken griffe and wrong here. A module
+    with no history at the tag has no API a caller could have depended on.
+    """
+    listed = subprocess.run(
+        ["git", "ls-tree", "--name-only", tag, f"skill/scripts/{module}.py"],
+        capture_output=True, text=True,
+    )
+    return listed.returncode == 0 and listed.stdout.strip() != ""
 
 
 def main() -> None:
@@ -22,6 +38,10 @@ def main() -> None:
 
     broken = {}
     for module in MODULES:
+        if not _existed_at(tag, module):
+            print(f"--- {module} against {tag} ---")
+            print(f"  new since {tag}, no API it could have broken")
+            continue
         try:
             result = subprocess.run(
                 ["griffe", "check", "-s", "skill/scripts", module, "-a", tag],
