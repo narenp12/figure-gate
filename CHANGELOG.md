@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+**The public API is annotated, and the API page renders as a reference.** The
+19 documented callables carry parameter and return types and Google-style
+`Args:` and `Returns:` sections, so each entry on the page is a signature and
+two tables rather than three paragraphs. `check_figure.py` and
+`suggest_fixes.py` gained `from __future__ import annotations`;
+`check_palette.py` gained it too, which is what keeps `tuple[float, float,
+float]` from being evaluated on the 3.8 the file still claims.
+
+Annotating found one wrong claim. `check_palette.check` documented `status` as
+True or False, and the contrast row has returned `"warn"` since it became
+advisory. The docstring now says what the function does, and the return type
+says it too.
+
+`Gate.func` was annotated `object`, which is not callable, and `audit` calls
+it. It is now `Callable[..., tuple[bool | str, str]]`, and `Gate.needs` is
+`tuple[str, ...]` rather than a bare `tuple`.
+
 **The API gate stopped existing twice.** `ci.yml` carried an inline copy of
 `skill/scripts/audit_api.py`, and the two had drifted: the copy accepted six
 changelog verbs where the script accepts twelve, missed an `Unreleased` section

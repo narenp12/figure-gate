@@ -335,7 +335,13 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
             imported.update(a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
-    assert imported <= {"argparse", "itertools", "math"}, imported
+    # `__future__` and `collections.abc` are the annotations: the first makes
+    # them strings, so `tuple[float, float, float]` is never evaluated and the
+    # 3.8 floor holds, and the second is where `Sequence` comes from. Both are
+    # standard library, which is what this test is about. A name that is not
+    # belongs nowhere on this list.
+    assert imported <= {"__future__", "argparse", "collections", "itertools",
+                        "math"}, imported
 
 
 # --- anomalous trichromacy ---------------------------------------------------

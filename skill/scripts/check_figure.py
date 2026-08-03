@@ -41,11 +41,22 @@ Checks, in the order `audit` runs them
     21. Alt text          - the figure carries a description
 """
 
+from __future__ import annotations
+
 import itertools
 import math
 from collections import Counter
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+# The annotations below name these; the code imports numpy and matplotlib
+# inside the functions that use them, and `from __future__ import
+# annotations` keeps that true by making every annotation a string.
+if TYPE_CHECKING:
+    import numpy as np
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -252,7 +263,7 @@ VENUE_WIDTH_PT = {
 }
 
 
-def content_width_pt(venue=None):
+def content_width_pt(venue: str | None = None) -> float | None:
     """The usable page width to measure against, in points.
 
     Args:
@@ -276,7 +287,8 @@ def content_width_pt(venue=None):
             "CONTENT_WIDTH_PT to what it says.") from None
 
 
-def page_scale(fig, placed_frac=1.0, venue=None):
+def page_scale(fig: Figure, placed_frac: float = 1.0,
+               venue: str | None = None) -> float:
     """Scale from authored inches to points on the page.
 
     `placed_frac` is the fraction of the content width the figure is placed at,
@@ -1004,7 +1016,7 @@ def check_contrast_stack(fig):
     return ok, f"alpha levels {levels}{note}"
 
 
-def scatter_diameter_pt(size):
+def scatter_diameter_pt(size: float | np.ndarray) -> float | np.ndarray:
     """The diameter in points that `scatter(s=size)` actually draws.
 
     matplotlib documents `s` as "the marker size in points**2", which reads as
@@ -2597,7 +2609,7 @@ ALT_TEXT_ATTR = "_figure_gate_alt"
 ALT_TEXT_MIN_CHARS = 60
 
 
-def describe(fig, text):
+def describe(fig: Figure, text: str) -> None:
     """Attach a text description to a figure, for readers who cannot see it.
 
     Across 100,000 public Jupyter notebooks, 99.81% of programmatically
@@ -2677,7 +2689,7 @@ def _savefig_suffix(path):
     return Path(os.fspath(name)).suffix.lower() or None
 
 
-def alt_metadata(fig, path=None):
+def alt_metadata(fig: Figure, path: Any = None) -> dict[str, str] | None:
     """The `metadata=` dict for `savefig`, carrying whatever `describe` set.
 
     Pass the same `path` you are about to save to, so the description lands in
@@ -2813,9 +2825,9 @@ class Gate(NamedTuple):
     context object would cost more than the uniformity is worth.
     """
     name: str
-    func: object
+    func: Callable[..., tuple[bool | str, str]]
     advisory: bool = False
-    needs: tuple = ()
+    needs: tuple[str, ...] = ()
 
 
 GATES = (
@@ -2849,7 +2861,10 @@ GATES = (
 ADVISORY_GATES = _advisory_gates()
 
 
-def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
+def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
+          context_axes: Sequence[Axes] | None = None,
+          venue: str | None = None,
+          ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Run every gate over a figure. Returns `(ok, rows)`.
 
     `check_palette.check` returns the same shape. It returned `(rows, ok)`
@@ -2897,8 +2912,10 @@ def audit(fig, scale=None, placed_frac=1.0, context_axes=None, venue=None):
     return all(s is not False for _, s, _ in rows), rows
 
 
-def report(fig, name="", scale=None, placed_frac=1.0, context_axes=None,
-           venue=None, suggest=False):
+def report(fig: Figure, name: str = "", scale: float | None = None,
+           placed_frac: float = 1.0,
+           context_axes: Sequence[Axes] | None = None,
+           venue: str | None = None, suggest: bool = False) -> bool:
     """`audit()`, printed. Returns the same `ok` bool and nothing else.
 
     The arguments are `audit`'s, plus `name` for the heading. Advisory rows
