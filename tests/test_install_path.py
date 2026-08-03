@@ -21,8 +21,11 @@ import pytest
 from conftest import SCRIPTS, STYLE_SHEET
 
 # The name and location `_style_sheet` probes first, which is what the wheel's
-# force-include has to match for the gate to fire on an install.
-INSTALLED_NAME = "figure.mplstyle"
+# force-include has to match for the gate to fire on an install. Through 0.6.0
+# this was a bare `figure.mplstyle` at the root of site-packages, a generic
+# name any other distribution could also claim.
+INSTALLED_DIR = "figure_gate_data"
+INSTALLED_NAME = f"{INSTALLED_DIR}/figure.mplstyle"
 
 PYPROJECT = SCRIPTS.parent.parent / "pyproject.toml"
 
@@ -34,7 +37,7 @@ def test_the_wheel_maps_the_sheet_beside_the_script():
     wheel = config["tool"]["hatch"]["build"]["targets"].get("wheel", {})
     source = STYLE_SHEET.relative_to(PYPROJECT.parent).as_posix()
     assert wheel.get("force-include", {}).get(source) == INSTALLED_NAME, (
-        "the wheel no longer ships figure.mplstyle beside check_figure.py, so "
+        f"the wheel no longer ships figure.mplstyle in {INSTALLED_DIR}/, so "
         "gate 16 cannot fire on the install path")
 
 
@@ -43,6 +46,7 @@ def _installed(tmp_path, with_sheet=True):
     shutil.copy(SCRIPTS / "check_figure.py", tmp_path / "check_figure.py")
     shutil.copy(SCRIPTS / "check_palette.py", tmp_path / "check_palette.py")
     if with_sheet:
+        (tmp_path / INSTALLED_DIR).mkdir()
         shutil.copy(STYLE_SHEET, tmp_path / INSTALLED_NAME)
     return tmp_path
 
@@ -97,7 +101,7 @@ def test_without_the_sheet_the_row_is_the_old_silent_pass(tmp_path):
         status, detail = check_figure.check_style_sheet(fig)
         print(status, "|", detail)
     """)
-    assert out.startswith("True | no figure.mplstyle"), out
+    assert out.startswith("True | no figure.mplstyle in figure_gate_data/"), out
 
 
 def test_STYLE_SHEET_wins_over_both_probed_locations(tmp_path):
@@ -125,3 +129,24 @@ def test_a_configured_sheet_that_does_not_exist_warns(tmp_path):
         print(status, "|", detail)
     """)
     assert out.startswith("warn | STYLE_SHEET is set to"), out
+
+
+def test_the_wheel_does_not_ship_release_tooling():
+    """`audit_api.py` compares the public API against the last tag and is run
+    from the Makefile and from CI. Nobody installs this distribution for it,
+    and through 0.6.0 it landed on every installing user's import path.
+
+    The check is on the built wheel rather than on the config, because the
+    config can grow a second `[tool.hatch...]` table that reinstates it without
+    the `exclude` line changing.
+    """
+    import zipfile
+
+    root = PYPROJECT.parent
+    subprocess.run(["uv", "build", "--wheel", "--out-dir", "dist"],
+                   cwd=root, check=True, capture_output=True)
+    wheel = sorted((root / "dist").glob("*.whl"))[-1]
+    names = zipfile.ZipFile(wheel).namelist()
+    assert "audit_api.py" not in names, (
+        f"{wheel.name} ships audit_api.py, which is release tooling: "
+        f"{sorted(n for n in names if 'dist-info' not in n)}")
