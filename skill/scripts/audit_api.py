@@ -4,7 +4,10 @@ import sys
 import pathlib
 
 REPORTED = re.compile(r"^\S+?:\d+: (\S+?): ", re.M)
-CHANGED = r"break|broke|removed|renamed|replaced|no longer"
+CHANGED = (
+    r"break|broke|removed|renamed|replaced|deleted|deprecated|"
+    r"moved|changed|gained|added|no longer"
+)
 MODULES = ("check_figure", "check_palette")
 
 
@@ -19,30 +22,45 @@ def main() -> None:
 
     broken = {}
     for module in MODULES:
-        result = subprocess.run(
-            ["griffe", "check", "-s", "skill/scripts", module, "-a", tag],
-            capture_output=True, text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["griffe", "check", "-s", "skill/scripts", module, "-a", tag],
+                capture_output=True, text=True,
+            )
+        except FileNotFoundError:
+            sys.exit(
+                f"griffe is not installed, so the public API of {module} "
+                "cannot be compared against the last tag.\n"
+                "That is the tool failing, not the API passing."
+            )
         report = (result.stdout + result.stderr).strip()
         print(f"--- {module} against {tag} ---")
         print(report or "  no breaking change")
-        found = REPORTED.findall(report)
-        if result.returncode != 0 and not found:
-            sys.exit(
-                f"griffe exited {result.returncode} for {module} "
-                f"without reporting a finding:\n{report}\n"
-                "That is the tool failing, not the API passing."
-            )
-        for name in found:
-            broken[name] = module
+        if result.returncode != 0:
+            found = REPORTED.findall(report)
+            if not found:
+                sys.exit(
+                    f"griffe exited {result.returncode} for {module} "
+                    f"without reporting a finding:\n{report}\n"
+                    "That is the tool failing, not the API passing."
+                )
+            for name in found:
+                broken[name] = module
 
     if not broken:
         print(f"\nNothing a caller could do at {tag} has stopped working.")
         sys.exit(0)
 
+    # The changelog gate is deliberately coarse: griffe reports the top-level
+    # name that broke, so a tuple change surfaces as `GATES` and not the row
+    # that moved. This proves "Unreleased names the symbol next to a change
+    # verb", not "the specific break is written down", and a symbol already
+    # named in Unreleased can pass without a new entry. Diffing the symbol's
+    # repr against the last tag would catch that, but parsing it is more
+    # brittle than the bar this holds.
     changelog = pathlib.Path("CHANGELOG.md").read_text()
     unreleased = re.search(
-        r"^## Unreleased\n(.*?)(?=^## )", changelog, re.S | re.M,
+        r"^## Unreleased\n(.*?)(?=^## |\Z)", changelog, re.S | re.M,
     )
     section = unreleased.group(1) if unreleased else ""
     paragraphs = section.split("\n\n")
