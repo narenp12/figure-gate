@@ -78,17 +78,39 @@ exclude = ["skill/scripts/audit_api.py"]
 "skill/assets/figure.mplstyle" = "figure_gate_data/figure.mplstyle"
 
 # Keeps the skill, the tests and the examples -- the tests are what make the
-# thresholds checkable by someone who did not write them. Drops agent scratch
-# state, which means nothing outside this checkout.
+# thresholds checkable by someone who did not write them.
+#
+# An allowlist, and it used to be a blacklist of agent-scratch paths. The
+# blacklist shipped: it named `/.claude` and `/.codebase-memory` but not
+# `.superpowers/`, which is neither tracked nor gitignored, so twelve files of
+# task briefs and review diffs went into the sdist along with whatever stray
+# untracked note was in the tree at build time. Releases come off a fresh
+# `actions/checkout` and so were never affected, but `make dist` on a working
+# machine was, and a blacklist only excludes the scratch directory whose name
+# somebody remembered.
+#
+# Listing what a source release IS cannot fail that way: a new directory is
+# absent until it is named, rather than present until it is excluded.
 [tool.hatch.build.targets.sdist]
-exclude = [
-    "/.claude",
-    "/.codebase-memory",
-    "/.github",
-    "/CLAUDE.md",
-    "/opencode.json",
-    ".DS_Store",
+include = [
+    "/skill",
+    "/tests",
+    "/examples",
+    "/docs",
+    "/specs",
+    "/conda",
+    "/.claude-plugin",
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
+    "/LICENSE",
+    "/Makefile",
+    "/README.md",
+    "/SECURITY.md",
+    "/pyproject.toml",
+    "/zensical.toml",
+    "/.gitignore",
 ]
+exclude = [".DS_Store"]
 
 # The version is written in four files and a tag, and nothing wrote them
 # together. 0.5.0 is what that costs: the bump moved pyproject.toml and
