@@ -1,6 +1,6 @@
 [project]
 name = "figure-gate"
-version = "0.6.0"
+version = "0.7.0.dev0"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
@@ -143,13 +143,22 @@ exclude = [".DS_Store"]
 # only thing between a half-finished bump and a release, and become the proof
 # that one command ran.
 #
-#     uv run bump-my-version bump minor
+#     uv run bump-my-version bump dev
 #
 # rewrites all four, commits, and tags v<new>. Pushing the tag is still what
 # publishes; release.yml has not moved.
 #
-# Two things it deliberately does not do. `sha256` in the recipe is unknowable
+# `dev` rather than `minor`, because the version between releases now carries a
+# `.devN` suffix -- see the `parse`/`serialize` block below for why. Cutting a
+# release drops the suffix; `bump minor` (or `patch`, or `major`) is what opens
+# the next development cycle afterwards. Both rewrite the same four files.
+#
+# Three things it deliberately does not do. `sha256` in the recipe is unknowable
 # until the sdist exists on PyPI, which is what conda/update_recipe.py is for.
+# The recipe's `source.url` interpolates the version, so between releases it
+# names a `.dev0` sdist that PyPI does not have; nothing builds from the
+# in-repo recipe -- the conda-forge feedstock has its own -- and the URL is
+# correct again the moment `bump dev` runs.
 # And nothing writes a fresh `## Unreleased` stub back into the changelog: the
 # CHANGELOG entry below fails the bump outright when there is no such heading,
 # so a release with no notes stops here rather than at the `no '## $version'
@@ -163,11 +172,45 @@ exclude = [".DS_Store"]
 # whole recovery, but a failure that touches nothing is a failure nobody has to
 # read a diff to trust.
 [tool.bumpversion]
-current_version = "0.6.0"
+current_version = "0.7.0.dev0"
 commit = true
 tag = true
 tag_name = "v{new_version}"
 tag_message = "figure-gate {new_version}"
+
+# The version between releases says it is between releases.
+#
+# It did not until now: the tree carried the version of the release that had
+# already happened, so a checkout ahead of v0.6.0 still said `0.6.0` and
+# `uv build` on it produced `figure_gate-0.6.0-py3-none-any.whl` -- a file
+# named exactly like the 0.6.0 on PyPI and not the same code. Releases build
+# from a tag on a fresh checkout and were never affected; `make dist` on a
+# working machine was, and the artifact carries no hint of it.
+#
+# So the development version is `X.Y.Z.devN` and the last step before tagging
+# drops the suffix:
+#
+#     uv run bump-my-version bump dev       # 0.7.0.dev0 -> 0.7.0
+#
+# `bump minor` from a released version opens the next dev cycle (0.7.0 ->
+# 0.8.0.dev0), so the two-command release is `bump dev` to cut, and `bump
+# minor`/`bump patch` to open the next one. `dev` is `optional_value`, which is
+# what makes `{major}.{minor}.{patch}` the serialization once the part is empty
+# rather than leaving a trailing separator.
+parse = """(?x)
+    (?P<major>0|[1-9]\\d*)\\.
+    (?P<minor>0|[1-9]\\d*)\\.
+    (?P<patch>0|[1-9]\\d*)
+    (?:\\.dev(?P<dev>0|[1-9]\\d*))?
+"""
+serialize = [
+    "{major}.{minor}.{patch}.dev{dev}",
+    "{major}.{minor}.{patch}",
+]
+
+[tool.bumpversion.parts.dev]
+optional_value = "None"
+values = ["0", "None"]
 
 # The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
 # release commits already in the log, and drops the arrow.
