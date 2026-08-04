@@ -4,12 +4,13 @@
 
 **Installed, the checkers are a package: `from figure_gate import
 check_figure`.** This is a breaking change on the install path and the reason
-the next release is 0.7.0. Through 0.6.0 the wheel put `check_figure`,
-`check_palette` and `suggest_fixes` at the top level of `site-packages` --
-three of the most generic module names a distribution could claim, on a
-namespace shared with every other installed package. `import check_figure`
-no longer resolves; `from figure_gate import check_figure` does. The console
-scripts `check-palette` and `check-figure` are unchanged.
+the next release is 0.7.0. Through 0.6.0 the wheel put `check_figure` and
+`check_palette` at the top level of `site-packages` -- two of the most generic
+module names a distribution could claim, on a namespace shared with every other
+installed package. `import check_figure` no longer resolves; `from figure_gate
+import check_figure` does. The console scripts `check-palette` and
+`check-figure` are unchanged. `suggest_fixes` is new in this release and has
+only ever been importable from the package.
 
 Vendoring is untouched. The files stay at `skill/scripts/`, still import
 nothing of each other at module scope, and a copied `check_figure.py` still
@@ -20,10 +21,15 @@ serves both layouts.
 Two things follow from the move. `py.typed` ships, so the annotations added in
 the previous release are visible to a caller's type checker for the first time;
 until now PEP 561 required every one of them to be read as `Any`, because the
-marker has nothing to attach to when the modules are loose files. And
-`figure_gate_data/` is gone: the sheet installs to `figure_gate/figure.mplstyle`
-and `_style_sheet` probes two locations instead of three, the namespacing
-directory having existed only because the modules sat at the wheel root.
+marker has nothing to attach to when the modules are loose files. And the style
+sheet installs to `figure_gate/figure.mplstyle`, beside the module that reads
+it, rather than as a bare `figure.mplstyle` at the root of `site-packages` --
+another generic name in a directory every distribution shares. A package
+directory is already namespaced, so the sheet needs nothing around it: the
+first location `_style_sheet` probes is beside the module, which is the
+installed package on one route and a vendored copy on the other. An install
+that named the sheet by its old path has to say the new one; the gate finds it
+either way.
 
 `pip install -e .` no longer works on a clone, and `[tool.uv] package = false`
 records that. hatchling refuses editable installs when a `sources` entry
@@ -108,25 +114,11 @@ started guide: every non-underscore name in the three modules, breakable by a
 minor bump below 1.0, with the row *shape* rather than the row *count* being
 what callers can rely on.
 
-**The wheel stopped shipping release tooling, and the style sheet moved into a
-figure_gate_data directory.** Through 0.6.0 an install put four modules at the
-root of site-packages, one of them `audit_api.py`, which compares this project's
-public API against its last tag and has no caller outside this repository. It
-also put the sheet there as a bare `figure.mplstyle`, a name generic enough that
-another distribution could claim it, in a directory every distribution shares.
-
-`_style_sheet` now probes the installed location first, then the two locations
-it already knew. Nothing changes for a vendored copy: no such directory sits
-beside a copied checker, so the first candidate misses and the second answers,
-which is the case the documentation describes. What changes is an install that
-referred to the sheet by its old path. The gate finds it either way; a
-`plt.style.use` naming the root-level file does not.
-
-The order is load-bearing rather than incidental. On the install path the
-script's own directory *is* the root of site-packages, so probing the bare name
-first would let another distribution's sheet win over this one's. It can still
-happen in an installation missing its own sheet, which is a narrower hole than
-the one it replaces, not a closed one.
+**The wheel does not ship release tooling.** `audit_api.py`, added this cycle,
+compares this project's public API against its last tag and has no caller
+outside this repository: it reaches the checkout through the `audit-api` target
+in the Makefile and through its own test. The wheel excludes it, so the only
+thing an install puts on the import path is the three modules a caller uses.
 
 **The remediation marker became two marks, `[FIX]` and `[WHY]`.** A gate's
 detail appended `  <- ` and everything after it was read, by the guide and by

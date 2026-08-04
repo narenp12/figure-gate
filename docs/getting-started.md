@@ -87,7 +87,7 @@ matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 
-from check_figure import report
+from check_figure import report      # installed: from figure_gate.check_figure
 
 plt.style.use(str(Path(__file__).parent / "figure.mplstyle"))
 
@@ -111,7 +111,7 @@ built for measurement has no reason to open a window.
 `audit` is the same checks without the printing, which is what a test wants:
 
 ```python
-from check_figure import audit
+from check_figure import audit       # installed: from figure_gate.check_figure
 
 @pytest.mark.parametrize("name", sorted(FIGURES))
 def test_figure_is_composed(name):
