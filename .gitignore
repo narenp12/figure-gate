@@ -14,6 +14,7 @@ site/
 # Agent state, not project state.
 .claude/
 .codebase-memory/
+.superpowers/
 CLAUDE.md
 opencode.json
 
