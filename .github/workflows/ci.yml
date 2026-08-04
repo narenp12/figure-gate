@@ -243,8 +243,9 @@ jobs:
           if "figure_gate/figure.mplstyle" not in names:
               sys.exit(f"{wheel} has no figure_gate/figure.mplstyle, so "
                        "_style_sheet finds nothing once installed")
-          # Release tooling. It has no caller outside this repository, and
-          # through 0.6.0 it landed on every installing user's import path.
+          # Release tooling. It has no caller outside this repository, and the
+          # wheel takes everything in skill/scripts, so it would ship without
+          # the exclusion that keeps it out.
           if "figure_gate/audit_api.py" in names:
               sys.exit(f"{wheel} ships audit_api.py")
           # PEP 561: without this, every annotation in the package resolves to
