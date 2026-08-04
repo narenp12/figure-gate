@@ -16,6 +16,20 @@ updates:
     # v9.0.0 pinned in release.yml down to v7.6.0 -- a downgrade, on the
     # workflow that publishes to PyPI, under twelve green checks. One action
     # per pull request makes that visible in the title.
+    #
+    # One exception, and only where the coupling is the action's own. The
+    # codeql-action directories are one action released under one tag: a run
+    # whose init and analyze disagree fails in the analyze post-action with
+    # "Loaded a configuration file for version X, but running version Y". Split
+    # across two pull requests (#52 and #54) neither half could go green, and
+    # merging either would have left main in the state that produces that
+    # error. The group is the narrowest one that covers it -- the pattern
+    # matches nothing but codeql-action, so the visibility the ungrouped
+    # default buys for unrelated actions is untouched.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
 
 # No Python entry. Every dependency here is a floor (`matplotlib>=3.8`,
 # `pytest>=7.0`) and uv.lock is not committed, so there is nothing for
