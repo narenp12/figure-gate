@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+Documentation only. No code changed, and the public API is where 0.7.0 left it.
+
+**The docs say which import line a given install wants.** 0.7.0 moved the
+installed modules into a package, and the two indexes do not publish in the
+same hour: conda-forge follows PyPI through the feedstock's autotick bot, so
+for a while after each release `conda install` hands back the release before
+it. On the day 0.7.0 shipped that was 0.6.0, whose modules are flat and whose
+import line is the vendored one. The README and the getting-started page name
+the version each import line belongs to, and how to read which one you got,
+rather than presenting the two install routes as interchangeable.
+
+**The vendoring instructions cover `suggest_fixes.py`.** They copied three
+files and named two scripts while the README advertised a third, so the route
+the docs call the default was the one route with no way to reach `suggest`. It
+is a fourth `cp`, marked optional, beside a sentence saying what a copy without
+it loses and what `check_figure.py` genuinely cannot run without.
+
+**`py.typed` is documented where a caller would look for it.** It shipped in
+0.7.0 and the release notes were the only place saying so.
+
+**The gates page names the row a crashed gate produces.** The audit stopped
+losing itself to one raising gate in 0.7.0, and the row it reports instead
+is a row about the checker rather than about the figure, which is a thing a
+reader of that page has to be able to recognise.
+
+**The release procedure in `CONTRIBUTING.md` is the one that was followed.** It
+still said `bump minor` cuts a release, which stopped being true when the tree
+started carrying a development version: `bump dev` cuts, and `bump minor` opens
+the next cycle. Both bumps tag, `release.yml` triggers on any `v*` tag, and its
+version guard compares the tag against the project rather than judging the shape
+of either, so the cycle-opening tag is one that would publish a development
+version to PyPI if it were ever pushed. The section says that, and it says that
+the tag goes on the merged commit, which is where v0.7.0 sits and is not where
+the bump put it.
+
+**One copy of the API promise.** It was in the README and on the
+getting-started page verbatim, 1246 characters each, in a repository whose docs
+site is built on symlinks so that no page is a second copy of another. The docs
+site has the statement; the README has the two sentences a reader of the PyPI
+page needs and a link.
+
 ## 0.7.0 — 2026-08-03
 
 **Installed, the checkers are a package: `from figure_gate import
