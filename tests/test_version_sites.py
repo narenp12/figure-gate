@@ -37,7 +37,7 @@ NOT_A_CONSTANT_PATTERN = "CHANGELOG.md"
 
 def pyproject():
     tomllib = pytest.importorskip("tomllib")     # 3.11+, as the build needs
-    return tomllib.loads(PYPROJECT.read_text())
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
 
 def bumpversion():
@@ -75,7 +75,7 @@ def test_each_configured_pattern_is_in_the_file_it_points_at(entry):
     pattern = entry.get("search", "{current_version}").format(
         current_version=re.escape(version) if entry.get("regex") else version)
 
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     found = (re.search(pattern, text, re.MULTILINE) if entry.get("regex")
              else pattern in text)
     assert found, (

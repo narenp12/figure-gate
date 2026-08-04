@@ -2,7 +2,7 @@ schema_version: 1
 
 context:
   name: figure-gate
-  version: "0.6.0"
+  version: "0.7.0.dev0"
   python_min: "3.11"
 
 package:
@@ -23,8 +23,8 @@ build:
   script: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
   python:
     entry_points:
-      - check-palette = check_palette:main
-      - check-figure = check_figure:main
+      - check-palette = figure_gate.check_palette:main
+      - check-figure = figure_gate.check_figure:main
 
 requirements:
   host:
@@ -38,8 +38,9 @@ requirements:
 tests:
   - python:
       imports:
-        - check_palette
-        - check_figure
+        - figure_gate
+        - figure_gate.check_palette
+        - figure_gate.check_figure
       pip_check: true
       python_version: ${{ python_min }}.*
   - script:

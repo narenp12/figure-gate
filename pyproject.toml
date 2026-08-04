@@ -1,6 +1,6 @@
 [project]
 name = "figure-gate"
-version = "0.6.0"
+version = "0.7.0.dev0"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
@@ -36,8 +36,8 @@ Issues = "https://github.com/narenp12/figure-gate/issues"
 Changelog = "https://github.com/narenp12/figure-gate/blob/main/CHANGELOG.md"
 
 [project.scripts]
-check-palette = "check_palette:main"
-check-figure = "check_figure:main"
+check-palette = "figure_gate.check_palette:main"
+check-figure = "figure_gate.check_figure:main"
 
 # scipy is optional and only ever a speed-up: `check_overplotting` uses a KD-tree
 # when it is importable and an O(n^2) numpy path when it is not. The docs
@@ -53,9 +53,27 @@ fast = ["scipy>=1.6"]
 requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
+# `skill/scripts/` becomes the `figure_gate` package, rather than being emptied
+# onto the top level of `site-packages`.
+#
+# Until 0.7.0 `sources = ["skill/scripts"]` stripped the prefix and installed
+# `check_figure.py`, `check_palette.py` and `suggest_fixes.py` as top-level
+# modules: three of the most generic names a distribution could claim, sitting
+# next to `matplotlib` and `numpy`, and permanent the moment callers import
+# them. A distribution called figure-gate now installs something called
+# `figure_gate`.
+#
+# It also unblocks PEP 561. `py.typed` only carries types for a package, so
+# every annotation in these files -- all of them, as of the previous release --
+# resolved to `Any` in a caller's type checker for as long as the layout was
+# flat.
+#
+# The vendored form is untouched: the files stay where they are in the
+# repository, still import nothing of each other at module scope, and are still
+# copied one at a time. Only the install path moves.
 [tool.hatch.build.targets.wheel]
 only-include = ["skill/scripts"]
-sources = ["skill/scripts"]
+sources = { "skill/scripts" = "figure_gate" }
 # Release tooling, not something a caller imports. It reaches the checkout
 # through the `audit-api` target in the Makefile and through its own test, and
 # shipping it put a script nobody installs for on every user's import path.
@@ -67,28 +85,53 @@ exclude = ["skill/scripts/audit_api.py"]
 # stock matplotlib -- the forgotten `plt.style.use` the gate exists to catch --
 # passes it.
 #
-# It goes in a directory named for the distribution rather than at the wheel
-# root, because a bare `figure.mplstyle` sitting in `site-packages` is a generic
-# name any other distribution could also claim, and the setuptools guidance for
-# run-time data files has no exemption for it. The filename does not change:
-# `tests/test_prose_claims.py` resolves `figure.mplstyle` against the tracked
-# `skill/assets/figure.mplstyle`, and a name that exists only inside a built
-# wheel resolves to nothing.
+# It sits inside the package, beside the module that reads it. It used to sit
+# in a `figure_gate_data/` directory at the wheel root, and that directory only
+# ever existed because the modules were at the wheel root too: a bare
+# `figure.mplstyle` dropped straight into `site-packages` is a generic name any
+# other distribution could also claim. Inside `figure_gate/` that cannot
+# happen, so the namespacing directory has no work left to do and is gone.
+#
+# The filename does not change: `tests/test_prose_claims.py` resolves
+# `figure.mplstyle` against the tracked `skill/assets/figure.mplstyle`, and a
+# name that exists only inside a built wheel resolves to nothing.
 [tool.hatch.build.targets.wheel.force-include]
-"skill/assets/figure.mplstyle" = "figure_gate_data/figure.mplstyle"
+"skill/assets/figure.mplstyle" = "figure_gate/figure.mplstyle"
 
 # Keeps the skill, the tests and the examples -- the tests are what make the
-# thresholds checkable by someone who did not write them. Drops agent scratch
-# state, which means nothing outside this checkout.
+# thresholds checkable by someone who did not write them.
+#
+# An allowlist, and it used to be a blacklist of agent-scratch paths. The
+# blacklist shipped: it named `/.claude` and `/.codebase-memory` but not
+# `.superpowers/`, which is neither tracked nor gitignored, so twelve files of
+# task briefs and review diffs went into the sdist along with whatever stray
+# untracked note was in the tree at build time. Releases come off a fresh
+# `actions/checkout` and so were never affected, but `make dist` on a working
+# machine was, and a blacklist only excludes the scratch directory whose name
+# somebody remembered.
+#
+# Listing what a source release IS cannot fail that way: a new directory is
+# absent until it is named, rather than present until it is excluded.
 [tool.hatch.build.targets.sdist]
-exclude = [
-    "/.claude",
-    "/.codebase-memory",
-    "/.github",
-    "/CLAUDE.md",
-    "/opencode.json",
-    ".DS_Store",
+include = [
+    "/skill",
+    "/tests",
+    "/examples",
+    "/docs",
+    "/specs",
+    "/conda",
+    "/.claude-plugin",
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
+    "/LICENSE",
+    "/Makefile",
+    "/README.md",
+    "/SECURITY.md",
+    "/pyproject.toml",
+    "/zensical.toml",
+    "/.gitignore",
 ]
+exclude = [".DS_Store"]
 
 # The version is written in four files and a tag, and nothing wrote them
 # together. 0.5.0 is what that costs: the bump moved pyproject.toml and
@@ -100,13 +143,22 @@ exclude = [
 # only thing between a half-finished bump and a release, and become the proof
 # that one command ran.
 #
-#     uv run bump-my-version bump minor
+#     uv run bump-my-version bump dev
 #
 # rewrites all four, commits, and tags v<new>. Pushing the tag is still what
 # publishes; release.yml has not moved.
 #
-# Two things it deliberately does not do. `sha256` in the recipe is unknowable
+# `dev` rather than `minor`, because the version between releases now carries a
+# `.devN` suffix -- see the `parse`/`serialize` block below for why. Cutting a
+# release drops the suffix; `bump minor` (or `patch`, or `major`) is what opens
+# the next development cycle afterwards. Both rewrite the same four files.
+#
+# Three things it deliberately does not do. `sha256` in the recipe is unknowable
 # until the sdist exists on PyPI, which is what conda/update_recipe.py is for.
+# The recipe's `source.url` interpolates the version, so between releases it
+# names a `.dev0` sdist that PyPI does not have; nothing builds from the
+# in-repo recipe -- the conda-forge feedstock has its own -- and the URL is
+# correct again the moment `bump dev` runs.
 # And nothing writes a fresh `## Unreleased` stub back into the changelog: the
 # CHANGELOG entry below fails the bump outright when there is no such heading,
 # so a release with no notes stops here rather than at the `no '## $version'
@@ -120,11 +172,45 @@ exclude = [
 # whole recovery, but a failure that touches nothing is a failure nobody has to
 # read a diff to trust.
 [tool.bumpversion]
-current_version = "0.6.0"
+current_version = "0.7.0.dev0"
 commit = true
 tag = true
 tag_name = "v{new_version}"
 tag_message = "figure-gate {new_version}"
+
+# The version between releases says it is between releases.
+#
+# It did not until now: the tree carried the version of the release that had
+# already happened, so a checkout ahead of v0.6.0 still said `0.6.0` and
+# `uv build` on it produced `figure_gate-0.6.0-py3-none-any.whl` -- a file
+# named exactly like the 0.6.0 on PyPI and not the same code. Releases build
+# from a tag on a fresh checkout and were never affected; `make dist` on a
+# working machine was, and the artifact carries no hint of it.
+#
+# So the development version is `X.Y.Z.devN` and the last step before tagging
+# drops the suffix:
+#
+#     uv run bump-my-version bump dev       # 0.7.0.dev0 -> 0.7.0
+#
+# `bump minor` from a released version opens the next dev cycle (0.7.0 ->
+# 0.8.0.dev0), so the two-command release is `bump dev` to cut, and `bump
+# minor`/`bump patch` to open the next one. `dev` is `optional_value`, which is
+# what makes `{major}.{minor}.{patch}` the serialization once the part is empty
+# rather than leaving a trailing separator.
+parse = """(?x)
+    (?P<major>0|[1-9]\\d*)\\.
+    (?P<minor>0|[1-9]\\d*)\\.
+    (?P<patch>0|[1-9]\\d*)
+    (?:\\.dev(?P<dev>0|[1-9]\\d*))?
+"""
+serialize = [
+    "{major}.{minor}.{patch}.dev{dev}",
+    "{major}.{minor}.{patch}",
+]
+
+[tool.bumpversion.parts.dev]
+optional_value = "None"
+values = ["0", "None"]
 
 # The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
 # release commits already in the log, and drops the arrow.
@@ -164,6 +250,9 @@ replace = '"version": "{new_version}"'
 filename = "conda/recipe.yaml"
 search = '  version: "{current_version}"'
 replace = '  version: "{new_version}"'
+
+[tool.uv]
+package = false
 
 [tool.ruff]
 # The project floor, which is what everything except one file is written to.

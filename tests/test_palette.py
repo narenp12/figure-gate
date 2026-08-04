@@ -328,7 +328,7 @@ def test_the_cyclic_wrap_is_a_colour_distance_not_a_lightness_one():
 def test_check_palette_still_imports_nothing_outside_the_standard_library():
     import ast
     from pathlib import Path
-    source = Path(cp.__file__).read_text()
+    source = Path(cp.__file__).read_text(encoding="utf-8")
     imported = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):

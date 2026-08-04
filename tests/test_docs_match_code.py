@@ -51,7 +51,7 @@ ROW = re.compile(
 
 def table_rows():
     return [(m.group(1), float(m.group(3)))
-            for m in (ROW.match(line) for line in GUIDE.read_text().splitlines())
+            for m in (ROW.match(line) for line in GUIDE.read_text(encoding="utf-8").splitlines())
             if m]
 
 
@@ -93,7 +93,7 @@ def test_the_dagger_matches_the_number(hex_color, quoted):
     the rows offered as series hues, which is also the only place
     `check_palette` gates the band.
     """
-    line = next((l for l in GUIDE.read_text().splitlines()
+    line = next((l for l in GUIDE.read_text(encoding="utf-8").splitlines()
                  if f"`{hex_color}`" in l and l.startswith("|")), None)
     if line is None:
         pytest.fail(f"`{hex_color}` not found in guide table")
@@ -153,14 +153,14 @@ def swatch_pairs():
     could be orphaned from its hex both in the file and on the rendered line.
     """
     return [(m.group(2), m.group(1))
-            for m in LABELLED_SWATCH.finditer(GUIDE.read_text())]
+            for m in LABELLED_SWATCH.finditer(GUIDE.read_text(encoding="utf-8"))]
 
 
 def test_the_guide_still_carries_swatches():
     """`SWATCH_ATTRS` is a literal attribute list. If the syntax is reformatted
     -- a `{:` prefix, different spacing -- every test parametrized over
     `swatch_pairs()` silently becomes zero tests."""
-    declared = SWATCH.findall(GUIDE.read_text())
+    declared = SWATCH.findall(GUIDE.read_text(encoding="utf-8"))
     assert len(declared) == len(swatch_pairs()) and declared, (
         f"{len(declared)} `.sw` attribute list(s) in the guide, "
         f"{len(swatch_pairs())} of them attached to a hex in a code span")
@@ -188,7 +188,7 @@ def test_every_palette_row_carries_a_swatch(hex_color, _quoted):
 def test_the_guide_does_not_quote_a_retired_surface():
     """`#fcfcfb` was the surface the numbers used to be computed against. It is
     not what anything renders, so a reappearance means the drift came back."""
-    assert "fcfcfb" not in GUIDE.read_text().lower().replace(
+    assert "fcfcfb" not in GUIDE.read_text(encoding="utf-8").lower().replace(
         "`#fcfcfb`, a", ""), "the retired surface is quoted again"
 
 
@@ -233,7 +233,7 @@ def gate_table_names():
     rows, a roster check that reads nothing and compares it against 19 gates.
     Splitting on the delimiter instead makes the column count irrelevant.
     """
-    lines = GATES.read_text().splitlines()
+    lines = GATES.read_text(encoding="utf-8").splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     names = []
     for line in lines[start:]:
@@ -286,7 +286,7 @@ def test_the_stated_test_count_is_the_real_one():
     """A number in prose is not executable -- the same reason the rest of this
     file exists. 0.1.3 shipped a README claiming 166 tests against a suite of
     171, and the only thing that catches that is asking pytest."""
-    claimed = re.search(r"The suite is (\d+) tests", GATES.read_text())
+    claimed = re.search(r"The suite is (\d+) tests", GATES.read_text(encoding="utf-8"))
     assert claimed, ("docs/gates.md no longer states a test count in the form "
                      "this test reads")
     assert int(claimed.group(1)) == collected_test_count()
@@ -303,7 +303,7 @@ def test_the_stated_test_count_is_the_real_one():
 def table_advisory_names():
     """Gates the table marks *(advisory)*, from the same parse the roster test
     uses, so the two cannot disagree about which rows exist."""
-    lines = GATES.read_text().splitlines()
+    lines = GATES.read_text(encoding="utf-8").splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     out = []
     for line in lines[start:]:
@@ -327,7 +327,7 @@ def test_the_page_states_the_advisory_count_it_marks():
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", GATES.read_text())
+    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", GATES.read_text(encoding="utf-8"))
     assert claimed, ("docs/gates.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
@@ -420,7 +420,7 @@ def gate_table_rows():
     second cell by index cares again, so it cares here rather than making the
     roster check care too.
     """
-    lines = GATES.read_text().splitlines()
+    lines = GATES.read_text(encoding="utf-8").splitlines()
     start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
     rows = []
     for line in lines[start:]:
@@ -538,7 +538,7 @@ def prose_constants():
                  ROOT / "CONTRIBUTING.md"):
         if not path.exists():
             continue
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if line.lstrip().startswith("|"):
                 continue
             line = ESCAPED_SPAN.sub("", line)
@@ -622,7 +622,7 @@ INK_TABLE_ROW = re.compile(r"^\|[^|]+\|([^|]*`#[0-9A-Fa-f]{6}`[^|]*)\|\s*"
 
 def guide_ink_hexes():
     out = []
-    for line in GUIDE.read_text().splitlines():
+    for line in GUIDE.read_text(encoding="utf-8").splitlines():
         m = INK_TABLE_ROW.match(line)
         if m:
             out.extend(h.lower() for h in
@@ -700,7 +700,7 @@ def test_the_series_slots_are_the_ones_the_style_sheet_cycles():
 
 def test_the_guide_quotes_the_all_pairs_limit_it_measures():
     written = re.search(r"MAX_SERIES, MAX_SERIES_ALL_PAIRS = (\d+), (\d+)",
-                        GUIDE.read_text())
+                        GUIDE.read_text(encoding="utf-8"))
     assert written, "the appendix no longer states the constants in this form"
     assert int(written.group(2)) == largest_all_pairs_count()
 
@@ -710,7 +710,7 @@ def test_the_prose_agrees_with_the_appendix_constant():
     words = {"three": 3, "four": 4, "five": 5, "six": 6}
     limit = largest_all_pairs_count()
     for path in (GUIDE, SKILL / "SKILL.md"):
-        found = re.findall(r"first[- ](\w+) slots? clear", path.read_text())
+        found = re.findall(r"first[- ](\w+) slots? clear", path.read_text(encoding="utf-8"))
         assert found, f"{path.name} no longer states the limit in words"
         for word in found:
             assert words.get(word.lower()) == limit, (
@@ -740,7 +740,7 @@ DEFECT_COUNT = re.compile(r"found (\w+) defects? in")
 
 def defect_claims():
     """Every file that states how many defects writing the gallery found."""
-    return {path.name: DEFECT_COUNT.search(path.read_text())
+    return {path.name: DEFECT_COUNT.search(path.read_text(encoding="utf-8"))
             for path in (GALLERY, README, DOCS_GALLERY)}
 
 
@@ -816,7 +816,7 @@ def roster_paragraph():
     and reported that eighteen gates were missing from it.
     """
     blocks = [" ".join(b.split())
-              for b in re.split(r"\n\s*\n", SKILL_MD.read_text())]
+              for b in re.split(r"\n\s*\n", SKILL_MD.read_text(encoding="utf-8"))]
     hits = [b for b in blocks if "`check_palette.py` gates " in b
             and "`check_figure.py` gates " in b]
     assert len(hits) == 1, (
@@ -897,7 +897,7 @@ VIRIDIS_CLAIM = re.compile(
 
 
 def viridis_claims():
-    return {path.name: VIRIDIS_CLAIM.search(" ".join(path.read_text().split()))
+    return {path.name: VIRIDIS_CLAIM.search(" ".join(path.read_text(encoding="utf-8").split()))
             for path in (GUIDE, SKILL_MD)}
 
 
@@ -945,7 +945,7 @@ LUMINANCE_CLAIM = re.compile(
 def luminance_claims():
     out = []
     for path in (GUIDE, SKILL_MD):
-        for m in LUMINANCE_CLAIM.finditer(" ".join(path.read_text().split())):
+        for m in LUMINANCE_CLAIM.finditer(" ".join(path.read_text(encoding="utf-8").split())):
             out.append((path.name, float(m.group(1)), m.group(2), m.group(3)))
     return out
 
@@ -979,7 +979,7 @@ def test_the_oklab_aside_quotes_the_oklab_numbers():
     a different answer can see their own arithmetic rather than suspect the
     guide, so it is worth keeping and worth checking.
     """
-    written = OKLAB_ASIDE.search(" ".join(GUIDE.read_text().split()))
+    written = OKLAB_ASIDE.search(" ".join(GUIDE.read_text(encoding="utf-8").split()))
     assert written, ("the guide no longer states the OKLab equivalents in the "
                      "form this test reads")
 
@@ -1000,7 +1000,7 @@ def test_the_guide_says_which_unit_the_grayscale_numbers_are_in():
     naming the unit, the numbers are correct and unreadable: the guide states
     OKLab ΔE ×100 as its convention everywhere else."""
     for path in (GUIDE, SKILL_MD):
-        text = " ".join(path.read_text().split())
+        text = " ".join(path.read_text(encoding="utf-8").split())
         assert re.search(r"relative luminance[^.]*OKLab", text), (
             f"{path.name} quotes relative-luminance separations without saying "
             "they are not the OKLab unit the rest of the document uses")
@@ -1031,7 +1031,7 @@ def described_strings():
 
     out = []
     for path in (DEMO, GALLERY):
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.Call):
                 continue
             func = getattr(node.func, "attr", None) or getattr(
@@ -1050,7 +1050,7 @@ def described_strings():
 
 def site_alt_texts():
     return {" ".join(alt.split()): image for alt, image
-            in MARKDOWN_IMAGE.findall(DOCS_GALLERY.read_text())}
+            in MARKDOWN_IMAGE.findall(DOCS_GALLERY.read_text(encoding="utf-8"))}
 
 
 def test_the_examples_still_describe_every_figure():
@@ -1076,7 +1076,7 @@ def test_the_readme_shows_the_demo_figures_own_alt_text():
     """The README is where the paraphrase entered, and it is the copy PyPI
     renders, so it is checked separately from the page it was copied into."""
     alts = [" ".join(alt.split())
-            for alt, image in MARKDOWN_IMAGE.findall(README.read_text())]
+            for alt, image in MARKDOWN_IMAGE.findall(README.read_text(encoding="utf-8"))]
     assert alts, "the README no longer embeds an image with alt text"
     for alt in alts:
         assert alt in described_strings(), (
@@ -1099,7 +1099,7 @@ TEACHING_DOCS = [README, GATES, GETTING_STARTED, SKILL_MD, GUIDE, DOCS_GALLERY,
 def test_no_document_teaches_the_pathless_alt_metadata_call():
     bad = []
     for path in TEACHING_DOCS:
-        for number, line in enumerate(path.read_text().splitlines(), 1):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"metadata\s*=\s*alt_metadata\(\s*\w+\s*\)", line):
                 bad.append(f"{path.name}:{number}")
     assert not bad, (
@@ -1126,12 +1126,12 @@ MISC_CLAIM = re.compile(
 def guide_kind_claims():
     """(kind, colormap) for every row of the guide's kind table."""
     return [(m.group(1).lower(), m.group(2))
-            for m in map(KIND_ROW.match, GUIDE.read_text().splitlines()) if m]
+            for m in map(KIND_ROW.match, GUIDE.read_text(encoding="utf-8").splitlines()) if m]
 
 
 def guide_misc_claims():
     """The colormaps the guide names as failing."""
-    match = MISC_CLAIM.search(" ".join(GUIDE.read_text().split()))
+    match = MISC_CLAIM.search(" ".join(GUIDE.read_text(encoding="utf-8").split()))
     return re.findall(r"`([A-Za-z_0-9]+)`", match.group(1)) if match else []
 
 
@@ -1198,7 +1198,7 @@ CONSTANT_DOCS = [GUIDE, SKILL_MD]
 def doc_constant_claims():
     out = []
     for path in CONSTANT_DOCS:
-        for names, values in THRESHOLD_CONST.findall(path.read_text()):
+        for names, values in THRESHOLD_CONST.findall(path.read_text(encoding="utf-8")):
             for name, value in zip(names.split(","), values.split(",")):
                 out.append((path.name, name.strip(), value.strip()))
     return out
@@ -1262,7 +1262,7 @@ ROSTER_COUNT_CLAIMS = {
 
 
 def roster_count_claims():
-    return {label: re.search(pattern, " ".join(path.read_text().split()))
+    return {label: re.search(pattern, " ".join(path.read_text(encoding="utf-8").split()))
             for label, (path, pattern) in ROSTER_COUNT_CLAIMS.items()}
 
 
@@ -1303,11 +1303,11 @@ GALLERY_COUNT_CLAIMS = {
 def gallery_figure_count():
     """The executable roster: the figures `gallery.py` actually finishes."""
     return len(re.findall(r'finish\(\s*\w+,\s*"gallery-',
-                          GALLERY_PY.read_text()))
+                          GALLERY_PY.read_text(encoding="utf-8")))
 
 
 def gallery_count_claims():
-    return {label: re.search(pattern, " ".join(path.read_text().split()))
+    return {label: re.search(pattern, " ".join(path.read_text(encoding="utf-8").split()))
             for label, (path, pattern) in GALLERY_COUNT_CLAIMS.items()}
 
 
@@ -1426,7 +1426,7 @@ def test_no_gate_is_both_explained_and_exempt():
 @pytest.mark.parametrize("gate", sorted(GUIDANCE_ANCHORS))
 def test_every_gate_has_guidance_a_reader_can_find(gate):
     document, anchor = GUIDANCE_ANCHORS[gate]
-    text = " ".join(GUIDE_FILES[document].read_text().split())
+    text = " ".join(GUIDE_FILES[document].read_text(encoding="utf-8").split())
     assert anchor in text, (
         f"{gate} is anchored to {document} at {anchor!r}, which is no longer "
         "in that file. Either the passage was rewritten and the anchor needs "
@@ -1450,13 +1450,13 @@ def template_files():
 
 
 def test_the_issue_forms_are_the_ones_contributing_describes():
-    names = {re.match(r"name:\s*(.+)", p.read_text().splitlines()[0]).group(1)
+    names = {re.match(r"name:\s*(.+)", p.read_text(encoding="utf-8").splitlines()[0]).group(1)
              for p in template_files()}
     assert names == {"A gate fired on a figure that is fine",
                      "A broken figure passed",
                      "Something else is broken",
                      "Propose a new gate"}
-    described = (ROOT / "CONTRIBUTING.md").read_text()
+    described = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     for name in names:
         first = name.split(".")[0]
         assert f"**{first}" in described, (
@@ -1466,7 +1466,7 @@ def test_the_issue_forms_are_the_ones_contributing_describes():
 def test_the_issue_forms_name_files_that_exist():
     missing = []
     for path in template_files() + [TEMPLATES / "config.yml"]:
-        for span in re.findall(r"`([^`]+)`", path.read_text()):
+        for span in re.findall(r"`([^`]+)`", path.read_text(encoding="utf-8")):
             if not span.endswith((".py", ".md", ".mplstyle")):
                 continue
             hits = list(ROOT.rglob(span))
@@ -1477,7 +1477,7 @@ def test_the_issue_forms_name_files_that_exist():
 
 def test_the_over_fire_form_quotes_real_gate_names():
     pytest.importorskip("matplotlib")
-    text = (TEMPLATES / "gate-over-fires.yml").read_text()
+    text = (TEMPLATES / "gate-over-fires.yml").read_text(encoding="utf-8")
     # Only the "Which gate" field. Elsewhere in the form a backtick is a shell
     # command, and every example there would read as a gate name.
     block = re.search(r"id: gate\n(.*?)\n  - type:", text, re.S)

@@ -2,7 +2,7 @@
   "$schema": "https://www.schemastore.org/claude-code-plugin-manifest.json",
   "name": "figure-gate",
   "description": "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size.",
-  "version": "0.6.0",
+  "version": "0.7.0.dev0",
   "author": {
     "name": "Naren Prakash",
     "url": "https://github.com/narenp12"

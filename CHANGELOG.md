@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+**Installed, the checkers are a package: `from figure_gate import
+check_figure`.** This is a breaking change on the install path and the reason
+the next release is 0.7.0. Through 0.6.0 the wheel put `check_figure`,
+`check_palette` and `suggest_fixes` at the top level of `site-packages` --
+three of the most generic module names a distribution could claim, on a
+namespace shared with every other installed package. `import check_figure`
+no longer resolves; `from figure_gate import check_figure` does. The console
+scripts `check-palette` and `check-figure` are unchanged.
+
+Vendoring is untouched. The files stay at `skill/scripts/`, still import
+nothing of each other at module scope, and a copied `check_figure.py` still
+does `import check_palette` beside it -- the two sites that reach for a sibling
+now try the relative import first and fall back to the flat one, so one file
+serves both layouts.
+
+Two things follow from the move. `py.typed` ships, so the annotations added in
+the previous release are visible to a caller's type checker for the first time;
+until now PEP 561 required every one of them to be read as `Any`, because the
+marker has nothing to attach to when the modules are loose files. And
+`figure_gate_data/` is gone: the sheet installs to `figure_gate/figure.mplstyle`
+and `_style_sheet` probes two locations instead of three, the namespacing
+directory having existed only because the modules sat at the wheel root.
+
+`pip install -e .` no longer works on a clone, and `[tool.uv] package = false`
+records that. hatchling refuses editable installs when a `sources` entry
+rewrites a prefix rather than removing one, which is what mapping
+`skill/scripts` onto `figure_gate` does. Nothing in the suite needs the
+installed package -- `conftest.py` puts `skill/scripts` on `sys.path` -- and
+keeping the skill's own directory layout was worth more than the editable
+install.
+
+**A gate that raises no longer loses the audit.** `audit` ran its twenty-one
+gates in a list comprehension, so one exception anywhere propagated and the
+caller got a traceback instead of the twenty rows already measured. Each gate
+is now called inside a `try`, and a gate that raised reports as its own row,
+with the exception in the detail and a note that the defect is in the checker
+rather than in the figure. The verdict follows the gate's own severity: an
+advisory that crashed warns, a hard gate that crashed fails, because a gate
+that measured nothing has not cleared the figure. No gate is known to raise --
+twenty adversarial figures, including 3D, polar, all-NaN, infinite and
+zero-sized ones, found none -- but `matplotlib>=3.8` has no upper bound and
+these gates read deep internals.
+
+**The version between releases says so.** It is `0.7.0.dev0` here, and the last
+step before tagging is `uv run bump-my-version bump dev`, which drops the
+suffix. The tree used to carry the version of the release that had already
+happened, so `uv build` on a checkout ahead of v0.6.0 produced a
+`figure_gate-0.6.0` wheel that was not the 0.6.0 on PyPI. Releases build from a
+tag on a clean checkout and were never affected.
+
+**The source distribution lists what it is instead of what it is not.** The
+sdist config was a blacklist of agent-scratch paths and it had a hole:
+`.superpowers/` is neither tracked nor gitignored, so a local `make dist`
+shipped a dozen task briefs and review diffs, along with any other untracked
+file lying in the tree. It is an allowlist now, and `.superpowers/` is
+gitignored. Releases were never affected, for the same reason as above.
+
+**`tests/test_docs_site.py` reads the repository, not the working tree.** It
+walked `docs/` off the filesystem, and `.gitignore` carries
+`docs/superpowers/`, so a maintainer with design notes on disk got five
+failures naming files that are not part of the project while CI stayed green.
+It asks `git ls-files` now, and falls back to walking the filesystem where
+there is no git to ask, which is how the suite keeps running from an unpacked
+sdist.
+
+**CI runs the suite on macOS and Windows.** One leg each, on the newest
+supported Python and matplotlib; Linux still carries the version matrix. Font
+resolution is the most OS-dependent thing `check_fonts` touches and every run
+until now was on one Linux image.
+
 **Every function in the three modules is annotated, and the API page renders
 as a reference.** The 19 documented callables carry Google-style
 `Args:` and `Returns:` sections, so each entry on the page is a signature and

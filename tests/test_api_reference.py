@@ -52,7 +52,7 @@ def public_callables(module):
     about what is in the file rather than what the local interpreter managed
     to import.
     """
-    tree = ast.parse((SCRIPTS / f"{module}.py").read_text())
+    tree = ast.parse((SCRIPTS / f"{module}.py").read_text(encoding="utf-8"))
     return {node.name: node for node in tree.body
             if isinstance(node, ast.FunctionDef)
             and not node.name.startswith("_")}
@@ -60,7 +60,7 @@ def public_callables(module):
 
 def documented():
     """`::: module.name` directives on the page, as `(module, name)` pairs."""
-    return set(re.findall(r"^::: (\w+)\.(\w+)$", PAGE.read_text(), re.M))
+    return set(re.findall(r"^::: (\w+)\.(\w+)$", PAGE.read_text(encoding="utf-8"), re.M))
 
 
 def undocumented(module):
@@ -109,7 +109,7 @@ def test_the_page_is_in_the_nav():
     """An unreferenced page builds and is reachable only by URL. The site
     builds with --strict, which catches a nav entry with no page; this is the
     other direction."""
-    assert '"api.md"' in CONFIG.read_text(), (
+    assert '"api.md"' in CONFIG.read_text(encoding="utf-8"), (
         "docs/api.md is not in the zensical.toml nav")
 
 
@@ -117,4 +117,4 @@ def test_the_handler_is_pointed_at_the_scripts():
     """The scripts are loose files, not an installed package. Without this
     path mkdocstrings resolves nothing and every block on the page is a build
     error."""
-    assert 'paths = ["skill/scripts"]' in CONFIG.read_text()
+    assert 'paths = ["skill/scripts"]' in CONFIG.read_text(encoding="utf-8")

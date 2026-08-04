@@ -78,7 +78,7 @@ def main() -> None:
     # named in Unreleased can pass without a new entry. Diffing the symbol's
     # repr against the last tag would catch that, but parsing it is more
     # brittle than the bar this holds.
-    changelog = pathlib.Path("CHANGELOG.md").read_text()
+    changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
     unreleased = re.search(
         r"^## Unreleased\n(.*?)(?=^## |\Z)", changelog, re.S | re.M,
     )

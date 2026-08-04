@@ -35,7 +35,7 @@ def jobs():
     """(workflow name, job id, the job's own lines) for every job defined."""
     found = []
     for path in WORKFLOWS:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         start = re.search(r"^jobs:$", text, re.M)
         assert start, f"{path.name} defines no `jobs:` block"
         body = text[start.end():]

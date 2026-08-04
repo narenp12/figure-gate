@@ -51,6 +51,13 @@ Everything below the quickstart lives on the
 uv add figure-gate          # or: conda install -c conda-forge figure-gate
 ```
 
+```python
+from figure_gate import check_figure as cf
+```
+
+Copying the files into your own project is the other route, and the default one
+the docs teach; vendored, the import is `import check_figure`.
+
 ## Where this sits
 
 Prescriptive style sheets already exist and are good:

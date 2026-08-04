@@ -38,7 +38,7 @@ PYPI_JSON = "https://pypi.org/pypi/figure-gate/{version}/json"
 
 
 def project_version():
-    return tomllib.loads(PYPROJECT.read_text())["project"]["version"]
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["version"]
 
 
 def pypi_sdist(version):
@@ -89,7 +89,7 @@ def stamp(text, version, sha256):
 def main():
     version = project_version()
     sha256 = pypi_sdist(version)
-    RECIPE.write_text(stamp(RECIPE.read_text(), version, sha256))
+    RECIPE.write_text(stamp(RECIPE.read_text(encoding="utf-8"), version, sha256))
     print(f"recipe.yaml -> figure-gate {version}, sha256 {sha256}")
 
 

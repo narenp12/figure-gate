@@ -14,6 +14,7 @@ numbers `contrast()` actually returns, on the surfaces the theme actually draws.
 
 import colorsys
 import re
+import subprocess
 
 import pytest
 
@@ -24,6 +25,44 @@ import check_palette as cp
 ROOT = SKILL.parent
 DOCS = ROOT / "docs"
 CONFIG = ROOT / "zensical.toml"
+
+
+def _tracked_under_docs():
+    """The paths under `docs/` that git tracks, or None outside a checkout.
+
+    This file used to walk `docs/` off the filesystem, which made the working
+    tree an input: `.gitignore` carries `docs/superpowers/`, so a maintainer
+    with design notes on disk got five failures naming files that are not part
+    of the project, while CI -- which clones -- stayed green. A gate whose
+    verdict depends on what is lying around in an ignored directory is not
+    reporting on the repository.
+
+    None, not an empty set, when git is absent or this is not a checkout: the
+    sdist ships `tests/`, so the suite has to keep running where there is no
+    git to ask. Callers fall back to walking the filesystem there, which is the
+    old behaviour and is right when every file present is a shipped one.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z", "--", "docs"],
+            capture_output=True, text=True,
+        )
+    except OSError:                                         # pragma: no cover
+        return None
+    if listed.returncode != 0:                              # pragma: no cover
+        return None
+    return {ROOT / name for name in listed.stdout.split("\0") if name}
+
+
+TRACKED = _tracked_under_docs()
+
+
+def docs_paths(pattern="*"):
+    """`DOCS.rglob(pattern)`, restricted to tracked files where git can say."""
+    found = DOCS.rglob(pattern)
+    if TRACKED is None:                                     # pragma: no cover
+        return found
+    return (p for p in found if p in TRACKED)
 
 # `  { "The gates" = "style-guide.md" },`
 NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
@@ -45,7 +84,7 @@ AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md"}
 
 
 def nav_targets():
-    lines = CONFIG.read_text().splitlines()
+    lines = CONFIG.read_text(encoding="utf-8").splitlines()
     start = next(i for i, l in enumerate(lines) if l.startswith("nav = ["))
     out = []
     for line in lines[start + 1:]:
@@ -72,17 +111,23 @@ def test_every_nav_entry_exists(target):
 
 
 def symlinks():
-    return sorted(p.name for p in DOCS.rglob("*") if p.is_symlink())
+    return sorted(p.name for p in docs_paths("*") if p.is_symlink())
 
 
 def test_the_symlinks_were_found():
     """Both tests below are parametrized over this list, so an empty one does
-    not fail them -- it deletes them. Twelve pages and images point out of
+    not fail them -- it deletes them. Seventeen pages and images point out of
     `docs/`; if that count drops, either something became a copy (which
     `test_no_page_has_become_a_copy` catches) or this collection stopped
-    working (which nothing else would)."""
+    working (which nothing else would).
+
+    The number is written three times on purpose -- the assertion, the message
+    and the sentence above -- and all three said something different until now:
+    the assertion had been moved to 17 and the prose still read twelve and 13.
+    That is the defect this whole file exists to catch, one level in.
+    """
     assert len(symlinks()) == 17, (
-        f"found {len(symlinks())} symlinks under docs/, expected 13 - if the "
+        f"found {len(symlinks())} symlinks under docs/, expected 17 - if the "
         "site legitimately gained or lost a page, update this number with it")
 
 
@@ -90,7 +135,7 @@ def test_the_symlinks_were_found():
 def test_every_symlink_resolves(link):
     """`--strict` makes the build fail on a dangling page, but only when
     someone builds. A file moved under `skill/` should fail the test run."""
-    path = next(p for p in DOCS.rglob("*") if p.name == link)
+    path = next(p for p in docs_paths("*") if p.name == link)
     assert path.exists(), (
         f"docs/{path.relative_to(DOCS)} points at "
         f"{path.readlink()}, which does not exist")
@@ -101,7 +146,7 @@ def test_symlinks_stay_inside_the_repository(link):
     """An absolute target works on the machine it was made on and nowhere
     else, and a target outside the checkout would publish a file that is not
     in the repository."""
-    path = next(p for p in DOCS.rglob("*") if p.name == link)
+    path = next(p for p in docs_paths("*") if p.name == link)
     assert not path.readlink().is_absolute(), f"{link} has an absolute target"
     assert ROOT in path.resolve().parents, (
         f"{link} resolves to {path.resolve()}, outside the repository")
@@ -111,7 +156,7 @@ def test_no_page_has_become_a_copy():
     """The one that matters. If someone replaces a symlink with a real file to
     fix a rendering nit, the site keeps building and the guide starts drifting
     from the code that computes its numbers."""
-    copies = sorted(str(p.relative_to(DOCS)) for p in DOCS.rglob("*.md")
+    copies = sorted(str(p.relative_to(DOCS)) for p in docs_paths("*.md")
                     if not p.is_symlink() and p.name not in AUTHORED)
     assert not copies, (
         f"{copies} are real files under docs/ - they should be symlinks to the "
@@ -134,7 +179,7 @@ def test_no_page_has_become_a_copy():
 
 def source_pages():
     """The markdown the site serves, resolved through the symlinks."""
-    return sorted((p, p.resolve()) for p in DOCS.rglob("*.md"))
+    return sorted((p, p.resolve()) for p in docs_paths("*.md"))
 
 
 def accidental_headings(text):
@@ -157,7 +202,7 @@ def accidental_headings(text):
 @pytest.mark.parametrize("page,target", source_pages(),
                          ids=lambda v: getattr(v, "name", v))
 def test_no_line_becomes_a_heading_by_accident(page, target):
-    bad = accidental_headings(target.read_text())
+    bad = accidental_headings(target.read_text(encoding="utf-8"))
     report = "\n".join(f"  {target.name}:{n}: {line}" for n, line in bad)
     assert not bad, (
         f"{len(bad)} line(s) start with `#` but are not headings, so the "
@@ -181,7 +226,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 
 def build_steps():
     """The lines of the docs workflow that build the site."""
-    return [line.strip() for line in WORKFLOW.read_text().splitlines()
+    return [line.strip() for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
             if "zensical build" in line]
 
 
@@ -205,7 +250,7 @@ def test_the_build_installs_the_declared_group(step):
 
 
 def docs_group():
-    text = PYPROJECT.read_text()
+    text = PYPROJECT.read_text(encoding="utf-8")
     match = re.search(r"^docs = \[(.*?)^\]", text, re.S | re.M)
     assert match, "pyproject.toml no longer declares a `docs` group"
     return re.findall(r'"([A-Za-z0-9_.-]+)', match.group(1))
@@ -222,8 +267,8 @@ def test_a_page_using_directives_declares_the_handler_that_reads_them():
     """`:::` in a page is silently inert prose without mkdocstrings installed:
     the extension raises at import, the build exits 1, and the message names a
     module no page mentions. Tie the need to the declaration."""
-    using = sorted(p.name for p in DOCS.rglob("*.md")
-                   if re.search(r"^::: ", p.resolve().read_text(), re.M))
+    using = sorted(p.name for p in docs_paths("*.md")
+                   if re.search(r"^::: ", p.resolve().read_text(encoding="utf-8"), re.M))
     if not using:
         pytest.skip("no page uses mkdocstrings directives")
     assert "mkdocstrings-python" in docs_group(), (
@@ -275,7 +320,7 @@ QUOTED = re.compile(
 
 def quoted_rows():
     return [(m.group(1), float(m.group(2)), float(m.group(3)), float(m.group(4)))
-            for m in map(QUOTED.match, CSS.read_text().splitlines()) if m]
+            for m in map(QUOTED.match, CSS.read_text(encoding="utf-8").splitlines()) if m]
 
 
 def test_the_stylesheet_table_is_still_parseable():
@@ -299,7 +344,7 @@ def test_the_stylesheet_names_the_surface_it_measured_against(variant, surface):
     """The surface is half of every contrast number. If the comment names one
     hex and the tests compute against another, both can be internally
     consistent and the site can still ship links under the floor."""
-    assert surface in CSS.read_text(), (
+    assert surface in CSS.read_text(encoding="utf-8"), (
         f"palette.css does not name {surface}, the {variant} slate background")
 
 
@@ -307,7 +352,7 @@ def test_the_configured_variant_is_one_the_stylesheet_measured():
     """Flipping `variant` in zensical.toml changes the dark background under
     every link on the site. A variant with no row in the table is a site whose
     contrast nobody has checked."""
-    match = re.search(r'^variant\s*=\s*"(\w+)"', CONFIG.read_text(), re.M)
+    match = re.search(r'^variant\s*=\s*"(\w+)"', CONFIG.read_text(encoding="utf-8"), re.M)
     assert match, "zensical.toml no longer states a theme variant"
     assert match.group(1) in SLATES, (
         f"zensical.toml selects the {match.group(1)!r} variant, which "
@@ -326,7 +371,7 @@ def scheme_link_colors():
     stylesheet off the page -- silently redirects the match into the wrong
     block and reports both schemes sharing a color.
     """
-    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
     values = dict(re.findall(r"--(fg-\w+):\s*(#[0-9a-fA-F]{6})", text))
     out = {}
     for scheme in ("default", "slate"):
