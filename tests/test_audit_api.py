@@ -45,8 +45,7 @@ def _changelog(content: str) -> str:
 def test_audit_api_fails_on_silent_breaks(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
-        _changelog("## Unreleased\n\nNo mention of the break.\n")
-    )
+        _changelog("## Unreleased\n\nNo mention of the break.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -67,8 +66,7 @@ def test_audit_api_passes_when_breaks_documented(tmp_path, monkeypatch):
         _changelog(
             "## Unreleased\n\n"
             "- `contrast` was removed from the public API.\n"
-        )
-    )
+        ), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -85,8 +83,7 @@ def test_audit_api_passes_when_breaks_documented(tmp_path, monkeypatch):
 def test_audit_api_passes_when_no_breaks(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
-        _changelog("## Unreleased\n\nNothing yet.\n")
-    )
+        _changelog("## Unreleased\n\nNothing yet.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -104,8 +101,7 @@ def test_audit_api_passes_when_no_breaks(tmp_path, monkeypatch):
 def test_audit_api_fails_on_griffe_tool_failure(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
-        _changelog("## Unreleased\n\nIrrelevant.\n")
-    )
+        _changelog("## Unreleased\n\nIrrelevant.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -160,7 +156,7 @@ def test_audit_api_fails_when_griffe_missing(tmp_path, monkeypatch):
 
 def test_audit_api_ignores_report_shaped_output_on_clean_run(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text(_changelog("## Unreleased\n\nNothing.\n"))
+    changelog.write_text(_changelog("## Unreleased\n\nNothing.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -179,8 +175,7 @@ def test_audit_api_unreleased_is_last_section(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         "## Unreleased\n\n"
-        "- `contrast` was removed from the public API.\n"
-    )
+        "- `contrast` was removed from the public API.\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -197,8 +192,7 @@ def test_audit_api_unreleased_is_last_section(tmp_path, monkeypatch):
 def test_audit_api_changelog_accepts_other_break_words(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
-        _changelog("## Unreleased\n\n`GATES` moved down one row.\n")
-    )
+        _changelog("## Unreleased\n\n`GATES` moved down one row.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {
@@ -220,7 +214,7 @@ def test_audit_api_skips_a_module_that_did_not_exist_at_the_tag(tmp_path, monkey
     with no history at the tag has no API that could have broken, and saying so
     is not the same as saying nothing broke."""
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text(_changelog("## Unreleased\n\nNothing.\n"))
+    changelog.write_text(_changelog("## Unreleased\n\nNothing.\n"), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
     griffe_output = {

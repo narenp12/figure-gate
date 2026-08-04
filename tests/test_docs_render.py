@@ -181,7 +181,7 @@ def built_site(tmp_path_factory, worker_id):
         marker = shared / "zensical-build.done"
         if not marker.is_file():
             _build_the_site()
-            marker.write_text("built")
+            marker.write_text("built", encoding="utf-8")
     return SITE
 
 
@@ -400,7 +400,7 @@ def test_the_stylesheet_does_not_reintroduce_the_root_prefix():
     a scanner reading raw text fails on the documentation of the bug rather than
     the bug. Read declarations, not prose.
     """
-    source = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    source = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
     offenders = [line.strip() for line in source.splitlines()
                  if ":root[data-md-color-scheme" in line]
     assert not offenders, (
@@ -591,7 +591,7 @@ def test_no_built_heading_holds_a_code_span_marker(built_site):
     offenders = []
     for page in sorted(built_site.rglob("index.html")):
         for inner in re.findall(r"<h[1-6][^>]*>(.*?)</h[1-6]>",
-                                page.read_text(), re.S):
+                                page.read_text(encoding="utf-8"), re.S):
             body = re.sub(r"<[^>]+>", "", inner)
             if "`" in body:
                 offenders.append(
@@ -612,7 +612,7 @@ def deploy_base():
     `narenp12.github.io/choosing-a-form/` -- off the site, 404, and identical to
     a correct link in every local preview served at `/`.
     """
-    match = re.search(r'^site_url\s*=\s*"([^"]+)"', CONFIG.read_text(), re.M)
+    match = re.search(r'^site_url\s*=\s*"([^"]+)"', CONFIG.read_text(encoding="utf-8"), re.M)
     assert match, "zensical.toml no longer states a site_url"
     path = urllib.parse.urlparse(match.group(1)).path
     return path if path.endswith("/") else path + "/"
@@ -648,7 +648,7 @@ def test_every_internal_link_resolves_under_the_deploy_base(built_site):
         relative = page.relative_to(built_site)
         directory = "" if relative.parent == Path(".") else f"{relative.parent}/"
         here = base + directory
-        for href in re.findall(r'href="([^"]+)"', page.read_text()):
+        for href in re.findall(r'href="([^"]+)"', page.read_text(encoding="utf-8")):
             if href.startswith(("http://", "https://", "#", "mailto:", "data:")):
                 continue
             target = posixpath.normpath(posixpath.join(here, href))
@@ -680,7 +680,7 @@ def test_no_filter_is_applied_to_gallery_figures():
     # Reads the source, so it needs no browser and runs everywhere the rest of
     # the suite does -- the temptation it forecloses arrives while someone is
     # looking at the dark page, not while they are running the docs job.
-    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
     for bad in ("invert(", "hue-rotate(", "saturate("):
         assert bad not in text, (
             f"palette.css applies {bad} - a filter on a gallery figure changes "
@@ -726,7 +726,7 @@ def test_this_file_skips_rather_than_errors_without_the_docs_group(tmp_path):
     the site or launches a browser, and a run that does take minutes has failed
     the point of the test as surely as a red one.
     """
-    (tmp_path / "sitecustomize.py").write_text(BLOCKER)
+    (tmp_path / "sitecustomize.py").write_text(BLOCKER, encoding="utf-8")
     env = dict(os.environ, PYTHONPATH=str(tmp_path), **{NESTED: "1"})
 
     run = subprocess.run(

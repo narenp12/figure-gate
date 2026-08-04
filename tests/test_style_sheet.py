@@ -44,7 +44,7 @@ def test_colors_are_written_bare_not_with_a_hash():
     """The direct form of the same check, so a failure names the cause rather
     than leaving you to infer it from a log line."""
     offenders = []
-    for lineno, raw in enumerate(STYLE_SHEET.read_text().splitlines(), 1):
+    for lineno, raw in enumerate(STYLE_SHEET.read_text(encoding="utf-8").splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#") or ":" not in line:
             continue

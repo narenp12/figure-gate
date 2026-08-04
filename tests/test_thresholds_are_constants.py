@@ -50,7 +50,7 @@ COUNTING = ("len(", ".size", ".ndim", "count", "int(mpl.rcParams")
 def _comparisons(module):
     """(module, function, line, source, structural) per literal comparison."""
     path = pathlib.Path(inspect.getfile(module))
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     out = []
     for func in ast.walk(tree):
         if not isinstance(func, ast.FunctionDef):
@@ -189,7 +189,7 @@ def test_the_promoted_constants_are_the_values_that_were_inline():
 
 
 def test_the_readme_still_makes_the_claim_this_file_gates():
-    text = " ".join((SKILL.parent / "README.md").read_text().split())
+    text = " ".join((SKILL.parent / "README.md").read_text(encoding="utf-8").split())
     assert "Every threshold is a module-level constant" in text, (
         "the README no longer makes the claim this file exists to hold it to. "
         "If the sentence went, this file should go with it rather than "

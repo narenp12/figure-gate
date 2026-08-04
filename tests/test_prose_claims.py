@@ -166,7 +166,7 @@ def spans():
     """
     return [(doc_id(path), span)
             for path in PROSE_DOCS
-            for span in _spans_in(prose_only(path.read_text()))]
+            for span in _spans_in(prose_only(path.read_text(encoding="utf-8")))]
 
 
 def test_the_corpus_accounts_for_every_tracked_document():
@@ -210,7 +210,7 @@ def test_a_historical_document_says_what_it_is_dated_to(path):
     record. A changelog is dated by its headings and a spec by its front
     matter; something in `specs/` with neither is current-state prose that has
     been filed somewhere the sweep does not look."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert re.search(r"^(Date: |## )\d{4}-\d{2}-\d{2}", text, re.M) or \
         re.search(r"^## \d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2}", text, re.M), (
             f"{doc_id(path)} is exempted from the prose sweep as a historical "
@@ -221,7 +221,7 @@ def fenced_python():
     """(document, index, source) for every ```python block in the corpus."""
     out = []
     for path in PROSE_DOCS:
-        blocks = re.findall(r"```python\n(.*?)```", path.read_text(), re.S)
+        blocks = re.findall(r"```python\n(.*?)```", path.read_text(encoding="utf-8"), re.S)
         out.extend((doc_id(path), i, src) for i, src in enumerate(blocks))
     return out
 
@@ -282,7 +282,7 @@ def _cli_flags(module):
     building it means running `argparse` against a `sys.argv` the test does not
     own.
     """
-    source = pathlib.Path(inspect.getfile(module)).read_text()
+    source = pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")
     return set(re.findall(r'"(--[a-z-]+)"', source))
 
 
@@ -290,7 +290,7 @@ CLI_FLAGS = {name: _cli_flags(module) for name, module in MODULES.items()}
 ALL_FLAGS = set().union(*CLI_FLAGS.values())
 
 CONSOLE_SCRIPTS = set(re.findall(r"^([a-z-]+) = \"",
-                                 (ROOT / "pyproject.toml").read_text(),
+                                 (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
                                  re.M))
 
 # Aliases the prose uses in code spans, spelled the way the import line in the
@@ -313,7 +313,7 @@ def _appendix_definitions():
     `ordinal()` and `series()` are guide-defined, so nothing in the scripts has
     those names, and a resolver that only knows the modules calls them typos.
     """
-    return set(re.findall(r"^def ([a-z_][a-z0-9_]*)\(", GUIDE.read_text(),
+    return set(re.findall(r"^def ([a-z_][a-z0-9_]*)\(", GUIDE.read_text(encoding="utf-8"),
                           re.M))
 
 
@@ -380,10 +380,10 @@ def _tracked_files():
 
 TRACKED_FILES = _tracked_files()
 
-PYPROJECT = (ROOT / "pyproject.toml").read_text()
-RECIPE = (ROOT / "conda" / "recipe.yaml").read_text()
+PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+RECIPE = (ROOT / "conda" / "recipe.yaml").read_text(encoding="utf-8")
 WORKFLOWS = "\n".join(
-    path.read_text() for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")))
+    path.read_text(encoding="utf-8") for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")))
 
 
 def _ci_names():
@@ -398,7 +398,7 @@ def _ci_names():
     """
     names = set()
     for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         names |= set(re.findall(r"^  ([a-z][a-z0-9_-]*):$", text, re.M))
         names |= set(re.findall(r"^\s*-?\s*name:\s*(.+?)\s*$", text, re.M))
     return names
@@ -410,7 +410,7 @@ CI_NAMES = _ci_names()
 # place in the repository where a documented command is also a definition, so it
 # reads as one.
 MAKE_TARGETS = set(re.findall(r"^([a-z][a-z-]*):",
-                              (ROOT / "Makefile").read_text(), re.M))
+                              (ROOT / "Makefile").read_text(encoding="utf-8"), re.M))
 
 # Ruff rule codes the project selects, and the prefixes they belong to. Prose
 # names both: `E741` is a rule the configuration ignores by name, and `DOC` is
@@ -451,7 +451,7 @@ def _module_strings(module):
     what the source spells.
     """
     return set(re.findall(r'"([A-Z][A-Z ]*)"',
-                          pathlib.Path(inspect.getfile(module)).read_text()))
+                          pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")))
 
 
 STATUS_WORDS = set().union(*(_module_strings(m) for m in MODULES.values()))
@@ -462,10 +462,10 @@ STATUS_WORDS = set().union(*(_module_strings(m) for m in MODULES.values()))
 # `tests/`.
 TEST_SYMBOLS = set(re.findall(
     r"^([A-Z][A-Z0-9_]{2,})\s*[:=]", "\n".join(
-        path.read_text() for path in sorted((ROOT / "tests").glob("*.py"))),
+        path.read_text(encoding="utf-8") for path in sorted((ROOT / "tests").glob("*.py"))),
     re.M)) | set(re.findall(
         r"^def (test_[a-z0-9_]+)", "\n".join(
-            path.read_text() for path in sorted((ROOT / "tests").glob("*.py"))),
+            path.read_text(encoding="utf-8") for path in sorted((ROOT / "tests").glob("*.py"))),
         re.M))
 
 
@@ -479,7 +479,7 @@ def _headings():
     """
     out = set()
     for path in _tracked_markdown():
-        out |= set(re.findall(r"^(#{1,6} .+?)\s*$", path.read_text(), re.M))
+        out |= set(re.findall(r"^(#{1,6} .+?)\s*$", path.read_text(encoding="utf-8"), re.M))
     return out
 
 
@@ -878,7 +878,7 @@ def constants_in_module_paragraphs():
     """
     out = []
     for path in PROSE_DOCS:
-        for i, para in enumerate(path.read_text().split("\n\n")):
+        for i, para in enumerate(path.read_text(encoding="utf-8").split("\n\n")):
             named = set(MODULE_MENTION.findall(para))
             if len(named) != 1:
                 continue
@@ -911,7 +911,7 @@ def _style_sheet_hexes():
     only the `#` form finds the commentary and misses the settings, which made
     the two ink tokens the guide documents look like colours nothing ships.
     """
-    text = (SKILL / "assets" / "figure.mplstyle").read_text()
+    text = (SKILL / "assets" / "figure.mplstyle").read_text(encoding="utf-8")
     bare = re.findall(r"(?<![#\w])([0-9a-fA-F]{6})(?![\w])", text)
     return {h.lower() for h in HEX.findall(text)} | {f"#{h.lower()}"
                                                     for h in bare}
@@ -987,7 +987,7 @@ KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
 def doc_hexes():
     return sorted({(path.name, h.lower())
                    for path in PROSE_DOCS
-                   for h in HEX.findall(path.read_text())})
+                   for h in HEX.findall(path.read_text(encoding="utf-8"))})
 
 
 @pytest.mark.parametrize("document,hexcode", doc_hexes())
@@ -1031,7 +1031,7 @@ def end_claims():
     out = []
     for path in PROSE_DOCS:
         current = None
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if line.startswith("#"):
                 found = [m for m in list(colormaps) + list(COLORMAPS_ADDED_LATER)
                          if f"`{m}`" in line
@@ -1068,7 +1068,7 @@ WINDOW = re.compile(r"`t\s*[∈=]\s*\[([\d.]+),\s*([\d.]+)\]`")
 def window_claims():
     return sorted({(path.name, float(a), float(b))
                    for path in PROSE_DOCS
-                   for a, b in WINDOW.findall(path.read_text())})
+                   for a, b in WINDOW.findall(path.read_text(encoding="utf-8"))})
 
 
 @pytest.mark.parametrize("document,lo,hi", window_claims())
@@ -1136,7 +1136,7 @@ def test_a_retracted_claim_is_written_nowhere(claim):
     entry = RETRACTED_CLAIMS[claim]
     found = []
     for path in _retraction_corpus():
-        text = " ".join(path.read_text().split())
+        text = " ".join(path.read_text(encoding="utf-8").split())
         if re.search(entry["pattern"], text, re.I):
             found.append(path.relative_to(ROOT).as_posix())
     assert not found, (
@@ -1165,7 +1165,7 @@ def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
     assert re.search(pattern, shipped, re.I), (
         "the pattern no longer matches the message it was written to retire")
     assert not re.search(pattern, " ".join(
-        (SKILL / "references" / "style-guide.md").read_text().split()), re.I), (
+        (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8").split()), re.I), (
         "the pattern matches the corrected sentence too, so it forbids the "
         "replacement as well as the claim")
 
@@ -1315,7 +1315,12 @@ def test_every_swept_document_is_reachable_by_the_name_the_ledger_uses():
     """`document()` is only ever called for names already in a ledger, so an
     ambiguity introduced by a new file would sit undetected until somebody
     added an entry for it. Check the whole corpus, not the referenced part."""
-    shared = {name: [doc_id(p) for p in paths]
+    # Sorted, because the assertion is about which documents share a basename
+    # and not about the order a directory walk happened to return them in. It
+    # compared unsorted lists until the suite first ran on Windows, where the
+    # walk yields `conda/README.md` before `README.md` and this failed on a
+    # corpus that had not changed.
+    shared = {name: sorted(doc_id(p) for p in paths)
               for name, paths in DOCS_BY_NAME.items() if len(paths) > 1}
     assert shared == {"README.md": ["README.md", "conda/README.md"]}, (
         f"documents sharing a basename changed: {shared}. Any ledger entry "
@@ -1325,7 +1330,7 @@ def test_every_swept_document_is_reachable_by_the_name_the_ledger_uses():
 @pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
 def test_every_external_claim_is_still_written_where_the_ledger_says(claim):
     entry = EXTERNAL_CLAIMS[claim]
-    text = " ".join(document(entry["document"]).read_text().split())
+    text = " ".join(document(entry["document"]).read_text(encoding="utf-8").split())
     assert entry["anchor"] in text, (
         f"{claim} is recorded as verified against {entry['source']}, but "
         f"{entry['anchor']!r} is no longer in {entry['document']}. A rewritten "
@@ -1351,7 +1356,7 @@ def test_an_external_source_is_named_in_the_references(claim):
     """The reader gets what the ledger has: a citation in the document, not a
     comment in a test file."""
     entry = EXTERNAL_CLAIMS[claim]
-    text = " ".join(document(entry["document"]).read_text().split())
+    text = " ".join(document(entry["document"]).read_text(encoding="utf-8").split())
     surname = entry["source"].split(",")[0].split()[0].strip()
     assert surname in text or surname.lower() in text.lower(), (
         f"{claim} cites {entry['source']}, and {surname} appears nowhere in "
@@ -1442,7 +1447,7 @@ def test_context_axes_turns_a_saturated_surface_into_a_pass():
 # apart again.
 
 def test_the_two_entry_points_return_the_same_shape():
-    text = " ".join(README.read_text().split())
+    text = " ".join(README.read_text(encoding="utf-8").split())
     assert "`audit(fig)` returns `(ok, rows)`" in text, (
         "the README no longer states audit's return order in the form this "
         "test reads")

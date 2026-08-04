@@ -84,7 +84,7 @@ AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md"}
 
 
 def nav_targets():
-    lines = CONFIG.read_text().splitlines()
+    lines = CONFIG.read_text(encoding="utf-8").splitlines()
     start = next(i for i, l in enumerate(lines) if l.startswith("nav = ["))
     out = []
     for line in lines[start + 1:]:
@@ -202,7 +202,7 @@ def accidental_headings(text):
 @pytest.mark.parametrize("page,target", source_pages(),
                          ids=lambda v: getattr(v, "name", v))
 def test_no_line_becomes_a_heading_by_accident(page, target):
-    bad = accidental_headings(target.read_text())
+    bad = accidental_headings(target.read_text(encoding="utf-8"))
     report = "\n".join(f"  {target.name}:{n}: {line}" for n, line in bad)
     assert not bad, (
         f"{len(bad)} line(s) start with `#` but are not headings, so the "
@@ -226,7 +226,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 
 def build_steps():
     """The lines of the docs workflow that build the site."""
-    return [line.strip() for line in WORKFLOW.read_text().splitlines()
+    return [line.strip() for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
             if "zensical build" in line]
 
 
@@ -250,7 +250,7 @@ def test_the_build_installs_the_declared_group(step):
 
 
 def docs_group():
-    text = PYPROJECT.read_text()
+    text = PYPROJECT.read_text(encoding="utf-8")
     match = re.search(r"^docs = \[(.*?)^\]", text, re.S | re.M)
     assert match, "pyproject.toml no longer declares a `docs` group"
     return re.findall(r'"([A-Za-z0-9_.-]+)', match.group(1))
@@ -268,7 +268,7 @@ def test_a_page_using_directives_declares_the_handler_that_reads_them():
     the extension raises at import, the build exits 1, and the message names a
     module no page mentions. Tie the need to the declaration."""
     using = sorted(p.name for p in docs_paths("*.md")
-                   if re.search(r"^::: ", p.resolve().read_text(), re.M))
+                   if re.search(r"^::: ", p.resolve().read_text(encoding="utf-8"), re.M))
     if not using:
         pytest.skip("no page uses mkdocstrings directives")
     assert "mkdocstrings-python" in docs_group(), (
@@ -320,7 +320,7 @@ QUOTED = re.compile(
 
 def quoted_rows():
     return [(m.group(1), float(m.group(2)), float(m.group(3)), float(m.group(4)))
-            for m in map(QUOTED.match, CSS.read_text().splitlines()) if m]
+            for m in map(QUOTED.match, CSS.read_text(encoding="utf-8").splitlines()) if m]
 
 
 def test_the_stylesheet_table_is_still_parseable():
@@ -344,7 +344,7 @@ def test_the_stylesheet_names_the_surface_it_measured_against(variant, surface):
     """The surface is half of every contrast number. If the comment names one
     hex and the tests compute against another, both can be internally
     consistent and the site can still ship links under the floor."""
-    assert surface in CSS.read_text(), (
+    assert surface in CSS.read_text(encoding="utf-8"), (
         f"palette.css does not name {surface}, the {variant} slate background")
 
 
@@ -352,7 +352,7 @@ def test_the_configured_variant_is_one_the_stylesheet_measured():
     """Flipping `variant` in zensical.toml changes the dark background under
     every link on the site. A variant with no row in the table is a site whose
     contrast nobody has checked."""
-    match = re.search(r'^variant\s*=\s*"(\w+)"', CONFIG.read_text(), re.M)
+    match = re.search(r'^variant\s*=\s*"(\w+)"', CONFIG.read_text(encoding="utf-8"), re.M)
     assert match, "zensical.toml no longer states a theme variant"
     assert match.group(1) in SLATES, (
         f"zensical.toml selects the {match.group(1)!r} variant, which "
@@ -371,7 +371,7 @@ def scheme_link_colors():
     stylesheet off the page -- silently redirects the match into the wrong
     block and reports both schemes sharing a color.
     """
-    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    text = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
     values = dict(re.findall(r"--(fg-\w+):\s*(#[0-9a-fA-F]{6})", text))
     out = {}
     for scheme in ("default", "slate"):

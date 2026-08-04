@@ -37,7 +37,7 @@ CONDA_NAMES = {"matplotlib": "matplotlib-base"}
 
 
 def recipe_text():
-    return RECIPE.read_text()
+    return RECIPE.read_text(encoding="utf-8")
 
 
 def context():
@@ -100,7 +100,7 @@ def requirement(entry):
 
 def pyproject():
     tomllib = pytest.importorskip("tomllib")     # 3.11+, as the build needs
-    return tomllib.loads(PYPROJECT.read_text())
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
 
 def test_the_recipe_version_is_the_project_version():

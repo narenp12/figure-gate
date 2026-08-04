@@ -33,7 +33,7 @@ PYPROJECT = SCRIPTS.parent.parent / "pyproject.toml"
 
 def _wheel_config():
     tomllib = pytest.importorskip("tomllib")     # 3.11+; the build runs there
-    config = tomllib.loads(PYPROJECT.read_text())
+    config = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     return config["tool"]["hatch"]["build"]["targets"].get("wheel", {})
 
 
@@ -102,7 +102,7 @@ def _run(tmp_path, body):
         matplotlib.use("agg")
         import matplotlib.pyplot as plt
         from figure_gate import check_figure
-    """) + textwrap.dedent(body))
+    """) + textwrap.dedent(body), encoding="utf-8")
     result = subprocess.run([sys.executable, str(script)],
                             capture_output=True, text=True, cwd=tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr

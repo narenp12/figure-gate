@@ -41,7 +41,7 @@ def test_the_fallback_matches_the_builtin_where_the_builtin_exists():
     if "okabe_ito" not in colormaps:
         pytest.skip("matplotlib < 3.11 has no okabe_ito colormap")
     from matplotlib.colors import to_hex
-    source = DEMO.read_text()
+    source = DEMO.read_text(encoding="utf-8")
     start = source.index('OKABE_ITO = [')
     end = source.index("]", start) + 1
     literal = eval(source[start + len("OKABE_ITO = "):end])   # noqa: S307

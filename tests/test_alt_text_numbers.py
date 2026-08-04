@@ -593,7 +593,7 @@ def test_the_examples_still_describe_the_figures_this_file_reads():
     show."""
     literals = []
     for path in (DEMO, GALLERY):
-        for node in ast.walk(ast.parse(path.read_text())):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not isinstance(node, ast.Call):
                 continue
             func = getattr(node.func, "attr", None) or getattr(
