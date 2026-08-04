@@ -81,3 +81,56 @@ def test_each_configured_pattern_is_in_the_file_it_points_at(entry):
     assert found, (
         f"{entry['filename']} does not contain {pattern!r}, so the bump would "
         f"fail there -- after rewriting every file configured ahead of it")
+
+
+def test_the_commit_message_is_configured_where_the_tool_reads_it():
+    """`message` belongs to `[tool.bumpversion]`. Under a part table --
+    `[tool.bumpversion.parts.dev]`, where it sat through 0.6.0 -- it is a key on
+    the part, bump-my-version never looks for it there, and the release commit
+    gets the stock `Bump version: X → Y` the key exists to replace. Nothing
+    reports the miss: the config parses, the bump succeeds, and the message is
+    wrong."""
+    assert bumpversion().get("message") == "chore: release {new_version}"
+    parts = bumpversion().get("parts", {})
+    assert "message" not in parts.get("dev", {}), (
+        "message is on the dev part, where bump-my-version does not read it")
+
+
+def test_the_changelog_search_is_anchored_to_a_heading():
+    """The changelog writes about its own headings, so `## Unreleased` occurs
+    inside sentences as well as at the top of the open section. Unanchored, the
+    bump replaces all of them: 0.6.0 shipped with two sentences saying a missing
+    `## 0.6.0 — 2026-07-30` heading, describing a gate that asks for no such
+    thing."""
+    entry = next(e for e in bumpversion()["files"]
+                 if e["filename"] == "CHANGELOG.md")
+    assert entry.get("regex"), "an unanchored search rewrites inline mentions"
+    assert entry["search"].startswith("^") and entry["search"].endswith("$")
+
+
+def test_no_section_names_its_own_heading_inside_a_sentence():
+    """The damage the anchor prevents, checked on the file itself rather than on
+    the config that writes it.
+
+    A bump rewrites `## Unreleased` to the version being cut, so a mention it
+    corrupted always names the heading of the section it sits in. Writing about
+    another release's heading is ordinary prose -- the entry describing this
+    very defect quotes 0.6.0's -- and only the self-reference is the tell."""
+    import re
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    heading = None
+    buried = []
+    for line in changelog.splitlines():
+        match = re.match(r"^## (\d+\.\d+\.\d+ — \d{4}-\d{2}-\d{2})$", line)
+        if match:
+            heading = match.group(1)
+            continue
+        if line.startswith("## "):
+            heading = None
+            continue
+        if heading and f"## {heading}" in line:
+            buried.append(line)
+    assert not buried, (
+        "a bump rewrote `## Unreleased` inside these sentences:\n"
+        + "\n".join(buried))

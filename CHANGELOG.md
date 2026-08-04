@@ -58,6 +58,17 @@ happened, so `uv build` on a checkout ahead of v0.6.0 produced a
 `figure_gate-0.6.0` wheel that was not the 0.6.0 on PyPI. Releases build from a
 tag on a clean checkout and were never affected.
 
+Two things the bump config said and did not do. Its `## Unreleased` search was
+unanchored, so cutting a release rewrote every mention of that string in the
+file and not only the heading: the 0.6.0 notes explain the gate that requires an
+Unreleased section, and shipped saying a missing `## 0.6.0 — 2026-07-30`
+heading. Those two sentences are repaired here and the search is anchored to a
+line of its own. And `message = "chore: release {new_version}"` sat under
+`[tool.bumpversion.parts.dev]`, a table where nothing reads it, so both releases
+cut with this config carried the stock `Bump version: X → Y` the key exists to
+replace. `tests/test_version_sites.py` holds both, and holds the changelog to
+having no release heading buried inside a sentence.
+
 **The source distribution lists what it is instead of what it is not.** The
 sdist config was a blacklist of agent-scratch paths and it had a hole:
 `.superpowers/` is neither tracked nor gitignored, so a local `make dist`
@@ -747,7 +758,7 @@ Pushing the tag still publishes; `release.yml` has not moved.
 
 `CHANGELOG.md` is first in the file list, and the order is load-bearing.
 bump-my-version writes each file as it reaches it rather than validating the
-set first, so with the changelog last a missing `## 0.6.0 — 2026-07-30` heading leaves
+set first, so with the changelog last a missing `## Unreleased` heading leaves
 the other three bumped on disk before it errors. First, it touches nothing. The
 failure itself is deliberate: a release with no notes written for it now stops
 before the tag rather than at the `no '## $version' section` check in
@@ -759,7 +770,7 @@ before the tag rather than at the `no '## $version' section` check in
 to find it in. The last one is the reason the test exists. bump-my-version does
 refuse to write a file whose pattern is missing, but only when someone runs it,
 which is the moment a release is being cut. `CHANGELOG.md` is exempt from that
-check, since `## 0.6.0 — 2026-07-30` is absent for most of the life of the repository
+check, since `## Unreleased` is absent for most of the life of the repository
 and present only once there are notes.
 
 The two checks that caught the 0.4.0 recipe stay. What changes is their job:
