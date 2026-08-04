@@ -107,7 +107,7 @@ jobs:
       # endpoint 404s for it -- so the upload runs through the PyPA action,
       # which signs the files and attaches a PEP 740 attestation. Nothing else
       # about the pipeline changes; uv still builds.
-      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
   # v0.1.2 and v0.1.3 shipped to PyPI and left no GitHub release, because this
   # workflow used to end at the step above. The notes are cut from CHANGELOG.md
