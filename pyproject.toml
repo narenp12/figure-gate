@@ -1,6 +1,6 @@
 [project]
 name = "figure-gate"
-version = "0.7.0.dev0"
+version = "0.7.0"
 description = "Mechanical gates for publication figures: colorblind-safe color, composition, and type legibility at print size."
 readme = "README.md"
 license = "MIT"
@@ -172,7 +172,7 @@ exclude = [".DS_Store"]
 # whole recovery, but a failure that touches nothing is a failure nobody has to
 # read a diff to trust.
 [tool.bumpversion]
-current_version = "0.7.0.dev0"
+current_version = "0.7.0"
 commit = true
 tag = true
 tag_name = "v{new_version}"
@@ -208,29 +208,42 @@ serialize = [
     "{major}.{minor}.{patch}",
 ]
 
+# The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
+# release commits already in the log, and drops the arrow.
+#
+# It has to sit on `[tool.bumpversion]` itself. Written under
+# `[tool.bumpversion.parts.dev]`, which is where it was through 0.6.0, it is a
+# key on a part rather than on the config: bump-my-version reads no `message`
+# there, says nothing about the one it found, and commits the stock text. Both
+# releases cut with this config carried it.
+message = "chore: release {new_version}"
+
 [tool.bumpversion.parts.dev]
 optional_value = "None"
 values = ["0", "None"]
-
-# The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
-# release commits already in the log, and drops the arrow.
-message = "chore: release {new_version}"
 
 # The heading release.yml cuts the GitHub release notes out of, and the entry
 # that fails a release with no notes. The date format matches every heading
 # already in the file: the awk in that workflow matches on `## ` and the
 # version field alone, but a heading that reads differently from its neighbours
 # is a diff someone has to stop and think about.
+#
+# Anchored to a line of its own, because the changelog writes about its own
+# headings. `## Unreleased` unanchored replaced every mention of the string,
+# including the ones inside sentences, and 0.6.0 shipped with two: the notes
+# explaining the gate that requires an Unreleased section came out saying a
+# missing `## 0.6.0 — 2026-07-30` heading, which is not a thing that gate has
+# ever asked for. The heading is the only occurrence that starts a line.
 [[tool.bumpversion.files]]
 filename = "CHANGELOG.md"
-search = "## Unreleased"
+regex = true
+search = "^## Unreleased$"
 replace = "## {new_version} — {now:%Y-%m-%d}"
 
-# Anchored, and the only entry here that needs to be. `current_version` above
-# ends in `version = "0.5.0"`, so an unanchored search rewrites that line as
-# well -- harmlessly today, since it wants the same new value and
-# bump-my-version maintains it anyway, but it is a second write to a line the
-# tool owns.
+# Anchored for a different reason. `current_version` above ends in
+# `version = "0.5.0"`, so an unanchored search rewrites that line as well --
+# harmlessly today, since it wants the same new value and bump-my-version
+# maintains it anyway, but it is a second write to a line the tool owns.
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
 regex = true

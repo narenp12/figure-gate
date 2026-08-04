@@ -117,6 +117,16 @@ checker cannot see that an arrow points at the wrong object, that reading order
 runs backwards, or that a label is true of the concept and false of the curve
 beside it. Render it and look at it.
 
+A row can also be reporting the checker rather than the figure. Every gate runs
+inside its own exception handler, so one that raises keeps its row and puts the
+exception in the detail, marked as a defect in the checker rather than in the
+figure. It takes its own severity: an advisory that crashed warns, a hard gate
+that crashed fails, because a gate that measured nothing has not cleared the
+figure. No gate is known to raise, and twenty adversarial figures, including
+3D, polar, all-NaN, infinite and zero-sized ones, found none, but the matplotlib
+floor these gates are written against has no ceiling above it, and they read
+internals that are free to move.
+
 Two blind spots are worth naming because a passing row looks the same as an
 absent one. The colormap gate reads a `Colormap`'s name to tell an encoding from
 a hand-set list of colors, so a map matplotlib left unnamed is skipped rather
@@ -163,7 +173,7 @@ neither told anyone what to change. Splitting an arrow against a tilde would
 have put the whole distinction on one glyph in a wall of detail text, so the
 marks are words.
 
-**Gates are tested for their ability to fail.** The suite is 1367 tests, and
+**Gates are tested for their ability to fail.** The suite is 1375 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

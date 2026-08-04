@@ -2,7 +2,7 @@ schema_version: 1
 
 context:
   name: figure-gate
-  version: "0.7.0.dev0"
+  version: "0.7.0"
   python_min: "3.11"
 
 package:
@@ -11,13 +11,15 @@ package:
 
 source:
   url: https://pypi.org/packages/source/f/figure-gate/figure_gate-${{ version }}.tar.gz
-  sha256: 57efcc97312b1c93de1b7266f607d6dc8a0ab6deca263435028a99b8a19d589b
+  sha256: e4930904c3653c08318e11b6d74972621bba6103746043ea31c3e528edff7656
 
 build:
-  # Three unnamespaced modules in site-packages, deliberately: they are meant to
-  # be vendored as single files, so the installed import line and the vendored
-  # one are the same. The sheet is not among them; it sits in figure_gate_data/,
-  # because its name is generic and the root of site-packages is shared.
+  # Since 0.7.0 the three modules install as the `figure_gate` package, which is
+  # what the entry points and the import tests below spell. Through 0.6.0 they
+  # were loose files at the root of site-packages, so that a vendored copy and
+  # an installed one took the same import line; the generic names cost more than
+  # the symmetry was worth. The style sheet ships inside the package, beside the
+  # module that reads it.
   noarch: python
   number: 0
   script: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
@@ -62,10 +64,12 @@ about:
     its column width, clipped text, and Type 3 fonts, which IEEE PDF eXpress
     refuses at upload.
 
-    Two scripts, check-palette and check-figure. check_palette.py imports
-    nothing outside the standard library, and both are meant to be run in CI or
-    copied into a project outright. Every gate has a test that proves it can
-    fail.
+    Two commands, check-palette and check-figure. An install exposes the
+    modules as figure_gate.check_palette and figure_gate.check_figure; through
+    0.6.0 they were loose modules at the root of site-packages. Either file is
+    also meant to be copied into a project outright, and check_palette.py
+    imports nothing outside the standard library. Every gate has a test that
+    proves it can fail.
   license: MIT
   license_file: LICENSE
 

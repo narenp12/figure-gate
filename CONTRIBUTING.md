@@ -142,29 +142,63 @@ no install step in it to make sure the claim stays true.
 
 ## Cutting a release
 
-The version is written in four files. Do not edit them by hand:
+The version is written in four files and a tag. Do not edit any of them by
+hand: `bump-my-version` writes `CHANGELOG.md`, `pyproject.toml`,
+`skill/.claude-plugin/plugin.json` and `conda/recipe.yaml` together, and 0.5.0
+is what a hand-run bump costs: the recipe was left at 0.4.0 and all three
+pytest jobs failed on the release PR.
+
+Between releases the tree carries a development version, `X.Y.Z.devN`, and
+cutting the release is the step that drops the suffix. So there are two bumps,
+and only one of them is a release:
 
 ```bash
-uv run bump-my-version bump minor    # or patch, or major
-git push && git push --tags
+uv run bump-my-version bump dev      # 0.8.0.dev0 -> 0.8.0, cuts the release
+uv run bump-my-version bump minor    # 0.8.0 -> 0.9.0.dev0, opens the next cycle
 ```
-
-That rewrites `CHANGELOG.md`, `pyproject.toml`,
-`skill/.claude-plugin/plugin.json` and `conda/recipe.yaml`, commits, and tags
-`v<new>`. Pushing the tag is what publishes: `release.yml` runs the suite,
-builds, uploads to PyPI with attestations, and cuts the GitHub release from the
-changelog section named after the version.
 
 Write the notes first, under a `## Unreleased` heading. The bump renames that
 heading to the version and the date, and fails if there is no such heading, so
 a release with nothing written about it stops before the tag rather than in the
 workflow after it.
 
+Then, on a branch, because `main` takes no direct pushes:
+
+1. Run the release bump, the first command above. It commits a message reading
+   "chore: release" and the new version, and tags `v<new>` **on your branch**.
+2. Open the pull request and merge it. The release commit reaches `main` as a
+   squash like every other change, which means the local tag from step 1 points
+   at a commit that is not on `main` and must not be pushed. Delete it, then
+   tag the merged commit: the v0.7.0 tag is on a785ef6, the merge of #56, not
+   on the bump commit that produced it.
+
+   ```bash
+   git tag -d v<new>
+   git fetch origin main
+   git tag v<new> origin/main          # after confirming that is the release commit
+   git push origin v<new>
+   ```
+
+3. Pushing the tag is what publishes. `release.yml` runs the suite, builds,
+   uploads to PyPI with attestations, and cuts the GitHub release from the
+   changelog section named after the version.
+4. Update `sha256` in `conda/recipe.yaml` with `conda/update_recipe.py`. It is
+   the one version-shaped field the bump leaves alone, because it cannot be
+   known until the sdist exists on PyPI. conda-forge's own feedstock is
+   separate and its bot opens the update PR from PyPI; `conda/README.md` is
+   that half.
+5. Open the next cycle with the second command above, minor or patch or major,
+   on a branch and through a pull request in the same way.
+
+**Any tag matching `v*` is a publish, including a development one.**
+`release.yml` triggers on the pattern, and the guard in it compares the tag
+against the project version rather than judging the shape of either, so a
+pushed v0.9.0.dev0 tag would agree with itself, upload to PyPI, and only then
+fail on the missing changelog section, after the release is public and the
+version number is spent. Both bumps tag; only the tag from the release bump is
+ever pushed.
+
 Rehearse anything that changes packaging on TestPyPI first. `testpypi.yml` is
 manual and takes the branch you dispatch it on, and TestPyPI refuses version
 reuse just as PyPI does, so a rehearsal needs a `.devN` version that is never
 tagged and a branch that is never merged.
-
-`sha256` in `conda/recipe.yaml` is the one version-shaped field the bump leaves
-alone, because it cannot be known until the sdist exists on PyPI. Update it
-with `conda/update_recipe.py` after the release lands.

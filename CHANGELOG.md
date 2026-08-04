@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+Documentation only. No code changed, and the public API is where 0.7.0 left it.
+
+**The docs say which import line a given install wants.** 0.7.0 moved the
+installed modules into a package, and the two indexes do not publish in the
+same hour: conda-forge follows PyPI through the feedstock's autotick bot, so
+for a while after each release `conda install` hands back the release before
+it. On the day 0.7.0 shipped that was 0.6.0, whose modules are flat and whose
+import line is the vendored one. The README and the getting-started page name
+the version each import line belongs to, and how to read which one you got,
+rather than presenting the two install routes as interchangeable.
+
+**The vendoring instructions cover `suggest_fixes.py`.** They copied three
+files and named two scripts while the README advertised a third, so the route
+the docs call the default was the one route with no way to reach `suggest`. It
+is a fourth `cp`, marked optional, beside a sentence saying what a copy without
+it loses and what `check_figure.py` genuinely cannot run without.
+
+**`py.typed` is documented where a caller would look for it.** It shipped in
+0.7.0 and the release notes were the only place saying so.
+
+**The gates page names the row a crashed gate produces.** The audit stopped
+losing itself to one raising gate in 0.7.0, and the row it reports instead
+is a row about the checker rather than about the figure, which is a thing a
+reader of that page has to be able to recognise.
+
+**The release procedure in `CONTRIBUTING.md` is the one that was followed.** It
+still said `bump minor` cuts a release, which stopped being true when the tree
+started carrying a development version: `bump dev` cuts, and `bump minor` opens
+the next cycle. Both bumps tag, `release.yml` triggers on any `v*` tag, and its
+version guard compares the tag against the project rather than judging the shape
+of either, so the cycle-opening tag is one that would publish a development
+version to PyPI if it were ever pushed. The section says that, and it says that
+the tag goes on the merged commit, which is where v0.7.0 sits and is not where
+the bump put it.
+
+**One copy of the API promise.** It was in the README and on the
+getting-started page verbatim, 1246 characters each, in a repository whose docs
+site is built on symlinks so that no page is a second copy of another. The docs
+site has the statement; the README has the two sentences a reader of the PyPI
+page needs and a link.
+
+## 0.7.0 — 2026-08-03
+
 **Installed, the checkers are a package: `from figure_gate import
 check_figure`.** This is a breaking change on the install path and the reason
 the next release is 0.7.0. Through 0.6.0 the wheel put `check_figure` and
@@ -57,6 +100,17 @@ suffix. The tree used to carry the version of the release that had already
 happened, so `uv build` on a checkout ahead of v0.6.0 produced a
 `figure_gate-0.6.0` wheel that was not the 0.6.0 on PyPI. Releases build from a
 tag on a clean checkout and were never affected.
+
+Two things the bump config said and did not do. Its `## Unreleased` search was
+unanchored, so cutting a release rewrote every mention of that string in the
+file and not only the heading: the 0.6.0 notes explain the gate that requires an
+Unreleased section, and shipped saying a missing `## 0.6.0 — 2026-07-30`
+heading. Those two sentences are repaired here and the search is anchored to a
+line of its own. And `message = "chore: release {new_version}"` sat under
+`[tool.bumpversion.parts.dev]`, a table where nothing reads it, so both releases
+cut with this config carried the stock `Bump version: X → Y` the key exists to
+replace. `tests/test_version_sites.py` holds both, and holds the changelog to
+having no release heading buried inside a sentence.
 
 **The source distribution lists what it is instead of what it is not.** The
 sdist config was a blacklist of agent-scratch paths and it had a hole:
@@ -747,7 +801,7 @@ Pushing the tag still publishes; `release.yml` has not moved.
 
 `CHANGELOG.md` is first in the file list, and the order is load-bearing.
 bump-my-version writes each file as it reaches it rather than validating the
-set first, so with the changelog last a missing `## 0.6.0 — 2026-07-30` heading leaves
+set first, so with the changelog last a missing `## Unreleased` heading leaves
 the other three bumped on disk before it errors. First, it touches nothing. The
 failure itself is deliberate: a release with no notes written for it now stops
 before the tag rather than at the `no '## $version' section` check in
@@ -759,7 +813,7 @@ before the tag rather than at the `no '## $version' section` check in
 to find it in. The last one is the reason the test exists. bump-my-version does
 refuse to write a file whose pattern is missing, but only when someone runs it,
 which is the moment a release is being cut. `CHANGELOG.md` is exempt from that
-check, since `## 0.6.0 — 2026-07-30` is absent for most of the life of the repository
+check, since `## Unreleased` is absent for most of the life of the repository
 and present only once there are notes.
 
 The two checks that caught the 0.4.0 recipe stay. What changes is their job:
