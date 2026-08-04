@@ -230,3 +230,104 @@ def test_audit_api_skips_a_module_that_did_not_exist_at_the_tag(tmp_path, monkey
             mod.main()
     assert exc_info.value.code == 0
     assert "new since" in capsys.readouterr().out
+
+
+def _pyproject(tmp_path, version: str) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        f'[project]\nname = "figure-gate"\nversion = "{version}"\n',
+        encoding="utf-8")
+
+
+def test_audit_api_reads_the_release_heading_after_the_bump(tmp_path, monkeypatch):
+    """The release commit renames `## Unreleased` to the version it cuts, and
+    the break is named in the section under that heading. Reading only
+    `## Unreleased` failed every release that carried one."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog(
+            "## 0.7.0 — 2026-08-03\n\n"
+            "- `contrast` was removed from the public API.\n"
+        ), encoding="utf-8")
+    _pyproject(tmp_path, "0.7.0")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (1, "skill/scripts/check_figure.py:0: contrast: Public object was removed\n", ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code == 0
+
+
+def test_audit_api_still_fails_when_the_release_heading_is_silent(tmp_path, monkeypatch):
+    """Reading the version's own section is not the gate going quiet: a break
+    the notes do not name fails under a release heading exactly as it does
+    under `## Unreleased`."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog("## 0.7.0 — 2026-08-03\n\nNo mention of the break.\n"),
+        encoding="utf-8")
+    _pyproject(tmp_path, "0.7.0")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (1, "skill/scripts/check_figure.py:0: contrast: Public object was removed\n", ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code != 0
+    assert "0.7.0 section does not name them" in str(exc_info.value)
+
+
+def test_audit_api_does_not_read_an_older_release_section(tmp_path, monkeypatch):
+    """The section is the one matching `pyproject.toml`, not whichever is
+    topmost. A paragraph in a shipped release must not stand in for a break
+    made after it went out."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog(
+            "## 0.6.0 — 2026-07-30\n\n"
+            "- `contrast` was removed from the public API.\n"
+        ), encoding="utf-8")
+    _pyproject(tmp_path, "0.7.0")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (1, "skill/scripts/check_figure.py:0: contrast: Public object was removed\n", ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code != 0
+
+
+def test_audit_api_prefers_unreleased_while_the_cycle_is_open(tmp_path, monkeypatch):
+    """Mid-cycle `pyproject.toml` carries `0.7.0.dev0` and the notes are still
+    under `## Unreleased`. The dev version has no heading of its own, and the
+    open section is the one that has to name the break."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog(
+            "## Unreleased\n\n"
+            "- `contrast` was removed from the public API.\n"
+        ), encoding="utf-8")
+    _pyproject(tmp_path, "0.7.0.dev0")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (1, "skill/scripts/check_figure.py:0: contrast: Public object was removed\n", ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code == 0

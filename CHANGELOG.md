@@ -109,6 +109,14 @@ job now runs the script, which is the copy with tests.
 a tag older than the file needed a new branch: a module with no history at the
 tag is reported as new rather than as griffe failing to run.
 
+The gate also reads the release's own heading, not only `## Unreleased`. The
+release commit renames that heading to the version it cuts, in the same commit
+that drops the `.dev` suffix, so the gate ran against an empty section and
+failed every release carrying a break -- on the commit that had just written
+the break down. It matches the heading to `pyproject.toml`'s version rather
+than taking whichever section is topmost, so a paragraph in a shipped release
+cannot stand in for a break made after it went out.
+
 **What the API promises is now written down**, in the README and in the getting
 started guide: every non-underscore name in the three modules, breakable by a
 minor bump below 1.0, with the row *shape* rather than the row *count* being
