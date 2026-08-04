@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-08-03
 
 **Installed, the checkers are a package: `from figure_gate import
 check_figure`.** This is a breaking change on the install path and the reason
