@@ -37,7 +37,15 @@ jobs:
       # holds security-events: write, and a tag can be moved.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+      # init and analyze move together, always. They are one action published
+      # under one tag, and a run that mixes two versions dies in the analyze
+      # post-action with "Loaded a configuration file for version X, but
+      # running version Y". Dependabot raised them as PR #52 and PR #54, one
+      # line each, and both failed for that reason; neither could have gone
+      # green alone, and merging either would have broken CodeQL on main until
+      # the other landed. The group in dependabot.yml now keeps them in one
+      # pull request.
+      - uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           languages: ${{ matrix.language }}
           # Beyond the default pack: this repository is small enough that the
@@ -46,6 +54,6 @@ jobs:
 
       # No build step. Everything here is interpreted, and CodeQL's extractors
       # read the tree directly.
-      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+      - uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           category: "/language:${{ matrix.language }}"
