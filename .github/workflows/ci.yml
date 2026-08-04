@@ -98,20 +98,39 @@ jobs:
         run: uv run --only-group api python skill/scripts/audit_api.py
 
   test:
-    name: pytest, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
-    runs-on: ubuntu-latest
+    name: pytest, ${{ matrix.os }}, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
+    runs-on: ${{ matrix.os }}
     # The suite runs in a couple of minutes. Without this, a stalled apt mirror
     # in the TeX step below is not a failure, it is a job that sits on a runner
     # until GitHub's six-hour cap, and the run stays yellow the whole time.
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # Linux carries the version matrix; macOS and Windows get one leg each, on
+      # the newest supported Python and matplotlib.
+      #
+      # Two legs rather than a third dimension, because what the other platforms
+      # are here to check is not version-specific. `check_fonts` asks whether the
+      # family a figure names is one the machine can actually resolve, and font
+      # availability is the most OS-dependent thing this project touches -- every
+      # run until now was on a Linux image with one font situation. The rest is
+      # path handling: `_style_sheet` joins paths and `alt_metadata` switches on
+      # a filename suffix, and neither had ever been asked a question on a
+      # case-insensitive filesystem or behind a backslash separator.
       matrix:
+        os: [ubuntu-latest]
         python: ["3.11", "3.13"]
         matplotlib: ["latest"]
         include:
-          - python: "3.11"
+          - os: ubuntu-latest
+            python: "3.11"
             matplotlib: "3.8.4"
+          - os: macos-latest
+            python: "3.13"
+            matplotlib: "latest"
+          - os: windows-latest
+            python: "3.13"
+            matplotlib: "latest"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -124,6 +143,10 @@ jobs:
           # glob matched nothing and the key never changed when a dependency did.
           cache-dependency-glob: "pyproject.toml"
       - name: Install
+        # Stated, because the default on the Windows leg is pwsh and the `if`
+        # below is `[ ... ]`, which pwsh parses as an array literal and runs
+        # without error -- selecting the wrong branch rather than failing.
+        shell: bash
         run: |
           uv pip install --system pytest pytest-xdist
           if [ "${{ matrix.matplotlib }}" = "latest" ]; then
@@ -142,7 +165,7 @@ jobs:
       # rather than over anything version-specific, so running it on every leg
       # would buy three copies of one answer.
       - name: Install the differential oracle (this job only)
-        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: uv pip install --system cmasher
       # Same shape, same reason, for the one test that needs a real TeX:
       # `test_pgf_rejects_the_metadata_kwarg_at_any_value` asserts that
@@ -158,7 +181,7 @@ jobs:
       # on the install because a silent step gives a reader nothing to look at
       # when it does stall again.
       - name: Install TeX (for the PGF test, this leg only)
-        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: |
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq \
@@ -177,7 +200,7 @@ jobs:
       # dead for months. This leg is the only one that can assert the row, so
       # assert here that it did, rather than trusting the step above ran.
       - name: The PGF test ran here rather than skipping
-        if: matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: |
           pytest tests/test_figure.py::test_pgf_rejects_the_metadata_kwarg_at_any_value \
             -q -rs | tee "$RUNNER_TEMP/pgf.log"
