@@ -43,6 +43,7 @@ Checks, in the order `audit` runs them
 
 from __future__ import annotations
 
+import importlib
 import itertools
 import math
 from collections import Counter
@@ -57,6 +58,33 @@ if TYPE_CHECKING:
     import numpy as np
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+
+
+def _sibling(name: str) -> Any:
+    """A sibling checker module, or None when it was not copied along.
+
+    These files are meant to be vendored one at a time, so every use of one
+    from another is optional and guarded. There are two layouts to find it in:
+    installed, where both are modules of the `figure_gate` package, and
+    vendored, where they are loose files beside each other. `__package__` is
+    empty in the second, which is what distinguishes them.
+
+    One helper, rather than the two-step written out at each call site. It was
+    written out, and when the package layout arrived one of the three sites was
+    missed -- `check_colormap`, whose fallback returns True. So on the install
+    path that gate reported a pass and the words "not importable beside this
+    file", and stopped classifying colormaps entirely. A guarded import whose
+    failure is a pass is exactly the kind that has to exist once.
+    """
+    if __package__:
+        try:
+            return importlib.import_module(f".{name}", __package__)
+        except ImportError:
+            pass
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        return None
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -1629,10 +1657,8 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
         return True, "no categorical series colors"
 
     fails, notes = [], []
-    cp: Any = None
-    try:
-        import check_palette as cp  # type: ignore[no-redef]
-    except ImportError:
+    cp: Any = _sibling("check_palette")
+    if cp is None:
         notes.append("check_palette.py is not importable beside this file, "
                      "so separation went unchecked")
 
@@ -2159,28 +2185,28 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
 # --- the sheet itself -------------------------------------------------------
 
 def _style_sheet() -> Path | None:
-    """`STYLE_SHEET` if the project set one, else `figure.mplstyle` in the three
-    places it is laid out: `figure_gate_data/` as the wheel installs it, beside
-    this script as the skill tells you to vendor it, and `assets/` next to
-    `scripts/` as this repository keeps it.
+    """`STYLE_SHEET` if the project set one, else `figure.mplstyle` in the two
+    places it is laid out: beside this file -- which covers both the installed
+    package and a vendored copy -- and `assets/` next to `scripts/`, as this
+    repository keeps it.
 
     A configured path is returned whether or not it exists: a sheet named and
     missing is a mistake worth a row, not a silent fall-through to a sheet the
     project did not ask for.
 
-    The installed location is probed first, and the order is load-bearing. On
-    the install path `here` is the root of `site-packages`, so a
-    `figure.mplstyle` dropped there by another distribution would otherwise win
-    over this project's own. Probing the namespaced directory first means that
-    can only happen in an installation missing its own sheet. Vendored layouts
-    are unaffected: no `figure_gate_data/` sits beside a copied checker, so the
-    first candidate misses and the second answers.
+    There were three candidates until 0.7.0, and the first was
+    `figure_gate_data/figure.mplstyle`, probed ahead of the rest. That
+    directory existed because the modules installed to the root of
+    `site-packages`, where a bare `figure.mplstyle` is a name any distribution
+    could claim, so the sheet needed somewhere namespaced to live and needed to
+    be found before a stray one. `here` is now the `figure_gate` package
+    directory, which is already namespaced, so the sheet sits beside this file
+    on both routes and one candidate covers what two did.
     """
     if STYLE_SHEET is not None:
         return Path(STYLE_SHEET)
     here = Path(__file__).resolve().parent
-    for cand in (here / "figure_gate_data" / "figure.mplstyle",
-                 here / "figure.mplstyle",
+    for cand in (here / "figure.mplstyle",
                  here.parent / "assets" / "figure.mplstyle"):
         if cand.is_file():
             return cand
@@ -2486,9 +2512,8 @@ ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
 def check_colormap(fig: Figure) -> tuple[bool | str, str]:
-    try:
-        import check_palette as cp
-    except ImportError:
+    cp = _sibling("check_palette")
+    if cp is None:
         return True, ("check_palette.py is not importable beside this file, "
                       "so no colormap was classified")
 
@@ -2786,8 +2811,8 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     import matplotlib as mpl
     path = _style_sheet()
     if path is None:
-        return True, ("no figure.mplstyle in figure_gate_data/, beside this "
-                      "script, or in assets/, nothing to compare")
+        return True, ("no figure.mplstyle beside this script or in assets/, "
+                      "nothing to compare")
     if not path.is_file():
         return "warn", (f"STYLE_SHEET is set to {path}, which is not a file: "
                         "nothing was compared, and the sheet you meant is not "
@@ -2917,9 +2942,34 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     # orders, and a registry that supplied them positionally would hand a
     # renderer to a `scale` parameter the moment a signature was reordered,
     # which is a wrong number rather than an exception.
-    rows = [(gate.name, *gate.func(fig, **{n: available[n]
-                                           for n in gate.needs}))
-            for gate in GATES]
+    rows: list[tuple[str, bool | str, str]] = []
+    for gate in GATES:
+        try:
+            status, detail = gate.func(
+                fig, **{n: available[n] for n in gate.needs})
+        except Exception as exc:                            # noqa: BLE001
+            # One gate raising used to lose the whole audit: this was a list
+            # comprehension, so an exception anywhere in the twenty-one
+            # propagated and the caller got a traceback instead of the twenty
+            # answers that had already been measured. These gates read deep
+            # matplotlib internals and `matplotlib>=3.8` has no upper bound, so
+            # the version that breaks one of them is a version nobody has
+            # released yet.
+            #
+            # The verdict follows the gate's own severity rather than being
+            # uniformly soft. An advisory that crashed warns; a hard gate that
+            # crashed fails, because a gate that measured nothing has not
+            # cleared the figure, and reporting it as a pass is the green run
+            # that quietly stopped checking.
+            #
+            # The detail says whose defect it is. A reader whose build just
+            # turned red should not go looking at their own figure first.
+            status = "warn" if gate.advisory else False
+            detail = (f"gate raised {type(exc).__name__}: {exc}  [FIX] this is "
+                      f"a defect in the checker, or a matplotlib change it has "
+                      f"not caught up with -- not something wrong with the "
+                      f"figure. Please report it.")
+        rows.append((gate.name, status, detail))
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.
     return all(s is not False for _, s, _ in rows), rows
@@ -2979,9 +3029,8 @@ def _print_suggestions(rows: Sequence[tuple[str, bool | str, str]]) -> None:
     scripts are meant to be copied into a project one at a time, and a top-level
     import would make the audit unrunnable without a file that only adds advice.
     """
-    try:
-        import suggest_fixes
-    except ImportError:
+    suggest_fixes = _sibling("suggest_fixes")
+    if suggest_fixes is None:
         print("  suggest_fixes.py is not importable beside this file, so no "
               "remedies were offered\n")
         return
