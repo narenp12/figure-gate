@@ -82,8 +82,13 @@ def oracle():
 
         pytest.skip(f"cmasher does not import under matplotlib "
                     f"{matplotlib.__version__}: {exc!r}")
-
-    return cmr
+    else:
+        # `else`, not a bare `return` after the block: `pytest.skip` raises, so
+        # both read the same at run time. Static analysis does not know that --
+        # CodeQL's py/uninitialized-local-variable reported `cmr` as possibly
+        # unbound on the fall-through path. Binding the return to "no exception
+        # was raised" states the control flow instead of leaving it inferred.
+        return cmr
 
 
 def registry_names():

@@ -66,7 +66,11 @@ def playwright_api():
     except ImportError:
         pytest.skip("playwright is in the docs-test group; the figure gates "
                     "do not need it. `uv sync --group docs-test`")
-    return api
+    else:
+        # `else` rather than a bare `return`, here and in the two below.
+        # `pytest.skip` raises, so the two spellings run identically; CodeQL
+        # does not model that and reported the name as possibly unbound.
+        return api
 
 
 def file_lock():
@@ -89,7 +93,8 @@ def file_lock():
     except ImportError:
         pytest.skip("filelock is in the docs-test group; the figure gates "
                     "do not need it. `uv sync --group docs-test`")
-    return FileLock
+    else:
+        return FileLock
 
 # WCAG 2.2 AA for text. Deliberately not the 3:1 series floor the figures are
 # held to -- a link is text being read, not a mark being told apart from its
@@ -211,8 +216,9 @@ def browser():
             b = p.chromium.launch()
         except Exception as exc:                      # noqa: BLE001
             pytest.skip(f"no chromium: {exc} -- run `uv run playwright install chromium`")
-        yield b
-        b.close()
+        else:
+            yield b
+            b.close()
 
 
 # The browser's half of the job: resolve the cascade, composite every
