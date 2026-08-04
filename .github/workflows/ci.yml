@@ -217,13 +217,25 @@ jobs:
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           print("\n".join(sorted(names)))
-          if "figure_gate_data/figure.mplstyle" not in names:
-              sys.exit(f"{wheel} has no figure_gate_data/figure.mplstyle, so "
+          if "figure_gate/figure.mplstyle" not in names:
+              sys.exit(f"{wheel} has no figure_gate/figure.mplstyle, so "
                        "_style_sheet finds nothing once installed")
           # Release tooling. It has no caller outside this repository, and
           # through 0.6.0 it landed on every installing user's import path.
-          if "audit_api.py" in names:
+          if "figure_gate/audit_api.py" in names:
               sys.exit(f"{wheel} ships audit_api.py")
+          # PEP 561: without this, every annotation in the package resolves to
+          # Any in a caller's type checker.
+          if "figure_gate/py.typed" not in names:
+              sys.exit(f"{wheel} has no py.typed")
+          # Nothing outside the package. Through 0.6.0 this wheel put
+          # check_figure, check_palette and suggest_fixes at the top level of
+          # site-packages -- generic names on a namespace shared with every
+          # other distribution, and permanent once callers import them.
+          stray = [n for n in names
+                   if not n.startswith(("figure_gate/", "figure_gate-"))]
+          if stray:
+              sys.exit(f"{wheel} claims top-level names: {stray}")
           PY
       - name: A figure with no plt.style.use fails the gate on the install path
         run: |
@@ -234,7 +246,7 @@ jobs:
           import matplotlib
           matplotlib.use("agg")
           import matplotlib.pyplot as plt
-          import check_figure
+          from figure_gate import check_figure
 
           sheet = check_figure._style_sheet()
           if sheet is None or "site-packages" not in str(sheet):

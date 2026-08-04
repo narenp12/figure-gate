@@ -3,11 +3,25 @@
 Signatures and docstrings are read out of `skill/scripts/` when this page
 builds, so what is shown is what the code has.
 
+Installed, the three modules are a package:
+
 ```python
-import check_figure as cf     # needs matplotlib
-import check_palette as cp    # standard library only
+from figure_gate import check_figure as cf     # needs matplotlib
+from figure_gate import check_palette as cp    # standard library only
+from figure_gate import suggest_fixes as sf
+```
+
+Vendored — copied into your own project, which is the default route — they are
+whatever you named the files, imported flat:
+
+```python
+import check_figure as cf
+import check_palette as cp
 import suggest_fixes as sf
 ```
+
+Same modules, same signatures; only the import line differs. Everything below
+applies to both.
 
 Not on this page:
 

@@ -36,8 +36,8 @@ Issues = "https://github.com/narenp12/figure-gate/issues"
 Changelog = "https://github.com/narenp12/figure-gate/blob/main/CHANGELOG.md"
 
 [project.scripts]
-check-palette = "check_palette:main"
-check-figure = "check_figure:main"
+check-palette = "figure_gate.check_palette:main"
+check-figure = "figure_gate.check_figure:main"
 
 # scipy is optional and only ever a speed-up: `check_overplotting` uses a KD-tree
 # when it is importable and an O(n^2) numpy path when it is not. The docs
@@ -53,9 +53,27 @@ fast = ["scipy>=1.6"]
 requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
+# `skill/scripts/` becomes the `figure_gate` package, rather than being emptied
+# onto the top level of `site-packages`.
+#
+# Until 0.7.0 `sources = ["skill/scripts"]` stripped the prefix and installed
+# `check_figure.py`, `check_palette.py` and `suggest_fixes.py` as top-level
+# modules: three of the most generic names a distribution could claim, sitting
+# next to `matplotlib` and `numpy`, and permanent the moment callers import
+# them. A distribution called figure-gate now installs something called
+# `figure_gate`.
+#
+# It also unblocks PEP 561. `py.typed` only carries types for a package, so
+# every annotation in these files -- all of them, as of the previous release --
+# resolved to `Any` in a caller's type checker for as long as the layout was
+# flat.
+#
+# The vendored form is untouched: the files stay where they are in the
+# repository, still import nothing of each other at module scope, and are still
+# copied one at a time. Only the install path moves.
 [tool.hatch.build.targets.wheel]
 only-include = ["skill/scripts"]
-sources = ["skill/scripts"]
+sources = { "skill/scripts" = "figure_gate" }
 # Release tooling, not something a caller imports. It reaches the checkout
 # through the `audit-api` target in the Makefile and through its own test, and
 # shipping it put a script nobody installs for on every user's import path.
@@ -67,15 +85,18 @@ exclude = ["skill/scripts/audit_api.py"]
 # stock matplotlib -- the forgotten `plt.style.use` the gate exists to catch --
 # passes it.
 #
-# It goes in a directory named for the distribution rather than at the wheel
-# root, because a bare `figure.mplstyle` sitting in `site-packages` is a generic
-# name any other distribution could also claim, and the setuptools guidance for
-# run-time data files has no exemption for it. The filename does not change:
-# `tests/test_prose_claims.py` resolves `figure.mplstyle` against the tracked
-# `skill/assets/figure.mplstyle`, and a name that exists only inside a built
-# wheel resolves to nothing.
+# It sits inside the package, beside the module that reads it. It used to sit
+# in a `figure_gate_data/` directory at the wheel root, and that directory only
+# ever existed because the modules were at the wheel root too: a bare
+# `figure.mplstyle` dropped straight into `site-packages` is a generic name any
+# other distribution could also claim. Inside `figure_gate/` that cannot
+# happen, so the namespacing directory has no work left to do and is gone.
+#
+# The filename does not change: `tests/test_prose_claims.py` resolves
+# `figure.mplstyle` against the tracked `skill/assets/figure.mplstyle`, and a
+# name that exists only inside a built wheel resolves to nothing.
 [tool.hatch.build.targets.wheel.force-include]
-"skill/assets/figure.mplstyle" = "figure_gate_data/figure.mplstyle"
+"skill/assets/figure.mplstyle" = "figure_gate/figure.mplstyle"
 
 # Keeps the skill, the tests and the examples -- the tests are what make the
 # thresholds checkable by someone who did not write them.
@@ -186,6 +207,9 @@ replace = '"version": "{new_version}"'
 filename = "conda/recipe.yaml"
 search = '  version: "{current_version}"'
 replace = '  version: "{new_version}"'
+
+[tool.uv]
+package = false
 
 [tool.ruff]
 # The project floor, which is what everything except one file is written to.
