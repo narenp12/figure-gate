@@ -2907,3 +2907,67 @@ def test_a_jet_heatmap_fails_the_whole_audit():
 
 def test_the_colormap_row_is_not_advisory():
     assert "Colormap kind" not in cf.ADVISORY_GATES
+
+
+# --- a gate that raises ------------------------------------------------------
+# `audit` ran its gates in a list comprehension, so one exception anywhere
+# propagated and the caller lost the twenty rows already measured. No gate is
+# known to raise -- twenty adversarial figures, including 3D, polar, all-NaN,
+# infinite and zero-sized ones, found none -- but these gates read deep
+# matplotlib internals and `matplotlib>=3.8` has no upper bound, so the version
+# that breaks one is a version nobody has released yet.
+
+
+def _with_broken_gate(monkeypatch, *names):
+    """`GATES` with the named gates replaced by ones that raise."""
+    def boom(fig, **kwargs):
+        raise RuntimeError("simulated matplotlib API change")
+
+    monkeypatch.setattr(cf, "GATES", tuple(
+        gate._replace(func=boom) if gate.name in names else gate
+        for gate in cf.GATES))
+
+
+def test_a_raising_gate_does_not_lose_the_other_rows(monkeypatch):
+    _with_broken_gate(monkeypatch, "Clipping")
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    ok, rows = cf.audit(fig)
+    assert len(rows) == len(cf.GATES), (
+        "one raising gate cost the rest of the audit")
+
+
+def test_a_raising_hard_gate_fails_rather_than_passing(monkeypatch):
+    """A gate that measured nothing has not cleared the figure. Reporting it as
+    a pass is the green run that quietly stopped checking."""
+    _with_broken_gate(monkeypatch, "Clipping")
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    ok, rows = cf.audit(fig)
+    row = next(r for r in rows if r[0] == "Clipping")
+    assert row[1] is False, row
+    assert "RuntimeError" in row[2], row
+    assert ok is False
+
+
+def test_a_raising_advisory_gate_warns_rather_than_failing(monkeypatch):
+    """An advisory that crashed says so without gating a build, which is the
+    verdict it would have had if it had run and found something."""
+    _with_broken_gate(monkeypatch, "Fonts")
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    ok, rows = cf.audit(fig)
+    row = next(r for r in rows if r[0] == "Fonts")
+    assert row[1] == "warn", row
+    assert ok is True, "a crashed advisory gated the build"
+
+
+def test_the_row_says_the_defect_is_not_in_the_figure(monkeypatch):
+    """A reader whose build just turned red should not start by looking at
+    their own figure."""
+    _with_broken_gate(monkeypatch, "Clipping")
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    _, rows = cf.audit(fig)
+    detail = next(r for r in rows if r[0] == "Clipping")[2]
+    assert "defect in the checker" in detail, detail
