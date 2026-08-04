@@ -64,10 +64,12 @@ about:
     its column width, clipped text, and Type 3 fonts, which IEEE PDF eXpress
     refuses at upload.
 
-    Two scripts, check-palette and check-figure. check_palette.py imports
-    nothing outside the standard library, and both are meant to be run in CI or
-    copied into a project outright. Every gate has a test that proves it can
-    fail.
+    Two commands, check-palette and check-figure. An install exposes the
+    modules as figure_gate.check_palette and figure_gate.check_figure; through
+    0.6.0 they were loose modules at the root of site-packages. Either file is
+    also meant to be copied into a project outright, and check_palette.py
+    imports nothing outside the standard library. Every gate has a test that
+    proves it can fail.
   license: MIT
   license_file: LICENSE
 

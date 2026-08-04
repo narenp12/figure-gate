@@ -5,13 +5,14 @@
 [![conda-forge](https://img.shields.io/conda/vn/conda-forge/figure-gate)](https://anaconda.org/conda-forge/figure-gate)
 [![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
 
-**Two scripts that read a built matplotlib figure and report which gates it
-fails, and a third that answers the rows that failed.** `audit(fig)` returns
-`(ok, rows)`, 21 rows, one per gate, each a `(label, status, detail)` triple
-where `status` is `True`, `False`, or `"warn"`. `check(colors)` gates a palette
-the same way in 5 rows and returns the same shape. `suggest(rows)` turns the
-rows that did not pass into remedies, in the order the gates reported them.
-Every threshold is a module-level constant you can read and change.
+**One script reads a built matplotlib figure and reports which gates it fails,
+a second gates a palette on its own, and a third answers the rows that
+failed.** `audit(fig)` returns `(ok, rows)`, 21 rows, one per gate, each a
+`(label, status, detail)` triple where `status` is `True`, `False`, or
+`"warn"`. `check(colors)` gates a palette the same way in 5 rows and returns
+the same shape. `suggest(rows)` turns the rows that did not pass into remedies,
+in the order the gates reported them. Every threshold is a module-level
+constant you can read and change.
 
 There is also an [Agent Skill](https://code.claude.com/docs/en/skills) wrapper
 that applies the same checks when Claude Code builds a figure.
@@ -55,8 +56,16 @@ uv add figure-gate          # or: conda install -c conda-forge figure-gate
 from figure_gate import check_figure as cf
 ```
 
+That import line is 0.7.0 and later. Before it the wheel put the modules at the
+top level of site-packages and `import check_figure` was the line on both
+routes; 0.7.0 moved them into the package and is a break for anyone who
+installed rather than vendored. The two badges above are the versions actually
+published, and they do not have to agree: conda-forge follows PyPI through the
+feedstock's autotick bot, so for a while after a release the conda package is
+the release before it. Read the badge before writing the import line.
+
 Copying the files into your own project is the other route, and the default one
-the docs teach; vendored, the import is `import check_figure`.
+the docs teach; vendored, the import is `import check_figure` at every version.
 
 ## Where this sits
 
@@ -76,25 +85,14 @@ other.
 ## What the API promises
 
 The public API is every name without a leading underscore in `check_figure.py`,
-`check_palette.py` and `suggest_fixes.py`. That is broader than the handful you
-would guess, and it is deliberately the same set the release gate compares, so
-the statement and the enforcement cannot drift apart.
+`check_palette.py` and `suggest_fixes.py`, and below 1.0 a minor bump may break
+it: 0.7.0 broke the install path's import line. Every break is named in the
+changelog under its release heading, and CI fails a pull request whose
+`## Unreleased` section does not name a symbol that moved.
 
-Below 1.0, a minor bump may break it. Every break is named in the changelog
-under its release heading, and no change reaches `main` whose `## Unreleased`
-section fails to name what moved: CI runs
-[`audit_api.py`](https://github.com/narenp12/figure-gate/blob/main/skill/scripts/audit_api.py)
-against the last tag on every pull request, and a symbol that changed without
-being written down fails the build.
-
-The number of rows is not part of the contract. The shape is: `audit` returns
-`(ok, rows)`, each row a `(label, status, detail)` triple whose `status` is
-`True`, `False` or `"warn"`, and `check` returns the same shape. Gates get
-added; `check_banking` arrived after 0.6.0 and moved the count.
-
-What is not enforced is the sentence rather than the symbol. The gate checks
-that a changed name appears in `## Unreleased` next to a word admitting a
-change. It cannot check that the sentence describes the change accurately.
+The row count is not part of the contract; the shape is. The full statement,
+including what the gate cannot check, is on
+[the docs site](https://narenp12.github.io/figure-gate/getting-started/#what-the-api-promises).
 
 ## Contributing
 
