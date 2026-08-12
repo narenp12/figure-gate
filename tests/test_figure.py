@@ -7,6 +7,7 @@ only "audit returned False" would pass even if every check had silently broken
 except one, which is close to what happened twice while the checker was written.
 """
 
+import re
 import shutil
 
 import matplotlib
@@ -2654,12 +2655,29 @@ def test_ink_coverage_flags_a_panel_that_was_never_filled():
 
 def test_ink_coverage_does_not_call_a_sparse_panel_empty():
     """Two points is a legitimate panel. Only a panel with no data artist at
-    all is empty."""
+    all is empty.
+
+    The weights are written out rather than left to the rcParams. At the
+    defaults this figure measures 0.0198 on matplotlib 3.8 and 0.0216 on 3.11 --
+    a two-thousandth of rendering difference either side of the 0.02 floor, so
+    the same figure passed on one supported matplotlib and warned on another,
+    for a reason that has nothing to do with whether a two-point panel is
+    empty. The margin is asserted below so a future drift toward the floor
+    fails here saying that, instead of turning back into a version-dependent
+    verdict.
+    """
     fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
-    ax.plot([0, 1], [0.2, 0.8], marker="o")
+    ax.plot([0, 1], [0.2, 0.8], marker="o", linewidth=3, markersize=12)
+    assert cf._axes_drew_anything(ax) is True
     ok, rows = cf.audit(fig)
+    detail = dict((n, d) for n, _, d in rows)["Ink coverage"]
     plt.close(fig)
     assert gates(rows)["Ink coverage"] is True
+    measured = float(re.search(r"ax0 ([\d.]+)", detail).group(1))
+    assert measured >= cf.INK_MIN + 0.01, (
+        f"the sparse panel now measures {measured}, back within rounding of "
+        f"the {cf.INK_MIN} floor: this test is meant to exercise the structural "
+        "clause, not to sit on the fraction one")
 
 
 def test_ink_coverage_does_not_call_a_table_panel_empty():
@@ -2689,6 +2707,160 @@ def test_ink_coverage_emptiness_is_structural_not_just_a_low_fraction():
     plt.close(fig)
     assert gates(rows)["Ink coverage"] == "warn"
     assert ok, "the ink row is advisory and must not gate"
+
+
+def ink_fraction(fig):
+    """The number the ink row reports for the first panel, read back out of it.
+
+    Two decimals, because that is what the row prints. It is enough: what
+    follows asks whether the fraction is the right quantity, not whether it is
+    right in the fourth place.
+    """
+    return float(re.search(r"ax0 ([\d.]+)", cf.check_ink(fig)[1]).group(1))
+
+
+@pytest.mark.parametrize("covered", [0.10, 0.25, 0.50])
+def test_the_ink_fraction_is_the_share_of_the_panel_that_was_drawn_on(covered):
+    """The row reports a number, and until now every test around it asserted
+    only the verdict the number produced. A fraction that had drifted to half
+    of the coverage it names would keep every one of those tests green and
+    would move where the floor and the ceiling actually sit.
+
+    Measured against a rectangle of known size in axes coordinates, with the
+    furniture switched off so the only ink is the rectangle.
+    """
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.axis("off")
+    ax.add_patch(plt.Rectangle((0, 0), 1, covered, transform=ax.transAxes,
+                               color="black"))
+    measured = ink_fraction(fig)
+    plt.close(fig)
+    assert abs(measured - covered) <= 0.02, (
+        f"a panel covered {covered} deep reports {measured}: the ink row is no "
+        "longer reporting the share of the panel carrying ink, and INK_MIN and "
+        "INK_MAX are thresholds on something else")
+
+
+@pytest.mark.parametrize("figsize,blank", [((3, 1.5), (0.02, 0.03)),
+                                           ((6, 3), (0.01, 0.01))])
+def test_what_furniture_alone_measures_depends_on_the_panel_size(figsize, blank):
+    """Why the emptiness clause is structural, as a measurement rather than as
+    a comment in the checker.
+
+    A blank panel's ink is its frame and ticks: a perimeter, against an area
+    that grows with the panel. The blank half of a 3x1.5in pair lands on the
+    0.02 floor and the blank half of a 6x3in pair lands under it -- the same
+    defect, on either side of the threshold, which is exactly why asking the
+    number whether a panel is empty does not work.
+
+    The small pair is given as a range because it is the reading that moved:
+    0.02 on matplotlib 3.8 and 0.03 on 3.11. A panel whose verdict hangs on
+    that difference is one this suite should not be building, and
+    `test_ink_coverage_does_not_call_a_sparse_panel_empty` is where that was
+    learned.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=figsize, constrained_layout=True)
+    axes[0].plot([0, 1], [0, 1])
+    detail = cf.check_ink(fig)[1]
+    empty = float(re.search(r"ax1 ([\d.]+)", detail).group(1))
+    drew = cf._axes_drew_anything(axes[1])
+    plt.close(fig)
+    assert blank[0] <= empty <= blank[1], (
+        f"the blank half of a {figsize} pair now measures {empty}, outside the "
+        f"{blank} this was measured at")
+    assert drew is False, (
+        "the structural clause is what catches this panel at either reading, "
+        "and it is the clause that just stopped firing")
+
+
+# --- the rows report the quantity they name -----------------------------------
+# Every test above this section asserts a verdict: the row that should have
+# fired, fired. None of them asks whether the number the row prints is the
+# number it says it is, and a gate whose measurement had drifted while its
+# verdict stayed correct on the constructed figure would pass all of them --
+# while every threshold in the file quietly moved, because a threshold is only
+# as meaningful as the quantity it is compared against. These build a figure
+# whose answer is known by arithmetic and read the number back out of the row.
+
+@pytest.mark.parametrize("sizes,ratio", [([10, 90], 9.0), ([20, 20], 1.0),
+                                         ([4, 100], 25.0)])
+def test_the_mark_ratio_row_reports_the_ratio_of_the_marker_areas(sizes, ratio):
+    """`s` is an area in points squared, so the ratio the row names is the
+    ratio of the two numbers the caller passed -- exactly, before any
+    rendering. The drawn areas printed beside it are measured and will move
+    with a renderer; this one cannot."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 1], [0, 1], s=sizes)
+    _, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert f"{ratio}x" in detail, (
+        f"marks of {sizes} pt^2 report {detail!r}, and the ratio in it is not "
+        f"{ratio}x")
+
+
+@pytest.mark.parametrize("authored,scale", [(10.0, 0.5), (12.0, 0.25)])
+def test_the_type_row_reports_the_size_the_label_lands_at(authored, scale):
+    """The type gate's whole claim is that it measures the page and not the
+    file: a label is authored at one size and arrives at another. That product
+    is the measurement, and it is the one number a reader is asked to trust
+    when the row tells them to cut words."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.set_xticks([])
+    ax.set_yticks([])          # so the label is the only string in the row
+    ax.set_xlabel("x label", fontsize=authored)
+    renderer, _ = cf._renderer(fig)
+    status, detail = cf.check_type_size(fig, renderer, scale=scale)
+    plt.close(fig)
+    assert status is False and f"({authored * scale}, 'x label')" in detail, (
+        f"a {authored}pt label at scale {scale} should land at "
+        f"{authored * scale}pt on the page; the row says {detail!r}")
+
+
+@pytest.mark.parametrize("authored,scale", [(0.8, 0.5), (1.5, 0.5), (0.6, 1.0)])
+def test_the_line_weight_row_reports_the_stroke_the_printer_gets(authored, scale):
+    """Same measurement, same reason, on the other artist a page scale moves.
+    The remedy is checked with it: the linewidth it names has to be the one
+    that clears the floor at this scale, or the row is telling a reader to
+    make a change that leaves them under it."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], linewidth=authored)
+    status, detail = cf.check_line_weight(fig, scale=scale)
+    plt.close(fig)
+    assert status is False, "the figure was built to be under the floor"
+    assert f"a stroke at {authored * scale:.2f}pt" in detail, (
+        f"a {authored}pt stroke at scale {scale} lands at "
+        f"{authored * scale:.2f}pt on the page; the row says {detail!r}")
+    assert f"at least {cf.LINE_FLOOR_PT / scale:.2f}" in detail
+
+
+@pytest.mark.parametrize("stacked,share", [(2, 67), (3, 75), (9, 90)])
+def test_the_overplotting_row_reports_the_share_of_marks_that_merged(stacked, share):
+    """A dozen tests above assert that this row warns. The percentage in it is
+    what a reader thins against -- 67% of the marks buried is a different
+    figure from 100% -- and it is stated in three of those docstrings without
+    being asserted in any of them. One mark is placed clear of the pile so the
+    share is a fraction rather than everything."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0] * stacked + [100], [0] * stacked + [100], s=100)
+    _, detail = cf.check_overplotting(fig)
+    plt.close(fig)
+    assert f"{share}%" in detail, (
+        f"{stacked} marks on one point and one clear of them is {share}% "
+        f"merged; the row says {detail!r}")
+
+
+def test_the_contrast_stack_row_reports_the_alpha_levels_it_found():
+    """The remedy is "keep to three levels", so the levels are the working
+    part of the row: a reader picks which one to drop out of that list. It has
+    to be the alphas that were drawn, sorted and deduplicated -- the same value
+    twice is one level, not two."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for alpha in (1.0, 0.8, 0.8, 0.6, 0.4):
+        ax.plot([0, 1], [alpha, alpha], alpha=alpha)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False and "alpha levels [0.4, 0.6, 0.8, 1.0]" in detail, (
+        f"four levels, one of them drawn twice, report {detail!r}")
 
 
 # --- the colormap kind gate --------------------------------------------------

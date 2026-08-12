@@ -177,6 +177,36 @@ calling one meant reading the source to find out that some take a renderer.
 added without writing one. `test_the_page_documents_every_gate_in_order` keeps
 a gate added later from joining a blind spot instead of a page.
 
+**What gating the how-to page cost, and what paid for it.** The page arrived
+with claims the doc suite could not read. A REPL block is Python interleaved
+with output, so `ast.parse` called a correct example a syntax error;
+`python_statements` splits a session with `doctest` and parses each source,
+and every prompt has to come back as an example so a block cannot pass by
+having nothing left in it. A sentence about a snippet names what the snippet
+bound, so `ok`, `s` and the predicates over them now resolve against the names
+the corpus' own examples assign, parsed rather than listed. `float()` resolves
+as a builtin call, `numpy.float64` against numpy, and `adjacent` against the
+`choices=` its flag is declared with. `status` came out of the unresolved
+ledger: it resolves now, for a reason.
+
+The link check in the docs job was reading `../api/#the-gate-functions` as a
+path and asking the filesystem for a directory named after the anchor. It
+splits the fragment off, resolves the page, and then checks the anchor exists
+on it, which is a check the old version could not make at all: a link into a
+section somebody renamed used to land on the page and scroll nowhere.
+
+`test_ink_coverage_does_not_call_a_sparse_panel_empty` had built a panel
+measuring 0.0198 on matplotlib 3.8 and 0.0216 on 3.11, either side of the 0.02
+floor, so one supported matplotlib passed it and another warned. The figure now
+states its own weights and asserts its margin. That is a test defect rather
+than a gate defect, and finding it exposed a real gap: nothing anywhere
+asserted that a row's *number* is the quantity its name claims. The ink
+fraction is now measured against a rectangle of known coverage, the
+furniture-only reading is pinned at two panel sizes, and the mark-ratio, type,
+line-weight, overplotting and alpha rows are asserted on what they print.
+`DOCUMENT_TO_GATE_MAX` **changed** 0.92 → **0.93**, moved by less than the
+measurement written to pay for it.
+
 ## 0.7.0 — 2026-08-03
 
 **Installed, the checkers are a package: `from figure_gate import

@@ -628,6 +628,65 @@ def test_the_deploy_base_is_a_subdirectory():
         "else before deleting this.")
 
 
+# The skip-to-content link on the generated 404 page, which the theme emits
+# without the `id="__skip"` it points at. No source document here mentions it.
+THEME_LINKS = {("404.html", "#__skip")}
+
+
+def broken_links(pages, files, base):
+    """Every href in `pages` that does not land, resolved as a browser would.
+
+    `pages` maps a page's path from the site root -- `api/index.html` -- to its
+    HTML, and `files` is everything the build wrote, directories included: many
+    hrefs point at a stylesheet or a favicon, which have to exist and have no
+    anchors to check. Taking both as arguments keeps this a function of text,
+    so it can be handed a site written to be broken -- the only way to watch it
+    fail, since against correct documents a check that resolved nothing looks
+    exactly like this one.
+
+    The fragment is split off before the path is resolved and then checked on
+    its own, because both halves are claims that fail differently. Keeping the
+    `#` on the path asks for `how-to/#read-one-row-or-one-gate` and calls a
+    correct cross-page link a 404; dropping the fragment instead lands on a
+    page whose section somebody renamed and scrolls nowhere, silently.
+    """
+    anchors = {name: set(re.findall(r'\bid="([^"]+)"', text))
+               | set(re.findall(r'\bname="([^"]+)"', text))
+               for name, text in pages.items()}
+    offenders = []
+    for name, text in sorted(pages.items()):
+        parent = posixpath.dirname(name)
+        here = base + (f"{parent}/" if parent else "")
+        for href in re.findall(r'href="([^"]+)"', text):
+            if href.startswith(("http://", "https://", "mailto:", "data:")):
+                continue
+            if (name, href) in THEME_LINKS:
+                continue
+            path, _, fragment = href.partition("#")
+            fragment = urllib.parse.unquote(fragment)
+            if not path:                       # `#section` on this page
+                landing = name
+            else:
+                target = posixpath.normpath(posixpath.join(here, path))
+                if path.endswith("/") or path in (".", ".."):
+                    target += "/"
+                if not (target + "/").startswith(base):
+                    offenders.append(f"  {name}: {href} -> {target} (off the site)")
+                    continue
+                landing = target[len(base):]
+                if target.endswith("/"):
+                    landing += "index.html"
+                if landing not in files:
+                    offenders.append(f"  {name}: {href} -> {target} (404)")
+                    continue
+            # Only answerable where the landing is a page: `#page=3` into a PDF
+            # is a claim about a file format, and not this test's to read.
+            if fragment and landing in pages and fragment not in anchors[landing]:
+                offenders.append(
+                    f"  {name}: {href} -> {landing} has no #{fragment}")
+    return offenders
+
+
 def test_every_internal_link_resolves_under_the_deploy_base(built_site):
     """Every href in the built HTML, resolved the way a browser resolves it.
 
@@ -643,28 +702,36 @@ def test_every_internal_link_resolves_under_the_deploy_base(built_site):
     exists and the naive version of this test passes.
     """
     base = deploy_base()
-    offenders = []
-    for page in sorted(built_site.rglob("*.html")):
-        relative = page.relative_to(built_site)
-        directory = "" if relative.parent == Path(".") else f"{relative.parent}/"
-        here = base + directory
-        for href in re.findall(r'href="([^"]+)"', page.read_text(encoding="utf-8")):
-            if href.startswith(("http://", "https://", "#", "mailto:", "data:")):
-                continue
-            target = posixpath.normpath(posixpath.join(here, href))
-            if href.endswith("/") or href in (".", ".."):
-                target += "/"
-            if not (target + "/").startswith(base):
-                offenders.append(f"  {relative}: {href} -> {target} (off the site)")
-                continue
-            landing = built_site / target[len(base):]
-            if target.endswith("/"):
-                landing = landing / "index.html"
-            if not landing.exists():
-                offenders.append(f"  {relative}: {href} -> {target} (404)")
+    pages = {path.relative_to(built_site).as_posix():
+             path.read_text(encoding="utf-8")
+             for path in sorted(built_site.rglob("*.html"))}
+    assert len(pages) > 1, "the build produced no pages to check"
+    # The empty string is the site root, which `./..` from a page resolves to.
+    files = {path.relative_to(built_site).as_posix()
+             for path in built_site.rglob("*")} | {""}
+    offenders = broken_links(pages, files, base)
     assert not offenders, (
         f"link(s) in the built site do not resolve under {base}:\n"
         + "\n".join(offenders))
+
+
+def test_the_link_check_catches_each_way_a_link_can_miss():
+    """Three failures the corpus does not contain, and one link correct in the
+    way the real cross-page links are: the missing anchor is the half a
+    fragment-blind check cannot see, and the working `../page/#section` is the
+    one such a check calls a 404."""
+    pages = {
+        "index.html": ('<a href="api/#the-gate-functions">into a section</a>'
+                       '<a href="api/#no-such-section">a section that went</a>'
+                       '<a href="nowhere/">a page that went</a>'
+                       '<a href="../../elsewhere/">off the site</a>'),
+        "api/index.html": '<h2 id="the-gate-functions">The gate functions</h2>',
+    }
+    reported = broken_links(pages, set(pages) | {"api", ""}, "/figure-gate/")
+    assert [r.split(": ", 1)[1] for r in reported] == [
+        "api/#no-such-section -> api/index.html has no #no-such-section",
+        "nowhere/ -> /figure-gate/nowhere/ (404)",
+        "../../elsewhere/ -> /elsewhere/ (off the site)"]
 
 
 # --- the figures are not recolored --------------------------------------------
