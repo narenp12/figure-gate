@@ -31,17 +31,19 @@ MODULES = ("check_figure", "check_palette", "suggest_fixes")
 
 # Public callables the page deliberately does not document.
 #
-# The twenty gates are the substantive exemption. `audit()` runs all of them
-# and computes the renderer, scale and canvas arguments they take; calling one
-# directly means reproducing that. What a caller needs from a gate is its
-# threshold and its failure condition, and `docs/gates.md` documents all
-# twenty in two tables -- `docs/api.md` says so and points at them.
+# The gates used to be exempt as a class, on the argument that `audit()` runs
+# them and computes the renderer, scale and canvas arguments they take, so
+# `docs/gates.md` documenting their thresholds was enough. It was not: a public
+# callable whose signature appears nowhere is one you read the source for, and
+# the exemption also meant a gate added later joined the page's blind spot
+# rather than the page. They are documented now, and
+# `test_the_page_documents_every_gate_in_order` keeps a new one from being
+# forgotten.
 EXEMPT = {
     "main": "the CLI entry point, documented by --help and the docs site",
     "self_test_figure": "builds the deliberately broken figure `main` checks; "
                         "not something a caller constructs",
 }
-EXEMPT_PREFIX = ("check_",)      # the twenty gates, minus `check_palette.check`
 
 
 def public_callables(module):
@@ -66,9 +68,7 @@ def documented():
 def undocumented(module):
     covered = {name for mod, name in documented() if mod == module}
     return [name for name in public_callables(module)
-            if name not in covered
-            and name not in EXEMPT
-            and not (name.startswith(EXEMPT_PREFIX) and name != "check")]
+            if name not in covered and name not in EXEMPT]
 
 
 def test_the_page_has_directives_at_all():
@@ -103,6 +103,30 @@ def test_every_documented_name_has_a_docstring(module, name):
     assert ast.get_docstring(node), (
         f"{module}.{name} is on the API page with no docstring, so it renders "
         f"as a heading over an empty block")
+
+
+def gate_functions():
+    """The gate functions in the order `audit` runs them, from the registry."""
+    import check_figure as cf
+
+    return [gate.func.__name__ for gate in cf.GATES]
+
+
+def documented_gates():
+    """`::: check_figure.check_*` directives, in the order the page lists them."""
+    text = PAGE.read_text(encoding="utf-8")
+    return re.findall(r"^::: check_figure\.(check_\w+)$", text, re.M)
+
+
+def test_the_page_documents_every_gate_in_order():
+    """A gate is a public callable, so it is on the page like any other. The
+    order is asserted with the membership because the page is read against
+    `docs/gates.md` and a printed report, and both of those are in `GATES`
+    order: three rosters that agree on the set and disagree on the sequence is
+    still three rosters to reconcile by hand."""
+    assert documented_gates() == gate_functions(), (
+        "docs/api.md lists the gates in a different order or misses one. It is "
+        "`GATES` order, the same as docs/gates.md and a printed report.")
 
 
 def test_the_page_is_in_the_nav():

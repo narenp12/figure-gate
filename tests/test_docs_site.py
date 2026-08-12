@@ -80,7 +80,12 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # README, which was carrying the threshold tables, the install routes and the
 # usage examples for a project that has a docs site. Nothing was duplicated in
 # the move, which is what keeps this set honest rather than a growing exemption.
-AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md"}
+# `how-to.md` is site-only for the third reason: it is task recipes, and a
+# recipe is a claim about what the code does when you type it. `test_how_to.py`
+# runs the commands, recomputes the numbers and re-derives the row table from
+# the registry, so the page cannot drift from the behaviour it teaches.
+AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md",
+            "how-to.md"}
 
 
 def nav_targets():
@@ -99,9 +104,9 @@ def nav_targets():
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
     gate-table parser in `test_docs_match_code.py`, and for the same reason."""
-    assert len(nav_targets()) == 9, (
+    assert len(nav_targets()) == 10, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
-        "9 - the nav changed shape and nav_targets() needs updating with it")
+        "10 - the nav changed shape and nav_targets() needs updating with it")
 
 
 @pytest.mark.parametrize("target", nav_targets())

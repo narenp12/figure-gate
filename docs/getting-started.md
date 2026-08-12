@@ -136,6 +136,10 @@ invokes the module from elsewhere. And the backend is set explicitly, which is
 what every example in this repository does before importing pyplot: a figure
 built for measurement has no reason to open a window.
 
+From here on, [the how-to](how-to.md) is the page you want: what to do when a
+row fails, how to gate a whole suite, how to place a figure at half width, and
+how to move a threshold.
+
 `audit` is the same checks without the printing, which is what a test wants:
 
 ```python
@@ -162,11 +166,18 @@ clipping gate compared 2× coordinates against a 1× bound and failed labels tha
 fit; and thresholds calibrated in pixels covered half the distance they were
 calibrated for. The same figure passed under Agg and failed under macosx.
 
-Since 0.1.2 the checker resets the figure to its authored dpi and measures on
-Agg regardless of what it was built under, so the verdict is a property of the
-figure rather than of the display. One consequence: an audited figure is no
-longer attached to its GUI canvas and will not show in a window. Audit last, or
-audit a figure you rebuild for the purpose.
+Since 0.1.2 the checker measures on Agg regardless of what the figure was built
+under, so the verdict is a property of the figure rather than of the display.
+0.8.0 finished the job: the display's pixel ratio was only ever the loud case of
+a pixel threshold read against a resolution nobody had pinned, so the canvas is
+now drawn at `MEASURE_DPI = 150` whatever the figure was authored at, and the
+figure is handed back on the dpi it arrived on. Setting `figure.dpi` yourself no
+longer moves a verdict either. `savefig.dpi` is untouched, so what you write out
+is still your choice.
+
+One consequence, unchanged: an audited figure is no longer attached to its GUI
+canvas and will not show in a window. Audit last, or audit a figure you rebuild
+for the purpose.
 
 The bug is worth reading as a warning about the shape of this project's own test
 suite rather than as a fixed defect. Every test and every example here pins Agg,

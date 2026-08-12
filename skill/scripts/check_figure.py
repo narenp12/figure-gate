@@ -43,6 +43,7 @@ Checks, in the order `audit` runs them
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import itertools
 import math
@@ -85,6 +86,30 @@ def _sibling(name: str) -> Any:
         return importlib.import_module(name)
     except ImportError:
         return None
+
+# The resolution every pixel measurement in this file is taken at, regardless of
+# what the figure was authored at.
+#
+# Half the thresholds below are pixel counts: the edge window, the footprint
+# floor, the ink cutoff. A pixel count is only a measurement if the resolution is
+# fixed, and `figure.dpi` is not fixed -- it is an author's knob, it is whatever
+# the sheet in effect happens to say, and a GUI backend multiplies it by the
+# display's device pixel ratio behind the author's back. Measured at the authored
+# dpi, "3% of the label's box is data ink" means one thing at 100 and another at
+# 300, and the same figure gets two verdicts for a number nobody thought they
+# were setting.
+#
+# Measured on the eleven gallery figures across 100/150/200/300/600 dpi, before
+# this constant existed: thirty-four rows moved and one flipped -- `orbit`'s ink
+# fraction ran 0.13 at 100 dpi down to 0.04 at 300 and out the bottom of the band
+# at 600, because a marker's antialiased fringe is a fixed number of pixels wide
+# and so a shrinking share of a mark that grows with the resolution. The figure
+# did not change. Only the knob did. `tests/test_renderer_invariance.py` sweeps
+# that range and holds every row identical.
+#
+# 150 because that is the number the thresholds were calibrated at and this is a
+# recalibration of nothing: the value it pins is the value they already assumed.
+MEASURE_DPI = 150.0
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -356,8 +381,45 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
     return width * placed_frac / (fig.get_size_inches()[0] * 72)
 
 
+def _authored_dpi(fig: Figure) -> float:
+    """The dpi the figure belongs on when this file is finished with it.
+
+    `_original_dpi` is private but is set unconditionally in `Figure.__init__`,
+    and it is the only record of the authored value once a HiDPI canvas has
+    overwritten `fig.dpi`. `Figure.set_dpi` does not touch it, which is what
+    makes it survive the measurement below.
+    """
+    return float(getattr(fig, "_original_dpi", fig.dpi))
+
+
+@contextlib.contextmanager
+def _at_measure_dpi(fig: Figure) -> Any:
+    """Hold `fig` at `MEASURE_DPI` for the duration, then put it back.
+
+    Every gate in this file that counts pixels has to count them at one
+    resolution, for the reason `MEASURE_DPI` gives. Doing that means moving the
+    figure, and a figure the caller still owns has to come back the way it
+    arrived, so this is a context manager rather than an assignment.
+
+    Restoring to `_authored_dpi` rather than to whatever `fig.dpi` held on entry
+    is deliberate: under a HiDPI GUI backend the entry value is the authored dpi
+    times the display's device pixel ratio, which is a fact about the display
+    and not about the figure. That is the same correction this function has
+    always made, now written where it can be read.
+    """
+    before = fig.dpi
+    after = _authored_dpi(fig)
+    try:
+        if before != MEASURE_DPI:
+            fig.dpi = MEASURE_DPI
+        yield
+    finally:
+        if fig.dpi != after:
+            fig.dpi = after
+
+
 def _renderer(fig: Figure) -> tuple[Any, Any]:
-    """Return (renderer, canvas): an Agg canvas at the authored dpi, drawn.
+    """Return (renderer, canvas): an Agg canvas at `MEASURE_DPI`, drawn.
 
     Text extents need a renderer that can measure, and the SVG canvas cannot,
     so measuring on Agg is the baseline. Measuring there *unconditionally* is
@@ -372,9 +434,15 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     threshold below that is calibrated in pixels — the edge window, the
     footprint floor — covers half the distance it was calibrated for.
 
-    Putting the figure back on `_original_dpi` fixes both. That attribute is
-    private but is set unconditionally in `Figure.__init__`, and it is the only
-    record of the authored value once a HiDPI canvas has overwritten `fig.dpi`.
+    Both are the same bug and neither is really about HiDPI: they are what
+    happens when a pixel threshold is read against a resolution nobody pinned.
+    Drawing at `MEASURE_DPI` fixes the class rather than the one instance of it
+    that had a display attached, which is why the figure is no longer merely put
+    back on its authored dpi to be measured there.
+
+    The caller is responsible for `_at_measure_dpi`. This function draws at the
+    dpi it is handed to, and `audit` is what holds the figure there while the
+    gates read the canvas it returns.
 
     Note this rebinds `fig.canvas`: a figure that has been audited is no longer
     attached to its GUI canvas and will not show in a window. `check_ink` and
@@ -383,9 +451,8 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     Reused across checks so check_ink does not render a second time.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
-    original = getattr(fig, "_original_dpi", fig.dpi)
-    if fig.dpi != original:
-        fig.dpi = original
+    if fig.dpi != MEASURE_DPI:
+        fig.dpi = MEASURE_DPI
     canvas = FigureCanvasAgg(fig)
     canvas.draw()
     return canvas.get_renderer(), canvas
@@ -875,9 +942,15 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
     if not items:
         return True, "no text to read"
     if canvas is None:
-        from matplotlib.backends.backend_agg import FigureCanvasAgg
-        canvas = FigureCanvasAgg(fig)
-        canvas.draw()
+        # Called on its own rather than through `audit`, so nobody has put the
+        # figure on `MEASURE_DPI` yet and the pixel fractions below would be
+        # read against whatever resolution the author set. Do it here and
+        # re-enter, so the whole body runs at the one resolution and `r` is
+        # remeasured against it.
+        with _at_measure_dpi(fig):
+            r, canvas = _renderer(fig)
+            return check_text_readability(fig, r, canvas, scale, placed_frac,
+                                          venue)
 
     # Hiding text changes what constrained_layout has to fit, so the second
     # render would come back with every artist in a slightly different place and
@@ -1433,9 +1506,12 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     import numpy as np
 
     if canvas is None:
-        from matplotlib.backends.backend_agg import FigureCanvasAgg
-        canvas = FigureCanvasAgg(fig)
-        canvas.draw()
+        # Same reason as `check_text_readability`: an ink fraction is a count of
+        # pixels, and a count of pixels is only a measurement at a fixed
+        # resolution. See `MEASURE_DPI`.
+        with _at_measure_dpi(fig):
+            _, canvas = _renderer(fig)
+            return check_ink(fig, context_axes, canvas)
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
     bg = buf[0, 0]
@@ -1488,10 +1564,13 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
             frac = float((sub & ~surf_mask).mean())
         else:
             frac = float(sub.mean())
-        # An empty panel is structural, not a low number. The frame and the
-        # tick marks of a blank axes measure about 0.03 on their own, over the
-        # 0.02 floor, so the blank subplot in a grid — the case that actually
-        # ships — read as merely sparse. Ask whether anything was drawn.
+        # An empty panel is structural, not a low number. Furniture is a
+        # perimeter and the panel is an area, so what a blank axes measures on
+        # its own depends on how big it is: at `MEASURE_DPI`, the blank half of
+        # a 3x1.5in pair reads 0.03, over the 0.02 floor, and the blank half of
+        # a 6x3in pair reads 0.01, under it. The first read as merely sparse and
+        # the second is caught by the floor for a reason that has nothing to do
+        # with it being empty. Ask whether anything was drawn.
         rows.append((i, frac,
                      _axes_drew_anything(ax) and INK_MIN <= frac <= INK_MAX))
 
@@ -1638,7 +1717,8 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     The hole this closes: `check_palette.py` judges a list of hexes someone
     remembered to paste into a terminal, and this file never looked at color at
     all. A figure on matplotlib's default `tab10` cycle - whose orange and green
-    measure OKLab dE 1.4 under protanopia - passed every composition check
+    measure CAM02-UCS dE 2.4 under protanopia, against a floor of 10.5 - passed
+    every composition check
     clean. Two scripts in one project that never spoke.
 
     Only what is never legitimate is gated: separation under color blindness,
@@ -2512,6 +2592,24 @@ ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
 def check_colormap(fig: Figure) -> tuple[bool | str, str]:
+    """Whether each colormap in the figure encodes what its data is.
+
+    Samples every named colormap an artist actually draws with, hands the
+    samples to `check_palette.cmap_kind`, and fails the two kinds that are not
+    an encoding. `misc` is a ramp whose lightness reverses, or is flat, or ends
+    somewhere neither cyclic nor diverging would: a reader cannot put two of its
+    values in order. A qualitative map is judged by the same all-pairs
+    separation floor a hand-built palette is, because an image puts every
+    category beside every other one.
+
+    Two ways this row passes without having judged anything, both deliberate.
+    A colormap matplotlib built from colours the author set on an artist is
+    skipped, since `contour(colors=[...])` is three levels of one hue rather
+    than three categories, and classifying it qualitative would fail it. And the
+    row needs `check_palette.py` importable beside this file: without it there
+    is nothing to classify with, so it says so in the detail and passes. A pass
+    here is worth reading, not just counting.
+    """
     cp = _sibling("check_palette")
     if cp is None:
         return True, ("check_palette.py is not importable beside this file, "
@@ -2924,8 +3022,9 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     reading as saturated.
 
     Args:
-        fig: The built figure. Measured through an Agg canvas at its authored
-            dpi, so the verdict does not depend on the backend it was made on.
+        fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
+            and handed back on its authored dpi, so the verdict depends on
+            neither the backend it was made on nor the resolution it was set to.
         scale: Points per authored inch, overriding `page_scale` outright.
         placed_frac: Fraction of the content width the figure is placed at.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
@@ -2934,6 +3033,24 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     Returns:
         `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
         report order; `ok` is False only when a row is a hard False.
+    """
+    with _at_measure_dpi(fig):
+        rows = _rows(fig, scale, placed_frac, venue, context_axes)
+    # "warn" rows are advisory: they report something worth a look without
+    # failing the build. Only a hard False gates.
+    return all(s is not False for _, s, _ in rows), rows
+
+
+def _rows(fig: Figure, scale: float | None, placed_frac: float,
+          venue: str | None, context_axes: Sequence[Axes] | None,
+          ) -> list[tuple[str, bool | str, str]]:
+    """Every gate's row, measured on one canvas at `MEASURE_DPI`.
+
+    Split out of `audit` so that the figure is held at the measurement
+    resolution by a `with` around the whole sweep rather than by a `try/finally`
+    wrapped around a function body with two dozen statements in it. The dpi has
+    to be restored even when a gate raises, and `audit` catches those one at a
+    time, so the restore cannot live in the loop.
     """
     r, canvas = _renderer(fig)
     available = dict(zip(GATE_INPUTS,
@@ -2970,9 +3087,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
                       f"not caught up with -- not something wrong with the "
                       f"figure. Please report it.")
         rows.append((gate.name, status, detail))
-    # "warn" rows are advisory: they report something worth a look without
-    # failing the build. Only a hard False gates.
-    return all(s is not False for _, s, _ in rows), rows
+    return rows
 
 
 def report(fig: Figure, name: str = "", scale: float | None = None,

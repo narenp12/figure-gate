@@ -2,8 +2,8 @@
 
 `audit(fig)` returns `(ok, rows)`, one row per gate. `check(colors)` gates a
 palette the same way. This page is what each row measures and the threshold it
-measures against; [the style guide](style-guide.md) is the measurement behind
-each threshold and what to do when a row fails.
+measures against. [The style guide](style-guide.md) is the measurement behind
+each threshold. [The how-to](how-to.md) is what to type when a row fails.
 
 ## Why the two scripts talk to each other
 
@@ -21,14 +21,18 @@ through the palette gates. That is row 12 of the 21.
 ## What each gate measures
 
 **`check_palette.py`** takes hex strings on the command line or via `check()`,
-and imports nothing outside the standard library. Distances are OKLab dE x100.
+and imports nothing outside the standard library. Distances are CAM02-UCS dE:
+Luo, Cui & Li (2006) fitted that space so Euclidean distance predicts perceived
+difference, which is what lets the two separation floors below cite a
+measurement. The lightness and chroma rows stay in OKLab, because those ask
+where a hue sits rather than how far apart two of them are.
 
 | Gate | Threshold | Fails when |
 |---|---|---|
 | Lightness band | `L_MIN, L_MAX = 0.43, 0.77` | OKLab lightness outside the band |
 | Chroma floor | `CHROMA_MIN = 0.10` | OKLab chroma below it, so the color reads as gray |
-| CVD separation | `CVD_TARGET = 8.0` | two hues under 8 dE in protan or deutan simulation, at dichromacy or at any severity in `ANOMALOUS_SEVERITIES` |
-| Normal-vision floor | `NORMAL_FLOOR = 15.0` | two hues under 15 dE in full color |
+| CVD separation | `CVD_TARGET = 10.5` | two hues under 10.5 dE in protan or deutan simulation, at dichromacy or at any severity in `ANOMALOUS_SEVERITIES` |
+| Normal-vision floor | `NORMAL_FLOOR = 21.0` | two hues under 21 dE in full color |
 | Contrast vs surface | `CONTRAST_MIN = 3.0` | a hue under 3:1 on the page *(advisory)* |
 
 `--ordinal` swaps those five rows for four that apply to a ramp: lightness
@@ -40,17 +44,17 @@ validated only for the red-green forms, so the number is indicative rather than
 decisive.
 
 The separation row is swept over severity rather than read at dichromacy. Most
-colour vision deficiency is anomalous trichromacy, and dichromacy is not the
-worst case for it: measured over 240000 pairs of hues `check_palette.py` would
-accept as series slots, 0.87% clear the floor at dichromacy and miss it at some
-lower severity, and dichromacy overstates separation by up to 10.5 dE. The row
-names the severity its worst reading came from. `simulate_anomalous` is the
+colour vision deficiency is anomalous trichromacy, and dichromacy is not its
+worst case. Over 240000 pairs of hues `check_palette.py` would accept as series
+slots, 0.87% clear the floor at dichromacy and miss it at some lower severity.
+Dichromacy overstates separation by up to 10.5 dE. The row names the severity
+its worst reading came from. `simulate_anomalous` is the
 Machado, Oliveira & Fernandes (2009) model; `simulate` remains Vienot dichromacy
 and is what every number quoted in the style guide was measured on.
 
-**`check_figure.py`** renders the figure through an Agg canvas, at the dpi it
-was authored at, and measures the result. `audit()` returns these 21 rows in
-this order.
+**`check_figure.py`** renders the figure through an Agg canvas at
+`MEASURE_DPI = 150`, measures the result, and hands the figure back on the dpi
+it arrived on. `audit()` returns these 21 rows in this order.
 
 | Gate | Threshold | Fails when |
 |---|---|---|
@@ -112,9 +116,9 @@ widths in points.
 
 Every check is an elimination gate: each one forbids a single enumerated
 failure, and none looks at the figure as a whole. 21 passing rows means the
-figure avoids 21 named defects. It does not mean the figure is good, and the
-checker cannot see that an arrow points at the wrong object, that reading order
-runs backwards, or that a label is true of the concept and false of the curve
+figure avoids 21 named defects. It does not mean the figure is good. The
+checker cannot see an arrow pointing at the wrong object, a reading order that
+runs backwards, or a label that is true of the concept and false of the curve
 beside it. Render it and look at it.
 
 A row can also be reporting the checker rather than the figure. Every gate runs
@@ -122,20 +126,38 @@ inside its own exception handler, so one that raises keeps its row and puts the
 exception in the detail, marked as a defect in the checker rather than in the
 figure. It takes its own severity: an advisory that crashed warns, a hard gate
 that crashed fails, because a gate that measured nothing has not cleared the
-figure. No gate is known to raise, and twenty adversarial figures, including
-3D, polar, all-NaN, infinite and zero-sized ones, found none, but the matplotlib
-floor these gates are written against has no ceiling above it, and they read
-internals that are free to move.
+figure. No gate is known to raise. Twenty adversarial figures, including 3D, polar,
+all-NaN, infinite and zero-sized ones, found none. The handler is there anyway:
+these gates read matplotlib internals that are free to move, and the version
+floor they are written against has no ceiling above it.
 
-Two blind spots are worth naming because a passing row looks the same as an
-absent one. The colormap gate reads a `Colormap`'s name to tell an encoding from
-a hand-set list of colors, so a map matplotlib left unnamed is skipped rather
-than judged; and it needs `check_palette.py` importable beside it, reporting
-that it could not classify anything rather than raising if it is not. Both are
-deliberate, and both mean the row can pass by having seen nothing.
+Two blind spots are worth naming, because a passing row looks the same as an
+absent one. The colormap gate reads a `Colormap`'s name to tell an encoding
+from a hand-set list of colors, so a map matplotlib left unnamed is skipped
+rather than judged. It also needs `check_palette.py` importable beside it;
+without it the row says it classified nothing, and passes. Both are deliberate.
+Both mean the row can pass by having seen nothing.
 
 The rules also do not transfer to interactive web charts, where hover,
 responsive reflow and dark mode change most of the constraints.
+
+**What the evidence for these gates actually is.** The colour gates answer to an
+independent implementation: `tests/test_colour_space_oracle.py` runs this
+project's CIECAM02 against colorspacious and its whole decision against the
+same, at 0.988 specificity. The composition gates have no equivalent oracle,
+because there is no importable corpus of published figures: journals ship PDFs,
+not `Figure` objects. The nearest external material that exists is matplotlib's
+own 28 shipped style sheets, and `tests/test_external_style_corpus.py` runs
+three neutral figures under every one of them. Four of those styles are
+published by their authors as accessible under colour vision deficiency, and the
+colour gate rejects none of the four while rejecting 21 of the 24 that make no
+such claim.
+
+The same sweep names what does *not* discriminate, which is the more useful half:
+`check_style_sheet` and `check_fonts` fire on 28 styles out of 28. The first asks
+whether this project's sheet is in effect and the second asks for Type 42
+embedding, and on anyone else's sheet both answers are known in advance. Both are
+advisory, and neither is evidence of anything about a figure.
 
 ## Design notes
 
@@ -144,6 +166,23 @@ responsive reflow and dark mode change most of the constraints.
 for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
 poles clear every gate in `check_palette.py` unmodified, and a windowed custom
 ramp discarded 35% of viridis for no measured gain.
+
+**Pixels are measured at one resolution, `MEASURE_DPI = 150`.** Roughly half the
+thresholds are pixel counts: the edge window the readability gate uses to tell
+a mark from ground, the footprint below which a text box is a glyph or two, the
+distance from the page colour at which a pixel counts as ink. A pixel count is
+a measurement only if the resolution is fixed. `figure.dpi` is not fixed: it is
+an author's knob, it is whatever sheet is in effect, and a GUI backend
+multiplies it by the display's device pixel ratio without asking. So `audit`
+draws at
+`MEASURE_DPI` whatever the figure was authored at, and hands the figure back on
+the dpi it arrived on.
+
+The cost of not doing this was measured before the constant existed: across
+100/150/200/300/600 dpi, the eleven gallery figures moved 34 rows and flipped
+one. The same figure, five verdicts, from a knob that has nothing to do with
+whether it reads. `savefig.dpi` is unaffected, so what you write out is still
+yours to choose.
 
 **WARN is not FAIL.** Eight of the 21 rows are advisory, in that they can
 return `"warn"` but never `False`, and `ADVISORY_GATES` in `check_figure.py` is
@@ -173,7 +212,7 @@ neither told anyone what to change. Splitting an arrow against a tilde would
 have put the whole distinction on one glyph in a wall of detail text, so the
 marks are words.
 
-**Gates are tested for their ability to fail.** The suite is 1375 tests, and
+**Gates are tested for their ability to fail.** The suite is 1601 tests, and
 each check has one asserting it catches a figure with exactly that defect. The
 style sheet has its own tests because `#` starts a comment in matplotlib's
 style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps

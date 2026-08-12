@@ -28,11 +28,14 @@ resolves, or it fails until somebody writes down why it cannot.
 """
 
 import ast
+import builtins
+import doctest
 import inspect
 import pathlib
 import re
 import subprocess
 
+import numpy
 import pytest
 
 import matplotlib
@@ -181,9 +184,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (16, 11), (
+    assert (len(tracked), len(PROSE_DOCS)) == (17, 12), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 16 and 11 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 17 and 12 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
@@ -226,6 +229,36 @@ def fenced_python():
     return out
 
 
+PROMPT = re.compile(r"^ *>>> ", re.M)
+
+
+def python_statements(source):
+    """The parseable Python in one fenced block.
+
+    A block written as a REPL session is Python interleaved with output, and
+    handing the whole thing to `ast.parse` reports the prompt as a syntax
+    error. The prompt is not the defect: `docs/how-to.md` states two returned
+    values that way and `test_how_to.py` computes both from the code. Split
+    with `doctest`, which understands the form, and parse what it returns.
+
+    Every prompt has to come back as an example. One `doctest` reads as output
+    -- which is what an indented prompt is -- would otherwise vanish, and a
+    block whose examples vanished passes by having nothing left to check.
+    """
+    if not PROMPT.search(source):
+        return [source]
+    try:
+        examples = doctest.DocTestParser().get_examples(source)
+    except ValueError as exc:
+        raise AssertionError(
+            f"doctest cannot read this block as a session: {exc}") from None
+    assert len(examples) >= len(PROMPT.findall(source)), (
+        f"{len(PROMPT.findall(source))} prompt line(s) came back as "
+        f"{len(examples)} example(s): doctest is reading part of this block as "
+        "output rather than as the code it is written as")
+    return [example.source for example in examples]
+
+
 @pytest.mark.parametrize("document,index,source", fenced_python())
 def test_every_fenced_python_block_parses(document, index, source):
     """A worked example that does not parse is a claim that does not run.
@@ -235,9 +268,21 @@ def test_every_fenced_python_block_parses(document, index, source):
     than in an editor.
     """
     try:
-        ast.parse(source)
+        for statement in python_statements(source):
+            ast.parse(statement)
     except SyntaxError as exc:
         pytest.fail(f"{document} python block {index} does not parse: {exc}")
+
+
+def test_a_broken_session_is_not_excused_by_being_a_session():
+    """The gate above grew a second path, and a second path is somewhere a
+    defect hides. Both ways a session can be wrong: Python that does not parse
+    behind a well-formed prompt, and a prompt `doctest` cannot read as one."""
+    with pytest.raises(SyntaxError):
+        for statement in python_statements(">>> check_form(fig\n"):
+            ast.parse(statement)
+    with pytest.raises(AssertionError):
+        python_statements(">>> check_form(fig)\n(True, 'x')\n  >>> page_scale(fig)\n1.0\n")
 
 
 # --- resolving a code span ---------------------------------------------------
@@ -289,15 +334,32 @@ def _cli_flags(module):
 CLI_FLAGS = {name: _cli_flags(module) for name, module in MODULES.items()}
 ALL_FLAGS = set().union(*CLI_FLAGS.values())
 
+
+def _cli_choices(module):
+    """Values a flag will accept, read out of its `choices=[...]`.
+
+    `adjacent` is one of the two `--pairs` takes, so naming it in prose is a
+    claim the parser settles -- as the flag itself is. Source-read, for the
+    reason `_cli_flags` is."""
+    source = pathlib.Path(inspect.getfile(module)).read_text(encoding="utf-8")
+    return {value
+            for group in re.findall(r"choices=\[([^\]]*)\]", source)
+            for value in re.findall(r'"([^"]+)"', group)}
+
+
+CLI_CHOICES = set().union(*(_cli_choices(m) for m in MODULES.values()))
+
 CONSOLE_SCRIPTS = set(re.findall(r"^([a-z-]+) = \"",
                                  (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
                                  re.M))
 
 # Aliases the prose uses in code spans, spelled the way the import line in the
-# same document spells them.
+# same document spells them. `numpy` because the gates return its scalars:
+# `page_scale` hands back a `numpy.float64`, and docs/how-to.md saying so is a
+# claim about a type that either has that name or does not.
 NAMESPACES = {"plt": plt, "matplotlib": matplotlib, "mpl": matplotlib,
               "pe": matplotlib.patheffects, "cp": cp, "cf": cf,
-              "colormaps": colormaps,
+              "colormaps": colormaps, "numpy": numpy, "np": numpy,
               "check_figure": cf, "check_palette": cp}
 
 # Keys the alt-text helper writes into a saved file, per format. `Subject` and
@@ -318,6 +380,29 @@ def _appendix_definitions():
 
 
 APPENDIX = _appendix_definitions()
+
+
+def _example_bindings():
+    """Names the corpus' own worked examples bind to a value.
+
+    `ok, rows = audit(fig)` is followed by prose about `ok`, and nothing in the
+    scripts is called that: it is the caller's name for the first half of the
+    return. A sentence explaining a snippet may name what the snippet named.
+    Parsed out of the blocks rather than listed as words, so a variable that
+    leaves the examples stops resolving with them. Assignment targets only: a
+    `def` in an example would otherwise license every parameter name in it,
+    and the guide's appendix helpers resolve through `APPENDIX` already.
+    """
+    names = set()
+    for _, _, source in fenced_python():
+        for statement in python_statements(source):
+            for node in ast.walk(ast.parse(statement)):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    names.add(node.id)
+    return names
+
+
+EXAMPLE_NAMES = _example_bindings()
 
 
 def _parameter_names():
@@ -534,6 +619,26 @@ def _identifiers_resolve(snippet):
     return bool(ours) and all(_resolves_dotted(n) for n in ours)
 
 
+def _is_predicate(span):
+    """`not s`, `s is False`: a test written over a name, not a name.
+
+    Parsed rather than pattern-matched, so the names inside are held to the
+    standard a bare span is and a predicate over something nothing defines
+    still fails. Only the shapes prose uses for a verdict -- negation,
+    comparison, their `and`/`or` -- so this is not a licence for code.
+    """
+    try:
+        tree = ast.parse(span, mode="eval")
+    except SyntaxError:
+        return False
+    if not isinstance(tree.body, (ast.UnaryOp, ast.Compare, ast.BoolOp)):
+        return False
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    return bool(names) and all(
+        n in EXAMPLE_NAMES or n in PARAMETERS or _resolves_dotted(n)
+        for n in names)
+
+
 def resolve(span):
     """A label for what `span` names in the code, or None when nothing does."""
     if span in VOCABULARY:
@@ -632,7 +737,11 @@ def resolve(span):
         return "tuple-shape"                  # order checked by the API tests
     call = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_.]*)\s*\(.*\)", span, re.S)
     if call:
-        return "call" if _resolves_dotted(call.group(1)) else None
+        if _resolves_dotted(call.group(1)):
+            return "call"
+        # `float()`, and only as a call: `True` and `False` are in
+        # `dir(builtins)` too, and they are vocabulary rather than code.
+        return ("builtin-call" if call.group(1) in dir(builtins) else None)
     kwarg = re.fullmatch(r"([a-z_]+)\s*=.*", span, re.S)
     if kwarg:
         return ("keyword" if kwarg.group(1) in MPL_NAMES | PARAMETERS
@@ -644,6 +753,15 @@ def resolve(span):
         return "expression"
     if (";" in span or "import" in span) and _identifiers_resolve(span):
         return "snippet"
+    if span in CLI_CHOICES:
+        return "cli-value"
+    # The caller's names, after every resolver that knows the code's own. A
+    # sentence about a snippet is entitled to name what the snippet bound, and
+    # nothing else is: the set is parsed out of the examples themselves.
+    if span in EXAMPLE_NAMES:
+        return "example-binding"
+    if _is_predicate(span):
+        return "predicate"
 
     # The configuration domains, last. Everything above knows what a Python
     # name looks like, and a key such as `host` or `sha256` looks exactly like
@@ -675,7 +793,6 @@ UNRESOLVED_SPANS = {
                                           "so a reader recognises it",
     "(a)": "a panel label in a figure, quoted as it appears on the figure",
     "(b)": "a panel label in a figure, quoted as it appears on the figure",
-    "status": "a field of the row triple, named in prose describing the shape",
     "#": "the character itself, in the sentence about style-sheet colours "
          "written with a leading hash",
     "/plugin install figure-gate@figure-gate": "a Claude Code command, named "
@@ -982,9 +1099,14 @@ KNOWN_HEXES |= {h.lower() for h in
 # still has to be a real pair, or the demonstration is a story. Each of these
 # carries the measurement it appears with, and `test_palette.py` pins it.
 COUNTEREXAMPLE_HEXES = {
-    # 8.4 dE at dichromacy, 7.9 at severity 0.8: the pair that says dichromacy
+    # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
     # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    "#288ac6", "#fd00db",
+    #
+    # It used to be #288ac6/#fd00db, at 8.4 and 7.9 against a floor of 8. Those
+    # two straddled the OKLab floor and sit either side of the CAM02-UCS one by
+    # 0.03 dE, which is a fixture that demonstrates nothing once rounded. The
+    # replacement clears dichromacy by 8.7 and misses the worst severity by 2.2.
+    "#8e4dc7", "#1402ef",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
 
@@ -1230,7 +1352,7 @@ EXTERNAL_CLAIMS = {
     },
     "colour difference and target size": {
         "document": "style-guide.md",
-        "anchor": "Why there is no size-weighted separation gate",
+        "anchor": "Why there is still no size-weighted gate",
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
                   "2014(1), 253-258",
         "verified": "2026-07-31",
@@ -1380,8 +1502,16 @@ def _heatmap():
     return fig
 
 
-def _grid_with_a_blank_panel():
-    fig, axs = plt.subplots(1, 2, figsize=(6, 3), constrained_layout=True)
+def _grid_with_a_blank_panel(figsize=(3, 1.5)):
+    """Two panels, one of them never drawn in.
+
+    The size is an argument because the paragraph's claim turns on it: furniture
+    is a perimeter and a panel is an area, so the blank half's reading falls as
+    the pair grows. The default is the small size, where that reading lands
+    inside the range and `_axes_drew_anything` is the only thing that can catch
+    it.
+    """
+    fig, axs = plt.subplots(1, 2, figsize=figsize, constrained_layout=True)
     axs[0].plot([0, 1], [0, 1])
     return fig
 
@@ -1410,22 +1540,48 @@ def test_a_heatmap_measures_full_ink_and_warns():
         f"{detail!r}")
 
 
-def test_a_blank_panel_warns_from_inside_the_range():
-    """The sentence a reader acts on is that a blank cell warns even though its
-    furniture measures inside the band. If the floor ever catches it instead,
-    the sentence is telling the reader about a mechanism that stopped running.
-    """
-    fig = _grid_with_a_blank_panel()
+def _blank_panel_fraction(figsize):
+    fig = _grid_with_a_blank_panel(figsize)
     try:
         status, detail = cf.check_ink(fig)
     finally:
         plt.close(fig)
+    return status, detail, float(re.search(r"ax1 ([\d.]+)", detail).group(1))
+
+
+def test_a_blank_panel_warns_from_inside_the_range():
+    """The sentence a reader acts on is that a blank cell warns even when the
+    range would have passed it. If the floor ever catches this one instead, the
+    sentence is telling the reader about a mechanism that stopped running.
+    """
+    status, detail, blank = _blank_panel_fraction((3, 1.5))
     assert status == "warn", f"a blank panel no longer warns: {detail}"
-    blank = float(re.search(r"ax1 ([\d.]+)", detail).group(1))
     assert cf.INK_MIN <= blank <= cf.INK_MAX, (
         f"the blank panel measures {blank}, outside "
         f"[{cf.INK_MIN}, {cf.INK_MAX}]. The guide says it is caught by asking "
         "whether anything was drawn, not by the range")
+
+
+def test_the_blank_panels_own_reading_falls_as_the_panel_grows():
+    """The size dependence the paragraph now states, measured.
+
+    The guide claimed for a while that a blank panel's furniture measures inside
+    the range, full stop. It does at 3x1.5in and does not at 6x3in, and the
+    figure that was standing in the guide as the example was the second one, so
+    the sentence was being demonstrated by a case that contradicted it. Pinned
+    here so the number in the prose is a measurement and not a memory.
+    """
+    _, _, small = _blank_panel_fraction((3, 1.5))
+    status, detail, large = _blank_panel_fraction((6, 3))
+    assert small > large, (
+        f"a blank panel reads {small} at 3x1.5in and {large} at 6x3in, so "
+        "furniture no longer thins out as the panel grows and the guide's "
+        "explanation of why the drew-anything question exists is wrong")
+    assert large < cf.INK_MIN, (
+        f"the blank half of a 6x3in pair now measures {large}, inside "
+        f"[{cf.INK_MIN}, {cf.INK_MAX}]. The guide names it as the case the "
+        "range catches on its own")
+    assert status == "warn", f"a blank panel no longer warns: {detail}"
 
 
 def test_context_axes_turns_a_saturated_surface_into_a_pass():

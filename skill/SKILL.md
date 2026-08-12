@@ -235,9 +235,9 @@ and contrast against the surface.
 
 The two used to be unable to speak: `check_palette.py` judged a list of hexes
 someone remembered to paste into a terminal, and `check_figure.py` never looked
-at color. So a figure on matplotlib's default `tab10` cycle — orange and green at
-OKLab ΔE 1.4 under protanopia, one hue to that reader — passed the whole
-composition suite clean. **Series color** closes it by reading the hues the
+at color. So a figure on matplotlib's default `tab10` cycle, whose orange and
+green sit at CAM02-UCS ΔE 2.4 under protanopia against a floor of 10.5 and are
+one hue to that reader, passed the whole composition suite clean. **Series color** closes it by reading the hues the
 figure actually drew and putting those through the palette gates, inferring
 adjacent-versus-all-pairs from whether the marks are scatter.
 
@@ -278,12 +278,13 @@ Three → orange, sky blue, bluish green. Choosing semantically ("blue is
 structure, red is training") is how a palette that looks fine measures ΔE 3.2
 under protanopia. The in-order rule exists to keep that from happening.
 
-Two limits worth knowing: scatter and small multiples compare *every* series
-against every other, and only the first five slots clear that — the sixth drops
-the worst pair to ΔE 7.9 under deuteranopia, under the target of 8, so past five
-fold the tail into "Other" or facet. And there is no seventh series hue; a
-generated one is indistinguishable from an existing slot under simulated color
-blindness.
+One limit worth knowing: scatter and small multiples compare *every* series
+against every other, and the first six slots clear that. The worst pair is
+`#0072B2` vs `#CC79A7` at ΔE 12.8 under protanopia, against a target of 10.5.
+That used to read five: the sixth measured 7.9 against a target of 8 in OKLab,
+whose distances have no calibrated threshold, and the two spaces do not even
+agree on which pair is worst. And there is no seventh series hue; a generated one
+is indistinguishable from an existing slot under simulated color blindness.
 
 `figure.mplstyle` now sets `axes.prop_cycle` to the six series slots, so a
 figure built on the sheet is on the right palette without anyone remembering to
@@ -303,7 +304,8 @@ canonical first two, orange and sky blue, separate by relative luminance 0.011
 in the set. When the figure must survive a photocopier, select by luminance
 instead — relative luminance 0.264 (`#E69F00` vs `#0072B2`) — say so, and add a
 second channel: dash pattern or marker shape. WCAG relative luminance, not the
-OKLab ΔE the separation gates use, because that is what a desaturation keeps.
+CAM02-UCS ΔE the separation gates use, and not the OKLab lightness this guide
+quotes elsewhere, because luminance is what a desaturation keeps.
 
 **Status colors come from the same palette** —
 `good #009E73`, `warning #E69F00`, `critical #D55E00` — always shipped with an
