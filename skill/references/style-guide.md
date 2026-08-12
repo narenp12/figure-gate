@@ -104,9 +104,13 @@ The ends fail differently.
 
 **At the floor**, suspect the scale before the data. Marks occupying one corner of a
 panel usually mean limits set by an outlier or left at the default, and the fix is the
-limits, not more ink. A panel with nothing drawn in it warns even though its frame and
-ticks alone measure inside the range: the gate asks whether anything was drawn, so the
-blank cell in a grid is a WARN and not a pass.
+limits, not more ink. A panel with nothing drawn in it warns whether or not the range
+would have caught it: the gate asks whether anything was drawn, so the blank cell in a
+grid is a WARN and not a pass. That question is doing work, because empty furniture is
+not reliably under the floor. Frame, ticks and gridlines are a perimeter and the panel
+is an area, so their share falls as the panel grows: measured at `MEASURE_DPI`, a blank
+half of a 3x1.5in pair reads 0.03, inside the range, and a blank half of a 6x3in pair
+reads 0.01, under it. Only the first is caught by asking.
 
 **At the ceiling**, the panel is reporting density rather than observations, which is
 the Overplotting section in `choosing-a-form.md`: transparency within the 3-alpha-level
@@ -182,16 +186,20 @@ if you want.
 
 The remaining six, in canonical order: `#E69F00 #56B4E9 #009E73 #0072B2 #D55E00 #CC79A7`
 
-Adjacent CVD ΔE 16.6, adjacent normal-vision ΔE 16.4, first-five all-pairs ΔE 11.2/15.6.
+Adjacent CVD ΔE 32.0, adjacent normal-vision ΔE 31.5, all-pairs ΔE 12.8/21.6.
 
 **Take slots in order.** One → orange. Three → orange, sky blue, bluish green. Never
-cherry-pick by meaning. Two limits: the first five slots clear all-pairs; there is no
-seventh hue.
+cherry-pick by meaning. One limit, not two: the first six slots clear all-pairs, and there is
+no seventh hue.
 
-The all-pairs limit was written as four for a long time and the measurement does not
-support it: five slots come to ΔE 11.2 under deuteranopia against a target of 8, and
-six is the first count that fails, at 7.9 (`#009E73` vs `#CC79A7`). Four was a number
-nobody had run. `tests/test_docs_match_code.py` now derives it by asking
+The all-pairs limit has been wrong twice, in both directions. It was written as four
+for a long time and nobody had run it. Measured, it became five: six slots failed at
+ΔE 7.9 (`#009E73` vs `#CC79A7`) against a target of 8. That measurement was made in
+OKLab, whose distances have no calibrated threshold, and in CAM02-UCS the same worst
+pair is `#0072B2` vs `#CC79A7` at 12.8 against a floor of 10.5. Two spaces disagreeing
+about *which* pair is worst is the clearest illustration in this guide of why 0.8.0
+changed metric. The restriction to five was an artefact and it is gone.
+`tests/test_docs_match_code.py` derives the number by asking
 `check_palette.check(..., all_pairs=True)` for the largest count that passes, so the
 constant below and this sentence cannot drift from the validator again.
 
@@ -200,9 +208,9 @@ two, separate by relative luminance 0.011 (`#E69F00` vs `#56B4E9`) and are invis
 once desaturated. Take orange and blue instead — relative luminance 0.264 (`#E69F00`
 vs `#0072B2`) — and add a second channel when it must survive a photocopier.
 
-The unit is WCAG relative luminance here, not the OKLab ΔE ×100 the separation gates
-use, because that is the channel a desaturation keeps. In OKLab lightness the same two
-pairs are 0.018 and 0.221: the ordering is the same, the numbers are not, and a reader
+The unit is WCAG relative luminance here, not the CAM02-UCS ΔE the separation gates
+use and not the OKLab lightness quoted below, because luminance is the channel a
+desaturation keeps. In OKLab lightness the same two pairs are 0.018 and 0.221: the ordering is the same, the numbers are not, and a reader
 who recomputes one convention against the other concludes the guide has drifted.
 
 ### Sequential: viridis, as shipped
@@ -294,7 +302,11 @@ isoluminant and carries no order at all. Otherwise the measure is **back-travel*
 the fraction of a segment's lightness span spent moving against its own
 direction: under `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential,
 under it over both halves is diverging, or cyclic when the two ends are within
-`CMAP_WRAP_DE_MAX = 3.0` of each other in OKLab ΔE ×100.
+`CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, one just-noticeable
+difference, which is what "the ends are the same colour" means once the metric has a
+unit. The 18 maps in the registry that reach this branch wrap at 0.000 and 0.376
+(the two twilights) or at 27.963 and above (everything diverging), so the threshold has
+two orders of magnitude of clearance either side.
 
 Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
 `rainbow`, `hsv` and `gist_ncar` land there. A reader cannot order two values in
@@ -352,44 +364,72 @@ python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all # scatter
 python check_palette.py "#471365,#2c718e,#44bf70" --ordinal   # ramps
 ```
 
-Gates: lightness band, chroma floor, CVD separation ≥ 8, normal-vision ≥ 15, contrast ≥
-3:1. Separations are OKLab ΔE ×100. CVD gating on protanopia/deuteranopia (~8% of males);
+Gates: lightness band, chroma floor, CVD separation ≥ 10.5, normal-vision ≥ 21,
+contrast ≥ 3:1. Separations are CAM02-UCS ΔE. CVD gating on protanopia/deuteranopia (~8% of males);
 tritan reported but not gated (~0.01%). Surface defaults to white; `--surface` for a
 tinted page.
 
 **Dichromacy is not the worst case, so the separation row is swept over severity.**
 Most colour vision deficiency is anomalous trichromacy — a cone whose peak sensitivity is
 shifted, not one that is missing — and simulating only the endpoint would be sound if the
-endpoint were the hardest view. Measured over 240 000 pairs of hues this validator would
-accept as series slots, 0.87% clear ΔE 8 under dichromacy and miss it at some lower
-severity, and dichromacy overstates separation by as much as 10.5 ΔE. `#288ac6` and
-`#fd00db` are one such pair: 8.4 at dichromacy, 7.9 at severity 0.8. So the row reports
+endpoint were the hardest view. Measured over 244 650 pairs of hues this validator would
+accept as series slots, 1.27% clear ΔE 10.5 under dichromacy and miss it at some lower
+severity, and dichromacy overstates separation by as much as 12.7 ΔE. `#8e4dc7` and
+`#1402ef` are one such pair: 19.2 at dichromacy, 8.3 at severity 0.9. So the row reports
 the worst view found and names the severity it was found at, using the Machado, Oliveira
 & Fernandes (2009) matrices for `ANOMALOUS_SEVERITIES` and the Viénot matrices at
-dichromacy. The bundled cycle's worst adjacent pair reads 15.8, which is what says the
+dichromacy. The bundled cycle's worst adjacent pair reads 31.7, which is what says the
 stricter reading is not a floor nobody can satisfy.
 
-**Why there is no size-weighted separation gate.** A hue pair that reads as two on a
-filled band ought to read as one on a hairline, and that intuition is right — a small
-target does need more colour difference than a large one. Stone, Szafir & Setlur (2014)
-measured how much: the noticeable difference for half of observers rises as C + K/s,
-with s the target's visual angle in degrees, fitted from 0.333° to 6°, which comes to
-6.1 CIELAB ΔE at a two-degree patch and 10.4 at a third of a degree. A gate multiplying
-the floors above by that ratio was built and thrown away, because the two numbers are in
-different units and multiplying them is what made it fire.
+**Where the two floors come from.** A hue pair that reads as two on a filled band ought
+to read as one on a hairline, and that intuition is right: a small target does need more
+colour difference than a large one. Stone, Szafir & Setlur (2014) measured how much: the
+noticeable difference for half of observers rises as C + K/s, with s the target's visual
+angle in degrees, fitted from 0.333° to 6°, which comes to 6.1 CIELAB ΔE at a two-degree
+patch and 10.4 at a third of a degree.
 
-Measured over 20 000 random pairs, one OKLab ΔE ×100 unit is a median 2.94 CIELAB ΔE.
-So `NORMAL_FLOOR = 15.0` is about 44 CIELAB, and `CVD_TARGET = 8.0` about 24 — four
-times and twice the 10.4 the size model asks for at the smallest size it was fitted at.
-Okabe-Ito's green and sky blue, which the discarded gate flagged on a 1.6pt curve, are
-59.5 CIELAB apart: 5.7× the requirement. **The floors here already exceed what the size
-model demands at every size the model can speak to.** Publication line widths are well
-below that range — a 1pt stroke is 0.05° at reading distance, two decades outside the
-data — and extrapolating that fit there produces a number nothing supports.
+Before 0.8.0 that model could only sit beside the floors and be compared against them,
+because the floors were OKLab distances and OKLab has no calibrated metric, its authors
+fitted it for hue uniformity and never against discrimination data, so a distance of 8 in
+it was a number with no referent. Since 0.8.0 the floors are CAM02-UCS, which Luo, Cui &
+Li (2006) fitted so that Euclidean distance predicts perceived difference, and the model
+is what they are derived from:
+
+> One CAM02-UCS unit is a median **1.99 CIELAB ΔE\*ab** over the gamut this validator
+> accepts as series slots, so Stone et al.'s 10.4 is **5.23 CAM02-UCS**. `CVD_TARGET` is
+> 2× that and `NORMAL_FLOOR` is 4×.
+
+The bridge is population-dependent and the population is load-bearing: over the whole
+sRGB cube the same ratio reads 1.85, which would put `CVD_TARGET` at 11.3 instead of
+10.5. The slot gamut is the right one because the lightness band and the chroma floor
+reject everything else before the separation rows are reached, the cube contains pairs
+this gate cannot be handed. `test_the_bridge_between_the_two_colour_spaces_is_population_dependent`
+measures both so the choice cannot quietly revert.
+
+The multiples are the one judgement in the derivation. 10.4 CIELAB is where half of
+observers **notice a difference**; a figure asks for more, because the reader is not
+detecting that two marks differ side by side, they are identifying which series a mark
+belongs to across a page from memory of a legend. 2× under simulation and 4× in full
+colour is where this project puts that margin. The guide used to describe the OKLab
+floors as landing at the same multiples, which is true and is a coincidence: it computed
+them through a whole-cube ratio against a metric that had no calibration.
+
+**What is evidence for them.** The floors were derived without reference to any palette.
+Run against the published Okabe-Ito eight-colour set, `CVD_TARGET` clears all 28 pairs
+and `NORMAL_FLOOR` misses exactly one: orange `#E69F00` against yellow `#F0E442`, at
+20.75. Yellow is one of the two colours the shipped cycle already drops. Arriving at that
+independently is the strongest argument these numbers have, and it is why the result is
+pinned in `test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor`
+rather than sanded off with a friendlier fixture.
+
+**Why there is still no size-weighted gate.** A gate multiplying the floors by Stone
+et al.'s size ratio was built and thrown away. Publication line widths are far below the
+range the model was fitted over: a 1pt stroke is 0.05° at reading distance, two decades
+outside the data, and extrapolating the fit there produces a number nothing supports.
 
 So the rule is a rule and not a gate: **a hairline is where a palette gets tested, so give
 thin strokes the widest-separated slots and do not lean on a pair that only just clears a
-floor.** `test_the_size_model_is_already_inside_the_normal_vision_floor` pins the
+floor.** `test_the_separation_floors_reproduce_the_size_model_they_derive_from` pins the
 arithmetic so the next person to propose the gate can re-derive this in one run.
 
 ### Text on fills
@@ -544,7 +584,7 @@ _OKABE = colormaps["okabe_ito"]
 # 0 black 1 #E69F00 2 #56B4E9 3 #009E73 4 #F0E442 5 #0072B2 6 #D55E00 7 #CC79A7
 
 SERIES = [_OKABE(i) for i in (1, 2, 3, 5, 6, 7)]
-MAX_SERIES, MAX_SERIES_ALL_PAIRS = 6, 5
+MAX_SERIES, MAX_SERIES_ALL_PAIRS = 6, 6
 
 STATUS = {"good": _OKABE(3), "warning": _OKABE(1), "critical": _OKABE(6)}
 NEUTRAL_BACKDROP = ["#ffffff", "#e6e5de", "#c3c2b7", "#95938b"]

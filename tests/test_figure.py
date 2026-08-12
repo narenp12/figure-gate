@@ -93,9 +93,14 @@ def test_hidpi_does_not_move_any_verdict():
 
 
 def test_hidpi_figure_is_measured_at_its_authored_dpi():
-    """The dpi the figure was authored at is the one the page gets. Leaving the
-    doubled value in place would put the checker a factor of two away from
-    every pixel constant at the top of the file."""
+    """The dpi the figure was authored at is the one the caller gets back.
+
+    Measuring now happens at `MEASURE_DPI` rather than at the authored value
+    (see `test_renderer_invariance.py` for why, and for the general form of this
+    test), but the figure is borrowed, not kept. Leaving the doubled value in
+    place would hand back a figure whose next `savefig` writes at twice the
+    resolution its author asked for.
+    """
     fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
     authored = fig.dpi
@@ -379,7 +384,7 @@ def test_series_color_catches_the_default_matplotlib_cycle():
     """The failure that motivated the gate. A figure on matplotlib's own `tab10`
     cycle passed Clipping, Text collision, Contrast stack, Mark ratio, Axis
     redundancy, Type size and Ink coverage clean, and its orange and green
-    measure OKLab dE 1.4 under protanopia -- one hue to a reader who cannot
+    measure CAM02-UCS dE 2.4 under protanopia -- one hue to a reader who cannot
     separate them. `check_palette.py` had always known; nothing asked it."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     for i, c in enumerate(TAB10):
@@ -402,13 +407,23 @@ def test_series_color_passes_the_palette_the_guide_prescribes():
 
 
 def test_pairs_mode_is_inferred_from_the_marks():
-    """Six slots clear adjacent separation and only the first four clear
-    all-pairs -- the guide says so, and it is exactly the distinction the CLI
-    has to be told with `--pairs`. Drawn as lines a reader compares neighbours;
-    drawn as scatter every series lands beside every other."""
-    def audit_six(scatter):
+    """Drawn as lines a reader compares neighbours; drawn as scatter every
+    series lands beside every other, and the mode has to follow the marks.
+
+    The palette is not the shipped cycle any more. Before 0.8.0 the cycle's six
+    slots cleared adjacent and failed all-pairs, so it demonstrated the two
+    modes for free; under CAM02-UCS its worst all-pairs view is 12.8 against a
+    10.5 floor and it clears both. That is a real result and it is pinned in
+    `test_the_whole_cycle_now_clears_all_pairs` -- but it leaves this test
+    needing a palette that still separates the modes, so it builds one: blue and
+    violet are 8.6 apart under protan simulation and never adjacent, with orange
+    between them.
+    """
+    palette = ["#0072b2", "#d55e00", "#87019f"]
+
+    def audit_three(scatter):
         fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-        for i, c in enumerate(OKABE):
+        for i, c in enumerate(palette):
             if scatter:
                 ax.scatter([0, 1], [i, i + 1], color=c)
             else:
@@ -417,8 +432,27 @@ def test_pairs_mode_is_inferred_from_the_marks():
         plt.close(fig)
         return gates(rows)["Series color"]
 
-    assert audit_six(scatter=False) is True
-    assert audit_six(scatter=True) is False
+    assert audit_three(scatter=False) is True
+    assert audit_three(scatter=True) is False
+
+
+def test_the_whole_cycle_now_clears_all_pairs():
+    """What the metric change bought, stated as a test rather than left in a
+    changelog entry.
+
+    The style sheet ships six slots and the guide used to say only the first
+    five could be used where every series sits beside every other, because the
+    sixth pair measured 7.7 against an OKLab floor of 8.0. In CAM02-UCS the same
+    pair is 12.8 against 10.5. The restriction was an artefact of measuring in a
+    space with no calibrated threshold, and removing it is the only place a
+    reader gets *more* room out of 0.8.0 rather than less.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, c in enumerate(OKABE):
+        ax.scatter([0, 1], [i, i + 1], color=c)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is True, gates(rows)
 
 
 def test_series_color_catches_a_seventh_hue():
@@ -498,13 +532,21 @@ def test_series_color_scopes_the_comparison_to_a_panel():
     figure-wide harvest did exactly that: a flow-chart node in panel a measured
     against a regression curve in panel b. Each panel here separates internally;
     only the cross-panel pair is close, and that pair is not a comparison."""
-    # Ordered so the close cross-panel pair (blue vs teal) is consecutive in the
-    # figure-wide harvest -- otherwise adjacent mode never compares them and the
-    # old figure-wide code passes for the wrong reason.
+    # Ordered so the close cross-panel pair (blue vs violet) is consecutive in
+    # the figure-wide harvest -- otherwise adjacent mode never compares them and
+    # the old figure-wide code passes for the wrong reason.
+    #
+    # Violet rather than the teal this used before 0.8.0. The teal was picked to
+    # sit ~dE 6 from blue under the old OKLab metric and reads 8.6 under
+    # CAM02-UCS, still close enough for the cross-panel point -- but it also read
+    # 9.8 against the pink in its own panel, which the 10.5 floor now fails, so
+    # the fixture stopped isolating the thing it was built to isolate. Violet
+    # against blue is the same confusion and a cleaner one: it is where protan
+    # simulation collapses hardest, and it is 33.3 clear of the pink beside it.
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
     a.plot([0, 1], [1, 0], color="#d55e00", label="Acquisition")  # orange
     a.plot([0, 1], [0, 1], color="#0072b2", label="GP mean")      # blue
-    b.plot([0, 1], [0, 1], color="#2c738e", label="DMTA node")    # teal, ~dE 6 vs blue
+    b.plot([0, 1], [0, 1], color="#87019f", label="DMTA node")    # violet, dE 8.9 vs blue
     b.plot([0, 1], [1, 0], color="#cc79a7", label="Assay")        # pink
     ok, rows = cf.audit(fig)
     plt.close(fig)
@@ -2857,6 +2899,42 @@ def test_a_qualitative_colormap_that_does_separate_passes():
 
 
 def test_the_qualitative_route_does_not_apply_the_band_and_chroma_rows():
+    """`#f0e442` is deliberately not in this fixture; see the test below it.
+
+    The row under test is the band-and-chroma one, and Okabe-Ito's yellow fails
+    a different row for a real reason, so leaving it here would have this test
+    go red for something it is not about.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+    okabe = ListedColormap(["#e69f00", "#56b4e9", "#009e73", "#0072b2"],
+                           name="okabe4")
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots()
+    ax.imshow(rng.integers(0, 4, (20, 20)), cmap=okabe)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor():
+    """The 0.8.0 floors' sharpest consequence, and the strongest evidence for
+    them that this project has.
+
+    `NORMAL_FLOOR` was derived from Stone, Szafir & Setlur and from a measured
+    colour-space bridge, with no reference to any palette. Run against the
+    published Okabe-Ito eight-colour set it clears 27 of the 28 pairs and misses
+    one: orange `#e69f00` against yellow `#f0e442`, at 20.75 against a floor of
+    21.0.
+
+    Yellow is one of the two colours `figure.mplstyle` already leaves out of its
+    cycle. The floor was not tuned to produce that answer and the agreement is
+    the reason to trust it -- so the result is pinned here rather than sanded off
+    by choosing a friendlier fixture, and if a future change makes Okabe-Ito
+    clear this floor completely, that is a finding and this is where it lands.
+    """
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
     okabe = ListedColormap(["#e69f00", "#56b4e9", "#009e73", "#f0e442"],
@@ -2868,7 +2946,23 @@ def test_the_qualitative_route_does_not_apply_the_band_and_chroma_rows():
         ok, detail = cf.check_colormap(fig)
     finally:
         plt.close(fig)
-    assert ok is True, detail
+    assert ok is False, detail
+    assert "#e69f00" in detail and "#f0e442" in detail, detail
+
+    import check_palette as cp
+    measured = cp.delta_e(cp.hex_to_linear("#e69f00"),
+                          cp.hex_to_linear("#f0e442"))
+    assert measured == pytest.approx(20.75, abs=0.1), measured
+    assert measured < cp.NORMAL_FLOOR
+
+    # The rest of the published set clears the floor it misses.
+    rest = ["#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7", "#000000"]
+    worst = min(cp.delta_e(cp.hex_to_linear(a), cp.hex_to_linear(b))
+                for i, a in enumerate(["#e69f00", *rest])
+                for b in ["#e69f00", *rest][i + 1:])
+    assert worst >= cp.NORMAL_FLOOR, (
+        f"dropping yellow no longer rescues the set: worst remaining pair "
+        f"{worst:.2f} against a floor of {cp.NORMAL_FLOOR}")
 
 
 def test_a_heatmap_is_not_gated_twice_under_two_different_rules():

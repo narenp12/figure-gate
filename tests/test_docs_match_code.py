@@ -997,13 +997,19 @@ def test_the_oklab_aside_quotes_the_oklab_numbers():
 
 def test_the_guide_says_which_unit_the_grayscale_numbers_are_in():
     """The fix for the original defect, held in place. Without the sentence
-    naming the unit, the numbers are correct and unreadable: the guide states
-    OKLab ΔE ×100 as its convention everywhere else."""
+    naming the unit, the numbers are correct and unreadable.
+
+    Three units are now in play, not two: CAM02-UCS ΔE for the separation gates
+    since 0.8.0, OKLab lightness for the band and for the grayscale comparison
+    below it, and WCAG relative luminance here. The sentence has to rule out
+    both of the others, so the assertion checks for both names rather than the
+    one it checked when OKLab was the only alternative."""
     for path in (GUIDE, SKILL_MD):
         text = " ".join(path.read_text(encoding="utf-8").split())
-        assert re.search(r"relative luminance[^.]*OKLab", text), (
-            f"{path.name} quotes relative-luminance separations without saying "
-            "they are not the OKLab unit the rest of the document uses")
+        assert re.search(r"relative luminance[^.]*CAM02-UCS[^.]*OKLab", text), (
+            f"{path.name} quotes relative-luminance separations without ruling "
+            "out both the CAM02-UCS unit the gates use and the OKLab lightness "
+            "it quotes alongside them")
 
 
 # --- the alt text on the site is the alt text the figure carries -------------

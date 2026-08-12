@@ -23,14 +23,14 @@ import suggest_fixes as sf
 Same modules, same signatures; only the import line differs. Everything below
 applies to both.
 
-Not on this page:
+Not on this page: **the thresholds**. They are module-level constants, one
+table per module on [the gates](gates.md), with the measurement behind each on
+[the style guide](style-guide.md). Read them as `cf.TYPE_FLOOR_PT`.
 
-- **Thresholds.** Module-level constants, one table per module on
-  [the gates](gates.md), with the measurement behind each on
-  [the style guide](style-guide.md). Read them as `cf.TYPE_FLOOR_PT`.
-- **The 21 gate functions** (`check_clipping`, `check_type_size` and the rest).
-  `audit` runs them and computes the arguments they take.
-  [The gates](gates.md) is their reference.
+Everything else is here, including the 21 gate functions, at the bottom.
+`audit` is what most callers want: it runs all 21 and computes the renderer,
+canvas and scale arguments they take. Call one directly and that is yours to
+reproduce, which [the how-to](how-to.md#read-one-row-or-one-gate) covers.
 
 ## check_figure
 
@@ -71,7 +71,11 @@ the checks are reimplemented elsewhere.
 
 ::: check_palette.hex_to_linear
 
+::: check_palette.oklab_distance
+
 ::: check_palette.linear_to_oklab
+
+::: check_palette.linear_to_cam02ucs
 
 ::: check_palette.relative_luminance
 
@@ -82,3 +86,55 @@ Remedies. Both take the rows `audit` returned, not the figure.
 ::: suggest_fixes.suggest
 
 ::: suggest_fixes.format_suggestions
+
+## The gate functions
+
+One row each, in the order `audit` runs them, which is the order
+[the gates](gates.md) tables them in and the order a report prints. Every one
+returns `(status, detail)`, where `status` is `True`, `False` or `"warn"`.
+
+The signature says what the gate needs beyond the figure. A `r` parameter is a
+renderer, `canvas` an already-drawn canvas, and `scale`/`placed_frac`/`venue`
+the page arithmetic. `audit` supplies all of them.
+
+::: check_figure.check_clipping
+
+::: check_figure.check_collisions
+
+::: check_figure.check_text_readability
+
+::: check_figure.check_contrast_stack
+
+::: check_figure.check_mark_ratio
+
+::: check_figure.check_overplotting
+
+::: check_figure.check_redundancy
+
+::: check_figure.check_type_size
+
+::: check_figure.check_line_weight
+
+::: check_figure.check_banking
+
+::: check_figure.check_ink
+
+::: check_figure.check_series_color
+
+::: check_figure.check_dual_axis
+
+::: check_figure.check_form
+
+::: check_figure.check_identity_channel
+
+::: check_figure.check_label_attribution
+
+::: check_figure.check_style_sheet
+
+::: check_figure.check_contour_dash
+
+::: check_figure.check_colormap
+
+::: check_figure.check_fonts
+
+::: check_figure.check_alt_text

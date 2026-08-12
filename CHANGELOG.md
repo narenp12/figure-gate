@@ -2,7 +2,114 @@
 
 ## Unreleased
 
-Documentation only. No code changed, and the public API is where 0.7.0 left it.
+**The separation gates measure in CAM02-UCS instead of OKLab, and both floors
+moved.** This is the largest correctness change the project has made and it
+changes verdicts, so it is first.
+
+`delta_e` returned OKLab Euclidean distance ×100 and the two separation floors
+were quoted in it. OKLab was fitted for hue uniformity and never calibrated
+against discrimination data, so a distance of 8 in it had no referent: there was
+no measurement anyone could look up saying what a reader does at 8, which meant
+`CVD_TARGET = 8.0` was a preference wearing a citation's clothes. Worse, the CVD
+rows measured that uncalibrated distance *between colour-blind simulations* —
+coordinates OKLab was never fitted for at all.
+
+Measured against colorspacious (CAM02-UCS + Machado) over 79 800 pairs the
+validator would accept as series slots, the old metric ranked pairs correctly
+(Spearman 0.964, ROC AUC 0.988) but its operating point did not: specificity at
+the shipped floor was **0.786**, so about one pair in twenty that the gate passed
+an independent implementation called too close, concentrated in violet (12.8%)
+and blue-violet (11.7%). The same measurement now reads **0.988**.
+
+- `delta_e` **changed** what it returns: CAM02-UCS ΔE, not OKLab ×100. Same name,
+  same signature, different number. A caller comparing its result against a
+  hard-coded threshold gets a wrong answer silently, which is the sharpest edge
+  in this release.
+- `oklab_distance` was **added**, returning exactly what `delta_e` returned
+  before, for callers who need the old scale.
+- `linear_to_cam02ucs` was **added**: a stdlib CIECAM02, held to colorspacious
+  within 1e-9 on identical XYZ by `tests/test_colour_space_oracle.py`.
+- `CVD_TARGET` **changed** 8.0 → **10.5** and `NORMAL_FLOOR` **changed**
+  15.0 → **21.0**. Both were re-derived from Stone, Szafir & Setlur (2014), not
+  rescaled: the per-pair ratio between the two spaces runs 1.16 to 2.02, so no
+  single factor converts them.
+- `CMAP_WRAP_DE_MAX` **changed** 3.0 → **1.0**, which is now one JND rather than
+  a number picked between two clusters.
+
+Two consequences worth knowing before you upgrade:
+
+**All six cycle slots now clear all-pairs.** The guide said five, because the
+sixth pair measured 7.9 against a floor of 8. In CAM02-UCS the worst all-pairs
+view is a *different pair* — `#0072B2` vs `#CC79A7`, at 12.8 against 10.5 — and
+it clears. Scatter and small multiples may use the whole cycle. This is the only
+place 0.8.0 gives more room rather than less.
+
+**Okabe-Ito's orange and yellow miss the new normal-vision floor**, at 20.75
+against 21.0, the one miss out of that set's 28 pairs. The floor was derived
+without reference to any palette, and yellow is one of the two colours
+`figure.mplstyle` already drops from its cycle. Arriving at that independently is
+the strongest evidence these floors have, so the result is pinned in a test
+rather than smoothed away.
+
+**The composition gates measure at a fixed resolution, `MEASURE_DPI = 150`.**
+Half of `check_figure`'s thresholds are pixel counts, and a pixel count is a
+measurement only when the resolution is pinned. It was not: the gates drew at
+`fig.dpi`, which is whatever the author set, whatever sheet is in effect, or the
+authored value times the device pixel ratio of an attached display. Audited
+across 100/150/200/300/600 dpi, the eleven gallery figures moved **34 rows and
+flipped one**. `orbit`'s ink fraction ran 0.13 at 100 dpi down to 0.04 at 300
+and out of the band at 600, because a mark's antialiased fringe is a fixed
+number of pixels wide and so a shrinking share of a mark that grows with the
+resolution. The figure never changed; only the knob did.
+
+- `audit` now draws at `MEASURE_DPI` and hands the figure back on the dpi it
+  arrived on. `check_ink` and `check_text_readability` do the same when they are
+  called directly, so a gate called on its own reports what `audit` reports.
+- 150 is the number every pixel threshold was already calibrated at, so no
+  threshold moved and no verdict changed at 150 dpi. Verdicts at other authored
+  dpi changed to match it.
+- `tests/test_renderer_invariance.py` sweeps that range and requires every row
+  identical down to the message, and puts the old behaviour back to check the
+  sweep can still see it.
+- One documented number was wrong as a result and is corrected: a blank panel's
+  furniture does not always measure inside the ink band. Furniture is a
+  perimeter and a panel is an area, so at `MEASURE_DPI` the blank half of a
+  3x1.5in pair reads 0.03, inside it, and the blank half of a 6x3in pair reads
+  0.01, under it. Only the first is caught by asking whether anything was drawn,
+  which is the mechanism the guide describes.
+
+**The composition gates are now measured against material this project did not
+author.** `tests/test_external_style_corpus.py` builds three neutral figures
+under each of matplotlib's 28 shipped style sheets (seaborn's, Tableau's,
+Petroff's, ggplot's, FiveThirtyEight's, Solarized's), holding the content fixed
+so styling is the only variable. Four of those styles carry a ground-truth label
+from their own authors, being published as accessible under colour vision
+deficiency, and **none of the four is rejected** by the colour gate while **21 of
+the 24 unlabelled styles are**. Solarize_Light2 is the corpus's one WCAG text
+failure, and the two presentation styles are its two clipping failures.
+
+The negative result from the same sweep is pinned beside it: `Style sheet` and
+`Fonts` fire on **28 styles out of 28**. Neither is measuring the figure. The
+first asks whether this project's sheet is in effect and the second asks for
+Type 42 embedding that no stock style sets, and neither should ever be counted
+as evidence that these gates discriminate.
+
+**The suite's balance is a number now, with a ceiling on it.**
+`tests/test_suite_balance.py` classifies every test module as measuring the
+tool, checking a document against the code, or release plumbing, and gates the
+document-to-gate ratio at 0.92. It reads **0.910**; before the two sweeps above
+it read 0.977, which is the shape of the criticism that prompted this: the
+documentation tests had very nearly caught the tool. Raising the ceiling means
+writing the measurement the prose is standing in for, or arguing a module is
+classified wrong.
+
+**The declared matplotlib floor is checked against CI's matrix.**
+`matplotlib>=3.8` was a support claim that nothing verified was ever run. It is
+true (`ci.yml` pins a 3.8.4 leg), and it is now asserted, so raising the floor
+without moving the leg fails rather than quietly shipping a claim no test has
+touched.
+
+Documentation, unchanged from what was already here:
 
 **The docs say which import line a given install wants.** 0.7.0 moved the
 installed modules into a package, and the two indexes do not publish in the
@@ -42,6 +149,33 @@ getting-started page verbatim, 1246 characters each, in a repository whose docs
 site is built on symlinks so that no page is a second copy of another. The docs
 site has the statement; the README has the two sentences a reader of the PyPI
 page needs and a link.
+
+**There is a how-to page, and it is the one the docs did not have.** Every page
+on the site explained: `gates.md` what a row measures, `style-guide.md` what was
+measured to land on the threshold. Nothing said what to type. A reader whose
+build had just gone red on `Type size` had a 666-line essay and a table of
+constants to work from, while `report(fig, suggest=True)` had been printing the
+remedy for that row since the marks were split, undocumented anywhere a reader
+would look. `docs/how-to.md` is the recipes: printing the remedies, the row
+table with a first move for each of the 21, gating a suite, gating a palette
+from a toolchain that is not Python, placing at a fraction of the content
+width, alt text, reading one row, moving a threshold.
+
+`tests/test_how_to.py` runs it. The row table is re-derived from `GATES` and
+`REMEDIES` rather than proofread, the quoted scales are recomputed, the quoted
+CLI output is the CLI's. Writing it found two defects in its own prose before
+the page shipped: a paragraph warning about a difference between `not s` and
+`s is False` that does not exist, since `"warn"` is truthy, and a REPL block
+quoting `page_scale` as `1.380138888888889` when the value is a `numpy.float64`
+and prints as `np.float64(...)`.
+
+**The API page documents the 21 gate functions.** They were exempt as a class,
+on the argument that `audit` runs them and `gates.md` carries their thresholds.
+What that left was 21 public callables whose signatures appeared nowhere, so
+calling one meant reading the source to find out that some take a renderer.
+`check_colormap` had no docstring at all, which is why it could not have been
+added without writing one. `test_the_page_documents_every_gate_in_order` keeps
+a gate added later from joining a blind spot instead of a page.
 
 ## 0.7.0 — 2026-08-03
 

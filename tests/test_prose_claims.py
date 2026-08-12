@@ -982,9 +982,14 @@ KNOWN_HEXES |= {h.lower() for h in
 # still has to be a real pair, or the demonstration is a story. Each of these
 # carries the measurement it appears with, and `test_palette.py` pins it.
 COUNTEREXAMPLE_HEXES = {
-    # 8.4 dE at dichromacy, 7.9 at severity 0.8: the pair that says dichromacy
+    # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
     # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    "#288ac6", "#fd00db",
+    #
+    # It used to be #288ac6/#fd00db, at 8.4 and 7.9 against a floor of 8. Those
+    # two straddled the OKLab floor and sit either side of the CAM02-UCS one by
+    # 0.03 dE, which is a fixture that demonstrates nothing once rounded. The
+    # replacement clears dichromacy by 8.7 and misses the worst severity by 2.2.
+    "#8e4dc7", "#1402ef",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
 
@@ -1230,7 +1235,7 @@ EXTERNAL_CLAIMS = {
     },
     "colour difference and target size": {
         "document": "style-guide.md",
-        "anchor": "Why there is no size-weighted separation gate",
+        "anchor": "Why there is still no size-weighted gate",
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
                   "2014(1), 253-258",
         "verified": "2026-07-31",
@@ -1380,8 +1385,16 @@ def _heatmap():
     return fig
 
 
-def _grid_with_a_blank_panel():
-    fig, axs = plt.subplots(1, 2, figsize=(6, 3), constrained_layout=True)
+def _grid_with_a_blank_panel(figsize=(3, 1.5)):
+    """Two panels, one of them never drawn in.
+
+    The size is an argument because the paragraph's claim turns on it: furniture
+    is a perimeter and a panel is an area, so the blank half's reading falls as
+    the pair grows. The default is the small size, where that reading lands
+    inside the range and `_axes_drew_anything` is the only thing that can catch
+    it.
+    """
+    fig, axs = plt.subplots(1, 2, figsize=figsize, constrained_layout=True)
     axs[0].plot([0, 1], [0, 1])
     return fig
 
@@ -1410,22 +1423,48 @@ def test_a_heatmap_measures_full_ink_and_warns():
         f"{detail!r}")
 
 
-def test_a_blank_panel_warns_from_inside_the_range():
-    """The sentence a reader acts on is that a blank cell warns even though its
-    furniture measures inside the band. If the floor ever catches it instead,
-    the sentence is telling the reader about a mechanism that stopped running.
-    """
-    fig = _grid_with_a_blank_panel()
+def _blank_panel_fraction(figsize):
+    fig = _grid_with_a_blank_panel(figsize)
     try:
         status, detail = cf.check_ink(fig)
     finally:
         plt.close(fig)
+    return status, detail, float(re.search(r"ax1 ([\d.]+)", detail).group(1))
+
+
+def test_a_blank_panel_warns_from_inside_the_range():
+    """The sentence a reader acts on is that a blank cell warns even when the
+    range would have passed it. If the floor ever catches this one instead, the
+    sentence is telling the reader about a mechanism that stopped running.
+    """
+    status, detail, blank = _blank_panel_fraction((3, 1.5))
     assert status == "warn", f"a blank panel no longer warns: {detail}"
-    blank = float(re.search(r"ax1 ([\d.]+)", detail).group(1))
     assert cf.INK_MIN <= blank <= cf.INK_MAX, (
         f"the blank panel measures {blank}, outside "
         f"[{cf.INK_MIN}, {cf.INK_MAX}]. The guide says it is caught by asking "
         "whether anything was drawn, not by the range")
+
+
+def test_the_blank_panels_own_reading_falls_as_the_panel_grows():
+    """The size dependence the paragraph now states, measured.
+
+    The guide claimed for a while that a blank panel's furniture measures inside
+    the range, full stop. It does at 3x1.5in and does not at 6x3in, and the
+    figure that was standing in the guide as the example was the second one, so
+    the sentence was being demonstrated by a case that contradicted it. Pinned
+    here so the number in the prose is a measurement and not a memory.
+    """
+    _, _, small = _blank_panel_fraction((3, 1.5))
+    status, detail, large = _blank_panel_fraction((6, 3))
+    assert small > large, (
+        f"a blank panel reads {small} at 3x1.5in and {large} at 6x3in, so "
+        "furniture no longer thins out as the panel grows and the guide's "
+        "explanation of why the drew-anything question exists is wrong")
+    assert large < cf.INK_MIN, (
+        f"the blank half of a 6x3in pair now measures {large}, inside "
+        f"[{cf.INK_MIN}, {cf.INK_MAX}]. The guide names it as the case the "
+        "range catches on its own")
+    assert status == "warn", f"a blank panel no longer warns: {detail}"
 
 
 def test_context_axes_turns_a_saturated_surface_into_a_pass():

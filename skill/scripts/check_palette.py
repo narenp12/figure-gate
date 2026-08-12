@@ -10,7 +10,7 @@ and contrast against the surface.
     python check_palette.py "#E69F00,#56B4E9" --surface "#f4f1ea"
     python check_palette.py "#0072B2,#52514e" --ink "#52514e"
 
-Separations are OKLab dE x100. Adjacent mode checks consecutive pairs only,
+Separations are CAM02-UCS dE. Adjacent mode checks consecutive pairs only,
 which is what lines, bars and stacked marks need. `--pairs all` checks every
 pair, which is what scatter, bubble and small multiples need.
 
@@ -77,6 +77,152 @@ def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
         1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
         0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
     )
+
+
+# --- CIECAM02 / CAM02-UCS ---------------------------------------------------
+#
+# Every *distance* below is measured here rather than in OKLab, and the reason
+# is narrow: OKLab has no published unit. Its authors fitted it for hue
+# uniformity and never calibrated its metric against discrimination data, so a
+# distance of 8 in it is a number with no referent - you cannot look up what a
+# reader does at 8, and you cannot cite anyone who measured it. CAM02-UCS was
+# fitted by Luo, Cui & Li (2006) to the combined CIE discrimination datasets
+# precisely so that its Euclidean distance predicts perceived difference, which
+# is the only property a threshold can rest on.
+#
+# The error this replaces was not a rounding error. Until 0.8.0 the separation
+# gates measured OKLab distance BETWEEN COLOUR-BLIND SIMULATIONS, which compounds
+# two problems: an uncalibrated metric, applied to coordinates it was never
+# fitted for. Measured against colorspacious (CAM02-UCS + Machado) over 79 800
+# pairs this validator would accept as series slots, the old metric agreed on
+# ranking (Spearman 0.964, ROC AUC 0.988) but its operating point did not
+# transfer: at the shipped `CVD_TARGET = 8.0` its specificity was 0.786, and the
+# per-pair ratio between the two spaces ran from 1.16 to 2.02. A ratio with that
+# spread is why the floors below are re-derived from the literature rather than
+# rescaled from their old values - no single factor converts them.
+#
+# OKLab stays for the two rows that ask about a *coordinate* rather than a
+# distance: the lightness band and the chroma floor. Those are design choices
+# about where in the space a series hue should sit, and they claim no calibration.
+#
+# The sRGB viewing environment, matching CIE 159:2004's worked conditions and
+# colorspacious's `CIECAM02Space.sRGB`: D65 at 100 cd/m^2, a 20% surround, and
+# an adapting field of L_A = 64/pi/5. `tests/test_colour_space_oracle.py` holds
+# this implementation to colorspacious to 1e-9 on identical XYZ.
+_XYZ_W = (95.047, 100.0, 108.883)
+_Y_B = 20.0
+_L_A = 64.0 / math.pi / 5.0
+_SURROUND_F, _SURROUND_C, _SURROUND_NC = 1.0, 0.69, 1.0
+
+# Linear-light sRGB to XYZ, Y in 0..100. IEC 61966-2-1's published matrix.
+_M_XYZ = ((0.4124564, 0.3575761, 0.1804375),
+          (0.2126729, 0.7151522, 0.0721750),
+          (0.0193339, 0.1191920, 0.9503041))
+# CAT02 chromatic adaptation transform and its inverse, and the Hunt-Pointer-
+# Estevez matrix, all as published in CIE 159:2004.
+_M_CAT02 = ((0.7328, 0.4296, -0.1624),
+            (-0.7036, 1.6975, 0.0061),
+            (0.0030, 0.0136, 0.9834))
+_M_CAT02_INV = ((1.096123820835514, -0.278869000218287, 0.182745179382773),
+                (0.454369041975359, 0.473533154307412, 0.072097803717229),
+                (-0.009627608738429, -0.005698031216113, 1.015325639954543))
+_M_HPE = ((0.38971, 0.68898, -0.07868),
+          (-0.22981, 1.18340, 0.04641),
+          (0.0, 0.0, 1.0))
+
+
+def _mul3(m: Sequence[Sequence[float]],
+          v: Sequence[float]) -> tuple[float, float, float]:
+    a, b, c = (sum(row[j] * v[j] for j in range(3)) for row in m)
+    return a, b, c
+
+
+def _post_adapt(rgb: Sequence[float], f_l: float) -> tuple[float, float, float]:
+    """CIECAM02's nonlinear response compression, odd-symmetric about zero.
+
+    The sign handling is not decoration: a saturated hue leaves one HPE channel
+    negative, and raising a negative to 0.42 is a domain error.
+    """
+    out = []
+    for x in rgb:
+        t = (f_l * abs(x) / 100.0) ** 0.42
+        out.append(math.copysign(400.0 * t / (t + 27.13), x) + 0.1)
+    return out[0], out[1], out[2]
+
+
+def _viewing_conditions() -> tuple[tuple[float, float, float],
+                                   float, float, float, float, float, float]:
+    d = _SURROUND_F * (1 - (1 / 3.6) * math.exp((-_L_A - 42) / 92))
+    d = min(1.0, max(0.0, d))
+    rgb_w = _mul3(_M_CAT02, _XYZ_W)
+    dr, dg, db = (d * _XYZ_W[1] / w + 1 - d for w in rgb_w)
+    d_rgb = (dr, dg, db)
+    k = 1.0 / (5 * _L_A + 1)
+    f_l = (0.2 * k ** 4 * (5 * _L_A)
+           + 0.1 * (1 - k ** 4) ** 2 * (5 * _L_A) ** (1 / 3))
+    n = _Y_B / _XYZ_W[1]
+    z = 1.48 + math.sqrt(n)
+    n_bb = n_cb = 0.725 * (1 / n) ** 0.2
+    rgb_wc = tuple(dr * w for dr, w in zip(d_rgb, rgb_w))
+    rgb_aw = _post_adapt(_mul3(_M_HPE, _mul3(_M_CAT02_INV, rgb_wc)), f_l)
+    a_w = (2 * rgb_aw[0] + rgb_aw[1] + rgb_aw[2] / 20 - 0.305) * n_bb
+    return d_rgb, f_l, n, z, n_bb, n_cb, a_w
+
+
+_D_RGB, _F_L, _N, _Z, _N_BB, _N_CB, _A_W = _viewing_conditions()
+
+
+def linear_to_cam02ucs(rgb: Sequence[float]) -> tuple[float, float, float]:
+    """Linear-light RGB as CAM02-UCS `(J', a', b')`.
+
+    The space `delta_e` measures in. Euclidean distance here is a perceived
+    colour difference in the units Luo, Cui & Li (2006) fitted, which is what
+    lets the floors in this file cite a measurement instead of a preference.
+
+    Args:
+        rgb: Linear-light `(r, g, b)`, each channel in 0..1.
+
+    Returns:
+        `(J', a', b')` in CAM02-UCS. `J'` runs 0..100 for in-gamut colours.
+    """
+    xyz = tuple(100.0 * v for v in _mul3(_M_XYZ, rgb))
+    rgb_c = tuple(dr * v for dr, v in zip(_D_RGB, _mul3(_M_CAT02, xyz)))
+    return _cam02ucs_from_post_adapted(
+        _post_adapt(_mul3(_M_HPE, _mul3(_M_CAT02_INV, rgb_c)), _F_L))
+
+
+def _cam02ucs_from_post_adapted(
+        rgb_a: Sequence[float]) -> tuple[float, float, float]:
+    """CIECAM02's appearance correlates and the UCS compression, given the
+    post-adaptation cone responses.
+
+    Split out from `linear_to_cam02ucs` so the appearance model can be measured
+    against colorspacious on identical XYZ, with this file's sRGB matrix out of
+    the comparison. The two disagree by ~0.015 dE end to end purely because
+    colorspacious derives its primaries at full precision, and a differential
+    that cannot separate that from a real arithmetic error is a differential
+    that will one day be silenced for the wrong reason. See
+    `tests/test_colour_space_oracle.py`.
+    """
+    a = rgb_a[0] - 12 * rgb_a[1] / 11 + rgb_a[2] / 11
+    b = (rgb_a[0] + rgb_a[1] - 2 * rgb_a[2]) / 9
+    h = math.atan2(b, a)
+    e_t = 0.25 * (math.cos(h + 2.0) + 3.8)
+
+    achromatic = (2 * rgb_a[0] + rgb_a[1] + rgb_a[2] / 20 - 0.305) * _N_BB
+    j = 100.0 * (achromatic / _A_W) ** (_SURROUND_C * _Z)
+
+    denom = rgb_a[0] + rgb_a[1] + 21 * rgb_a[2] / 20
+    t = (50000.0 / 13.0 * _SURROUND_NC * _N_CB * e_t * math.hypot(a, b) / denom
+         if denom else 0.0)
+    chroma = t ** 0.9 * math.sqrt(j / 100.0) * (1.64 - 0.29 ** _N) ** 0.73
+    colourfulness = chroma * _F_L ** 0.25
+
+    # The UCS compression, Luo, Cui & Li (2006) table 3: J' has c1 = 0.007 and
+    # M' has c2 = 0.0228.
+    j_p = 1.7 * j / (1 + 0.007 * j)
+    m_p = math.log(1 + 0.0228 * colourfulness) / 0.0228
+    return j_p, m_p * math.cos(h), m_p * math.sin(h)
 
 
 def relative_luminance(rgb: Sequence[float]) -> float:
@@ -288,10 +434,43 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
 
 
 def delta_e(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
+    """CAM02-UCS colour difference between two linear-light colours.
+
+    Euclidean distance in CAM02-UCS, which is the space's intended use: Luo,
+    Cui & Li (2006) fitted it so that this distance predicts perceived
+    difference, so the number carries a unit somebody measured. `CVD_TARGET`
+    and `NORMAL_FLOOR` are quoted in it.
+
+    Not a CIELAB dE*ab and not a CIEDE2000. Over the gamut this file gates as
+    series slots, one CAM02-UCS unit is a median 1.99 CIELAB dE*ab, but the
+    ratio runs 1.72-2.24 across the interquartile range, so the two are not
+    interconvertible at a fixed rate and a threshold quoted in one does not
+    transfer to the other.
+
+    Before 0.8.0 this returned OKLab distance x100. See the CIECAM02 section
+    above for why that number could not support a threshold.
+
+    Args:
+        rgb_a: Linear-light `(r, g, b)`.
+        rgb_b: The colour to measure it against.
+
+    Returns:
+        CAM02-UCS euclidean distance.
+    """
+    a, b = linear_to_cam02ucs(rgb_a), linear_to_cam02ucs(rgb_b)
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
     """OKLab distance between two linear-light colours, x100.
 
-    Scaled by 100 so the thresholds read as whole numbers: `CVD_TARGET = 8.0`
-    for two hues under a simulation, `NORMAL_FLOOR = 15.0` in full colour.
+    What `delta_e` measured before 0.8.0, kept because the lightness rows still
+    reason in OKLab and because a caller comparing against a number this project
+    published earlier needs the old scale to do it.
+
+    It is not a colour difference in any calibrated sense: OKLab was fitted for
+    hue uniformity, not for discrimination, so distances in it have no published
+    referent. Gate on `delta_e`.
 
     Args:
         rgb_a: Linear-light `(r, g, b)`.
@@ -310,7 +489,17 @@ CMAP_SAMPLES = 256
 CMAP_QUALITATIVE_N = 40
 CMAP_SPAN_MIN = 0.02
 CMAP_BACKTRAVEL_MAX = 0.02
-CMAP_WRAP_DE_MAX = 3.0
+# A ramp is cyclic when its two ends are the same colour, and "the same colour"
+# now has a definition instead of a tuning: CAM02-UCS is fitted so that a unit
+# of its distance is about one just-noticeable difference, so ends closer than
+# 1.0 are ends a reader cannot tell apart. The OKLab 3.0 this replaces could not
+# be stated that way - it was a number between the two clusters and nothing more.
+#
+# Measured over the 18 maps in matplotlib's registry that reach this branch:
+# twilight wraps at 0.000 and twilight_shifted at 0.376, and the nearest
+# diverging map, BrBG, wraps at 27.963. The threshold has two orders of
+# magnitude of clearance on either side, so it is a definition rather than a fit.
+CMAP_WRAP_DE_MAX = 1.0
 
 
 def _back_travel(ls: Sequence[float]) -> float:
@@ -387,10 +576,54 @@ def cmap_kind(samples: Sequence[str]) -> str:
 
 # --- gates ------------------------------------------------------------------
 
+# OKLab coordinates, not distances: where in the space a series hue should sit.
+# These make no calibration claim and did not move when the metric did.
 L_MIN, L_MAX = 0.43, 0.77
 CHROMA_MIN = 0.10
-CVD_TARGET = 8.0          # below this, secondary encoding is mandatory
-NORMAL_FLOOR = 15.0       # hard floor; no secondary encoding excuses this
+
+# --- separation floors, in CAM02-UCS -----------------------------------------
+#
+# Both derive from one published measurement and one conversion measured here,
+# and neither is a rescaling of the OKLab number it replaced. It could not be:
+# the ratio between the two spaces runs 1.16 to 2.02 depending on the pair, so
+# converting the old floors would have moved every verdict by an unknown amount
+# in an unknown direction. They are re-derived from the anchor instead.
+#
+# The anchor is Stone, Szafir & Setlur (2014), who measured the colour
+# difference half of observers notice as a function of target size, C + K/s with
+# s the visual angle in degrees, fitted from 0.333 to 6 degrees. At 0.333
+# degrees - the smallest size their fit covers, and the closest thing in the
+# literature to a hairline - that is 10.4 CIELAB dE*ab.
+#
+# Their number is in CIELAB and the gate measures in CAM02-UCS, so it needs a
+# bridge, and the bridge is population-dependent: one CAM02-UCS unit is a median
+# 1.99 CIELAB over the gamut this file accepts as series slots and 1.85 over the
+# whole sRGB cube, which moves the floors by 7.6%. The slot gamut is the right
+# one and not by preference - the lightness band and the chroma floor reject
+# everything else before the separation rows are reached, so the cube contains
+# pairs this gate cannot be handed. `tests/test_palette.py` measures over the
+# slot gamut for that reason and says so.
+#
+# The multiples are the one judgement here, and they are a judgement rather than
+# a measurement. 10.4 CIELAB is where half of observers NOTICE A DIFFERENCE. A
+# figure asks for more than that: the reader is not detecting that two marks
+# differ side by side, they are identifying which series a mark belongs to,
+# across a page, from memory of a legend, at whatever size it was printed. 2x
+# for a simulated view and 4x in full colour is where this project puts that
+# margin. The style guide described the pre-0.8.0 floors as landing at the same
+# multiples, but it computed them through a CIELAB ratio measured over the whole
+# cube against a metric that had no calibration, so that agreement is a
+# coincidence and is not evidence for these numbers.
+#
+# What IS evidence: the published Okabe-Ito set clears `CVD_TARGET` at every one
+# of its 28 pairs, and misses `NORMAL_FLOOR` at exactly one - orange #E69F00
+# against yellow #F0E442, at 20.75. That is the pair `figure.mplstyle` already
+# drops, arrived at independently. See the style guide.
+#
+# `--ordinal` does not use these. Adjacent steps of a ramp are compared for
+# lightness order, not for identification.
+CVD_TARGET = 10.5         # 2x Stone et al.; below this, secondary encoding is mandatory
+NORMAL_FLOOR = 21.0       # 4x Stone et al.; hard floor, no secondary encoding excuses it
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 # The three ordinal rows. `--ordinal` swaps the categorical gates for these, and

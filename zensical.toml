@@ -34,6 +34,7 @@ extra_css = ["stylesheets/palette.css"]
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
+  { "How to" = "how-to.md" },
   { "The gates" = "gates.md" },
   { "Gallery" = "gallery.md" },
   { "Style guide" = "style-guide.md" },

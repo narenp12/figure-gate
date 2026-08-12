@@ -39,6 +39,9 @@ Everything below the quickstart lives on the
 - [Getting started](https://narenp12.github.io/figure-gate/getting-started/):
   install or vendor, the two settings that need your document's values, and the
   code to call.
+- [How to](https://narenp12.github.io/figure-gate/how-to/): the recipes. Fix a
+  row that failed, gate figures in CI, place at half width, attach alt text,
+  move a threshold.
 - [The gates](https://narenp12.github.io/figure-gate/gates/): what each row
   measures, its threshold, and what a passing run does not mean.
 - [The style guide](https://narenp12.github.io/figure-gate/style-guide/): the
@@ -56,16 +59,15 @@ uv add figure-gate          # or: conda install -c conda-forge figure-gate
 from figure_gate import check_figure as cf
 ```
 
-That import line is 0.7.0 and later. Before it the wheel put the modules at the
-top level of site-packages and `import check_figure` was the line on both
-routes; 0.7.0 moved them into the package and is a break for anyone who
-installed rather than vendored. The two badges above are the versions actually
-published, and they do not have to agree: conda-forge follows PyPI through the
-feedstock's autotick bot, so for a while after a release the conda package is
-the release before it. Read the badge before writing the import line.
+That import line is 0.7.0 and later; through 0.6.0 it was `import
+check_figure`, the same line a vendored copy uses at every version. The two
+badges may disagree on which version that is, because conda-forge follows PyPI
+through a bot rather than in the same hour.
+[Getting started](https://narenp12.github.io/figure-gate/getting-started/#install)
+has both routes and how to tell which one you are on.
 
 Copying the files into your own project is the other route, and the default one
-the docs teach; vendored, the import is `import check_figure` at every version.
+the docs teach.
 
 ## Where this sits
 

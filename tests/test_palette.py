@@ -57,7 +57,7 @@ def test_adjacent_cvd_separation_matches_documented_value():
     worst = min(
         cp.delta_e(cp.simulate(lin[i], k), cp.simulate(lin[i + 1], k))
         for i in range(len(lin) - 1) for k in ("protan", "deutan"))
-    assert worst == pytest.approx(16.6, abs=0.1)
+    assert worst == pytest.approx(32.0, abs=0.1)
 
 
 def test_orange_and_sky_blue_are_the_worst_grayscale_pair():
@@ -404,7 +404,15 @@ def test_the_severity_matrices_belong_on_linear_light():
             wrong = cp.simulate_anomalous(gamma, kind, 1.0)
             on_srgb += cp.delta_e(reference,
                                   tuple(to_linear(c) for c in wrong))
-        assert on_linear < on_srgb / 1.3, (
+        # 1.2 rather than the 1.3 this held before 0.8.0. The finding is
+        # unchanged - linear light reproduces Vienot dichromacy better, and it
+        # is the domain the table wants - but the margin is smaller when the
+        # difference is measured in CAM02-UCS instead of OKLab: mean 4.34 dE on
+        # linear light against 5.46 (protan) and 6.73 (deutan) on gamma-encoded
+        # sRGB, so ratios of 1.26 and 1.55 where OKLab reported 1.37 and 2.04.
+        # A metric change that moved this number is expected; one that flipped
+        # its sign would not be, and that is what the assertion is for.
+        assert on_linear < on_srgb / 1.2, (
             f"{kind}: linear light {on_linear:.1f}, sRGB {on_srgb:.1f} - the "
             "two domains stopped being distinguishable, so this test no longer "
             "says which one the table wants")
@@ -415,35 +423,37 @@ def test_dichromacy_is_not_the_worst_case():
     clear `CVD_TARGET` under both dichromacy models and miss it at severity
     0.8, where far more readers actually sit.
 
-    Measured over 240000 such pairs, 0.87% of them do this, and dichromacy
-    overstates separation by up to 10.5 dE.
+    Measured over 244650 such pairs in CAM02-UCS, 1.27% of them do this, and
+    dichromacy overstates separation by up to 12.7 dE. Both numbers grew when
+    the metric changed in 0.8.0 - they read 0.87% and 10.5 in OKLab - so the
+    sweep the gate does is doing more work now, not less.
     """
-    a, b = "#288ac6", "#fd00db"
+    a, b = "#8e4dc7", "#1402ef"
     la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
 
     # Every dichromacy view, not just the one that crosses: the gate takes the
     # worst of them, so the claim is that all of them clear the floor.
     at_dichromacy = min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind))
                         for kind in ("protan", "deutan"))
-    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.8),
-                             cp.simulate_anomalous(lb, "protan", 0.8))
+    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.9),
+                             cp.simulate_anomalous(lb, "protan", 0.9))
     assert at_dichromacy >= cp.CVD_TARGET > at_severity, (
         f"the fixture stopped crossing the floor: {at_dichromacy:.2f} at "
-        f"dichromacy, {at_severity:.2f} at severity 0.8")
+        f"dichromacy, {at_severity:.2f} at severity 0.9")
 
     ok, rows = cp.check([a, b])
     assert ok is False
     row = next(r for r in rows if r[0].startswith("CVD separation"))
     assert row[1] is False
-    assert "severity 0.8" in row[2], row[2]
+    assert "severity 0.9" in row[2], row[2]
 
 
 def test_the_bundled_cycle_survives_the_severity_sweep():
     """The over-fire guard, and the one that matters most: a sweep that failed
     the palette this project ships would be a gate nobody could satisfy.
 
-    The worst adjacent pair in the style sheet's own cycle reads 15.8 dE at
-    severity 0.9, which is not close to the 8.0 floor.
+    The worst adjacent pair in the style sheet's own cycle reads 31.7 dE at
+    severity 0.1, three times the 10.5 floor.
     """
     cycle = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
     ok, rows = cp.check(cycle)
@@ -501,21 +511,45 @@ def _de_lab(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(_cielab(a), _cielab(b))))
 
 
-def test_the_size_model_is_already_inside_the_normal_vision_floor():
-    """Why this project has no size-weighted separation gate.
+def _slot_pairs(n, seed=0):
+    """Random pairs of colours that clear the lightness band and chroma floor.
 
-    A small target does need more colour difference than a large one, and Stone,
-    Szafir & Setlur (2014) measured how much: it rises as C + K/s with s the visual
-    angle in degrees, fitted from 0.333 to 6, giving 6.1 CIELAB at a two-degree
-    patch and 10.4 at a third of a degree. A gate that multiplied this file's
-    floors by that ratio was built and thrown away, because the floors are OKLab
-    and the model is CIELAB and multiplying across units is what made it fire --
-    on `examples/gallery.py`, on the palette this project recommends.
+    The population the separation rows actually see. Sampling the whole sRGB
+    cube instead is what makes the CIELAB bridge read 1.85 rather than 1.99, and
+    that 7.6% moves both floors, so the choice is load-bearing and is made here
+    rather than left to whoever writes the next test.
+    """
+    rng = random.Random(seed)
+    out = []
+    while len(out) < n:
+        pair = []
+        while len(pair) < 2:
+            h = "#{:02x}{:02x}{:02x}".format(
+                *(rng.randrange(256) for _ in range(3)))
+            lin = cp.hex_to_linear(h)
+            L, a, b = cp.linear_to_oklab(lin)
+            if cp.L_MIN <= L <= cp.L_MAX and math.hypot(a, b) >= cp.CHROMA_MIN:
+                pair.append(lin)
+        out.append(tuple(pair))
+    return out
 
-    The arithmetic is pinned here so the next person to propose the gate
-    re-derives it in one run instead of rebuilding it. If a future change to the
-    colour maths moves these relationships, that is a real result and this test
-    is where it surfaces.
+
+def test_the_separation_floors_reproduce_the_size_model_they_derive_from():
+    """Where `CVD_TARGET` and `NORMAL_FLOOR` come from.
+
+    A small target needs more colour difference than a large one, and Stone,
+    Szafir & Setlur (2014) measured how much: it rises as C + K/s with s the
+    visual angle in degrees, fitted from 0.333 to 6, giving 6.1 CIELAB at a
+    two-degree patch and 10.4 at a third of a degree. Before 0.8.0 that model
+    could only be used as a sanity check, because the floors were OKLab
+    distances and the model is CIELAB and nothing converts between an
+    uncalibrated metric and a calibrated one. Since 0.8.0 the floors are
+    CAM02-UCS, the conversion is a measurement, and they are derived from the
+    model rather than merely compared against it.
+
+    This test is that derivation, run forwards. If a future change to the colour
+    maths moves the bridge, both floors are wrong by the amount it moved and
+    this is where that surfaces.
     """
     # C and K are the mean of Stone, Szafir & Setlur's Table 3 over L*, a*, b*.
     C, K = (5.079 + 5.339 + 5.349) / 3, (0.751 + 1.541 + 2.871) / 3
@@ -525,31 +559,54 @@ def test_the_size_model_is_already_inside_the_normal_vision_floor():
     smallest_fitted = C + K / 0.333
     assert smallest_fitted == pytest.approx(10.4, abs=0.2)
 
-    # One OKLab dE x100 unit, in CIELAB dE.
-    rng = random.Random(0)
-    ratios = []
-    for _ in range(4000):
-        a = [rng.randrange(256) for _ in range(3)]
-        b = [rng.randrange(256) for _ in range(3)]
-        la = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*a))
-        lb = cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(*b))
-        oklab = cp.delta_e(la, lb)
-        if oklab >= 1:
-            ratios.append(_de_lab(la, lb) / oklab)
-    ratios.sort()
+    # One CAM02-UCS unit, in CIELAB dE*ab, over the gamut the gate sees.
+    ratios = sorted(_de_lab(la, lb) / d
+                    for la, lb in _slot_pairs(4000)
+                    if (d := cp.delta_e(la, lb)) >= 1)
     per_unit = ratios[len(ratios) // 2]
-    assert per_unit == pytest.approx(2.94, abs=0.15), per_unit
+    assert per_unit == pytest.approx(1.99, abs=0.06), per_unit
 
-    # The finding: both existing floors clear the model's hardest requirement.
-    assert cp.NORMAL_FLOOR * per_unit > 4 * smallest_fitted
-    assert cp.CVD_TARGET * per_unit > 2 * smallest_fitted
+    # The derivation: 2x and 4x the model's hardest requirement, converted.
+    assert cp.CVD_TARGET == pytest.approx(2 * smallest_fitted / per_unit, abs=0.4)
+    assert cp.NORMAL_FLOOR == pytest.approx(4 * smallest_fitted / per_unit, abs=0.8)
 
-    # And the pair the discarded gate fired on, on a 1.6pt curve in the gallery.
+    # And the pair the discarded size gate fired on, on a 1.6pt gallery curve.
     green, sky = cp.hex_to_linear("#009e73"), cp.hex_to_linear("#56b4e9")
     assert _de_lab(green, sky) > 5 * smallest_fitted, (
         "the gallery pair the size gate flagged is no longer comfortably clear "
         "of the size model's requirement, which is the whole reason the gate "
         "was not shipped")
+
+
+def test_the_bridge_between_the_two_colour_spaces_is_population_dependent():
+    """Why `_slot_pairs` exists, as an assertion rather than a comment.
+
+    The floors are Stone et al.'s CIELAB numbers divided by this ratio, so
+    sampling the whole sRGB cube instead of the gamut the gate gates would put
+    `CVD_TARGET` at 11.3 rather than 10.5. A reader who wants to re-derive the
+    floors has to know which population to draw from, and a test that measures
+    both is a better place to learn it than a sentence.
+    """
+    rng = random.Random(0)
+    cube = []
+    while len(cube) < 4000:
+        pair = tuple(cp.hex_to_linear("#{:02x}{:02x}{:02x}".format(
+            *(rng.randrange(256) for _ in range(3)))) for _ in range(2))
+        if cp.delta_e(*pair) >= 1:
+            cube.append(pair)
+
+    def median_ratio(pairs):
+        r = sorted(_de_lab(la, lb) / d for la, lb in pairs
+                   if (d := cp.delta_e(la, lb)) >= 1)
+        return r[len(r) // 2]
+
+    slot, whole = median_ratio(_slot_pairs(4000)), median_ratio(cube)
+    assert slot == pytest.approx(1.99, abs=0.06), slot
+    assert whole == pytest.approx(1.85, abs=0.06), whole
+    assert slot / whole > 1.05, (
+        f"slot gamut {slot:.3f}, whole cube {whole:.3f} - the two populations "
+        "stopped disagreeing, so the sampling choice in `_slot_pairs` no longer "
+        "needs defending and this test has nothing left to say")
 
 
 def test_no_size_weighting_leaked_into_the_validator():
