@@ -9,8 +9,8 @@ each threshold. [The how-to](how-to.md) is what to type when a row fails.
 
 A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
 returned nothing but passing rows from the composition checks. `check_palette.py` rated
-that same cycle's orange and green at dE 1.4 under protanopia: one hue to that
-reader, against a floor of 8. The composition checker had no access to the
+that same cycle's orange and green at dE 2.4 under protanopia: one hue to that
+reader, against a floor of 10.5. The composition checker had no access to the
 colors it was drawing.
 
 ```mermaid
@@ -55,9 +55,9 @@ decisive.
 
 The separation row is swept over severity rather than read at dichromacy. Most
 colour vision deficiency is anomalous trichromacy, and dichromacy is not its
-worst case. Over 240000 pairs of hues `check_palette.py` would accept as series
-slots, 0.87% clear the floor at dichromacy and miss it at some lower severity.
-Dichromacy overstates separation by up to 10.5 dE. The row names the severity
+worst case. Over 244650 pairs of hues `check_palette.py` would accept as series
+slots, 1.27% clear the floor at dichromacy and miss it at some lower severity.
+Dichromacy overstates separation by up to 12.7 dE. The row names the severity
 its worst reading came from. `simulate_anomalous` is the
 Machado, Oliveira & Fernandes (2009) model; `simulate` remains Vienot dichromacy
 and is what every number quoted in the style guide was measured on.
