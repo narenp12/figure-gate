@@ -66,6 +66,8 @@ and is what every number quoted in the style guide was measured on.
 `MEASURE_DPI = 150`, measures the result, and hands the figure back on the dpi
 it arrived on. `audit()` returns these 21 rows in this order.
 
+<div class="sortable" markdown>
+
 | Gate | Threshold | Fails when |
 |---|---|---|
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
@@ -89,7 +91,8 @@ it arrived on. `audit()` returns these 21 rows in this order.
 | Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation |
 | Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
-{: .sortable }
+
+</div>
 
 Thresholds cite a published floor where one exists: SIAM's one point, WCAG's
 4.5:1, the Nature/Science/PNAS type minima. The rest were measured, and
@@ -231,7 +234,7 @@ advisory, and neither is evidence of anything about a figure.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 1612 tests, and each check has one asserting it catches a
+    The suite is 1616 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

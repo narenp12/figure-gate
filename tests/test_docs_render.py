@@ -904,6 +904,101 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
     assert (notes.nth(0).get_attribute("open") is not None) == starts_open
 
 
+def test_the_gates_flow_diagram_draws_an_svg(page, server):
+    """mermaid, proven on the page.
+
+    The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
+    diagram's SVG exists only after the page's own JavaScript has run, and the
+    bundle renders it into a *closed* shadow root, so no selector can reach it
+    and a static-HTML scan sees nothing. This test overrides
+    `attachShadow` before any page script runs to record every closed root,
+    then asks whether any of them holds an SVG with real content -- the only
+    way to prove the renderer ran, short of re-implementing the bundle.
+
+    The diagram's floor is that a fence whose engine never loaded leaves a
+    `<pre>` and no shadow root at all, which fails this test's first assert
+    with the cause attached.
+    """
+    page.add_init_script("""
+      window.__closedRoots = [];
+      const _attach = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function (init) {
+        const root = _attach.call(this, init);
+        if (init && init.mode === "closed") window.__closedRoots.push(root);
+        return root;
+      };
+    """)
+    page.goto(server + GATES_PATH, wait_until="networkidle")
+    page.wait_for_selector("div.mermaid")
+    drawn = page.evaluate("""() => {
+      const svgs = window.__closedRoots
+        .filter(r => r.querySelector("svg"))
+        .map(r => ({ nodes: r.querySelectorAll("*").length,
+                     w: r.querySelector("svg").getBoundingClientRect().width }));
+      return { roots: window.__closedRoots.length, svgs };
+    }""")
+    assert drawn["roots"] >= 1, (
+        "gates.md's mermaid fence rendered no closed shadow root - the engine "
+        "did not run, or the bundle stopped rendering mermaid into a shadow")
+    assert any(s["nodes"] >= 50 and s["w"] > 0 for s in drawn["svgs"]), (
+        f"no closed shadow root holds a real diagram, got {drawn['svgs']} - "
+        "the fence is a <pre> the renderer never consumed")
+    assert page.locator("pre.mermaid").count() == 0, (
+        "the mermaid fence was left as a literal <pre class='mermaid'> - the "
+        "renderer did not replace it")
+
+
+def test_the_gates_threshold_column_sorts_by_value(page, server):
+    """tablesort's number plugin, proven.
+
+    The threshold column's cells are prose or backtick-quoted constants
+    ("canvas bounds", "`BANKING_SLOPE_MAX = 10.0`"), so the number plugin's
+    detect() -- which requires a cell to *start* with a digit -- never engages
+    on its own. `javascripts/tablesort.js` forces `data-sort-method="number"`
+    on that one header; this test proves the force landed and that the sorted
+    order is numeric, with `10.0` after `2.0` as the design specifies.
+
+    A string sort would order the value column differently ("10" before "2",
+    alphabetically) and no code on the page could be blamed but the missing
+    force.
+    """
+    page.goto(server + GATES_PATH, wait_until="networkidle")
+    table = page.locator(".sortable table")
+    assert table.count() == 1, (
+        "the gates page should carry exactly one sortable table; found "
+        f"{table.count()} - gates.md's div wrapper or the tablesort selector "
+        "drifted")
+    header = table.locator("th", has_text="Threshold")
+    assert header.get_attribute("data-sort-method") == "number", (
+        "javascripts/tablesort.js no longer forces the number method on the "
+        "Threshold column - its cells do not auto-detect, so it would sort "
+        "as strings")
+
+    header.click()
+    page.wait_for_timeout(200)
+    assert header.get_attribute("aria-sort") == "ascending", (
+        "tablesort did not mark the clicked header, so the plugin did not run")
+
+    values = page.evaluate("""() => [...document.querySelectorAll(
+      ".sortable tbody tr")].map(tr => tr.cells[1].textContent.trim())""")
+    keys = [_number_sort_key(v) for v in values]
+    assert keys == sorted(keys), (
+        f"the Threshold column did not sort numerically: {values} - keys "
+        f"{keys} are not non-decreasing; '10' would precede '2' in a string "
+        "sort, which is the failure this test is written to see")
+
+
+def _number_sort_key(cell):
+    """A cell's tablesort.number key, mirrored from the plugin.
+
+    The plugin cleans a cell to digits, minus, dot and question mark, then
+    parseFloat reads the leading number; no number sorts as 0.
+    """
+    cleaned = "".join(c for c in cell if c.isdigit() or c in "-.?")
+    match = re.match(r"-?\d+(?:\.\d+)?", cleaned)
+    return float(match.group()) if match else 0.0
+
+
 TILE_ICONS = {
     "rocket": "getting-started",
     "wrench": "how-to",

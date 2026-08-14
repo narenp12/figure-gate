@@ -33,18 +33,17 @@ extra_css = ["stylesheets/palette.css"]
 
 # Pass 2: tablesort and its number plugin sort the gates table, and mermaid
 # draws the flow diagram. Both engines are CDN scripts pinned to exact versions
-# -- mermaid's renderer is not in the Zensical bundle (verified: the bundle
-# carries the --md-mermaid-* CSS variables but no engine) and neither would be
-# vendored as a minified blob nobody reads. `test_docs_site.py` holds the
-# pinning, and a floating tag is the dependency discipline failure this project
-# screens against. The two `javascripts/` files run the engines at view time via
-# `document$.subscribe`, so both survive navigation.
+# -- the Zensical bundle renders mermaid itself into a closed shadow root, so
+# only the pinned engine is needed; there is no `javascripts/mermaid.js`.
+# `test_docs_site.py` holds the pinning, and a floating tag is the dependency
+# discipline failure this project screens against. The `javascripts/tablesort.js`
+# file runs the tablesort engine at view time via `document$.subscribe`, so it
+# survives navigation.
 extra_javascript = [
   "https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js",
   "https://unpkg.com/tablesort@5.3.0/dist/sorts/tablesort.number.min.js",
   "javascripts/tablesort.js",
   "https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js",
-  "javascripts/mermaid.js",
 ]
 
 nav = [
@@ -120,9 +119,8 @@ anchor_linenums = true
 [project.markdown_extensions.pymdownx.inlinehilite]
 [project.markdown_extensions.pymdownx.superfences]
 # gates.md's flow diagram. `fence_code_format` keeps the fence's text in a
-# `.mermaid` div for the CDN engine (loaded via extra_javascript above) to read
-# and replace with an SVG at view time -- the same pattern as the tablesort
-# init, both run by `document$.subscribe`.
+# `.mermaid` div for the bundle's own renderer (loaded with the pinned CDN
+# engine above) to read and replace with an SVG at view time.
 custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]

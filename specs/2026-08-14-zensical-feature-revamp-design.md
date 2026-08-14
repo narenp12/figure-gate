@@ -39,17 +39,17 @@ what those pages say and this is a rendering change, not a content change.
 
 | file | change |
 | --- | --- |
-| `zensical.toml` | theme features `content.tabs.link`, `content.code.annotate`; extensions `pymdownx.tabbed` (`alternate_style = true`), `pymdownx.snippets` (`auto_append`), `abbr`, `def_list`, `pymdownx.caret`, `pymdownx.keys`, `pymdownx.mark`, `pymdownx.tilde`; Pass 2: mermaid custom fence, `extra_javascript` (tablesort, its number plugin, mermaid) |
+| `zensical.toml` | theme features `content.tabs.link`, `content.code.annotate`; extensions `pymdownx.tabbed` (`alternate_style = true`), `pymdownx.snippets` (`auto_append`), `abbr`, `def_list`, `pymdownx.caret`, `pymdownx.keys`, `pymdownx.mark`, `pymdownx.tilde`; Pass 2: mermaid custom fence, `extra_javascript` (tablesort, its number plugin, pinned mermaid engine) |
 | `docs/includes/abbreviations.md` | the glossary `snippets.auto_append` serves every page |
-| `docs/javascripts/tablesort.js` | the `document$.subscribe` init, so tablesort survives navigation |
-| `docs/javascripts/mermaid.js` | the `document$.subscribe` init, so the CDN renderer runs after navigation |
+| `docs/javascripts/tablesort.js` | the `document$.subscribe` init, so tablesort survives navigation; forces the number method on the Threshold column |
+| `docs/javascripts/mermaid.js` | *not shipped* -- redundant with the bundle's native renderer, which double-ran and threw a page error |
 | `docs/getting-started.md` | install-route tabs, import-line tabs |
 | `docs/how-to.md` | code annotations, collapsible transcripts, definition lists for the CLI flags |
-| `docs/gates.md` | mermaid flow diagram (Pass 2), tablesort on the 21-row table (Pass 2), collapsible design notes |
+| `docs/gates.md` | mermaid flow diagram (Pass 2), tablesort on the 21-row table (Pass 2) wrapped in a `<div class="sortable" markdown>` so the class survives attr_list, collapsible design notes |
 | `README.md` | card-grid "what each page is for" block, one lucide icon per tile, HTML that degrades cleanly on GitHub |
-| `tests/test_docs_render.py` | render assertions for tabs, annotations, collapsibles, card grid, mermaid SVG, tablesort |
+| `tests/test_docs_render.py` | render assertions for tabs, annotations, collapsibles, card grid, mermaid SVG in the closed shadow root, tablesort numeric order |
 | `tests/test_docs_site.py` | `extra_javascript` pinning assertion; `AUTHORED` gains `abbreviations.md` |
-| `tests/test_prose_claims.py` | corpus count (17, 12) -> (18, 12); historical-spec list gains this design |
+| `tests/test_prose_claims.py` | corpus count (18, 12) -> (19, 13); historical-spec list gains this design |
 
 Unchanged: `docs/gallery.md`, `docs/style-guide.md`, `docs/choosing-a-form.md`,
 `docs/skill.md`, `docs/changelog.md`, `docs/api.md`, and the nav. The nav stays
@@ -113,7 +113,6 @@ extra_javascript = [
   "https://unpkg.com/tablesort@5.3.0/dist/sorts/tablesort.number.min.js",
   "javascripts/tablesort.js",
   "https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js",
-  "javascripts/mermaid.js",
 ]
 ```
 
@@ -129,16 +128,24 @@ base_path = ["docs"]
 auto_append = ["includes/abbreviations.md"]
 ```
 
-Mermaid's engine is not in the Zensical bundle -- verified, the installed
-`bundle.d7f30b55.min.js` carries the mermaid CSS theme variables but no
-renderer -- so it loads from CDN like tablesort. The CSS variables
-(`--md-mermaid-node-bg-color`, `--md-mermaid-edge-color`) are already shipped by
-the bundle, so diagrams adapt to light/dark with no extra stylesheet.
+The bundle's own mermaid integration was verified after this design was
+written, and it changes the shape of the feature: the installed
+`bundle.d7f30b55.min.js` carries a native renderer that reads `pre.mermaid`
+fences and replaces them with an SVG inside a **closed shadow root**, provided
+a `mermaid` global is present. So the CDN engine is still loaded (pinned, see
+below), but the extra `javascripts/mermaid.js` init is redundant -- it double-
+ran the renderer and threw a page error on the gates page -- and was dropped in
+Pass 2. The CSS variables (`--md-mermaid-node-bg-color`,
+`--md-mermaid-edge-color`) are already shipped by the bundle, so diagrams adapt
+to light/dark with no extra stylesheet.
 
 Both engines' URLs pinned to exact versions; a floating tag would be the
 dependency discipline failure this project screens against, and
 `test_docs_site.py` holds the pinning. The tablesort number plugin registers
-itself when it loads, so `javascripts/tablesort.js` needs no code for it.
+itself when it loads, but its detect() requires a column's cells to *start*
+with a digit, and the threshold column's are prose or backtick-quoted constants
+-- so `javascripts/tablesort.js` forces `data-sort-method="number"` on that one
+header rather than leaving the column to a string sort.
 
 ## 2. The page map
 
@@ -200,8 +207,14 @@ state.
   a paragraph.
 - **Tablesort** on the 21-row "What each gate measures" table. A reference page
   is scanned; sorting by threshold or by gate name is the scan's lever. The
-  threshold column sorts numerically via the `tablesort.number` plugin, which
-  auto-registers when it loads; plain string sort would put `10` before `2`.
+  `sortable` class lives on a wrapping `<div class="sortable" markdown>` --
+  attr_list cannot attach to a table row, and the class on the div survives the
+  build -- with `javascripts/tablesort.js` selecting `.sortable table`. The
+  threshold column sorts numerically via the `tablesort.number` plugin; the
+  plugin's detect() needs cells that *start* with a digit, and this column's are
+  prose or backtick-quoted constants, so the init forces
+  `data-sort-method="number"` on that one header. Plain string sort would put
+  `10` before `2`.
 - **Collapsible** design-note sections, the long paragraphs under
   "Design notes".
 
@@ -244,11 +257,14 @@ Pass 1, in `tests/test_docs_render.py`:
 
 Pass 2, in `tests/test_docs_render.py`:
 
-- **Mermaid** -- wait for the `.mermaid` selector to contain an `svg` on
-  gates.md (proof the CDN engine ran), not merely that the fence rendered text.
-- **Tablesort** -- assert the sortable class/direction indicator, click a
-  column header, assert rows reordered. Click the threshold column and assert
-  numeric order (`10` after `2`), which is the proof the number plugin loaded
+- **Mermaid** -- wait for the `.mermaid` selector to have real footprint and
+  the fence's `<pre>` to be consumed, and prove the SVG exists despite the
+  **closed shadow root** by recording `attachShadow` calls from an init script
+  and asserting one closed root holds a diagram (the render test's way of seeing
+  what no selector can).
+- **Tablesort** -- assert the number method landed on the Threshold header, click
+  it, assert `aria-sort="ascending"` and rows reordered, then assert numeric
+  order (`10` after `2`), which is the proof the number plugin sorted by value
   rather than a lexicographic sort shipping silently.
 
 In `tests/test_docs_site.py`:
@@ -262,7 +278,7 @@ In `tests/test_docs_site.py`:
 In `tests/test_prose_claims.py`:
 
 - **Corpus accounting** -- when the design lands, the tracked-markdown count
-  moves (17, 12) -> (18, 12) and the historical-spec list gains this design
+  moves (18, 12) -> (19, 13) and the historical-spec list gains this design
   doc. `abbreviations.md` joins the sweep the commit after it is written, so
   every code span it carries must resolve or earn an `UNRESOLVED_SPANS` entry
   with a reason.
@@ -285,7 +301,9 @@ installs `--group docs-test` as it does today.
   extra; it is the only thing that proves the link is on.
 - **Mermaid without the engine.** A `custom_fence` renders nothing at all if
   the renderer never loads; the strict build and nav-page check pass, and the
-  page ships an empty `.mermaid` div. The SVG assertion is the gate.
+  page ships an empty `.mermaid` div. The closed-shadow SVG assertion is the
+  gate -- and it also catches the double-run a second `mermaid.js` init caused,
+  which is why that file was removed rather than kept.
 - **The grid block leaking.** Written as raw HTML, the cards render as plain
   links and text on GitHub. Written subtly differently, they render as a broken
   block. The risk is contained to one `div` at the top of the README and is

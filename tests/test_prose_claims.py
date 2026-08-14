@@ -185,9 +185,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (18, 12), (
+    assert (len(tracked), len(PROSE_DOCS)) == (19, 13), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 18 and 12 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 19 and 13 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
