@@ -34,6 +34,7 @@ import inspect
 import pathlib
 import re
 import subprocess
+import textwrap
 
 import numpy
 import pytest
@@ -184,9 +185,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (17, 12), (
+    assert (len(tracked), len(PROSE_DOCS)) == (19, 13), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 17 and 12 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 19 and 13 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
@@ -204,6 +205,7 @@ def test_the_historical_class_holds_only_the_records():
         "specs/2026-07-28-documentation-audit-design.md",
         "specs/2026-07-30-standardized-docs-audit.md",
         "specs/2026-08-03-packaging-and-policy-design.md",
+        "specs/2026-08-14-zensical-feature-revamp-design.md",
     ], "the set of documents exempted as historical records changed"
 
 
@@ -221,11 +223,17 @@ def test_a_historical_document_says_what_it_is_dated_to(path):
 
 
 def fenced_python():
-    """(document, index, source) for every ```python block in the corpus."""
+    """(document, index, source) for every ```python block in the corpus.
+
+    A block nested in a tab is indented with the tab's content, and a Python
+    module is not a markdown list item: that shared indent is markdown, not
+    Python, so dedent it before anything parses the block.
+    """
     out = []
     for path in PROSE_DOCS:
         blocks = re.findall(r"```python\n(.*?)```", path.read_text(encoding="utf-8"), re.S)
-        out.extend((doc_id(path), i, src) for i, src in enumerate(blocks))
+        out.extend((doc_id(path), i, textwrap.dedent(src))
+                   for i, src in enumerate(blocks))
     return out
 
 

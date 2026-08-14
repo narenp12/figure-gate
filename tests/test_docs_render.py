@@ -139,7 +139,7 @@ def _build_the_site():
     if shutil.which("uv") is None:
         pytest.skip("uv is needed to build the site")
     result = subprocess.run(
-        ["uv", "run", "--no-project", "--with", "zensical>=0.0.51,<0.1",
+        ["uv", "run", "--only-group", "docs",
          "zensical", "build", "--strict"],
         cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, (
@@ -219,6 +219,22 @@ def browser():
         else:
             yield b
             b.close()
+
+
+@pytest.fixture()
+def page(browser, server):
+    """A blank page for the interaction tests.
+
+    `rendered` above measures every page and closes the contexts; behaviour --
+    a click on a tab, a toggle on a `<details>` -- needs a page its test can
+    drive, which is what this is. Function scope: an interaction test that
+    navigated a session page would leave every test after it standing on
+    whatever page the last one finished on.
+    """
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    pg = context.new_page()
+    yield pg
+    context.close()
 
 
 # The browser's half of the job: resolve the cascade, composite every
@@ -753,6 +769,314 @@ def test_no_filter_is_applied_to_gallery_figures():
             f"palette.css applies {bad} - a filter on a gallery figure changes "
             "the colors the gates certified. Frame the white instead of "
             "recoloring the figure.")
+
+
+# --- the adopted features behave as built --------------------------------------
+# An unknown name in the `features` list is accepted silently -- a build with
+# `content.tabs.link` misspelled exits 0 and no part of the site syncs -- so
+# each Pass 1 feature is proven on the page, the way the contrast defect above
+# was. The tab sync test in particular is the only thing that can show the link
+# feature is on.
+
+GETTING_STARTED_PATH = "/getting-started/"
+HOW_TO_PATH = "/how-to/"
+GATES_PATH = "/gates/"
+
+
+def _tab_groups(page):
+    """Every `.tabbed-set` measured by what a reader sees.
+
+    Visibility is read off `getComputedStyle`, deliberately not off the
+    `hidden` attribute: pymdownx's alternate style hides a block under a
+    `:checked` sibling selector, so a block's not being rendered never shows up
+    as an attribute. Asserting the attribute would be asserting the CSS
+    implementation, which is not what this site is being held to.
+    """
+    return page.evaluate("""() => {
+      return [...document.querySelectorAll('.tabbed-set.tabbed-alternate')].map(s => {
+        const radios = [...s.querySelectorAll('input')];
+        return {
+          labels: [...s.querySelectorAll('.tabbed-labels > label')]
+            .map(l => l.textContent.trim()),
+          active: [...s.querySelectorAll('.tabbed-labels > label')]
+            .findIndex(l => l.getAttribute('for') ===
+                            (radios.find(i => i.checked) || {}).id),
+          shown: [...s.querySelectorAll('.tabbed-block')].map(bl =>
+            getComputedStyle(bl).display !== 'none'),
+        };
+      });
+    }""")
+
+
+def test_getting_started_tabs_sync_the_shared_label_and_nothing_else(page, server):
+    """`content.tabs.link`, proven.
+
+    The two groups share "Vendored" at different positions (0 in the install
+    routes, 2 in the import lines). A link by *position* would move the import
+    group whenever the first group changed at all; a link by *label* moves it
+    only for the shared word. The sequence distinguishes the two:
+
+    - `conda-forge` has no counterpart in the import group, so that group must
+      not move -- a position-based link would have moved it anyway.
+    - `Vendored` has a counterpart, so that group must move to its own
+      "Vendored", and the previously active tab of each group hides its block.
+    """
+    page.goto(server + GETTING_STARTED_PATH, wait_until="networkidle")
+    groups = page.locator(".tabbed-set.tabbed-alternate")
+    assert groups.count() == 2, (
+        "getting-started.md writes two tab groups (install routes and import "
+        f"lines); the build produced {groups.count()}")
+    assert _tab_groups(page) == [
+        {"labels": ["Vendored", "Installed", "conda-forge"],
+         "active": 0, "shown": [True, False, False]},
+        {"labels": ["0.7+ installed", "0.6 and earlier", "Vendored"],
+         "active": 0, "shown": [True, False, False]},
+    ]
+
+    groups.nth(0).locator(".tabbed-labels label", has_text="conda-forge").click()
+    state = _tab_groups(page)
+    assert state[0]["active"] == 2, state
+    assert state[0]["shown"] == [False, False, True], state
+    assert state[1]["active"] == 0, state
+
+    groups.nth(0).locator(".tabbed-labels label", has_text="Vendored").click()
+    assert _tab_groups(page) == [
+        {"labels": ["Vendored", "Installed", "conda-forge"],
+         "active": 0, "shown": [True, False, False]},
+        {"labels": ["0.7+ installed", "0.6 and earlier", "Vendored"],
+         "active": 2, "shown": [False, False, True]},
+    ]
+
+
+def test_how_to_annotations_render_and_expand_in_the_browser(page, server):
+    """The annotation markers are built by the bundle at view time.
+
+    The built HTML keeps `# (1)!` as literal text in the code span; the
+    `.md-annotation` aside exists only after the page's own JavaScript has run,
+    which is exactly why this is a browser test and a static-HTML scan is not
+    the one that proves anything. There is no static text to scan.
+    """
+    page.goto(server + HOW_TO_PATH, wait_until="networkidle")
+    page.wait_for_selector(".md-annotation")
+    annotations = page.locator(".md-annotation")
+    assert annotations.count() == 4, (
+        f"how-to.md writes four `# (n)!` markers; the bundle turned "
+        f"{annotations.count()} of them into .md-annotation")
+
+    annotations.first.focus()
+    tooltip = page.locator(".md-tooltip--active")
+    page.wait_for_selector(".md-tooltip--active")
+    assert "The backend is set before pyplot imports" in tooltip.inner_text(), (
+        f"the expanded annotation reads {tooltip.inner_text()[:80]!r} -- the "
+        "ordered list that answers the marker is not reaching the tooltip")
+
+
+@pytest.mark.parametrize("path,count,starts_open", [
+    (HOW_TO_PATH, 2, False),   # transcripts: closed, a click of the title opens
+    (GATES_PATH, 5, True),     # design notes: open, a click of the title folds
+])
+def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
+                                               starts_open):
+    """A `???` / `???+` admonition toggles on clicking its title.
+
+    The count is pinned because a collapsible that stops being one takes its
+    story with it: the transcripts become a wall of text between recipes and
+    the design notes can no longer be folded. Whether the note starts open is
+    itself pinned -- gates' notes read as prose and fold on demand, how-to's
+    transcripts are evidence kept out of the way until asked for.
+    """
+    page.goto(server + path, wait_until="networkidle")
+    notes = page.locator("details.note")
+    assert notes.count() == count, (
+        f"expected {count} collapsible note(s) on {path}, found {notes.count()}")
+    assert all((notes.nth(i).get_attribute("open") is not None) == starts_open
+               for i in range(count)), (
+        f"on {path} every note should start "
+        f"{'open' if starts_open else 'collapsed'}")
+
+    notes.nth(0).locator("summary").click()
+    opened = notes.nth(0).get_attribute("open") is not None
+    assert opened != starts_open
+    assert notes.nth(0).locator(":scope > :not(summary)").first.is_visible() \
+        == opened
+
+    notes.nth(0).locator("summary").click()
+    assert (notes.nth(0).get_attribute("open") is not None) == starts_open
+
+
+def test_the_gates_flow_diagram_draws_an_svg(page, server):
+    """mermaid, proven on the page.
+
+    The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
+    diagram's SVG exists only after the page's own JavaScript has run, and the
+    bundle renders it into a *closed* shadow root, so no selector can reach it
+    and a static-HTML scan sees nothing. This test overrides
+    `attachShadow` before any page script runs to record every closed root,
+    then asks whether any of them holds an SVG with real content -- the only
+    way to prove the renderer ran, short of re-implementing the bundle.
+
+    The diagram's floor is that a fence whose engine never loaded leaves a
+    `<pre>` and no shadow root at all, which fails this test's first assert
+    with the cause attached.
+    """
+    page.add_init_script("""
+      window.__closedRoots = [];
+      const _attach = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function (init) {
+        const root = _attach.call(this, init);
+        if (init && init.mode === "closed") window.__closedRoots.push(root);
+        return root;
+      };
+    """)
+    page.goto(server + GATES_PATH, wait_until="networkidle")
+    page.wait_for_selector("div.mermaid")
+    drawn = page.evaluate("""() => {
+      const svgs = window.__closedRoots
+        .filter(r => r.querySelector("svg"))
+        .map(r => ({ nodes: r.querySelectorAll("*").length,
+                     w: r.querySelector("svg").getBoundingClientRect().width }));
+      return { roots: window.__closedRoots.length, svgs };
+    }""")
+    assert drawn["roots"] >= 1, (
+        "gates.md's mermaid fence rendered no closed shadow root - the engine "
+        "did not run, or the bundle stopped rendering mermaid into a shadow")
+    assert any(s["nodes"] >= 50 and s["w"] > 0 for s in drawn["svgs"]), (
+        f"no closed shadow root holds a real diagram, got {drawn['svgs']} - "
+        "the fence is a <pre> the renderer never consumed")
+    assert page.locator("pre.mermaid").count() == 0, (
+        "the mermaid fence was left as a literal <pre class='mermaid'> - the "
+        "renderer did not replace it")
+
+
+def test_the_gates_threshold_column_sorts_by_value(page, server):
+    """tablesort's number plugin, proven.
+
+    The threshold column's cells are prose or backtick-quoted constants
+    ("canvas bounds", "`BANKING_SLOPE_MAX = 10.0`"), so the number plugin's
+    detect() -- which requires a cell to *start* with a digit -- never engages
+    on its own. `javascripts/tablesort.js` forces `data-sort-method="number"`
+    on that one header; this test proves the force landed and that the sorted
+    order is numeric, with `10.0` after `2.0` as the design specifies.
+
+    A string sort would order the value column differently ("10" before "2",
+    alphabetically) and no code on the page could be blamed but the missing
+    force.
+    """
+    page.goto(server + GATES_PATH, wait_until="networkidle")
+    table = page.locator(".sortable table")
+    assert table.count() == 1, (
+        "the gates page should carry exactly one sortable table; found "
+        f"{table.count()} - gates.md's div wrapper or the tablesort selector "
+        "drifted")
+    header = table.locator("th", has_text="Threshold")
+    assert header.get_attribute("data-sort-method") == "number", (
+        "javascripts/tablesort.js no longer forces the number method on the "
+        "Threshold column - its cells do not auto-detect, so it would sort "
+        "as strings")
+
+    header.click()
+    page.wait_for_timeout(200)
+    assert header.get_attribute("aria-sort") == "ascending", (
+        "tablesort did not mark the clicked header, so the plugin did not run")
+
+    values = page.evaluate("""() => [...document.querySelectorAll(
+      ".sortable tbody tr")].map(tr => tr.cells[1].textContent.trim())""")
+    keys = [_number_sort_key(v) for v in values]
+    assert keys == sorted(keys), (
+        f"the Threshold column did not sort numerically: {values} - keys "
+        f"{keys} are not non-decreasing; '10' would precede '2' in a string "
+        "sort, which is the failure this test is written to see")
+
+
+def _number_sort_key(cell):
+    """A cell's tablesort.number key, mirrored from the plugin.
+
+    The plugin cleans a cell to digits, minus, dot and question mark, then
+    parseFloat reads the leading number; no number sorts as 0.
+    """
+    cleaned = "".join(c for c in cell if c.isdigit() or c in "-.?")
+    match = re.match(r"-?\d+(?:\.\d+)?", cleaned)
+    return float(match.group()) if match else 0.0
+
+
+TILE_ICONS = {
+    "rocket": "getting-started",
+    "wrench": "how-to",
+    "filter": "gates",
+    "image": "gallery",
+    "book": "style-guide",
+    "code": "api",
+}
+
+
+def home_article(built_site):
+    """The home page's article, and nothing around it.
+
+    Seven of the page's `svg.lucide` live in the header, the search dialog and
+    the table of contents; scoping to the article is how "the grid's six icons
+    are the only icons in the prose" is asserted without a list of chrome to
+    keep in step here.
+    """
+    html = (built_site / "index.html").read_text(encoding="utf-8")
+    article = re.search(r"<article class=\"[^\"]*\">(.*?)</article>", html, re.S)
+    assert article, "the home page no longer renders an article container"
+    grid = re.search(r'<div class="grid cards">\s*<ul>(.*?)</ul>',
+                     article.group(1), re.S)
+    assert grid, "the card grid is no longer a `<div class=\"grid cards\">`"
+    return grid.group(1)
+
+
+def test_the_home_card_grid_has_six_iconed_tiles(built_site):
+    """Six tiles, each with its designed lucide icon and a link that lands.
+
+    The icon classes in `TILE_ICONS` are the design's answer to "which page is
+    this", and the hrefs are checked against the built site rather than for
+    text, because the grid is raw HTML: `--strict` knows nothing about a link
+    written by hand in a `<div>`, and `test_every_internal_link_resolves...`
+    skips absolute URLs (its scheme guard) -- these absolute `https://` hrefs
+    are exactly the links that check never sees.
+    """
+    lis = re.findall(r"<li>.*?</li>", home_article(built_site), re.S)
+    assert len(lis) == 6, (
+        f"the README's grid should hold six tiles, found {len(lis)}")
+
+    base = deploy_base()
+    files = {p.relative_to(built_site).as_posix()
+             for p in built_site.rglob("*")}
+    got = {}
+    for li in lis:
+        icons = re.findall(r"lucide lucide-([a-z-]+)", li)
+        assert len(icons) == 1, (
+            f"a tile must carry exactly one icon, got {icons} in {li[:120]!r}")
+        name = icons[0]
+        assert name in TILE_ICONS, f"{name} is not one of the designed tile icons"
+        href = re.search(r'<a href="([^"]+)">', li)
+        assert href, f"a tile links nowhere: {li[:120]!r}"
+        page = urllib.parse.urlparse(href.group(1)).path
+        assert page.startswith(base), (
+            f"tile href {href.group(1)} leaves the deploy base {base}")
+        landing = page[len(base):]
+        built = landing if not landing.endswith("/") else landing + "index.html"
+        assert built in files, (
+            f"tile href {href.group(1)} does not land on a built page")
+        got[name] = landing.rstrip("/")
+    assert got == TILE_ICONS, (
+        f"the tile hrefs are {got}, expected the six designed pages")
+
+
+def test_the_six_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
+    """The icon-count rule behind the grid being the exception.
+
+    The site's voice is contrast arithmetic, and the grid exists because one
+    icon per tile carries information. A seventh `svg.lucide` in the article is
+    a decoration the review never signed off on, and it is the count's whole
+    job to name it.
+    """
+    icons = re.findall(r'class="lucide lucide-[a-z-]+"',
+                       home_article(built_site))
+    assert len(icons) == 6, (
+        f"{len(icons)} icon(s) in the home article, expected the grid's 6 -- "
+        "a seventh icon is decoration the count was written to catch")
 
 
 # --- this file skips, it does not error ---------------------------------------

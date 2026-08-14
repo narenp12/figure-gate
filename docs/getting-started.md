@@ -2,71 +2,128 @@
 
 ## Install
 
-Copy the style sheet and the two checkers. `check_palette.py` needs only the
-standard library; `check_figure.py` needs matplotlib; scipy is optional and
-changes only speed (`check_overplotting` uses a KD-tree when scipy imports and
-an O(n^2) numpy path when it does not).
+Three routes into the checkers. Copy them beside the figures to read and edit
+them; install to pin a version. `check_palette.py` needs only the standard
+library; `check_figure.py` needs matplotlib; scipy is optional and changes only
+speed (`check_overplotting` uses a KD-tree when scipy imports and an O(n^2)
+numpy path when it does not).
 
-```bash
-git clone https://github.com/narenp12/figure-gate
-cp figure-gate/skill/assets/figure.mplstyle       your-project/diagrams/
-cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
-cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
-cp figure-gate/skill/scripts/suggest_fixes.py     your-project/diagrams/  # optional
-```
+=== "Vendored"
 
-The fourth file is what turns a failed row into a remedy, and nothing else
-needs it: `check_figure.py` imports it lazily, so a copy without it audits
-exactly the same and only `report(fig, suggest=True)` and `suggest(rows)` are
-missing. `check_figure.py` does need `check_palette.py` beside it: that is
-the import the series-color and colormap rows travel on, and without it neither
-raises: both say in their detail that nothing was checked and pass.
+    ```bash
+    git clone https://github.com/narenp12/figure-gate
+    cp figure-gate/skill/assets/figure.mplstyle       your-project/diagrams/
+    cp figure-gate/skill/scripts/check_palette.py     your-project/diagrams/
+    cp figure-gate/skill/scripts/check_figure.py      your-project/diagrams/
+    cp figure-gate/skill/scripts/suggest_fixes.py     your-project/diagrams/  # optional
+    ```
 
-Installing instead of vendoring pins a version and puts the two checkers on
-PATH as `check-palette` and `check-figure`:
+    The fourth file is what turns a failed row into a remedy, and nothing else
+    needs it: `check_figure.py` imports it lazily, so a copy without it audits
+    exactly the same and only `report(fig, suggest=True)` and `suggest(rows)`
+    are missing. `check_figure.py` does need `check_palette.py` beside it: that
+    is the import the series-color and colormap rows travel on, and without it
+    neither raises: both say in their detail that nothing was checked and pass.
 
-```bash
-uv add figure-gate                        # the library, and the two commands
-uv tool install figure-gate               # the two commands only, no import
-conda install -c conda-forge figure-gate  # see the version note below
-```
+    Copying is the default because a vendored checker is one you can read and
+    edit beside the figures it gates, and the thresholds are meant to be edited.
 
-Installed, the checkers are a package, so import them from it:
+=== "Installed"
 
-```python
-from figure_gate import check_figure as cf
-from figure_gate import check_palette as cp
-from figure_gate import suggest_fixes as sf
-```
+    Installing pins a version and puts the two checkers on PATH as
+    `check-palette` and `check-figure`:
 
-`py.typed` ships with them, so the annotations are visible to your type checker
-on this route. They are not on the vendored one, where the files are loose
-modules with no package for the marker to attach to, and PEP 561 reads every
-annotation in them as `Any`.
+    ```bash
+    uv add figure-gate                        # the library, and the two commands
+    uv tool install figure-gate               # the two commands only, no import
+    ```
 
-Vendored, they are flat files and `import check_figure` is the line. Nothing
-else differs between the two.
+    Installed, the checkers are a package, so import them from it:
 
-**Which import line depends on which version you installed.** 0.7.0 moved the
-modules into the `figure_gate` package; through 0.6.0 the wheel put them at the
-top level of site-packages, so an install of 0.6.0 or earlier wants
-`import check_figure`, the same line as a vendored copy. conda-forge follows
-PyPI through the feedstock's autotick bot rather than in the same hour, so the
-conda package is the previous release for a while after each one. The badges on
-[the repository](https://github.com/narenp12/figure-gate) say what each index is
-serving now, and this says what you got:
+    ```python
+    from figure_gate import check_figure as cf
+    from figure_gate import check_palette as cp
+    from figure_gate import suggest_fixes as sf
+    ```
 
-```bash
-uv pip show figure-gate      # or: conda list figure-gate
-```
+    `py.typed` ships with them, so the annotations are visible to your type
+    checker on this route. They are not on the vendored one, where the files are
+    loose modules with no package for the marker to attach to, and PEP 561 reads
+    every annotation in them as `Any`.
+
+    What you got:
+
+    ```bash
+    uv pip show figure-gate      # or: conda list figure-gate
+    ```
+
+=== "conda-forge"
+
+    ```bash
+    conda install -c conda-forge figure-gate
+    ```
+
+    conda-forge follows PyPI through the feedstock's autotick bot rather than in
+    the same hour, so the conda package is the previous release for a while
+    after each one. The badges on
+    [the repository](https://github.com/narenp12/figure-gate) say what each
+    index is serving now.
+
+    What you got:
+
+    ```bash
+    uv pip show figure-gate      # or: conda list figure-gate
+    ```
 
 The install ships `figure.mplstyle` inside that package, beside the module that
 reads it, which is where the style-sheet gate looks. Without it the gate has
 nothing to compare and reports a pass, including for the figure it exists to
 catch: one drawn with `plt.style.use` forgotten entirely.
 
-Copying is the default because a vendored checker is one you can read and edit
-beside the figures it gates, and the thresholds are meant to be edited.
+**Which import line depends on which version you installed.** Vendored, the
+files are flat and `import check_figure` is the line. Installed, 0.7.0 moved
+the modules into the `figure_gate` package; through 0.6.0 the wheel put them at
+the top level of site-packages, so an install of 0.6.0 or earlier wants
+`import check_figure`, the same line as a vendored copy. This says what you
+got:
+
+=== "0.7+ installed"
+
+    ```python
+    from figure_gate import check_figure as cf
+    from figure_gate import check_palette as cp
+    from figure_gate import suggest_fixes as sf
+    ```
+
+    ```bash
+    uv pip show figure-gate      # or: conda list figure-gate
+    ```
+
+=== "0.6 and earlier"
+
+    The same import line as a vendored copy:
+
+    ```python
+    import check_figure as cf
+    import check_palette as cp
+    import suggest_fixes as sf
+    ```
+
+    ```bash
+    uv pip show figure-gate      # or: conda list figure-gate
+    ```
+
+=== "Vendored"
+
+    ```python
+    import check_figure as cf
+    import check_palette as cp
+    import suggest_fixes as sf
+    ```
+
+    `py.typed` is not on this route: the files are loose modules with no package
+    for the marker to attach to, and PEP 561 reads every annotation in them as
+    `Any`.
 
 ## Two settings need your document's values
 

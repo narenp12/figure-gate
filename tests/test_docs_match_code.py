@@ -327,7 +327,8 @@ def test_the_page_states_the_advisory_count_it_marks():
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    claimed = re.search(r"\*\*WARN is not FAIL\.\*\*\s+(\w+)", GATES.read_text(encoding="utf-8"))
+    claimed = re.search(r'note "WARN is not FAIL"\s+\n\s*(\w+)',
+                        GATES.read_text(encoding="utf-8"))
     assert claimed, ("docs/gates.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()

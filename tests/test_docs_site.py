@@ -85,7 +85,7 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # runs the commands, recomputes the numbers and re-derives the row table from
 # the registry, so the page cannot drift from the behaviour it teaches.
 AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md",
-            "how-to.md"}
+            "how-to.md", "abbreviations.md"}
 
 
 def nav_targets():
@@ -287,6 +287,38 @@ def test_the_build_is_not_left_configured_for_mkdocs():
     file is a build that stops failing on a dangling page without saying so."""
     assert not (ROOT / "mkdocs.yml").exists()
     assert not (ROOT / "mkdocs.yaml").exists()
+
+
+def test_every_cdn_script_is_pinned_to_an_exact_version():
+    """The gates page's sort and its flow diagram load from a CDN, and a CDN
+    URL without a version is a floating dependency: tablesort or mermaid
+    releases a breaking version and the page breaks, with nothing in the
+    repository having changed. The config comment and this test are the
+    project's answer -- every `extra_javascript` entry that names a host must
+    carry an exact `@version`, and a floating tag (`@latest`, `@5`) or no tag
+    at all is the failure the site screens against.
+
+    Local `javascripts/` files are the vendor floor and are exempt by design:
+    they cannot float, they are read at build time, and `--strict` fails the
+    build if they vanish.
+    """
+    text = CONFIG.read_text(encoding="utf-8")
+    match = re.search(r"extra_javascript = \[(.*?)\]", text, re.S)
+    assert match, "zensical.toml no longer declares extra_javascript"
+    urls = re.findall(r'"([^"]+)"', match.group(1))
+    assert len(urls) >= 2, (
+        f"expected the gates page's engine scripts in extra_javascript, "
+        f"found {urls}")
+    floating = [u for u in urls
+                if "://" in u and not re.search(r"@\d+(?:\.\d+){0,2}(?=/|$)", u)]
+    assert not floating, (
+        f"CDN script(s) without an exact version pin: {floating}. A floating "
+        "dependency is how this page breaks with no commit behind it -- pin "
+        "the exact version (e.g. mermaid@11.4.1) or vendor the file.")
+    local = [u for u in urls if "://" not in u]
+    assert local, (
+        "no local javascripts/ init remains in extra_javascript - the sort "
+        "may have stopped being driven by document$.subscribe")
 
 
 # --- the stylesheet quotes measurements too -----------------------------------

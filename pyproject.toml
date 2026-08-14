@@ -426,7 +426,7 @@ dev = [
 # costs nothing next to a resolution failure if that range ever widens again.
 docs = [
     "mkdocstrings-python>=1.10 ; python_full_version >= '3.10'",
-    "zensical>=0.0.51,<0.1; python_version >= '3.10'",
+    "zensical==0.0.54 ; python_version >= '3.10'",
 ]
 
 # griffe alone, for the job that asks whether the public API broke since the
