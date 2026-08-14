@@ -130,9 +130,9 @@ widths in points.
 
 Every check is an elimination gate: each one forbids a single enumerated
 failure, and none looks at the figure as a whole. 21 passing rows means the
-figure avoids 21 named defects. It does not mean the figure is good. The
-checker cannot see an arrow pointing at the wrong object, a reading order that
-runs backwards, or a label that is true of the concept and false of the curve
+figure avoids 21 named defects, not that the figure is good. The checker
+cannot see an arrow pointing at the wrong object, a reading order that runs
+backwards, or a label that is true of the concept and false of the curve
 beside it. Render it and look at it.
 
 A row can also be reporting the checker rather than the figure. Every gate runs
@@ -145,12 +145,12 @@ all-NaN, infinite and zero-sized ones, found none. The handler is there anyway:
 these gates read matplotlib internals that are free to move, and the version
 floor they are written against has no ceiling above it.
 
-Two blind spots are worth naming, because a passing row looks the same as an
-absent one. The colormap gate reads a `Colormap`'s name to tell an encoding
-from a hand-set list of colors, so a map matplotlib left unnamed is skipped
-rather than judged. It also needs `check_palette.py` importable beside it;
-without it the row says it classified nothing, and passes. Both are deliberate.
-Both mean the row can pass by having seen nothing.
+Two blind spots remain, because a passing row looks the same as an absent one.
+The colormap gate reads a `Colormap`'s name to tell an encoding from a
+hand-set list of colors, so a map matplotlib left unnamed is skipped rather
+than judged. It also needs `check_palette.py` importable beside it; without it
+the row says it classified nothing, and passes. Both are deliberate: the row
+can pass by having seen nothing.
 
 The rules also do not transfer to interactive web charts, where hover,
 responsive reflow and dark mode change most of the constraints.
@@ -206,9 +206,8 @@ advisory, and neither is evidence of anything about a figure.
     never `False`, and `ADVISORY_GATES` in `check_figure.py` is the list. A
     sub-3:1 hue is legal when it carries a direct label; a heatmap panel
     legitimately measures 0.98 ink coverage. Failing those would train people to
-    ignore the row, and an ignored gate is worth less than no gate. Type size is
-    the one row that does both: it fails under the floor, and warns on a figure
-    placed under 35% of the content width.
+    ignore the row. Type size is the one row that does both: it fails under the
+    floor, and warns on a figure placed under 35% of the content width.
 
 ???+ note "A row's detail carries two marks, and they mean different things"
 

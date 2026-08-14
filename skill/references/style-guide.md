@@ -27,7 +27,8 @@ Everything matplotlib ships is used as-shipped — viridis, `RdBu`, style sheets
 `constrained_layout`. What remains is the part matplotlib has no opinion about: which
 palette, whether the figure is composed, and whether the type clears the page.
 
-Every rule here was earned by a specific failure. Nothing is taste-by-assertion.
+Every rule here was written for a specific failure, and each names the measurement
+behind it.
 
 ---
 
@@ -96,7 +97,7 @@ solid ramp by construction and nobody's design decision.
 data. This one counts every non-background pixel in the rectangle, frame, ticks,
 gridlines and labels included. The two move opposite ways under one edit: deleting
 gridlines raises the data-ink ratio and lowers this number. A high reading means
-saturation, not decoration, and stripping furniture is never the answer to it. The guide
+saturation, not decoration, and stripping furniture is not the fix. The guide
 states no data-ink rule of its own, and one reason is that the empirical case for
 minimalism is weaker than its standing suggests (Bateman et al., below).
 
@@ -310,7 +311,7 @@ two orders of magnitude of clearance either side.
 
 Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
 `rainbow`, `hsv` and `gist_ncar` land there. A reader cannot order two values in
-any of them, which is the whole job.
+any of them, and ordering is what a colormap is for.
 
 The thresholds are empirical, measured across matplotlib's registry against
 `cmasher.get_cmap_type()` as an oracle. The margins, the three adjudicated
@@ -319,10 +320,10 @@ that ships with the repository, at
 [`specs/2026-07-28-colormap-kind-gate-design.md`](https://github.com/narenp12/figure-gate/blob/main/specs/2026-07-28-colormap-kind-gate-design.md).
 The theory is Kovesi; see the references at the end of this document.
 
-Kind is not quality. `turbo` passes as diverging because its lightness profile
-genuinely is diverging-shaped; its problem is hue banding, which a
-lightness-only measure cannot see. The row is named "Colormap kind" for that
-reason.
+Passing the kind gate is not a quality verdict. `turbo` passes as diverging
+because its lightness profile genuinely is diverging-shaped; its problem is hue
+banding, which a lightness-only measure cannot see. The row is named "Colormap
+kind" for that reason.
 
 ### Ink, status, backdrop
 
@@ -487,7 +488,8 @@ placement or the figure, not to shrink the type further.
 
 Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of the twelve
 the table already knows (`python check_figure.py --venues`). The script derives the scale
-per figure and fails any string under 7.5pt on page. Per-figure is the point: a 14in
+per figure and fails any string under 7.5pt on page. The scale is per figure because
+the shrink differs: a 14in
 figure on a 750pt slide shrinks to 0.74×, a 8.6in one is 1.21×, and the same 10pt label
 is fine in one and illegible in the other.
 
@@ -551,7 +553,7 @@ checked against the render. No invented precision. No em-dashes in rendered stri
 ## Discipline
 
 - **Declare the read before you draw.** One sentence: what, for whom, the job.
-- **Prefer checks over adjectives.** A check you run beats taste you have to feel.
+- **Prefer checks over adjectives.** A check you can run beats an adjective you have to feel.
 - **Every gate has a blind spot.** A figure that passes is not good — it is not-bad in
   exactly the ways enumerated. When it still looks wrong, write the gate.
 

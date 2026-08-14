@@ -4,7 +4,7 @@ Recipes. Each one is a task, the code that does it, and the output it produces.
 
 [The gates](gates.md) is the reference for what each row measures.
 [The style guide](style-guide.md) is the measurement behind each threshold.
-This page is neither. It is what to type.
+This page is the recipes.
 
 Every snippet here runs against the vendored import (`import check_figure`).
 Installed, the line is `from figure_gate import check_figure`. Nothing else
@@ -122,8 +122,7 @@ def test_figure_is_composed(name):
 
 Advisory rows never fail a build, and the message follows that on its own:
 `"warn"` is a truthy string, so both `not s` and `s is False` select the hard
-failures and leave the advisories out. Assert on `ok` and print the rows; there
-is no third thing to get right.
+failures and leave the advisories out. Assert on `ok` and print the rows.
 
 To see the advisory rows as well, ask for the ones that are not `True`:
 
@@ -136,7 +135,7 @@ for name, status, detail in rows:
 ## Gate a palette from a toolchain that is not Python
 
 `check_palette.py` imports nothing outside the standard library and exits 1 on
-a failing row. That is the whole CI contract:
+a failing row. That exit code is the CI contract:
 
 ```bash
 python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
@@ -269,6 +268,4 @@ fails in CI.
 
 Every threshold is a module-level constant for this reason. The tables on
 [the gates](gates.md) name each one, and
-[the style guide](style-guide.md) records what was measured to land on it. A
-number you move against a measurement you have read is a decision. A number you
-move because a row was inconvenient is the gate deleted, slowly.
+[the style guide](style-guide.md) records what was measured to land on it.

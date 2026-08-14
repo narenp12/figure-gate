@@ -33,7 +33,7 @@ opens a PR on the feedstock bumping `version` and `sha256` and resetting the
 build number; merge it once its CI is green. It can take several hours after
 the PyPI release, so a bump that has not appeared yet is usually not a problem.
 
-Three things worth knowing:
+Three things affect that loop:
 
 - **The bot stops opening version PRs once three are open on the feedstock**, so
   an unmerged bump blocks later ones. Merge or close them.

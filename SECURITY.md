@@ -20,7 +20,7 @@ one within 30. You will be credited in the advisory unless you ask not to be.
 | < 0.1   | no |
 
 Only the latest release gets fixes. The project is small enough that a patch
-release is cheap and a backport branch would be pretense.
+release is cheap and a backport branch would not be maintained.
 
 ## What counts here
 
