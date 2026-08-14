@@ -96,8 +96,8 @@ start wherever the data lives. Categories go on the vertical axis, sorted by val
 rather than alphabetically — sorting is free and it turns "find the biggest" from a
 scan into a glance.
 
-A log axis is the same argument in different clothes: it cannot contain zero, so it
-cannot carry a bar. Use points, and say in the caption that the scale is
+A log axis has the same constraint as a cut bar baseline: it cannot contain zero,
+so it cannot carry a bar. Use points, and say in the caption that the scale is
 multiplicative.
 
 ## Paired data: draw the pairing
@@ -244,7 +244,7 @@ segments of 119 — and culling them is the difference between a median slope of
 ## The forms with no research-figure use
 
 - **Pie and donut.** Angle and area, the two weakest quantitative tasks, for a job a
-  sorted dot plot does better. Two categories are a sentence, not a figure.
+  sorted dot plot does better. Two categories do not need a figure.
 - **3D bars, 3D surfaces for 2D data.** Perspective makes identical values plot at
   different sizes, and near marks occlude far ones. A third variable belongs in a
   facet, a color scale, or a contour.

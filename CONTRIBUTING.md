@@ -6,8 +6,9 @@ Open defects live in the issue tracker, and nowhere else. Not a "known issues"
 heading in the README, not a caveat in the style guide. Prose in this repo is
 gated — `tests/test_prose_claims.py` sweeps the reference material and pins
 every number and every backticked name against the code — and a bug description
-is the one kind of sentence that cannot be gated, so a known-issues list rots
-quietly in exactly the file whose discipline is that it does not. The 0.4.0 note
+is the one kind of sentence that cannot be gated, so a known-issues list
+cannot be kept current in the very file whose discipline is that everything in
+it is checked. The 0.4.0 note
 in the CHANGELOG names the general version of this: documentation standing in
 for a fix. The CHANGELOG records what shipped; the tracker records what has not.
 
@@ -43,7 +44,7 @@ ships with three things:
    render before they were tuned.
 
 If the right density or spacing genuinely depends on the form, make it a `WARN`
-rather than a `FAIL`. A gate people learn to skip is worse than no gate.
+rather than a `FAIL`. A gate people learn to skip stops gating.
 
 ## Changing a threshold
 

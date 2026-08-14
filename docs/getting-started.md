@@ -211,8 +211,7 @@ def test_figure_is_composed(name):
 ## Retina, and why the backend used to change the answer
 
 You do not have to set the backend for the numbers to come out right. The
-checker normalises for this itself, and that is worth knowing about because it
-did not always.
+checker normalises for this itself; it did not always.
 
 A HiDPI GUI backend, macosx on a Retina display or Qt on a scaled desktop, sets
 `fig.dpi` to the authored dpi times the display's device pixel ratio at the
@@ -236,11 +235,9 @@ One consequence, unchanged: an audited figure is no longer attached to its GUI
 canvas and will not show in a window. Audit last, or audit a figure you rebuild
 for the purpose.
 
-The bug is worth reading as a warning about the shape of this project's own test
-suite rather than as a fixed defect. Every test and every example here pins Agg,
-so nothing in CI could construct the failing condition, and it stayed green
-across a release. Tests that all share one assumption cannot see that
-assumption.
+The bug never reached CI. Every test and every example here pins Agg, so
+nothing in the suite could construct the failing condition, and it stayed green
+across a release.
 
 ## Requirements
 

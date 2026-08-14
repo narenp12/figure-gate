@@ -22,7 +22,7 @@ Figures that look authored rather than generated. The method is: decide the
 figure's one job, build it on the bundled style sheet, then run two validators
 that catch the failures the eye reliably misses.
 
-Nearly every rule here was earned by a specific defect on a real figure, and
+Every rule here was written for a specific defect on a real figure, and
 `references/style-guide.md` names the failure beside the rule. When you are
 about to deviate, read the relevant note first — most deviations were already
 tried and reverted for a measured reason.
@@ -139,7 +139,7 @@ the composition rules no script can infer for you:
   starts reading as an ornament stuck on top.
 - Context surfaces get structure — bands, hairline isolines — not just a neutral
   hue. An unstructured gradient is a coffee stain, because the eye has no edge
-  to hold. Neutral does not mean formless.
+  to hold. A neutral surface still needs structure.
 - Panels sharing a scale share their axis furniture (one y label, one tick
   column). Sharing runs along the axis the panels are stacked on, not both.
 - Encode only what exists. A path drawn through unordered points asserts a
@@ -241,11 +241,11 @@ one hue to that reader, passed the whole composition suite clean. **Series color
 figure actually drew and putting those through the palette gates, inferring
 adjacent-versus-all-pairs from whether the marks are scatter.
 
-**WARN is not FAIL, and the difference matters.** A sub-3:1 hue is legal
+**WARN is not FAIL.** A sub-3:1 hue is legal
 *if* it carries a visible direct label; a saturated panel is fine *if* it is a
-heatmap. Read the row and decide — do not skim past it. A gate everyone learns
-to ignore is worse than no gate, which is why the context-dependent checks warn
-instead of failing.
+heatmap. Read the row and decide — do not skim past it. The context-dependent
+checks warn instead of failing so that a legitimate figure does not train
+people to ignore the row.
 
 **7. Then render a PNG and look at it.** Vector output is not readable as a
 file. The checker sees geometry, not meaning: it cannot tell you an arrow points
@@ -278,7 +278,7 @@ Three → orange, sky blue, bluish green. Choosing semantically ("blue is
 structure, red is training") is how a palette that looks fine measures ΔE 3.2
 under protanopia. The in-order rule exists to keep that from happening.
 
-One limit worth knowing: scatter and small multiples compare *every* series
+One limit: scatter and small multiples compare *every* series
 against every other, and the first six slots clear that. The worst pair is
 `#0072B2` vs `#CC79A7` at ΔE 12.8 under protanopia, against a target of 10.5.
 That used to read five: the sixth measured 7.9 against a target of 8 in OKLab,
@@ -350,14 +350,14 @@ color — a colored mark *beside* text carries the identity.
 
 **Author each figure at the width it will actually be placed at.** Then the
 scale is 1.0, authored points are printed points, and there is no budget to
-compute. This is what journal templates have always done and it makes the whole
-problem disappear.
+compute. This is what journal templates have always done.
 
 When you cannot, `check_figure.py` derives the scale per figure from that
 figure's own width against `CONTENT_WIDTH_PT` and fails any string landing under
-7.5pt on the page. Per-figure is the entire point: a 14-inch figure on a 750pt
-slide shrinks to 0.74×, an 8.6-inch one is blown up to 1.21×, and the same 10pt
-label is comfortable in one and unreadable in the other.
+7.5pt on the page. The scale is per figure because the shrink differs: a
+14-inch figure on a 750pt slide shrinks to 0.74×, an 8.6-inch one is blown up
+to 1.21×, and the same 10pt label is comfortable in one and unreadable in the
+other.
 
 **A figure placed at a fraction of the content width must say so**, or it is
 measured as though it were full width and certified at a type size it does not
@@ -403,8 +403,6 @@ screen while looking fine on your monitor.
 
 ## Wire the gates into the build
 
-A figure that silently breaks is worse than one that fails loudly.
-
 ```python
 import pytest
 from check_figure import audit
@@ -416,19 +414,18 @@ def test_figure_is_composed(name):
     assert ok, "\n".join(f"{k}: {d}" for k, s, d in rows if not s)
 ```
 
-Also include a test asserting the gate **fails** on a deliberately bad figure. A
-gate that cannot fail is decoration, and this one silently stopped working twice
-while it was being written.
+Also include a test asserting the gate **fails** on a deliberately bad figure;
+this one silently stopped working twice while it was being written.
 
 ## When a figure passes everything and still looks wrong
 
-That is information, not noise: it names a failure mode with no gate yet. Write
+That names a failure mode with no gate yet. Write
 the gate. Every check in `check_figure.py` exists because a figure passed all
 the checks that came before it and was still visibly broken.
 
-Prefer moving a rule into `figure.mplstyle` over writing it as prose — a rule
-you have to remember is a rule that eventually gets forgotten. Prefer a check
-you can run over an adjective you have to feel.
+Put a rule in `figure.mplstyle` rather than in prose — a rule you have to
+remember eventually gets forgotten — and prefer a check you can run over an
+adjective you have to feel.
 
 ## Reference
 
