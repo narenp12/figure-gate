@@ -39,15 +39,17 @@ what those pages say and this is a rendering change, not a content change.
 
 | file | change |
 | --- | --- |
-| `zensical.toml` | theme features `content.tabs.link`, `content.code.annotate`; extensions `pymdownx.tabbed` (`alternate_style = true`), `pymdownx.snippets` (`auto_append`), `abbr`, `def_list`, `pymdownx.caret`, `pymdownx.keys`, `pymdownx.mark`, `pymdownx.tilde`; Pass 2: mermaid custom fence, `extra_javascript` (tablesort + mermaid) |
+| `zensical.toml` | theme features `content.tabs.link`, `content.code.annotate`; extensions `pymdownx.tabbed` (`alternate_style = true`), `pymdownx.snippets` (`auto_append`), `abbr`, `def_list`, `pymdownx.caret`, `pymdownx.keys`, `pymdownx.mark`, `pymdownx.tilde`; Pass 2: mermaid custom fence, `extra_javascript` (tablesort, its number plugin, mermaid) |
 | `docs/includes/abbreviations.md` | the glossary `snippets.auto_append` serves every page |
 | `docs/javascripts/tablesort.js` | the `document$.subscribe` init, so tablesort survives navigation |
+| `docs/javascripts/mermaid.js` | the `document$.subscribe` init, so the CDN renderer runs after navigation |
 | `docs/getting-started.md` | install-route tabs, import-line tabs |
 | `docs/how-to.md` | code annotations, collapsible transcripts, definition lists for the CLI flags |
 | `docs/gates.md` | mermaid flow diagram (Pass 2), tablesort on the 21-row table (Pass 2), collapsible design notes |
 | `README.md` | card-grid "what each page is for" block, HTML that degrades cleanly on GitHub |
 | `tests/test_docs_render.py` | render assertions for tabs, annotations, collapsibles, card grid, mermaid SVG, tablesort |
-| `tests/test_docs_site.py` | `extra_javascript` pinning assertion |
+| `tests/test_docs_site.py` | `extra_javascript` pinning assertion; `AUTHORED` gains `abbreviations.md` |
+| `tests/test_prose_claims.py` | corpus count (17, 12) -> (18, 12); historical-spec list gains this design |
 
 Unchanged: `docs/gallery.md`, `docs/style-guide.md`, `docs/choosing-a-form.md`,
 `docs/skill.md`, `docs/changelog.md`, `docs/api.md`, and the nav. The nav stays
@@ -57,6 +59,18 @@ build needs nothing the tests need", because the JS arrives as CDN
 `<script>` tags at view time, not as build or test dependencies.
 
 ## 1. The feature set
+
+### The two passes, and why
+
+Pass 1 is the zero-JS family: content that renders with the bundle alone,
+identically in every environment, so it cannot break anything the existing
+build contract already gates. Pass 2 is the CDN-JS family: the only change
+that adds a runtime dependency at view time, which is where this project has
+no test of its own for failure. The split keeps the two failure surfaces
+separate -- a config feature and a view-time script cannot be blamed on each
+other -- and keeps the risky step last and small. One pass would mix the two;
+an infra-first pass would delay every visible feature for plumbing that only
+two pages use.
 
 ### What the config gets, Pass 1
 
@@ -96,7 +110,10 @@ list says which page uses which. That is the file's existing discipline, kept.
 [project]
 extra_javascript = [
   "https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js",
+  "https://unpkg.com/tablesort@5.3.0/dist/sorts/tablesort.number.min.js",
   "javascripts/tablesort.js",
+  "https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js",
+  "javascripts/mermaid.js",
 ]
 ```
 
@@ -118,9 +135,10 @@ renderer -- so it loads from CDN like tablesort. The CSS variables
 (`--md-mermaid-node-bg-color`, `--md-mermaid-edge-color`) are already shipped by
 the bundle, so diagrams adapt to light/dark with no extra stylesheet.
 
-Both URLs pinned to exact versions; a floating tag would be the dependency
-discipline failure this project screens against, and `test_docs_site.py` holds
-the pinning.
+Both engines' URLs pinned to exact versions; a floating tag would be the
+dependency discipline failure this project screens against, and
+`test_docs_site.py` holds the pinning. The tablesort number plugin registers
+itself when it loads, so `javascripts/tablesort.js` needs no code for it.
 
 ## 2. The page map
 
@@ -169,10 +187,15 @@ state.
 ### gates.md
 
 - **Mermaid flowchart** in "Why the two scripts talk to each other":
-  `figure` -> `check_series_color` -> `check_palette` gates -> the row #12 of
-  21. A directed flow the head of the page currently draws in a paragraph.
+  `figure` -> `check_series_color` -> the palette gates, with a pass/fail
+  diamond where a row is flagged or cleared, five to seven nodes total. The
+  flow ends on the "series color" gate, named by its role; the 21-row table is
+  not drawn as nodes. A directed flow the head of the page currently draws in
+  a paragraph.
 - **Tablesort** on the 21-row "What each gate measures" table. A reference page
-  is scanned; sorting by threshold or by gate name is the scan's lever.
+  is scanned; sorting by threshold or by gate name is the scan's lever. The
+  threshold column sorts numerically via the `tablesort.number` plugin, which
+  auto-registers when it loads; plain string sort would put `10` before `2`.
 - **Collapsible** design-note sections, the long paragraphs under
   "Design notes".
 
@@ -213,12 +236,25 @@ Pass 2, in `tests/test_docs_render.py`:
 - **Mermaid** -- wait for the `.mermaid` selector to contain an `svg` on
   gates.md (proof the CDN engine ran), not merely that the fence rendered text.
 - **Tablesort** -- assert the sortable class/direction indicator, click a
-  column header, assert rows reordered.
+  column header, assert rows reordered. Click the threshold column and assert
+  numeric order (`10` after `2`), which is the proof the number plugin loaded
+  rather than a lexicographic sort shipping silently.
 
 In `tests/test_docs_site.py`:
 
 - **Pinning** -- assert every `extra_javascript` URL is version-pinned (an
-  `@version` present, no floating tags).
+  `@version` present, no floating tags) -- all five: tablesort, its number
+  plugin, mermaid.
+- **No-copies gate** -- `abbreviations.md` joins `AUTHORED`, so the new
+  real-file glossary does not trip `test_no_page_has_become_a_copy`.
+
+In `tests/test_prose_claims.py`:
+
+- **Corpus accounting** -- when the design lands, the tracked-markdown count
+  moves (17, 12) -> (18, 12) and the historical-spec list gains this design
+  doc. `abbreviations.md` joins the sweep the commit after it is written, so
+  every code span it carries must resolve or earn an `UNRESOLVED_SPANS` entry
+  with a reason.
 
 The existing skip discipline is preserved: the file still skips at run time
 without Chromium (`playwright_api()` / `file_lock()` patterns), so the
@@ -264,3 +300,11 @@ installs `--group docs-test` as it does today.
 - **Vendoring the JS.** Accepted CDN over vendoring: matching the repo's
   discipline on builds and tests, without importing a minified blob the
   maintainers cannot read or review into tracked source.
+
+## Changes
+
+- 2026-08-14 (review): justified the two-pass split; added the mermaid CDN and
+  its init file and the tablesort number plugin to the Pass 2 config; scoped
+  the gates flowchart to a role-named terminal; extended the test plan to the
+  prose-corpus accounting, the `AUTHORED` entry and the numeric-sort
+  assertion.

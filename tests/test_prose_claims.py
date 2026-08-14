@@ -184,9 +184,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (17, 12), (
+    assert (len(tracked), len(PROSE_DOCS)) == (18, 12), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 17 and 12 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 18 and 12 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
@@ -204,6 +204,7 @@ def test_the_historical_class_holds_only_the_records():
         "specs/2026-07-28-documentation-audit-design.md",
         "specs/2026-07-30-standardized-docs-audit.md",
         "specs/2026-08-03-packaging-and-policy-design.md",
+        "specs/2026-08-14-zensical-feature-revamp-design.md",
     ], "the set of documents exempted as historical records changed"
 
 
