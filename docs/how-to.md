@@ -17,35 +17,39 @@ rows:
 
 ```python
 import matplotlib
-matplotlib.use("agg")
+matplotlib.use("agg")                            # (1)!
 
 from check_figure import report, self_test_figure
 
-report(self_test_figure(), "self-test", suggest=True)
+report(self_test_figure(), "self-test", suggest=True)  # (2)!
 ```
 
-```text
-Composition audit: self-test
-  [FAIL] Clipping           clipped: ['a very long axis label that will', ...]  [FIX] add constrained_layout or widen the figure
-  [FAIL] Mark ratio         largest/smallest mark area 33.3x  (drawn area 9 to 314 pt^2)  [FIX] cap at 5.0x
-  ...
-  -> FIX THE MARKED CHECKS
+1. The backend is set before pyplot imports, exactly as the getting-started
+   example does: a figure built for measurement has no reason to open a window.
+2. `suggest=True` is what turns a failed row into a remedy. Without the optional
+   `suggest_fixes.py` beside the checker it prints the table alone.
 
-  What to do about the marked rows:
-  Clipping:
-    - let a layout engine place the artists, or widen the figure
-        fig.set_layout_engine("constrained")
-  Mark ratio:
-    - cap the size range, so the largest mark still reads as a mark
-        for ax in fig.axes:
-            for c in ax.collections:
-                s = c.get_sizes()
-                if len(s):
-                    c.set_sizes(s.clip(None, s.min() * 5.0))
-```
+??? note "The transcript, and what each marked row is telling you"
 
-The remedies come from `suggest_fixes.py`, which is optional. Without that file
-beside the checker, `suggest=True` prints the table alone.
+    ```text
+    Composition audit: self-test
+      [FAIL] Clipping           clipped: ['a very long axis label that will', ...]  [FIX] add constrained_layout or widen the figure
+      [FAIL] Mark ratio         largest/smallest mark area 33.3x  (drawn area 9 to 314 pt^2)  [FIX] cap at 5.0x
+      ...
+      -> FIX THE MARKED CHECKS
+
+      What to do about the marked rows:
+      Clipping:
+        - let a layout engine place the artists, or widen the figure
+            fig.set_layout_engine("constrained")
+      Mark ratio:
+        - cap the size range, so the largest mark still reads as a mark
+            for ax in fig.axes:
+                for c in ax.collections:
+                    s = c.get_sizes()
+                    if len(s):
+                        c.set_sizes(s.clip(None, s.min() * 5.0))
+    ```
 
 Each snippet is executed by `tests/test_suggest_fixes.py` against a figure that
 fails its gate, and the gate has to pass afterwards. A remedy that does not move
@@ -107,9 +111,14 @@ from mypaper.figures import FIGURES, build
 
 @pytest.mark.parametrize("name", sorted(FIGURES))
 def test_figure_is_composed(name):
-    ok, rows = audit(build(name), venue="neurips")
-    assert ok, "\n".join(f"{k}: {d}" for k, s, d in rows if s is False)
+    ok, rows = audit(build(name), venue="neurips")  # (1)!
+    assert ok, "\n".join(f"{k}: {d}" for k, s, d in rows if s is False)  # (2)!
 ```
+
+1. `venue="neurips"` tells the type gate how far the figure scales onto the
+   page, so text is measured where it renders, not where it was authored.
+2. Only hard failures print. Advisory rows are `"warn"` -- a truthy string --
+   so `s is False` leaves them out of the assertion message.
 
 Advisory rows never fail a build, and the message follows that on its own:
 `"warn"` is a truthy string, so both `not s` and `s is False` select the hard
@@ -134,25 +143,32 @@ python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
 echo $?    # 0 all rows pass, 1 something failed
 ```
 
-```text
-Palette (categorical, surface #ffffff): 3 slots
-  [PASS] Lightness band               all 3 inside L 0.43-0.77
-  [PASS] Chroma floor                 all 3 >= 0.1
-  [PASS] CVD separation (all-pairs)   worst #E69F00 vs #009E73 dE 20.7 (protan at severity 1.0) - tritan 12.5
-  [PASS] Normal-vision floor (all-pairs) worst #56B4E9 vs #009E73 dE 31.5
-  [WARN] Contrast vs surface          under 3.0:1, each needs a visible direct label: [('#E69F00', 2.25), ('#56B4E9', 2.31)]
+??? note "The palette transcript"
 
-  -> ALL CHECKS PASS (with advisories - act on the WARN rows)
-```
+    ```text
+    Palette (categorical, surface #ffffff): 3 slots
+      [PASS] Lightness band               all 3 inside L 0.43-0.77
+      [PASS] Chroma floor                 all 3 >= 0.1
+      [PASS] CVD separation (all-pairs)   worst #E69F00 vs #009E73 dE 20.7 (protan at severity 1.0) - tritan 12.5
+      [PASS] Normal-vision floor (all-pairs) worst #56B4E9 vs #009E73 dE 31.5
+      [WARN] Contrast vs surface          under 3.0:1, each needs a visible direct label: [('#E69F00', 2.25), ('#56B4E9', 2.31)]
+
+      -> ALL CHECKS PASS (with advisories - act on the WARN rows)
+    ```
 
 The flags:
 
-| Flag | Use it for |
-|---|---|
-| `--pairs all` | scatter and anything a reader reads out of order. Default is `adjacent` |
-| `--ordinal` | an ordered ramp. Swaps the five categorical rows for four ramp rows |
-| `--surface "#f4f4f4"` | a tinted page. Contrast is measured against this |
-| `--ink "#333333"` | neutrals that are exempt from the chroma and lightness rules |
+`--pairs all`
+:   scatter and anything a reader reads out of order. Default is `adjacent`
+
+`--ordinal`
+:   an ordered ramp. Swaps the five categorical rows for four ramp rows
+
+`--surface "#f4f4f4"`
+:   a tinted page. Contrast is measured against this
+
+`--ink "#333333"`
+:   neutrals that are exempt from the chroma and lightness rules
 
 A WARN alone still exits 0. Advisory rows report; they do not gate.
 

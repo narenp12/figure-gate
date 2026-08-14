@@ -34,6 +34,7 @@ import inspect
 import pathlib
 import re
 import subprocess
+import textwrap
 
 import numpy
 import pytest
@@ -222,11 +223,17 @@ def test_a_historical_document_says_what_it_is_dated_to(path):
 
 
 def fenced_python():
-    """(document, index, source) for every ```python block in the corpus."""
+    """(document, index, source) for every ```python block in the corpus.
+
+    A block nested in a tab is indented with the tab's content, and a Python
+    module is not a markdown list item: that shared indent is markdown, not
+    Python, so dedent it before anything parses the block.
+    """
     out = []
     for path in PROSE_DOCS:
         blocks = re.findall(r"```python\n(.*?)```", path.read_text(encoding="utf-8"), re.S)
-        out.extend((doc_id(path), i, src) for i, src in enumerate(blocks))
+        out.extend((doc_id(path), i, textwrap.dedent(src))
+                   for i, src in enumerate(blocks))
     return out
 
 

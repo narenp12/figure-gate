@@ -46,7 +46,7 @@ what those pages say and this is a rendering change, not a content change.
 | `docs/getting-started.md` | install-route tabs, import-line tabs |
 | `docs/how-to.md` | code annotations, collapsible transcripts, definition lists for the CLI flags |
 | `docs/gates.md` | mermaid flow diagram (Pass 2), tablesort on the 21-row table (Pass 2), collapsible design notes |
-| `README.md` | card-grid "what each page is for" block, HTML that degrades cleanly on GitHub |
+| `README.md` | card-grid "what each page is for" block, one lucide icon per tile, HTML that degrades cleanly on GitHub |
 | `tests/test_docs_render.py` | render assertions for tabs, annotations, collapsibles, card grid, mermaid SVG, tablesort |
 | `tests/test_docs_site.py` | `extra_javascript` pinning assertion; `AUTHORED` gains `abbreviations.md` |
 | `tests/test_prose_claims.py` | corpus count (17, 12) -> (18, 12); historical-spec list gains this design |
@@ -87,7 +87,7 @@ features = [
 ]
 ```
 
-Extensions, all verified present in the pinned Zensical 0.0.51 bundle:
+Extensions, all verified present in the pinned Zensical 0.0.54 bundle:
 
 - `pymdownx.tabbed` with `alternate_style = true` -- the linked-tab content.
   `alternate_style` is the setting the reference documents; the default tabbed
@@ -146,10 +146,16 @@ itself when it loads, so `javascripts/tablesort.js` needs no code for it.
 
 A `div class="grid cards"` block, six tiles linking to getting-started,
 how-to, gates, gallery, style-guide and API, each tile one line on what the
-page is for. The block is raw HTML that GitHub renders as a plain paragraph
-block with the links intact -- no broken markup on the repo page, full cards on
-the site. It sits above the existing `## Documentation` section; the prose
-below it is untouched.
+page is for. Each tile carries one lucide icon that stands for the page --
+`rocket` for getting-started, `wrench` for how-to, `filter` for gates, `image`
+for gallery, `book` for style-guide, `code` for API. The icons mark the tile's
+subject at a glance when the grid is scanned, which is the tile's only job;
+nothing else on the site gets one. Material's lucide set is already what the
+theme ships (the palette toggles use `lucide/moon` and `lucide/sun`), so the
+icons cost no new dependency. The block is raw HTML that GitHub renders as a
+plain paragraph block with the links intact -- no broken markup on the repo
+page, full cards on the site. It sits above the existing `## Documentation`
+section; the prose below it is untouched.
 
 The one structural cost, accepted: `index.md` stays the README symlink. A
 landing page that is a symlink cannot hold site-only markup without leaking it
@@ -229,7 +235,12 @@ Pass 1, in `tests/test_docs_render.py`:
 - **Collapsible** -- assert a `details` element on how-to and one on gates
   toggle `open` on click.
 - **Card grid** -- assert `div.grid.cards` exists on the home page with six
-  tiles, each linking to a built page.
+  tiles, each linking to a built page, and that each tile carries exactly one
+  icon: a `span.twemoji` wrapping an `svg.lucide` (`class` contains
+  `lucide lucide-`).
+- **Icon count** -- assert the six tile icons are the only `svg.lucide`
+  references on the home page; the grid was the exception to the no-decoration
+  rule, so a seventh icon is a decoration that the test has to be told about.
 
 Pass 2, in `tests/test_docs_render.py`:
 
@@ -285,9 +296,13 @@ installs `--group docs-test` as it does today.
 
 ## Not doing, and why
 
-- **Icons and emoji.** Offered and declined. The site's visual voice is
-  arithmetic about contrast ratios, and an icon set would be decoration this
-  project measured nothing about.
+- **Icons and emoji, as decoration.** The site's visual voice is arithmetic
+  about contrast ratios, and an icon set sprinkled through the prose would be
+  decoration this project measured nothing about. The one exception is the
+  card grid, where each tile's lucide icon carries information -- the page's
+  subject at scan distance -- and even there the count is pinned by a test.
+  Emoji are declined outright: they render differently on GitHub and on the
+  site, and this grid is the one place the two renderings are shared.
 - **gallery.md.** Figures and captions already work; a feature whose only
   effect is to add chrome between the image and its caption is a regression.
 - **The shared documents.** Any rendering feature added to `style-guide.md` or
@@ -303,8 +318,36 @@ installs `--group docs-test` as it does today.
 
 ## Changes
 
+- 2026-08-14 (render tests): the Pass 1 tests landed in `test_docs_render.py`,
+  and the browser answered three questions the design asked on paper.
+  - The tab link is *label*-based, as designed: the two getting-started groups
+    share "Vendored" at different positions (index 0 in install routes, index 2
+    in import lines), and clicking one group's "Vendored" activates the other's
+    -- which only a label link can do.
+  - "`hidden` attribute toggles" was wrong. Under `alternate_style` a block's
+    hiding is `display` under a `:checked` sibling selector; no attribute ever
+    appears. The test measures `getComputedStyle`, not the attribute.
+  - gates' design notes are `???+`, open by default; how-to's transcripts are
+    `???`, closed. The collapsible test pins each page's authored default.
+  - Annotations are entirely client-side: the built HTML keeps `# (1)!`
+    literal and the `.md-annotation` aside exists only after the bundle runs,
+    so the annotation test needs a live page and a JS wait, by design.
+  - The suite count moved 1606 -> 1612 with the six render tests, and the
+    document-to-gate balance crossed its ceiling. Resolved by raising
+    `DOCUMENT_TO_GATE_MAX` 0.93 -> 0.97 with the argument the balance file
+    requires: the render tests are the measurement the new prose features stand
+    in for (unknown feature names are accepted silently, and the annotation
+    markers do not exist in static HTML at all), so the doc-side growth is
+    measurement, not more proofreading. Measured 0.925 -> 0.966.
+- 2026-08-14 (pin): the bundle reference moved with the pin. Zensical is now
+  `==0.0.54`; the extensions listed above are verified against its bundle.
 - 2026-08-14 (review): justified the two-pass split; added the mermaid CDN and
   its init file and the tablesort number plugin to the Pass 2 config; scoped
   the gates flowchart to a role-named terminal; extended the test plan to the
   prose-corpus accounting, the `AUTHORED` entry and the numeric-sort
   assertion.
+- 2026-08-14 (icons): reversed the icons-declined item. The card grid's six
+  tiles each get one lucide icon (the theme already ships the set), and the
+  render test pins the tile-icon count to six so a seventh icon is a
+  reviewed change; emoji stay declined because the grid renders on GitHub
+  and on the site.

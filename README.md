@@ -31,6 +31,15 @@ while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.
 examples/gallery.py` covers the harder forms.
 Writing those eleven found seven defects in the checks themselves.*
 
+<div class="grid cards" markdown>
+- :lucide-rocket: **[Getting started](https://narenp12.github.io/figure-gate/getting-started/)** -- install or vendor, the two settings that need your document's values, and the code to call
+- :lucide-wrench: **[How to](https://narenp12.github.io/figure-gate/how-to/)** -- the recipes: fix a row that failed, gate figures in CI, place at half width, attach alt text, move a threshold
+- :lucide-filter: **[The gates](https://narenp12.github.io/figure-gate/gates/)** -- what each row measures, its threshold, and what a passing run does not mean
+- :lucide-image: **[Gallery](https://narenp12.github.io/figure-gate/gallery/)** -- eleven figures covering the harder forms, each with its audit
+- :lucide-book: **[Style guide](https://narenp12.github.io/figure-gate/style-guide/)** -- the measurement behind each threshold, and the rules tried and reverted
+- :lucide-code: **[API reference](https://narenp12.github.io/figure-gate/api/)** -- signatures and defaults, generated from the scripts when the site builds
+</div>
+
 ## Documentation
 
 Everything below the quickstart lives on the

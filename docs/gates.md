@@ -13,6 +13,16 @@ that same cycle's orange and green at dE 1.4 under protanopia: one hue to that
 reader, against a floor of 8. The composition checker had no access to the
 colors it was drawing.
 
+```mermaid
+flowchart TD
+    figure["figure on its axis"] --> read["check_series_color"]
+    read -- "mark types" --> need{"adjacent or\nall-pairs?"}
+    need --> gates["the palette gates"]
+    gates --> verdict{"series colour row"}
+    verdict -- "cleared" --> pass["row 12 clears with the figure"]
+    verdict -- "flagged" --> fail["row 12 names the defect"]
+```
+
 `check_series_color` closes that. It reads the hues off the figure's own
 artists, decides from the mark types whether the figure needs adjacent
 separation (lines, bars) or all-pairs separation (scatter), and runs them
@@ -79,6 +89,7 @@ it arrived on. `audit()` returns these 21 rows in this order.
 | Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation |
 | Fonts | Type 42 | PDF/PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
+{: .sortable }
 
 Thresholds cite a published floor where one exists: SIAM's one point, WCAG's
 4.5:1, the Nature/Science/PNAS type minima. The rest were measured, and
@@ -161,62 +172,70 @@ advisory, and neither is evidence of anything about a figure.
 
 ## Design notes
 
-**Use what matplotlib ships.** viridis for sequential, `RdBu` for diverging,
-`okabe_ito` for categorical, style sheets for defaults, `constrained_layout`
-for layout. Earlier versions hand-rolled all four and each was worse: `RdBu`'s
-poles clear every gate in `check_palette.py` unmodified, and a windowed custom
-ramp discarded 35% of viridis for no measured gain.
+???+ note "Use what matplotlib ships"
 
-**Pixels are measured at one resolution, `MEASURE_DPI = 150`.** Roughly half the
-thresholds are pixel counts: the edge window the readability gate uses to tell
-a mark from ground, the footprint below which a text box is a glyph or two, the
-distance from the page colour at which a pixel counts as ink. A pixel count is
-a measurement only if the resolution is fixed. `figure.dpi` is not fixed: it is
-an author's knob, it is whatever sheet is in effect, and a GUI backend
-multiplies it by the display's device pixel ratio without asking. So `audit`
-draws at
-`MEASURE_DPI` whatever the figure was authored at, and hands the figure back on
-the dpi it arrived on.
+    viridis for sequential, `RdBu` for diverging, `okabe_ito` for categorical,
+    style sheets for defaults, `constrained_layout` for layout. Earlier versions
+    hand-rolled all four and each was worse: `RdBu`'s poles clear every gate in
+    `check_palette.py` unmodified, and a windowed custom ramp discarded 35% of
+    viridis for no measured gain.
 
-The cost of not doing this was measured before the constant existed: across
-100/150/200/300/600 dpi, the eleven gallery figures moved 34 rows and flipped
-one. The same figure, five verdicts, from a knob that has nothing to do with
-whether it reads. `savefig.dpi` is unaffected, so what you write out is still
-yours to choose.
+???+ note "Pixels are measured at one resolution, `MEASURE_DPI = 150`"
 
-**WARN is not FAIL.** Eight of the 21 rows are advisory, in that they can
-return `"warn"` but never `False`, and `ADVISORY_GATES` in `check_figure.py` is
-the list. A sub-3:1 hue is legal when it carries a direct label; a heatmap panel
-legitimately measures 0.98 ink coverage. Failing those would train people to
-ignore the row, and an ignored gate is worth less than no gate. Type size is
-the one row that does both: it fails under the floor, and warns on a figure
-placed under 35% of the content width.
+    Roughly half the thresholds are pixel counts: the edge window the
+    readability gate uses to tell a mark from ground, the footprint below which
+    a text box is a glyph or two, the distance from the page colour at which a
+    pixel counts as ink. A pixel count is a measurement only if the resolution
+    is fixed. `figure.dpi` is not fixed: it is an author's knob, it is whatever
+    sheet is in effect, and a GUI backend multiplies it by the display's device
+    pixel ratio without asking. So `audit` draws at `MEASURE_DPI` whatever the
+    figure was authored at, and hands the figure back on the dpi it arrived on.
 
-**A row's detail carries two marks, and they mean different things.** [FIX]
-introduces an action, and nothing else is allowed to wear it. [WHY] introduces
-the reason the row fired: the published floor, the perceptual fact, what a
-reader loses. A detail may carry both, in that order, and the fix mark is where
-`check_colormap` cuts when it quotes a palette row inside its own message.
+    The cost of not doing this was measured before the constant existed: across
+    100/150/200/300/600 dpi, the eleven gallery figures moved 34 rows and flipped
+    one. The same figure, five verdicts, from a knob that has nothing to do with
+    whether it reads. `savefig.dpi` is unaffected, so what you write out is still
+    yours to choose.
 
-    under 1.0pt on page at scale 0.50: ['a stroke at 0.40pt']
-      [FIX] set linewidth to at least 2.00 at this scale
-      [WHY] SIAM: lines thinner than one point break up or disappear in print
+???+ note "WARN is not FAIL"
 
-Every gate but `check_collisions` names a fix; that one names the two colliding
-strings and stops, because which of the pair is free to move is a fact about the
-layout it cannot see. A reason never appears without a fix beside it, and that
-rule has a history. The two marks were one mark, an arrow, that said nothing
-about which of the two things followed it, and six clauses wore it while naming
-only why: `check_banking` cited Cleveland, `check_line_weight` cited SIAM, and
-neither told anyone what to change. Splitting an arrow against a tilde would
-have put the whole distinction on one glyph in a wall of detail text, so the
-marks are words.
+    Eight of the 21 rows are advisory, in that they can return `"warn"` but
+    never `False`, and `ADVISORY_GATES` in `check_figure.py` is the list. A
+    sub-3:1 hue is legal when it carries a direct label; a heatmap panel
+    legitimately measures 0.98 ink coverage. Failing those would train people to
+    ignore the row, and an ignored gate is worth less than no gate. Type size is
+    the one row that does both: it fails under the floor, and warns on a figure
+    placed under 35% of the content width.
 
-**Gates are tested for their ability to fail.** The suite is 1601 tests, and
-each check has one asserting it catches a figure with exactly that defect. The
-style sheet has its own tests because `#` starts a comment in matplotlib's
-style format: `grid.color: #e1e0d9` parses as an empty value, matplotlib keeps
-its default, and every other test stays green.
+???+ note "A row's detail carries two marks, and they mean different things"
+
+    [FIX] introduces an action, and nothing else is allowed to wear it. [WHY]
+    introduces the reason the row fired: the published floor, the perceptual
+    fact, what a reader loses. A detail may carry both, in that order, and the
+    fix mark is where `check_colormap` cuts when it quotes a palette row inside
+    its own message.
+
+        under 1.0pt on page at scale 0.50: ['a stroke at 0.40pt']
+          [FIX] set linewidth to at least 2.00 at this scale
+          [WHY] SIAM: lines thinner than one point break up or disappear in print
+
+    Every gate but `check_collisions` names a fix; that one names the two
+    colliding strings and stops, because which of the pair is free to move is a
+    fact about the layout it cannot see. A reason never appears without a fix
+    beside it, and that rule has a history. The two marks were one mark, an
+    arrow, that said nothing about which of the two things followed it, and six
+    clauses wore it while naming only why: `check_banking` cited Cleveland,
+    `check_line_weight` cited SIAM, and neither told anyone what to change.
+    Splitting an arrow against a tilde would have put the whole distinction on
+    one glyph in a wall of detail text, so the marks are words.
+
+???+ note "Gates are tested for their ability to fail"
+
+    The suite is 1612 tests, and each check has one asserting it catches a
+    figure with exactly that defect. The style sheet has its own tests because
+    `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
+    parses as an empty value, matplotlib keeps its default, and every other test
+    stays green.
 
 The full reasoning, meaning the measurements behind each threshold and the
 rules that were tried and reverted, is in [the style guide](style-guide.md).

@@ -31,6 +31,22 @@ edit_uri = ""
 
 extra_css = ["stylesheets/palette.css"]
 
+# Pass 2: tablesort and its number plugin sort the gates table, and mermaid
+# draws the flow diagram. Both engines are CDN scripts pinned to exact versions
+# -- mermaid's renderer is not in the Zensical bundle (verified: the bundle
+# carries the --md-mermaid-* CSS variables but no engine) and neither would be
+# vendored as a minified blob nobody reads. `test_docs_site.py` holds the
+# pinning, and a floating tag is the dependency discipline failure this project
+# screens against. The two `javascripts/` files run the engines at view time via
+# `document$.subscribe`, so both survive navigation.
+extra_javascript = [
+  "https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js",
+  "https://unpkg.com/tablesort@5.3.0/dist/sorts/tablesort.number.min.js",
+  "javascripts/tablesort.js",
+  "https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js",
+  "javascripts/mermaid.js",
+]
+
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
@@ -59,6 +75,8 @@ variant = "modern"
 # a feature is on is to look at the built page.
 features = [
   "content.code.copy",
+  "content.tabs.link",      # getting-started's two tab groups share the "vendored" label
+  "content.code.annotate",  # how-to's numbered markers expand to prose
   "navigation.top",
   "navigation.tracking",
   "search.highlight",
@@ -87,6 +105,8 @@ toggle.name = "Light"
 
 # Only what the pages actually use. The style guide is tables and footnotes,
 # the gallery is `md_in_html` figures, and every page is code blocks.
+# getting-started is `tabbed`, how-to is annotations/collapsibles/definition
+# lists, and the glossary `abbr` serves every page from one include.
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.attr_list]
 [project.markdown_extensions.md_in_html]
@@ -99,6 +119,36 @@ permalink = true
 anchor_linenums = true
 [project.markdown_extensions.pymdownx.inlinehilite]
 [project.markdown_extensions.pymdownx.superfences]
+# gates.md's flow diagram. `fence_code_format` keeps the fence's text in a
+# `.mermaid` div for the CDN engine (loaded via extra_javascript above) to read
+# and replace with an SVG at view time -- the same pattern as the tablesort
+# init, both run by `document$.subscribe`.
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.tilde]
+[project.markdown_extensions.pymdownx.tabbed]
+# `alternate_style` is the panel with the border and the active state; the
+# default tabbed style is a text block with no border and no selection.
+alternate_style = true
+[project.markdown_extensions.pymdownx.emoji]
+# The home page's card-grid tiles carry one lucide icon each. The generator
+# and index are Zensical's own: it ships the icon set under the theme's
+# templates, and `_resolve_pymdownx_emoji` turns these two strings into the
+# functions. Without the extension the `:lucide-rocket:` shortcodes render as
+# literal text.
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+[project.markdown_extensions.pymdownx.snippets]
+# `base_path` is explicit because the default, ".", resolves against the
+# config's directory: unqualified, Zensical reads `<repo>/includes/...`.
+base_path = ["docs"]
+auto_append = ["includes/abbreviations.md"]
 
 # `api.md` is the one page with no prose file behind it: it is `:::` directives,
 # and mkdocstrings reads the signatures and docstrings out of the scripts at
