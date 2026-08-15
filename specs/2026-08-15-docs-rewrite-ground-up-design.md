@@ -5,7 +5,7 @@ Status: design
 
 ## The hole
 
-The site is eleven flat pages and one voice, and the two audiences it serves
+The site is ten flat pages and one voice, and the two audiences it serves
 are mixed through them. The threshold tables and the "what a passing run does
 not mean" essay live under the same nav as the install tutorial; the API
 reference and the figure style guide are one click apart. A figure author who
@@ -52,9 +52,9 @@ not the other way around.
 | `SECURITY.md` | prose in the new voice, sections kept |
 | `conda/README.md` | prose in the new voice |
 | `CHANGELOG.md` | preserved record, not rewritten |
-| `tests/test_docs_site.py` | nav assertions -> the two-section structure; new entries for the two new site pages |
+| `tests/test_docs_site.py` | nav assertions `10 -> 13` (the new two-section nav has 13 leaf pages); symlink count `17 -> 19` (the two new site pages are symlinks); `AUTHORED` gains `design.md` (the one new real page) |
 | `tests/test_docs_match_code.py` | claims table rewritten to the new sentences |
-| `tests/test_prose_claims.py` | corpus accounting, `EXTERNAL_CLAIMS` ledger reset to the new prose |
+| `tests/test_prose_claims.py` | corpus accounting `(19, 13) -> (20, 14)` -- the two new site pages are symlinks that resolve to already-tracked root files, so only the new real `design.md` joins the corpus; `EXTERNAL_CLAIMS` ledger reset to the new prose |
 | `tests/test_docs_render.py` | page/path assertions -> new nav; rendering checks kept |
 
 Unchanged: `skill/scripts/`, `palette.css`, the image assets under `docs/images/`,
@@ -193,17 +193,17 @@ The four doc-gating test files are rewritten alongside the docs so the
 enforcement survives the new prose. Their job -- claims must match code -- is
 unchanged; what they pin changes to the new sentences and the new nav.
 
-- **`test_docs_site.py`** -- nav assertions move to the two-section structure;
-  `AUTHORED` gains `contributing.md` and `security.md`; the hex and CDN pins
-  survive untouched.
+- **`test_docs_site.py`** -- nav assertions move `10 -> 13` (the two-section nav has 13 leaf pages: Home + 5 author + 5 maintainer + Agent skill + Changelog); the symlink count moves `17 -> 19` (the two new site pages are symlinks to root files); `AUTHORED` gains `design.md`, the one new real file -- the two new symlinks need no `AUTHORED` entry because the no-copy test excludes symlinks by construction. The hex and CDN pins survive untouched.
 - **`test_docs_match_code.py`** -- the claims table is rewritten to the new
   sentences. Same extraction mechanism; new expected strings, each still
   verified against the code's actual output.
-- **`test_prose_claims.py`** -- corpus accounting moves to the new file set
-  (two new tracked markdown files join), and the `EXTERNAL_CLAIMS` exemption
-  ledger is reset to the new prose. Any claim the new prose makes that code
-  cannot verify lands in the ledger only if it is genuinely external -- a
-  URL, a version constraint, a venue rule.
+- **`test_prose_claims.py`** -- corpus accounting moves `(19, 13) -> (20, 14)`.
+  The two new site pages are symlinks that resolve to already-tracked root
+  files (`CONTRIBUTING.md`, `SECURITY.md`), so they add nothing to the
+  resolved-path corpus; only the new real `design.md` does. The
+  `EXTERNAL_CLAIMS` exemption ledger is reset to the new prose. Any claim the
+  new prose makes that code cannot verify lands in the ledger only if it is
+  genuinely external -- a URL, a version constraint, a venue rule.
 - **`test_docs_render.py`** -- page/path assertions update to the new nav;
   the rendering checks (tabs, annotations, collapsibles, card grid, mermaid in
   the closed shadow root, tablesort numeric order) are kept as they are.
