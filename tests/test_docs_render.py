@@ -915,6 +915,14 @@ def test_the_gates_flow_diagram_draws_an_svg(page, server):
     then asks whether any of them holds an SVG with real content -- the only
     way to prove the renderer ran, short of re-implementing the bundle.
 
+    The diagram's words are checked too, because an SVG that renders is not
+    necessarily an SVG that reads right: mermaid 11 prints a literal `\n` in a
+    quoted diamond label instead of breaking the line, so the `need` diamond's
+    question is asserted to carry a real `<br>` element. That spelling is
+    coupled to the engine's htmlLabels/foreignObject path -- `zensical.toml`
+    pins mermaid@11.4.1, and a bump that switched to `<tspan>` breaks would
+    fail this test with the message below rather than silently.
+
     The diagram's floor is that a fence whose engine never loaded leaves a
     `<pre>` and no shadow root at all, which fails this test's first assert
     with the cause attached.
@@ -934,7 +942,10 @@ def test_the_gates_flow_diagram_draws_an_svg(page, server):
       const svgs = window.__closedRoots
         .filter(r => r.querySelector("svg"))
         .map(r => ({ nodes: r.querySelectorAll("*").length,
-                     w: r.querySelector("svg").getBoundingClientRect().width }));
+                     w: r.querySelector("svg").getBoundingClientRect().width,
+                     text: [...r.querySelectorAll("span")]
+                       .map(s => s.textContent),
+                     brs: r.querySelectorAll("br").length }));
       return { roots: window.__closedRoots.length, svgs };
     }""")
     assert drawn["roots"] >= 1, (
@@ -946,6 +957,28 @@ def test_the_gates_flow_diagram_draws_an_svg(page, server):
     assert page.locator("pre.mermaid").count() == 0, (
         "the mermaid fence was left as a literal <pre class='mermaid'> - the "
         "renderer did not replace it")
+
+    labels = [t for s in drawn["svgs"] for t in s["text"]]
+    assert not any("\\n" in t for t in labels), (
+        f"a mermaid label reached the page as a literal `\\n`, got {labels} - "
+        "mermaid 11 does not turn `\\n` into a line break; the break has to "
+        "be a `<br>` element")
+
+    diamond = [s for s in drawn["svgs"]
+               if any("all-pairs" in t for t in s["text"])]
+    assert len(diamond) == 1, (
+        f"expected one diagram root carrying the 'all-pairs' diamond, got "
+        f"{len(diamond)} - gates.md's story changed, or a second diagram "
+        "matches the label search")
+    root = diamond[0]
+    assert root["brs"] >= 1, (
+        "the flow diagram's `need` diamond carries no `<br>`, so 'adjacent or' "
+        "and 'all-pairs?' sit on one line - a literal `\\n` renders as text, "
+        "which is the defect this assertion is written to see")
+    diamond_text = " | ".join(root["text"])
+    assert "adjacent or" in diamond_text and "all-pairs?" in diamond_text, (
+        f"the diamond's two lines are {diamond_text!r} - the label no longer "
+        "reads 'adjacent or' over 'all-pairs?', or the diagram's story changed")
 
 
 def test_the_gates_threshold_column_sorts_by_value(page, server):

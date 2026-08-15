@@ -115,7 +115,18 @@ SELF = {"test_suite_balance"}
 # accepts payment: by tests that measure the render rather than re-read the
 # prose. Measured 0.966 before (4595 document lines against 4759 gate lines)
 # and 0.989 after (4707 against 4759); set just above the after.
-DOCUMENT_TO_GATE_MAX = 0.99
+#
+# 0.99 -> 0.996 when the mermaid diagram's words were gated. Pass 2 proved
+# that *an* SVG renders; the bug it did not see was that the SVG renders the
+# wrong text -- mermaid 11 prints a literal `\n` in a quoted diamond label
+# instead of breaking the line. The added assertions drive the same closed
+# shadow root and measure the painted labels: no literal `\n`, a real `<br>`,
+# and the diamond's two expected lines. Same payment as Pass 1 and Pass 2 -- a
+# presentational defect a static scan cannot see is provable only by driving
+# the built page in a browser, and no gate-side test can measure it. Measured
+# 0.989 before (4707 document lines against 4759 gate lines) and 0.9954 after
+# (4737 against 4759); set just above the after.
+DOCUMENT_TO_GATE_MAX = 0.996
 
 # Below this the classification above is stale rather than wrong: modules have
 # been deleted or the glob has stopped matching, and every rate here is being
