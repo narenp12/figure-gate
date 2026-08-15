@@ -16,7 +16,7 @@ colors it was drawing.
 ```mermaid
 flowchart TD
     figure["figure on its axis"] --> read["check_series_color"]
-    read -- "mark types" --> need{"adjacent or\nall-pairs?"}
+    read -- "mark types" --> need{"adjacent or<br/>all-pairs?"}
     need --> gates["the palette gates"]
     gates --> verdict{"series colour row"}
     verdict -- "cleared" --> pass["row 12 clears with the figure"]
