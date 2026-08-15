@@ -31,13 +31,15 @@ while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.
 examples/gallery.py` covers the harder forms.
 Writing those eleven found seven defects in the checks themselves.*
 
-<div class="grid cards" markdown>
-- :lucide-rocket: **[Getting started](https://narenp12.github.io/figure-gate/getting-started/)** — install or vendor, the two settings that need your document's values, and the code to call
-- :lucide-wrench: **[How to](https://narenp12.github.io/figure-gate/how-to/)** — the recipes: fix a row that failed, gate figures in CI, place at half width, attach alt text, move a threshold
-- :lucide-filter: **[The gates](https://narenp12.github.io/figure-gate/gates/)** — what each row measures, its threshold, and what a passing run does not mean
-- :lucide-image: **[Gallery](https://narenp12.github.io/figure-gate/gallery/)** — eleven figures covering the harder forms, each with its audit
-- :lucide-book: **[Style guide](https://narenp12.github.io/figure-gate/style-guide/)** — the measurement behind each threshold, and the rules tried and reverted
-- :lucide-code: **[API reference](https://narenp12.github.io/figure-gate/api/)** — signatures and defaults, generated from the scripts when the site builds
+<div class="grid cards">
+<ul>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rocket" viewBox="0 0 24 24"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"/><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/getting-started/">Getting started</a></strong> — install or vendor, the two settings that need your document's values, and the code to call</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/how-to/">How to</a></strong> — the recipes: fix a row that failed, gate figures in CI, place at half width, attach alt text, move a threshold</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-filter" viewBox="0 0 24 24"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/gates/">The gates</a></strong> — what each row measures, its threshold, and what a passing run does not mean</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/gallery/">Gallery</a></strong> — eleven figures covering the harder forms, each with its audit</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/style-guide/">Style guide</a></strong> — the measurement behind each threshold, and the rules tried and reverted</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/api/">API reference</a></strong> — signatures and defaults, generated from the scripts when the site builds</li>
+</ul>
 </div>
 
 ## Documentation
