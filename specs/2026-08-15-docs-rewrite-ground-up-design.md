@@ -54,7 +54,7 @@ not the other way around.
 | `CHANGELOG.md` | preserved record, not rewritten |
 | `tests/test_docs_site.py` | nav assertions `10 -> 13` (the new two-section nav has 13 leaf pages); symlink count `17 -> 19` (the two new site pages are symlinks); `AUTHORED` gains `design.md` (the one new real page) |
 | `tests/test_docs_match_code.py` | claims table rewritten to the new sentences |
-| `tests/test_prose_claims.py` | corpus accounting `(19, 13) -> (20, 14)` -- the two new site pages are symlinks that resolve to already-tracked root files, so only the new real `design.md` joins the corpus; `EXTERNAL_CLAIMS` ledger reset to the new prose |
+| `tests/test_prose_claims.py` | corpus accounting `(20, 13) -> (21, 14)` -- the design spec's own commit already moved the baseline to `(20, 13)` (it is a tracked `specs/*.md`, so it joined the historical class and HEAD's `(19, 13)` pin already fails); the two new site pages are symlinks that resolve to already-tracked root files, so only the new real `design.md` joins the corpus; `HISTORICAL_DOCS` gains the design spec; `EXTERNAL_CLAIMS` ledger reset to the new prose |
 | `tests/test_docs_render.py` | page/path assertions -> new nav; rendering checks kept |
 
 Unchanged: `skill/scripts/`, `palette.css`, the image assets under `docs/images/`,
@@ -197,10 +197,13 @@ unchanged; what they pin changes to the new sentences and the new nav.
 - **`test_docs_match_code.py`** -- the claims table is rewritten to the new
   sentences. Same extraction mechanism; new expected strings, each still
   verified against the code's actual output.
-- **`test_prose_claims.py`** -- corpus accounting moves `(19, 13) -> (20, 14)`.
-  The two new site pages are symlinks that resolve to already-tracked root
-  files (`CONTRIBUTING.md`, `SECURITY.md`), so they add nothing to the
-  resolved-path corpus; only the new real `design.md` does. The
+- **`test_prose_claims.py`** -- corpus accounting moves `(20, 13) -> (21, 14)`
+  (the design spec's own commit already moved the baseline: it is a tracked
+  `specs/*.md`, so it joined the historical class and HEAD's `(19, 13)` pin
+  already fails on two tests). The two new site pages are symlinks that
+  resolve to already-tracked root files (`CONTRIBUTING.md`, `SECURITY.md`), so
+  they add nothing to the resolved-path corpus; only the new real `design.md`
+  does. The `HISTORICAL_DOCS` list gains the design spec. The
   `EXTERNAL_CLAIMS` exemption ledger is reset to the new prose. Any claim the
   new prose makes that code cannot verify lands in the ledger only if it is
   genuinely external -- a URL, a version constraint, a venue rule.
