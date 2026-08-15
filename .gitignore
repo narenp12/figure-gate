@@ -28,3 +28,6 @@ plans/
 # Design docs and plans live under docs/superpowers/ alongside the site.
 # They are not site content and should not be tracked.
 docs/superpowers/
+
+# Isolated implementation worktrees.
+.worktrees/
