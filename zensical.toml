@@ -102,6 +102,14 @@ accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Light"
 
+# The site has no image logo, so the header and drawer fall back to the
+# theme's default `lucide/book-open`. That is Material's generic "docs" glyph
+# and it echoes the style-guide tile's `book` icon on the home page. A fence is
+# the figure-gate mark: `lucide/fence` ships with the theme's icon set, so the
+# swap costs no asset and every page carries it the way the tiles carry theirs.
+[project.theme.icon]
+logo = "lucide/fence"
+
 # Only what the pages actually use. The style guide is tables and footnotes,
 # the gallery is `md_in_html` figures, and every page is code blocks.
 # getting-started is `tabbed`, how-to is annotations/collapsibles/definition
