@@ -22,6 +22,7 @@ and runs this file in the docs workflow, where a docs regression belongs.
 """
 
 import http.server
+import html
 import os
 import posixpath
 import re
@@ -674,6 +675,7 @@ def broken_links(pages, files, base):
         parent = posixpath.dirname(name)
         here = base + (f"{parent}/" if parent else "")
         for href in re.findall(r'href="([^"]+)"', text):
+            href = html.unescape(href)
             if href.startswith(("http://", "https://", "mailto:", "data:")):
                 continue
             if (name, href) in THEME_LINKS:
@@ -781,6 +783,7 @@ def test_no_filter_is_applied_to_gallery_figures():
 GETTING_STARTED_PATH = "/getting-started/"
 HOW_TO_PATH = "/how-to/"
 GATES_PATH = "/gates/"
+DESIGN_PATH = "/design/"
 
 
 def _tab_groups(page):
@@ -873,7 +876,7 @@ def test_how_to_annotations_render_and_expand_in_the_browser(page, server):
 
 @pytest.mark.parametrize("path,count,starts_open", [
     (HOW_TO_PATH, 2, False),   # transcripts: closed, a click of the title opens
-    (GATES_PATH, 5, True),     # design notes: open, a click of the title folds
+    (DESIGN_PATH, 5, True),    # design notes: open, a click of the title folds
 ])
 def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
                                                starts_open):
@@ -882,7 +885,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
     The count is pinned because a collapsible that stops being one takes its
     story with it: the transcripts become a wall of text between recipes and
     the design notes can no longer be folded. Whether the note starts open is
-    itself pinned -- gates' notes read as prose and fold on demand, how-to's
+    itself pinned -- design's notes read as prose and fold on demand, how-to's
     transcripts are evidence kept out of the way until asked for.
     """
     page.goto(server + path, wait_until="networkidle")
@@ -1035,32 +1038,37 @@ def _number_sort_key(cell):
 TILE_ICONS = {
     "rocket": "getting-started",
     "wrench": "how-to",
-    "filter": "gates",
     "image": "gallery",
     "book": "style-guide",
+    "shapes": "choosing-a-form",
+    "layers": "design",
+    "filter": "gates",
     "code": "api",
+    "git-pull-request": "contributing",
+    "shield": "security",
 }
 
 
 def home_article(built_site):
     """The home page's article, and nothing around it.
 
-    Seven of the page's `svg.lucide` live in the header, the search dialog and
-    the table of contents; scoping to the article is how "the grid's six icons
+    Eleven of the page's `svg.lucide` live in the header, the search dialog and
+    the table of contents; scoping to the article is how "the grids' ten icons
     are the only icons in the prose" is asserted without a list of chrome to
     keep in step here.
     """
     html = (built_site / "index.html").read_text(encoding="utf-8")
     article = re.search(r"<article class=\"[^\"]*\">(.*?)</article>", html, re.S)
     assert article, "the home page no longer renders an article container"
-    grid = re.search(r'<div class="grid cards">\s*<ul>(.*?)</ul>',
-                     article.group(1), re.S)
-    assert grid, "the card grid is no longer a `<div class=\"grid cards\">`"
-    return grid.group(1)
+    grids = re.findall(r'<div class="grid cards">\s*<ul>(.*?)</ul>',
+                       article.group(1), re.S)
+    assert grids, "the card grid is no longer a `<div class=\"grid cards\">`"
+    return "\n".join(grids)
 
 
-def test_the_home_card_grid_has_six_iconed_tiles(built_site):
-    """Six tiles, each with its designed lucide icon and a link that lands.
+def test_the_home_card_grids_have_ten_iconed_tiles(built_site):
+    """Ten tiles in two groups, each with its designed lucide icon and a link
+    that lands.
 
     The icon classes in `TILE_ICONS` are the design's answer to "which page is
     this", and the hrefs are checked against the built site rather than for
@@ -1070,8 +1078,8 @@ def test_the_home_card_grid_has_six_iconed_tiles(built_site):
     are exactly the links that check never sees.
     """
     lis = re.findall(r"<li>.*?</li>", home_article(built_site), re.S)
-    assert len(lis) == 6, (
-        f"the README's grid should hold six tiles, found {len(lis)}")
+    assert len(lis) == 10, (
+        f"the README's grids should hold ten tiles, found {len(lis)}")
 
     base = deploy_base()
     files = {p.relative_to(built_site).as_posix()
@@ -1094,22 +1102,22 @@ def test_the_home_card_grid_has_six_iconed_tiles(built_site):
             f"tile href {href.group(1)} does not land on a built page")
         got[name] = landing.rstrip("/")
     assert got == TILE_ICONS, (
-        f"the tile hrefs are {got}, expected the six designed pages")
+        f"the tile hrefs are {got}, expected the ten designed pages")
 
 
-def test_the_six_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
-    """The icon-count rule behind the grid being the exception.
+def test_the_ten_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
+    """The icon-count rule behind the grids being the exception.
 
-    The site's voice is contrast arithmetic, and the grid exists because one
-    icon per tile carries information. A seventh `svg.lucide` in the article is
-    a decoration the review never signed off on, and it is the count's whole
+    The site's voice is contrast arithmetic, and the grids exist because one
+    icon per tile carries information. An eleventh `svg.lucide` in the article
+    is a decoration the review never signed off on, and it is the count's whole
     job to name it.
     """
     icons = re.findall(r'class="lucide lucide-[a-z-]+"',
                        home_article(built_site))
-    assert len(icons) == 6, (
-        f"{len(icons)} icon(s) in the home article, expected the grid's 6 -- "
-        "a seventh icon is decoration the count was written to catch")
+    assert len(icons) == 10, (
+        f"{len(icons)} icon(s) in the home article, expected the grids' 10 -- "
+        "an eleventh icon is decoration the count was written to catch")
 
 
 # --- this file skips, it does not error ---------------------------------------

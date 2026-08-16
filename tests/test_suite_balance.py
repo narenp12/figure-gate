@@ -126,7 +126,16 @@ SELF = {"test_suite_balance"}
 # the built page in a browser, and no gate-side test can measure it. Measured
 # 0.989 before (4707 document lines against 4759 gate lines) and 0.9954 after
 # (4737 against 4759); set just above the after.
-DOCUMENT_TO_GATE_MAX = 0.996
+#
+# 0.996 -> 0.998 when the home page's grid split into two groups of five. The
+# growth was the ten-tile grid's render tests -- the icon/href sweep over both
+# grids, which drives the built page in a browser and is the same payment class
+# as the mermaid and Pass 1/2 tests, plus the re-points that swept `docs/design.md`
+# the day it became a tracked document. No gate-side test can measure a page
+# layout, so the proportion is paid the way this file accepts payment. Measured
+# 0.9954 before (4737 document lines against 4759 gate lines) and 0.9975 after
+# (4747 against 4759); set just above the after.
+DOCUMENT_TO_GATE_MAX = 0.998
 
 # Below this the classification above is stale rather than wrong: modules have
 # been deleted or the glob has stopped matching, and every rate here is being

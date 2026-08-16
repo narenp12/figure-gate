@@ -32,6 +32,7 @@ README = ROOT / "README.md"
 # the docs site, and every parser below that used to read the README reads the
 # page the claim actually lives on now.
 GATES = ROOT / "docs" / "gates.md"
+DESIGN = ROOT / "docs" / "design.md"
 GETTING_STARTED = ROOT / "docs" / "getting-started.md"
 
 SURFACE = "#ffffff"
@@ -286,8 +287,8 @@ def test_the_stated_test_count_is_the_real_one():
     """A number in prose is not executable -- the same reason the rest of this
     file exists. 0.1.3 shipped a README claiming 166 tests against a suite of
     171, and the only thing that catches that is asking pytest."""
-    claimed = re.search(r"The suite is (\d+) tests", GATES.read_text(encoding="utf-8"))
-    assert claimed, ("docs/gates.md no longer states a test count in the form "
+    claimed = re.search(r"The suite is (\d+) tests", DESIGN.read_text(encoding="utf-8"))
+    assert claimed, ("docs/design.md no longer states a test count in the form "
                      "this test reads")
     assert int(claimed.group(1)) == collected_test_count()
 
@@ -328,8 +329,8 @@ def test_the_page_states_the_advisory_count_it_marks():
     import check_figure as cf
 
     claimed = re.search(r'note "WARN is not FAIL"\s+\n\s*(\w+)',
-                        GATES.read_text(encoding="utf-8"))
-    assert claimed, ("docs/gates.md no longer states an advisory count in the "
+                        DESIGN.read_text(encoding="utf-8"))
+    assert claimed, ("docs/design.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
     assert word in WORD_NUMBERS, f"unreadable advisory count {word!r}"
@@ -535,7 +536,7 @@ def prose_constants():
     every documentation file is fair game: prose, list items, headings.
     """
     out = []
-    for path in (GATES, README, GETTING_STARTED, GUIDE, SKILL / "SKILL.md",
+    for path in (GATES, DESIGN, README, GETTING_STARTED, GUIDE, SKILL / "SKILL.md",
                  ROOT / "CONTRIBUTING.md"):
         if not path.exists():
             continue
@@ -1260,11 +1261,11 @@ ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
     "the report() comment": (GETTING_STARTED,
                              r"prints (\d+) rows, returns True if ok"),
-    "the series-color row number": (GATES, r"That is row 12 of the (\d+)"),
+    "the series-color row number": (DESIGN, r"That is row 12 of the (\d+)"),
     "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
-    "the elimination-gate claim": (GATES, r"(\d+) passing rows means the"),
-    "the named-defect count": (GATES, r"figure avoids (\d+) named defects"),
-    "the advisory paragraph": (GATES, r"of the (\d+) rows are advisory"),
+    "the elimination-gate claim": (DESIGN, r"(\d+) passing rows means the"),
+    "the named-defect count": (DESIGN, r"figure avoids (\d+) named defects"),
+    "the advisory paragraph": (DESIGN, r"of the (\d+) rows are advisory"),
 }
 
 

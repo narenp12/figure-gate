@@ -228,15 +228,19 @@ steps, not just at the end.
    (uncommitted `design.md`, trimmed `gates.md`/`getting-started.md`, their
    test edits, the nav change) so the ground-up rewrite starts from a clean
    `HEAD`. The symlink structure, Zensical config and `palette.css` stay.
-2. **Commit boundary.** Small commits, one per logical step: nav/IA + new
-   symlinks, then pages (author section, then maintainer section, then skill),
-   then tests. Each step stays green and reviewable; no one-giant-commit
-   rewrite.
-3. **Order.** IA/nav + symlinks first -> page prose -> test rewrite -> full
-   suite green -> done.
+2. **Commit boundary.** Confirmed in review 2026-08-15: a single commit
+   covering the whole rewrite, not small per-step commits. The doc-gating
+   tests are rewritten in the same pass, so intermediate states may be red
+   and only the final tree must be green. The in-flight stash is preserved at
+   `stash@{0}` for recovery.
+3. **Order.** IA/nav + symlinks -> page prose -> test rewrite -> full suite
+   green -> done.
 4. **No fabricated facts.** Every number, threshold, signature and claim in
-   the new prose comes from `skill/scripts/` or the existing docs. The rewrite
-   changes voice and structure, not facts.
+   the new prose is read out of `skill/scripts/`, not carried from memory.
+   Existing docs serve as a checklist of claims that must survive; where a
+   claim cannot be verified against code it earns an `EXTERNAL_CLAIMS` ledger
+   entry rather than a silent pass. The rewrite changes voice and structure,
+   not facts.
 
 ## Risks
 
@@ -279,3 +283,7 @@ steps, not just at the end.
   alongside), baseline (discard in-flight work), skill treatment (restyle,
   keep function), IA (audience split), governing standard (Google developer
   documentation style guide) all confirmed with the user in review.
+- 2026-08-15: execution confirmed in brainstorm. Fact source: code-first,
+  docs as checklist (every number read out of `skill/scripts/`, existing docs
+  only enumerated as claims to preserve). Commit rhythm: single commit, full
+  pass, suite green at the end.

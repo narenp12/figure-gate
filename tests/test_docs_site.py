@@ -84,7 +84,7 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # recipe is a claim about what the code does when you type it. `test_how_to.py`
 # runs the commands, recomputes the numbers and re-derives the row table from
 # the registry, so the page cannot drift from the behaviour it teaches.
-AUTHORED = {"gallery.md", "api.md", "gates.md", "getting-started.md",
+AUTHORED = {"gallery.md", "api.md", "design.md", "gates.md", "getting-started.md",
             "how-to.md", "abbreviations.md"}
 
 
@@ -96,7 +96,7 @@ def nav_targets():
         match = NAV_ENTRY.match(line)
         if match:
             out.append(match.group(1))
-        elif line.strip().startswith("]"):
+        elif line.strip() == "]":
             break
     return out
 
@@ -104,9 +104,9 @@ def nav_targets():
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
     gate-table parser in `test_docs_match_code.py`, and for the same reason."""
-    assert len(nav_targets()) == 10, (
+    assert len(nav_targets()) == 13, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
-        "10 - the nav changed shape and nav_targets() needs updating with it")
+        "13 - the nav changed shape and nav_targets() needs updating with it")
 
 
 @pytest.mark.parametrize("target", nav_targets())
@@ -121,7 +121,7 @@ def symlinks():
 
 def test_the_symlinks_were_found():
     """Both tests below are parametrized over this list, so an empty one does
-    not fail them -- it deletes them. Seventeen pages and images point out of
+    not fail them -- it deletes them. Nineteen pages and images point out of
     `docs/`; if that count drops, either something became a copy (which
     `test_no_page_has_become_a_copy` catches) or this collection stopped
     working (which nothing else would).
@@ -131,8 +131,8 @@ def test_the_symlinks_were_found():
     the assertion had been moved to 17 and the prose still read twelve and 13.
     That is the defect this whole file exists to catch, one level in.
     """
-    assert len(symlinks()) == 17, (
-        f"found {len(symlinks())} symlinks under docs/, expected 17 - if the "
+    assert len(symlinks()) == 19, (
+        f"found {len(symlinks())} symlinks under docs/, expected 19 - if the "
         "site legitimately gained or lost a page, update this number with it")
 
 

@@ -1,26 +1,12 @@
 # Gallery
 
-`python examples/gallery.py` builds these eleven and audits each one. The script
-exits non-zero if any figure fails, so they are regression tests with pictures
-attached rather than decoration.
+`python examples/gallery.py` builds these eleven and audits each one. The script exits non-zero if any figure fails, so the figures are regression tests with pictures attached rather than decoration.
 
-They exist because `demo.py` — one panel, three curves — is easy for a gate to
-pass, and passing an easy case is the wrong thing for a gate to be good at.
-These are the compositions where the checks have somewhere to hide. Writing
-them found seven defects in the checks themselves, and two in the figures that
-no check caught. Both kinds are named below.
+The figures exist because `demo.py` — one panel, three curves — is easy for a gate to pass, and passing an easy case is the wrong thing for a gate to be good at. These are the compositions where the checks have somewhere to hide. Writing them found seven defects in the checks themselves, and two in the figures that no check caught. Both kinds are named below.
 
-The last four were added by reading every gate's detail string across the first
-seven and looking for the ones that had never measured anything. Five had not:
-no figure drew a confidence band, a bar, a diverging colormap, a signed contour
-set or a `scatter`, so those rows returned a passing detail seven times over
-without once running the code that decides. A row that passes by having seen
-nothing looks exactly like a row that passed, which is the failure mode the
-[gates page](gates.md) names and this page had been an example of.
+The last four figures were added by reading every gate's detail string across the first seven and looking for the ones that had never measured anything. Five had not: no figure drew a confidence band, a bar, a diverging colormap, a signed contour set or a `scatter`, so those rows returned a passing detail seven times over without once running the code that decides. A row that passes by having seen nothing looks exactly like a row that passed, which is the failure mode the [gates page](gates.md) names and this page had been an example of.
 
-Every alt text on this page is the string the figure itself carries, passed to
-`describe(fig, ...)` before the audit runs — the alt-text gate reads it, so it
-is checked rather than written once and forgotten.
+Every alt text on this page is the string the figure itself carries, passed to `describe(fig, ...)` before the audit runs — the alt-text gate reads it, so it is checked rather than written once and forgotten.
 
 ---
 
@@ -105,9 +91,7 @@ is checked rather than written once and forgotten.
 
 ## The one the checker is supposed to fail
 
-`python skill/scripts/check_figure.py` with no arguments builds a deliberately
-broken figure and audits it, so the self-test proves the gates can fail rather
-than only that they can pass.
+`python skill/scripts/check_figure.py` with no arguments builds a deliberately broken figure and audits it, so the self-test proves the gates can fail rather than only that they can pass.
 
 And the figure from the README, which is the method in miniature:
 
