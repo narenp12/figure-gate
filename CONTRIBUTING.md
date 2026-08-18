@@ -158,10 +158,18 @@ uv run bump-my-version bump dev      # 0.8.0.dev0 -> 0.8.0, cuts the release
 uv run bump-my-version bump minor    # 0.8.0 -> 0.9.0.dev0, opens the next cycle
 ```
 
-Write the notes first, under a `## Unreleased` heading. The bump renames that
-heading to the version and the date, and fails if there is no such heading, so
-a release with nothing written about it stops before the tag rather than in the
-workflow after it.
+Write the notes first, under a `## Unreleased` heading. The release bump renames
+that heading to the version and the date, and fails if there is no such heading,
+so a release with nothing written about it stops before the tag rather than in
+the workflow after it.
+
+Only the release bump touches `CHANGELOG.md`. The cycle-opening bump rewrites
+the three version sites and leaves the changelog alone, because it runs in the
+window where the last heading has been consumed and the next one is unwritten.
+It required the heading until 0.8.0, which made it fail every time it was run:
+0.7.0 left the tree carrying the version it had just shipped instead of opening
+0.8.0.dev0, and 0.8.0 had to be cut by naming the new version outright, because
+the dev bump has nothing to drop from a version with no suffix.
 
 Then, on a branch, because `main` takes no direct pushes:
 
