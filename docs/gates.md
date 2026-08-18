@@ -1,3 +1,7 @@
+---
+description: "Every row the two checkers return, the threshold it measures against, and whether it can fail a build."
+---
+
 # The gates
 
 This page lists every row the two checkers return, the threshold each one
