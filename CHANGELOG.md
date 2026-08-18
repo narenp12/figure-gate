@@ -113,6 +113,84 @@ touched.
 
 Documentation, unchanged from what was already here:
 
+**The documentation is restructured by Diátaxis, one mode per page.** The split
+before this was by audience, author against maintainer, which left four modes on
+one page: `getting-started.md` was an install how-to, a tutorial, a requirements
+reference and an explanation of the API contract at once. `gates.md` had the CVD
+sweep rationale welded into its reference table, and `how-to.md` carried a
+21-row reference table. The site now splits by what the reader came to do:
+
+- Tutorial: `tutorial.md`, new. One path, no alternatives, every transcript
+  captured from running the steps in a clean directory.
+- How-to: `install.md`, new, and `how-to.md`, task-titled.
+- Reference: `gates.md`, `cli.md` and `compatibility.md`, the last two new, and
+  `api.md`.
+- Explanation: `design.md`, `style-guide.md`, `choosing-a-form.md`,
+  `gallery.md`.
+
+**`getting-started.md` is gone**, split across `tutorial.md`, `install.md` and
+`compatibility.md`, so a link or bookmark to that page breaks. Sentence-level
+voice follows Google's technical writing course: second person, active voice,
+one idea per sentence, key point first. The project history stays, quarantined
+in the explanation pages where Diátaxis puts it.
+
+Two claims were wrong and are corrected rather than carried over:
+
+- `design.md` credited the colour oracle with "0.988 specificity". 0.988 was the
+  ROC AUC of the superseded OKLab metric; that metric's specificity was 0.786,
+  and `tests/test_colour_space_oracle.py` pins the current one above 0.95.
+- The journal type floors, re-verified against the three publishers on
+  2026-08-17. Science publishes no text floor at all, so the "5-7pt labels,
+  6-8pt axes" it was credited with is retracted. PNAS gives 6pt and 2mm as one
+  requirement in two units, not two floors, and also sets a maximum the docs
+  never carried. Nature's 5pt minimum and 7pt maximum are confirmed. The
+  retraction sweep found the same wrong sentence still in `check_figure.py`
+  after both documents were fixed, which is what that sweep exists for.
+
+Adding pages pushed the document side of the suite past the gate side and over
+the ceiling. It was paid the way `tests/test_suite_balance.py` asks, with the
+measurement the new prose stands in for: `tests/test_tutorial.py` builds each
+tutorial step's figure and asserts the row transitions, so the tutorial cannot
+silently stop working. Ratio 0.985 against a ceiling of 0.998 that did not move.
+
+**Every site feature the config names is now asserted, and the ones that do
+nothing are gone.** Seven markdown extensions were configured that no page used.
+Six were inert; `pymdownx.emoji` read the `:::` of a prose mention of an
+mkdocstrings directive as a shortcode and swallowed the rest of the line into a
+code span. The config comment claiming "only what the pages actually use" is a
+test now, failing on any extension nothing uses.
+
+The nav had been Diátaxis since the restructure, but only the sidebar said so.
+`navigation.tabs`, `sections`, `path` and `footer` put the four modes in the
+chrome. A feature name is accepted silently, so each is asserted: the four that
+emit markup in `tests/test_docs_site.py`, and `content.tooltips` in
+`tests/test_docs_render.py`, which hovers an abbr and reads the painted tooltip.
+`navigation.indexes` and `search.suggest` measured as no-ops and are not set,
+with the reason written beside the list; `search.suggest` is a Material feature
+Zensical does not implement at all. Nine pages carry their own meta description,
+where all nine had shared one.
+
+`DOCUMENT_TO_GATE_MAX` **changed** 0.998 → **1.009**, and the documentation side
+is now the larger of the two: 1.0088 measured, 4919 document lines against 4876
+gate lines. Both additions that moved it found a live defect, which is the
+payment that file accepts.
+
+**The site is themed, and the home page's card grid renders on GitHub too.**
+`zensical.toml` swaps the default book-open glyph for a fence logo and
+`palette.css` adds the accent underline tint for `fg-blue` and `fg-sky`. The
+card grid used Material-specific syntax, a `markdown`-attributed `div` plus
+`:lucide-*` shortcodes, which GFM does not parse: markdown inside an HTML block
+is passed through raw and the shortcodes are unknown to it, so the whole block
+rendered as literal text on GitHub. It is raw HTML with inline lucide SVGs now,
+which is cards on the docs site and a clickable link list on GitHub.
+
+**The mermaid diamond on `gates.md` says what it meant to say.** mermaid 11
+renders a literal `\n` in a quoted diamond label instead of breaking the line,
+so the `need` node used `<br/>`. `tests/test_docs_render.py` measures the
+diagram's painted labels, so the defect cannot ship again.
+
+Earlier in the same cycle, before the restructure:
+
 **The docs say which import line a given install wants.** 0.7.0 moved the
 installed modules into a package, and the two indexes do not publish in the
 same hour: conda-forge follows PyPI through the feedstock's autotick bot, so
@@ -208,82 +286,6 @@ furniture-only reading is pinned at two panel sizes, and the mark-ratio, type,
 line-weight, overplotting and alpha rows are asserted on what they print.
 `DOCUMENT_TO_GATE_MAX` **changed** 0.92 → **0.93**, moved by less than the
 measurement written to pay for it.
-
-**The documentation is restructured by Diátaxis, one mode per page.** The split
-before this was by audience, author against maintainer, which left four modes on
-one page: `getting-started.md` was an install how-to, a tutorial, a requirements
-reference and an explanation of the API contract at once. `gates.md` had the CVD
-sweep rationale welded into its reference table, and `how-to.md` carried a
-21-row reference table. The site now splits by what the reader came to do:
-
-- Tutorial: `tutorial.md`, new. One path, no alternatives, every transcript
-  captured from running the steps in a clean directory.
-- How-to: `install.md`, new, and `how-to.md`, task-titled.
-- Reference: `gates.md`, `cli.md` and `compatibility.md`, the last two new, and
-  `api.md`.
-- Explanation: `design.md`, `style-guide.md`, `choosing-a-form.md`,
-  `gallery.md`.
-
-**`getting-started.md` is gone**, split across `tutorial.md`, `install.md` and
-`compatibility.md`, so a link or bookmark to that page breaks. Sentence-level
-voice follows Google's technical writing course: second person, active voice,
-one idea per sentence, key point first. The project history stays, quarantined
-in the explanation pages where Diátaxis puts it.
-
-Two claims were wrong and are corrected rather than carried over:
-
-- `design.md` credited the colour oracle with "0.988 specificity". 0.988 was the
-  ROC AUC of the superseded OKLab metric; that metric's specificity was 0.786,
-  and `tests/test_colour_space_oracle.py` pins the current one above 0.95.
-- The journal type floors, re-verified against the three publishers on
-  2026-08-17. Science publishes no text floor at all, so the "5-7pt labels,
-  6-8pt axes" it was credited with is retracted. PNAS gives 6pt and 2mm as one
-  requirement in two units, not two floors, and also sets a maximum the docs
-  never carried. Nature's 5pt minimum and 7pt maximum are confirmed. The
-  retraction sweep found the same wrong sentence still in `check_figure.py`
-  after both documents were fixed, which is what that sweep exists for.
-
-Adding pages pushed the document side of the suite past the gate side and over
-the ceiling. It was paid the way `tests/test_suite_balance.py` asks, with the
-measurement the new prose stands in for: `tests/test_tutorial.py` builds each
-tutorial step's figure and asserts the row transitions, so the tutorial cannot
-silently stop working. Ratio 0.985 against a ceiling of 0.998 that did not move.
-
-**Every site feature the config names is now asserted, and the ones that do
-nothing are gone.** Seven markdown extensions were configured that no page used.
-Six were inert; `pymdownx.emoji` read the `:::` of a prose mention of an
-mkdocstrings directive as a shortcode and swallowed the rest of the line into a
-code span. The config comment claiming "only what the pages actually use" is a
-test now, failing on any extension nothing uses.
-
-The nav had been Diátaxis since the restructure, but only the sidebar said so.
-`navigation.tabs`, `sections`, `path` and `footer` put the four modes in the
-chrome. A feature name is accepted silently, so each is asserted: the four that
-emit markup in `tests/test_docs_site.py`, and `content.tooltips` in
-`tests/test_docs_render.py`, which hovers an abbr and reads the painted tooltip.
-`navigation.indexes` and `search.suggest` measured as no-ops and are not set,
-with the reason written beside the list; `search.suggest` is a Material feature
-Zensical does not implement at all. Nine pages carry their own meta description,
-where all nine had shared one.
-
-`DOCUMENT_TO_GATE_MAX` **changed** 0.998 → **1.009**, and the documentation side
-is now the larger of the two: 1.0088 measured, 4919 document lines against 4876
-gate lines. Both additions that moved it found a live defect, which is the
-payment that file accepts.
-
-**The site is themed, and the home page's card grid renders on GitHub too.**
-`zensical.toml` swaps the default book-open glyph for a fence logo and
-`palette.css` adds the accent underline tint for `fg-blue` and `fg-sky`. The
-card grid used Material-specific syntax, a `markdown`-attributed `div` plus
-`:lucide-*` shortcodes, which GFM does not parse: markdown inside an HTML block
-is passed through raw and the shortcodes are unknown to it, so the whole block
-rendered as literal text on GitHub. It is raw HTML with inline lucide SVGs now,
-which is cards on the docs site and a clickable link list on GitHub.
-
-**The mermaid diamond on `gates.md` says what it meant to say.** mermaid 11
-renders a literal `\n` in a quoted diamond label instead of breaking the line,
-so the `need` node used `<br/>`. `tests/test_docs_render.py` measures the
-diagram's painted labels, so the defect cannot ship again.
 
 ## 0.7.0 — 2026-08-03
 
