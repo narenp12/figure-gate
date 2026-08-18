@@ -31,7 +31,19 @@ updates:
         patterns:
           - "github/codeql-action*"
 
-# No Python entry. Every dependency here is a floor (`matplotlib>=3.8`,
-# `pytest>=7.0`) and uv.lock is not committed, so there is nothing for
-# Dependabot to raise -- the constraints already admit the newest release.
-# Security alerts still cover those dependencies; they do not need this file.
+# Still no Python entry, and the reason has changed. It used to be that
+# uv.lock was gitignored, so there was nothing pinned for Dependabot to raise:
+# every dependency is a floor (`matplotlib>=3.8`, `pytest>=7.0`) and a floor
+# already admits the newest release.
+#
+# The lock is committed now, so a `uv` entry would have something to bump --
+# and it is left off deliberately rather than forgotten. The lock governs the
+# `uv run` and `uv sync` jobs only: lint, api, and the docs build. The test
+# matrix installs through `uv pip install --system`, which does not read the
+# lock at all -- checked, not assumed: against a lock pinning packaging 21.3,
+# `uv pip install "packaging>=21"` resolves 26.3 while `uv sync` gives 21.3.
+# So a weekly lock bump would open pull requests that cannot move the jobs
+# most likely to break, on a repository where the whole point of the matrix is
+# that it floats. Refresh it deliberately with `uv lock --upgrade` instead.
+#
+# Security alerts still cover these dependencies; they do not need this file.
