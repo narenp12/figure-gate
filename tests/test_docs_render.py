@@ -65,13 +65,13 @@ def playwright_api():
     try:
         import playwright.sync_api as api
     except ImportError:
-        pytest.skip("playwright is in the docs-test group; the figure gates "
-                    "do not need it. `uv sync --group docs-test`")
-    else:
-        # `else` rather than a bare `return`, here and in the two below.
-        # `pytest.skip` raises, so the two spellings run identically; CodeQL
-        # does not model that and reported the name as possibly unbound.
-        return api
+        # `raise` of what `pytest.skip` raises, not the call, here and in the
+        # two below. `skip` never returns; CodeQL does not model that and read
+        # a bare call as a fall-through -- `api` unbound, then implicit `None`.
+        raise pytest.skip.Exception(
+            "playwright is in the docs-test group; the figure gates "
+            "do not need it. `uv sync --group docs-test`") from None
+    return api
 
 
 def file_lock():
@@ -92,10 +92,10 @@ def file_lock():
     try:
         from filelock import FileLock
     except ImportError:
-        pytest.skip("filelock is in the docs-test group; the figure gates "
-                    "do not need it. `uv sync --group docs-test`")
-    else:
-        return FileLock
+        raise pytest.skip.Exception(
+            "filelock is in the docs-test group; the figure gates "
+            "do not need it. `uv sync --group docs-test`") from None
+    return FileLock
 
 # WCAG 2.2 AA for text. Deliberately not the 3:1 series floor the figures are
 # held to -- a link is text being read, not a mark being told apart from its
@@ -216,10 +216,10 @@ def browser():
         try:
             b = p.chromium.launch()
         except Exception as exc:                      # noqa: BLE001
-            pytest.skip(f"no chromium: {exc} -- run `uv run playwright install chromium`")
-        else:
-            yield b
-            b.close()
+            raise pytest.skip.Exception(
+                f"no chromium: {exc} -- run `uv run playwright install chromium`") from None
+        yield b
+        b.close()
 
 
 @pytest.fixture()

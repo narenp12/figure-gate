@@ -80,15 +80,15 @@ def oracle():
     except Exception as exc:                                # pragma: no cover
         import matplotlib
 
-        pytest.skip(f"cmasher does not import under matplotlib "
-                    f"{matplotlib.__version__}: {exc!r}")
-    else:
-        # `else`, not a bare `return` after the block: `pytest.skip` raises, so
-        # both read the same at run time. Static analysis does not know that --
-        # CodeQL's py/uninitialized-local-variable reported `cmr` as possibly
-        # unbound on the fall-through path. Binding the return to "no exception
-        # was raised" states the control flow instead of leaving it inferred.
-        return cmr
+        # The exception `pytest.skip` raises, raised rather than called, for
+        # the reason `test_docs_render.py`'s `playwright_api` gives: `skip`
+        # never returns, CodeQL does not model that, and read the bare call as
+        # a handler falling through -- `cmr` possibly unbound at first, then an
+        # implicit `None` return once an `else` had settled the unbound name.
+        raise pytest.skip.Exception(
+            f"cmasher does not import under matplotlib "
+            f"{matplotlib.__version__}: {exc!r}") from None
+    return cmr
 
 
 def registry_names():
