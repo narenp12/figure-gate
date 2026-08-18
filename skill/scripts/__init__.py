@@ -39,9 +39,9 @@ except PackageNotFoundError:                                # pragma: no cover
     __version__ = "0.0.0.dev0"
 
 # Read off the installed distribution rather than written here. The version
-# already lives in four files that one `bump-my-version` run rewrites together,
+# already lives in five files that one `bump-my-version` run rewrites together,
 # and `tests/test_version_sites.py` exists because two of them once drifted; a
-# literal here would be a fifth site, hand-maintained, that the bump config
+# literal here would be a sixth site, hand-maintained, that the bump config
 # does not know about.
 
 __all__ = ["__version__"]

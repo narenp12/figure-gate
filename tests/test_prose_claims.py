@@ -738,13 +738,13 @@ def resolve(span):
             if (SKILL / base / target).exists() or (ROOT / target).exists():
                 return "shell"
         return None
-    # `py.typed` is the odd one: a real tracked file with a suffix that names
-    # nothing, shipped since 0.7.0 so a caller's type checker reads the
-    # annotations instead of `Any`. It resolves the same way every other file
-    # span does, against the tree, and is listed by its full name rather than
-    # by suffix because ".typed" is not a file kind this project has.
-    if span == "py.typed" or span.endswith((".py", ".mplstyle", ".md", ".toml",
-                                            ".yml", ".yaml", ".css", ".json")):
+    # `py.typed` and `uv.lock` are the odd ones: tracked files whose suffixes
+    # name nothing, one shipped for PEP 561 and one the fifth version site the
+    # bump rewrites. Both resolve against the tree like every other file span,
+    # by full name because ".typed" and ".lock" are not kinds with a second.
+    if span in {"py.typed", "uv.lock"} or span.endswith(
+            (".py", ".mplstyle", ".md", ".toml",
+             ".yml", ".yaml", ".css", ".json")):
         if span in TRACKED_FILES:
             return "file"
         for base in ("", "scripts", "assets", "references"):
