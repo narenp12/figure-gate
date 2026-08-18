@@ -7,7 +7,8 @@
 # 0. Native config, and the flag where it belongs, in `.github/workflows/docs.yml`.
 #
 # The site is built from symlinks wherever the prose already had a home. The
-# pages authored here (gallery.md, gates.md, getting-started.md) are the
+# pages authored here (tutorial.md, install.md, how-to.md, gates.md, cli.md,
+# compatibility.md, design.md, gallery.md) are the
 # single copy of what they say; every other page points at the file that
 # already existed, so there is exactly one copy of the style guide and
 # `test_docs_match_code.py` still reads the copy the site serves. A `docs/` of
@@ -46,17 +47,35 @@ extra_javascript = [
   "https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js",
 ]
 
+# Grouped by what the reader came to do, after Diataxis: a tutorial teaches, a
+# how-to guide serves a goal the reader already has, reference states what is
+# true, and explanation gives the background. The four are kept apart on
+# purpose. The page that used to be "Getting started" was all four at once.
 nav = [
   { "Home" = "index.md" },
-  { "Getting started" = "getting-started.md" },
-  { "How to" = "how-to.md" },
-  { "The gates" = "gates.md" },
-  { "Gallery" = "gallery.md" },
-  { "Style guide" = "style-guide.md" },
-  { "API" = "api.md" },
-  { "Choosing a form" = "choosing-a-form.md" },
+  { "Tutorial" = "tutorial.md" },
+  { "How-to guides" = [
+    { "Install figure-gate" = "install.md" },
+    { "How-to guides" = "how-to.md" },
+  ]},
+  { "Reference" = [
+    { "The gates" = "gates.md" },
+    { "Commands" = "cli.md" },
+    { "Compatibility" = "compatibility.md" },
+    { "API" = "api.md" },
+  ]},
+  { "Explanation" = [
+    { "How the checkers decide" = "design.md" },
+    { "Figure style guide" = "style-guide.md" },
+    { "Choosing a form" = "choosing-a-form.md" },
+    { "Gallery" = "gallery.md" },
+  ]},
   { "Agent skill" = "skill.md" },
-  { "Changelog" = "changelog.md" },
+  { "Project" = [
+    { "Contributing" = "contributing.md" },
+    { "Security" = "security.md" },
+    { "Changelog" = "changelog.md" },
+  ]},
 ]
 
 [project.theme]
@@ -74,7 +93,7 @@ variant = "modern"
 # a feature is on is to look at the built page.
 features = [
   "content.code.copy",
-  "content.tabs.link",      # getting-started's two tab groups share the "vendored" label
+  "content.tabs.link",      # install's two tab groups share the "Vendored" label
   "content.code.annotate",  # how-to's numbered markers expand to prose
   "navigation.top",
   "navigation.tracking",
@@ -112,7 +131,7 @@ logo = "lucide/fence"
 
 # Only what the pages actually use. The style guide is tables and footnotes,
 # the gallery is `md_in_html` figures, and every page is code blocks.
-# getting-started is `tabbed`, how-to is annotations/collapsibles/definition
+# install is `tabbed`, how-to is annotations/collapsibles/definition
 # lists, and the glossary `abbr` serves every page from one include.
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.attr_list]
@@ -126,7 +145,7 @@ permalink = true
 anchor_linenums = true
 [project.markdown_extensions.pymdownx.inlinehilite]
 [project.markdown_extensions.pymdownx.superfences]
-# gates.md's flow diagram. `fence_code_format` keeps the fence's text in a
+# design.md's flow diagram. `fence_code_format` keeps the fence's text in a
 # `.mermaid` div for the bundle's own renderer (loaded with the pinned CDN
 # engine above) to read and replace with an SVG at view time.
 custom_fences = [

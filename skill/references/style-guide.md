@@ -1,16 +1,18 @@
 # Figure style guide
 
-Portable method for figures that look authored: diagrams for slides, papers, reports.
+A portable method for figures that look authored: diagrams for slides, papers,
+and reports.
 
-This is the reasoning behind `SKILL.md` — the measurements, and the failure each rule
-was written to prevent. Read it when deviating from a constraint, when a validator fails
-in a way you want to argue with, or when porting the checks off matplotlib.
+This page is the reasoning behind `SKILL.md`. It gives the measurements, and the
+failure each rule was written to prevent. Read it when you want to deviate from
+a constraint, when a validator fails in a way you want to argue with, or when
+you are porting the checks off matplotlib.
 
-Everything here is downstream of the form being right in the first place, which is
-`choosing-a-form.md` — the perceptual and statistical argument for what to draw, before
-any question of how it looks.
+Everything here is downstream of the form being right in the first place. That
+question is in [choosing a form](choosing-a-form.md), which is the perceptual
+and statistical argument for what to draw, before any question of how it looks.
 
-Ships with one style sheet and two validators:
+## What ships
 
 | File | In the skill | Needs | What it is |
 |---|---|---|---|
@@ -18,17 +20,17 @@ Ships with one style sheet and two validators:
 | `check_palette.py` | `scripts/` | Python 3.8+, stdlib only | color gates, any toolchain |
 | `check_figure.py` | `scripts/` | Python 3.11+, matplotlib 3.8+ | composition + type-size gates |
 
-Copy all three into the project (conventionally `diagrams/`), where they sit beside each
-other as the guide assumes. Only `check_figure.py` is coupled to matplotlib; the
-composition rules it enforces are library-agnostic, and each reads geometry any mature
+Copy all three into your project, conventionally into `diagrams/`, where they
+sit beside each other as this guide assumes.
+
+Only `check_figure.py` is coupled to matplotlib. The composition rules it
+enforces are library-agnostic, and each one reads geometry that any mature
 plotting library reports.
 
-Everything matplotlib ships is used as-shipped — viridis, `RdBu`, style sheets,
-`constrained_layout`. What remains is the part matplotlib has no opinion about: which
-palette, whether the figure is composed, and whether the type clears the page.
-
-Every rule here was written for a specific failure, and each names the measurement
-behind it.
+Everything matplotlib ships is used as shipped: viridis, `RdBu`, style sheets,
+`constrained_layout`. What remains is the part matplotlib has no opinion about:
+which palette, whether the figure is composed, and whether the type clears the
+page.
 
 ---
 
@@ -57,75 +59,86 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 
 ## Procedure
 
-1. **Ground content.** Use the document's exact nouns. Compute real numbers. Every label
-   checked against the drawn data, not the idea it names.
-2. **Choose the form** — `choosing-a-form.md`. Nothing downstream fixes a wrong one.
+1. **Ground the content.** Use the document's exact nouns. Compute real numbers.
+   Check every label against the drawn data, not against the idea it names.
+2. **Choose the form.** See [choosing a form](choosing-a-form.md). Nothing
+   downstream fixes a wrong one.
 3. **Build** on `figure.mplstyle`.
-4. **Compose, run `check_figure.py`, render a PNG, look at it.**
-5. **Validate palette with `check_palette.py`.** Do not eyeball color.
-6. **Render the finished document and look at *that*.**
+4. **Compose, run `check_figure.py`, render a PNG, and look at it.**
+5. **Validate the palette with `check_palette.py`.** Do not eyeball color.
+6. **Render the finished document and look at that.**
 
-### Composition rules (what the checker cannot tell you)
+### Composition rules the checker cannot decide for you
 
-- One thing opaque; ≤3 alpha levels. Context gets the alpha, data does not.
-- Marks within ~4× area of each other. Emphasis = shape or label, not 5× the area.
-- Context surfaces get structure (bands, isolines), not just a neutral fill.
-- Shared scale → shared axis furniture.
-- Encode only what exists. A path through unordered data draws a sequence that is not
-  there.
-- A path with real order (a trajectory) must read as directed — downsample or smooth
-  it, add a single arrowhead pointing forward, or model it so it stays visually
-  contained (a noisy SGD walk near a minimum is an Ornstein–Uhlenbeck process, whose
-  stationary distribution is the Gaussian being drawn). A self-intersecting scribble
-  drowns out every other mark.
-- Marks over a textured or variable-value context surface need a 1–3px white stroke
-  behind them (`pe.withStroke(foreground="white")` in matplotlib) — a knockout halo
-  that guarantees separation regardless of the local background value. A line that
-  vanishes where it crosses a contour is not a line; a marker that disappears into a
-  filled band is not a marker.
-- Ordinal emphasis is a lightness ramp, not a transparency stack.
+- Keep one thing opaque, and use at most three alpha levels. Context gets the
+  alpha; data does not.
+- Keep marks within about 4x the area of each other. Emphasis is shape or a
+  label, not 5x the area.
+- Give context surfaces structure, such as bands or isolines, rather than a
+  plain neutral fill.
+- Give panels on a shared scale shared axis furniture.
+- Encode only what exists. A path through unordered data draws a sequence that
+  is not there.
+- Make a path with real order read as directed. Downsample or smooth it, add a
+  single arrowhead pointing forward, or model it so it stays visually contained.
+  A noisy SGD walk near a minimum is an Ornstein-Uhlenbeck process, whose
+  stationary distribution is the Gaussian being drawn. A self-intersecting
+  scribble drowns out every other mark.
+- Put a 1-3px white stroke behind marks that cross a textured or variable-value
+  context surface, using `pe.withStroke(foreground="white")` in matplotlib. That
+  knockout halo guarantees separation regardless of the local background value.
+  A line that vanishes where it crosses a contour is not a line, and a marker
+  that disappears into a filled band is not a marker.
+- Make ordinal emphasis a lightness ramp, not a transparency stack.
 
 ### Panel occupancy
 
-`check_ink` measures the fraction of each axes rectangle whose pixels differ from the
-page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`. Advisory, and it stays
-advisory because the right density is a property of the form: an `imshow` heatmap
-measures 1.00 and warns on every figure that has one. Colorbars are exempt, being a
-solid ramp by construction and nobody's design decision.
+`check_ink` measures the fraction of each axes rectangle whose pixels differ
+from the page colour, and warns outside `INK_MIN, INK_MAX = 0.02, 0.55`.
 
-**It is not the data-ink ratio.** Tufte's quantity is the share of ink that carries
-data. This one counts every non-background pixel in the rectangle, frame, ticks,
-gridlines and labels included. The two move opposite ways under one edit: deleting
-gridlines raises the data-ink ratio and lowers this number. A high reading means
-saturation, not decoration, and stripping furniture is not the fix. The guide
-states no data-ink rule of its own, and one reason is that the empirical case for
-minimalism is weaker than its standing suggests (Bateman et al., below).
+The row is advisory, and it stays advisory because the right density is a
+property of the form. An `imshow` heatmap measures 1.00 and would warn on every
+figure that has one. Colorbars are exempt, being a solid ramp by construction
+and nobody's design decision.
 
-The ends fail differently.
+**This is not the data-ink ratio.** Tufte's quantity is the share of ink that
+carries data. This one counts every non-background pixel in the rectangle,
+including frame, ticks, gridlines, and labels. The two move opposite ways under
+one edit: deleting gridlines raises the data-ink ratio and lowers this number. A
+high reading means saturation rather than decoration, so stripping furniture is
+not the fix. This guide states no data-ink rule of its own, partly because the
+empirical case for minimalism is weaker than its standing suggests (Bateman et
+al., in the references).
 
-**At the floor**, suspect the scale before the data. Marks occupying one corner of a
-panel usually mean limits set by an outlier or left at the default, and the fix is the
-limits, not more ink. A panel with nothing drawn in it warns whether or not the range
-would have caught it: the gate asks whether anything was drawn, so the blank cell in a
-grid is a WARN and not a pass. That question is doing work, because empty furniture is
-not reliably under the floor. Frame, ticks and gridlines are a perimeter and the panel
-is an area, so their share falls as the panel grows: measured at `MEASURE_DPI`, a blank
-half of a 3x1.5in pair reads 0.03, inside the range, and a blank half of a 6x3in pair
-reads 0.01, under it. Only the first is caught by asking.
+The two ends fail differently.
 
-**At the ceiling**, the panel is reporting density rather than observations, which is
-the Overplotting section in `choosing-a-form.md`: transparency within the 3-alpha-level
-budget, hexbin, or a 2-D density estimate.
+**At the floor, suspect the scale before the data.** Marks occupying one corner
+of a panel usually mean limits set by an outlier or left at the default, and the
+fix is the limits rather than more ink.
 
-**When the fill is context, say so.** A `contourf` landscape under a few marks reads as
-saturated because the surface is what fills the rectangle. Pass those axes as
-`check_ink(fig, context_axes=[ax])`, or `audit(fig, context_axes=[ax])`, and the gate
-separates surface from marks and measures only what sits on top.
+A panel with nothing drawn in it warns whether or not the range would have
+caught it, because the gate asks whether anything was drawn at all. So a blank
+cell in a grid is a WARN and not a pass. That question does real work, because
+empty furniture is not reliably under the floor: frame, ticks, and gridlines are
+a perimeter while the panel is an area, so their share falls as the panel grows.
+Measured at `MEASURE_DPI`, a blank half of a 3x1.5in pair reads 0.03, inside the
+range, and a blank half of a 6x3in pair reads 0.01, under it. Only the first is
+caught by the range.
+
+**At the ceiling, the panel is reporting density rather than observations.**
+That is the overplotting case in [choosing a form](choosing-a-form.md):
+transparency within the three-alpha-level budget, a hexbin, or a 2-D density
+estimate.
+
+**When the fill is context, say so.** A `contourf` landscape under a few marks
+reads as saturated, because the surface is what fills the rectangle. Pass those
+axes as `check_ink(fig, context_axes=[ax])` or `audit(fig, context_axes=[ax])`,
+and the gate separates surface from marks and measures only what sits on top.
 
 ### Then still look at it
 
-The checker sees geometry, not meaning: it cannot tell you an arrow points at the wrong
-thing or that the reading order runs backwards.
+The checker sees geometry, not meaning. It cannot tell you that an arrow points
+at the wrong thing, or that the reading order runs backwards.
 
 ---
 
@@ -141,8 +154,9 @@ thing or that the reading order runs backwards.
 
 ### Categorical: Okabe-Ito
 
-Established colorblind-safe categorical, published order. Adopting it as-is beats a
-private set: it carries a decade of use and readers who know it recognize it.
+Okabe-Ito is an established colorblind-safe categorical set with a published
+order. Adopting it as-is beats inventing a private set: it carries a decade of
+use, and readers who know it recognise it.
 
 | Slot | Hue | Hex | Contrast `#ffffff` | Role |
 |---|---|---|---|---|
@@ -155,110 +169,130 @@ private set: it carries a decade of use and readers who know it recognize it.
 | 7 | vermillion | `#D55E00`{ .sw style="--c:#D55E00" } | 3.87 | series |
 | 8 | reddish purple | `#CC79A7`{ .sw style="--c:#CC79A7" } | 3.06 | series |
 
-† below 3:1 — must carry a visible direct label. ‡ below lightness band.
+† below 3:1, so it must carry a visible direct label. ‡ below the lightness
+band.
 
 The hue is the one cell here a reader cannot recompute. "Vermillion" is the Hue
-column attempting it in words; the swatch is the same claim in color. It renders
-on the site only. In the file it is an attribute list on the code span, restating
-the hex that span already holds, and a second copy of a color is how the ink
-table below came to credit the sheet with a token the sheet had stopped shipping.
-So both ends are held: `tests/test_docs_match_code.py` reads the source and
-asserts the pair agrees, `tests/test_docs_render.py` renders the page and asserts
-the browser paints it.
+column attempting it in words, and the swatch is the same claim in color. The
+swatch renders on the site only: in the file it is an attribute list on the code
+span, restating the hex that span already holds. A second copy of a color is how
+the ink table below came to credit the sheet with a token the sheet had stopped
+shipping, so both ends are held. `tests/test_docs_match_code.py` reads the
+source and asserts the pair agrees, and `tests/test_docs_render.py` renders the
+page and asserts the browser paints it.
 
-**A legend entry is not a direct label.** The rule was ambiguous on this and
+**A legend entry is not a direct label.** The rule was ambiguous on this, and
 `examples/demo.py` read it the other way for a while. It is settled the strict
-way, because the obligation follows from the measurement: a sub-3:1 mark is
+way, because the obligation follows from the measurement. A sub-3:1 mark is
 faint against the page, and a legend leaves the reader matching a small faint
-swatch to a small faint curve — the exact step a direct label exists to remove.
-Text at the mark, in ink, with the mark beside it carrying the identity.
+swatch to a small faint curve, which is the exact step a direct label exists to
+remove. Put text at the mark, in ink, with the mark beside it carrying the
+identity.
 
-Ratios are against white, because that is what `figure.mplstyle` renders and
-what the page under it is. They were previously quoted against `#fcfcfb`, a
-surface no figure in this project ever had; the numbers were all slightly wrong
-and reddish purple was listed as needing a direct label when on white it clears
-3:1 at 3.06. `tests/test_docs_match_code.py` now reads this table and checks
-every number against `contrast()`, so it cannot drift again. On a genuinely
-tinted page, pass `--surface`.
+Ratios are measured against white, because that is what `figure.mplstyle`
+renders and what the page under it is. They were previously quoted against
+`#fcfcfb`, a surface no figure in this project ever had. The numbers were all
+slightly wrong, and reddish purple was listed as needing a direct label when on
+white it clears 3:1 at 3.06. `tests/test_docs_match_code.py` now reads this
+table and checks every number against `contrast()`, so it cannot drift again. On
+a genuinely tinted page, pass `--surface`.
 
-Two slots held out: yellow at 1.32:1 genuinely vanishes as a hairline (fills only). Black
-is a preference (keeps "ink" unambiguous), not a measurement — take it as a series color
-if you want.
+Two slots are held out. Yellow at 1.32:1 genuinely vanishes as a hairline, so it
+is for fills only. Black is a preference rather than a measurement, because it
+keeps "ink" unambiguous; take it as a series color if you want.
 
 The remaining six, in canonical order: `#E69F00 #56B4E9 #009E73 #0072B2 #D55E00 #CC79A7`
 
 Adjacent CVD ΔE 32.0, adjacent normal-vision ΔE 31.5, all-pairs ΔE 12.8/21.6.
 
-**Take slots in order.** One → orange. Three → orange, sky blue, bluish green. Never
-cherry-pick by meaning. One limit, not two: the first six slots clear all-pairs, and there is
-no seventh hue.
+**Take slots in order.** One series takes orange. Three take orange, sky blue,
+and bluish green. Never cherry-pick by meaning. There is one limit rather than
+two: the first six slots clear all-pairs, and there is no seventh hue.
 
-The all-pairs limit has been wrong twice, in both directions. It was written as four
-for a long time and nobody had run it. Measured, it became five: six slots failed at
-ΔE 7.9 (`#009E73` vs `#CC79A7`) against a target of 8. That measurement was made in
-OKLab, whose distances have no calibrated threshold, and in CAM02-UCS the same worst
-pair is `#0072B2` vs `#CC79A7` at 12.8 against a floor of 10.5. Two spaces disagreeing
-about *which* pair is worst is the clearest illustration in this guide of why 0.8.0
-changed metric. The restriction to five was an artefact and it is gone.
+The all-pairs limit has been wrong twice, in both directions. It was written as
+four for a long time and nobody had run it. Measured, it became five, because
+six slots failed at ΔE 7.9 (`#009E73` against `#CC79A7`) with a target of 8.
+That measurement was made in OKLab, whose distances have no calibrated
+threshold. In CAM02-UCS the same worst pair is `#0072B2` against `#CC79A7` at
+12.8, against a floor of 10.5. Two spaces disagreeing about *which* pair is
+worst is the clearest illustration in this guide of why 0.8.0 changed metric.
+The restriction to five was an artefact and it is gone.
 `tests/test_docs_match_code.py` derives the number by asking
-`check_palette.check(..., all_pairs=True)` for the largest count that passes, so the
-constant below and this sentence cannot drift from the validator again.
+`check_palette.check(..., all_pairs=True)` for the largest count that passes, so
+the constant below and this sentence cannot drift from the validator again.
 
-**Grayscale:** Okabe-Ito does not solve it. Orange and sky blue, the canonical first
-two, separate by relative luminance 0.011 (`#E69F00` vs `#56B4E9`) and are invisible
-once desaturated. Take orange and blue instead — relative luminance 0.264 (`#E69F00`
-vs `#0072B2`) — and add a second channel when it must survive a photocopier.
+**Grayscale is not solved by Okabe-Ito.** Orange and sky blue, the canonical
+first two, separate by relative luminance 0.011 (`#E69F00` vs `#56B4E9`) and are
+invisible once desaturated. Take orange and blue instead, at relative luminance
+0.264 (`#E69F00` vs `#0072B2`), and add a second channel when it must survive a
+photocopier.
 
-The unit is WCAG relative luminance here, not the CAM02-UCS ΔE the separation gates
-use and not the OKLab lightness quoted below, because luminance is the channel a
-desaturation keeps. In OKLab lightness the same two pairs are 0.018 and 0.221: the ordering is the same, the numbers are not, and a reader
-who recomputes one convention against the other concludes the guide has drifted.
+The unit here is WCAG relative luminance, not the CAM02-UCS ΔE the separation
+gates use and not the OKLab lightness quoted below, because luminance is the
+channel a desaturation keeps. In OKLab lightness the same two pairs are 0.018
+and 0.221: the ordering is the same and the numbers are not, and a reader who
+recomputes one convention against the other concludes the guide has drifted.
 
 ### Sequential: viridis, as shipped
 
-Perceptually uniform, monotone in lightness, colorblind-safe, in matplotlib.
+viridis is perceptually uniform, monotone in lightness, colorblind-safe, and in
+matplotlib already.
 
 ```python
-ax.pcolormesh(X, Y, Z, cmap="viridis")    # continuous — as shipped
+ax.pcolormesh(X, Y, Z, cmap="viridis")    # continuous, as shipped
 ```
 
-**Window only for discrete tiers drawn as standalone lines/marks.** Full-range viridis
-ends at `#fde725`{ .sw style="--c:#fde725" }, 1.26:1, invisible as a hairline. Sample `t ∈ [0.05, 0.70]` via
-`ordinal()` from the appendix. Two things to get right: sample
-evenly (ΔL ratio < 2×), and narrow to `t ∈ [0.00, 0.38]` when the figure also carries
-status green (viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`).
+**Window it only for discrete tiers drawn as standalone lines or marks.**
+Full-range viridis ends at `#fde725`{ .sw style="--c:#fde725" }, 1.26:1, which
+is invisible as a hairline. Sample `t ∈ [0.05, 0.70]` through `ordinal()` from
+the appendix.
 
-**On marks, hand the ramp to a colormap, not a list of colors.** An ordinal ramp is
-built to violate the categorical separation floor — its steps are meant to be close, and
-there can be many. `check_figure.py` reads a scatter drawn `scatter(c=[rgba, rgba, …])` as
-that many independent categorical identities and fails it against the ΔE floor, because a
-pre-evaluated RGBA list carries no signal that the steps are ordered. Draw it
-`scatter(c=values, cmap=ListedColormap(ramp))` (or with a `Normalize`) instead: the gate
-reads that as the value encoding it is and exempts it, and the intent is now in the code
-rather than lost in a flat bag of hues. A ramp drawn as standalone *lines* has no colormap
-to hand it to — keep those tiers few and evenly stepped, and validate with
-`--ordinal`, since the composition gate measures them against the categorical floor.
+Two things to get right when you window:
+
+- Sample evenly, keeping the ΔL ratio under 2x.
+- Narrow to `t ∈ [0.00, 0.38]` when the figure also carries status green,
+  because viridis passes through green near `t=0.7`, ΔE 10.7 from `#009E73`.
+
+**On marks, hand the ramp to a colormap rather than a list of colors.** An
+ordinal ramp is built to violate the categorical separation floor: its steps are
+meant to be close, and there can be many of them. `check_figure.py` reads a
+scatter drawn as `scatter(c=[rgba, rgba, …])` as that many independent
+categorical identities and fails it against the ΔE floor, because a
+pre-evaluated RGBA list carries no signal that the steps are ordered.
+
+Draw it as `scatter(c=values, cmap=ListedColormap(ramp))`, or with a
+`Normalize`, instead. The gate reads that as the value encoding it is and exempts
+it, and the intent now lives in the code rather than being lost in a flat bag of
+hues.
+
+A ramp drawn as standalone *lines* has no colormap to hand it to. Keep those
+tiers few and evenly stepped, and validate with `--ordinal`, since the
+composition gate measures them against the categorical floor.
 
 ### Diverging: `RdBu`, as shipped
 
-ColorBrewer, colorblind-safe, in matplotlib. Midpoint is `#f6f7f7`{ .sw style="--c:#f6f7f7" }.
-Never a hue at the midpoint; never two cool poles.
+`RdBu` is ColorBrewer, colorblind-safe, and in matplotlib. Its midpoint is
+`#f6f7f7`{ .sw style="--c:#f6f7f7" }. Never put a hue at the midpoint, and never
+use two cool poles.
 
-**Take discrete levels from inside the ends, the way viridis is windowed.** Its ends as
-shipped are `#67001f`{ .sw style="--c:#67001f" } and `#053061`{ .sw style="--c:#053061" }.
-Handed to `check_palette.py` as swatches, both fall outside the lightness band, the dark
-blue under the chroma floor as well. `t ∈ [0.1, 0.9]` gives
-`#b1182b`{ .sw style="--c:#b1182b" } / `#2065ab`{ .sw style="--c:#2065ab" }, which clear
-every gate. A continuous fill is unaffected: the colormap gate reads the kind, and only
-runs the swatch gates on a map discrete enough to count as qualitative.
+**Take discrete levels from inside the ends, the way viridis is windowed.** Its
+ends as shipped are `#67001f`{ .sw style="--c:#67001f" } and
+`#053061`{ .sw style="--c:#053061" }. Handed to `check_palette.py` as swatches,
+both fall outside the lightness band, and the dark blue falls under the chroma
+floor as well. `t ∈ [0.1, 0.9]` gives `#b1182b`{ .sw style="--c:#b1182b" } and
+`#2065ab`{ .sw style="--c:#2065ab" }, which clear every gate.
+
+A continuous fill is unaffected. The colormap gate reads the kind, and only runs
+the swatch gates on a map discrete enough to count as qualitative.
 
 ### Cyclic: `twilight`, as shipped
 
-An angle has no ends. Phase, heading, direction, time of day: the last value is
-adjacent to the first, and a ramp that starts dark and ends light draws a seam
-straight across the figure at the one place the data is continuous. `twilight`
-and `twilight_shifted` close the loop and are monotone in lightness over each
-half, so a reader can still order two values within a half turn.
+An angle has no ends. For phase, heading, direction, or time of day, the last
+value is adjacent to the first, and a ramp that starts dark and ends light draws
+a seam straight across the figure at the one place the data is continuous.
+
+`twilight` and `twilight_shifted` close the loop and are monotone in lightness
+over each half, so a reader can still order two values within a half turn.
 
 ```python
 ax.imshow(np.angle(w), cmap="twilight", vmin=-np.pi, vmax=np.pi)
@@ -270,9 +304,9 @@ scale someone got wrong.
 
 ### Which kind, and the key it takes
 
-Four kinds, four questions. The kind is a property of the data, not a
-preference, and picking the wrong one is not a matter of taste: it claims an
-ordering the values do not have, or hides one they do.
+There are four kinds and four questions. The kind is a property of the data
+rather than a preference, and picking the wrong one is not a matter of taste: it
+claims an ordering the values do not have, or hides one they do.
 
 | Kind | The question it answers | matplotlib | Key |
 |---|---|---|---|
@@ -283,34 +317,44 @@ ordering the values do not have, or hides one they do.
 
 **A colorbar is a ruler, so it needs something to be a ruler along.** The three
 continuous kinds have one. Categories do not, and a bar drawn beside them is a
-scale along nothing: name them in a legend instead. The same rule decides where
-a value that falls outside the measured range goes. "Did not converge", "no
-data", "censored" are separate classes, not small values, so they are drawn in
-an explicit neutral and keyed *off* the bar, never as `cmap(0)`. The bar is the
-range that was measured, and putting a non-value at the bottom of it claims a
-quantity nobody measured.
+scale along nothing, so name them in a legend instead.
+
+The same rule decides where a value that falls outside the measured range goes.
+"Did not converge", "no data", and "censored" are separate classes rather than
+small values, so draw them in an explicit neutral and key them *off* the bar,
+never as `cmap(0)`. The bar is the range that was measured, and putting a
+non-value at the bottom of it claims a quantity nobody measured.
 
 The kind is measured rather than trusted to a name, because matplotlib groups
 its colormaps by kind in prose documentation only: there is no API and no
-metadata on a `Colormap` object. The gate is in `check_figure.py`, which samples
-`CMAP_SAMPLES = 256` levels off the colormap and hands them to `cmap_kind()` in
-`check_palette.py`, where every constant below is defined and where the OKLab
-conversion and the lightness reading happen. The split is the porting story: the
-kind measure travels with the stdlib-only module. Anything under
-`CMAP_QUALITATIVE_N = 40` levels is qualitative and is sent to the categorical
-gates instead. A map whose lightness span is under `CMAP_SPAN_MIN = 0.02` is
-isoluminant and carries no order at all. Otherwise the measure is **back-travel**,
-the fraction of a segment's lightness span spent moving against its own
-direction: under `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential,
-under it over both halves is diverging, or cyclic when the two ends are within
-`CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, one just-noticeable
-difference, which is what "the ends are the same colour" means once the metric has a
-unit. The 18 maps in the registry that reach this branch wrap at 0.000 and 0.376
-(the two twilights) or at 27.963 and above (everything diverging), so the threshold has
-two orders of magnitude of clearance either side.
+metadata on a `Colormap` object.
+
+The gate is in `check_figure.py`, which samples `CMAP_SAMPLES = 256` levels off
+the colormap and hands them to `cmap_kind()` in `check_palette.py`, where every
+constant below is defined and where the OKLab conversion and the lightness
+reading happen. The split is the porting story: the kind measure travels with
+the stdlib-only module.
+
+The measure works in three steps:
+
+- Anything under `CMAP_QUALITATIVE_N = 40` levels is qualitative, and goes to
+  the categorical gates instead.
+- A map whose lightness span is under `CMAP_SPAN_MIN = 0.02` is isoluminant and
+  carries no order at all.
+- Otherwise the measure is **back-travel**, the fraction of a segment's
+  lightness span spent moving against its own direction. Under
+  `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential. Under it over
+  both halves is diverging, or cyclic when the two ends are within
+  `CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, one just-noticeable
+  difference, which is what "the ends are the same colour" means once the metric
+  has a unit.
+
+The 18 maps in the registry that reach that last branch wrap at 0.000 and 0.376,
+the two twilights, or at 27.963 and above, everything diverging. The threshold
+has two orders of magnitude of clearance either side.
 
 Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
-`rainbow`, `hsv` and `gist_ncar` land there. A reader cannot order two values in
+`rainbow`, `hsv`, and `gist_ncar` land there. A reader cannot order two values in
 any of them, and ordering is what a colormap is for.
 
 The thresholds are empirical, measured across matplotlib's registry against
@@ -318,10 +362,10 @@ The thresholds are empirical, measured across matplotlib's registry against
 disagreements, and the one known false positive are recorded in the design note
 that ships with the repository, at
 [`specs/2026-07-28-colormap-kind-gate-design.md`](https://github.com/narenp12/figure-gate/blob/main/specs/2026-07-28-colormap-kind-gate-design.md).
-The theory is Kovesi; see the references at the end of this document.
+The theory is Kovesi; see the references at the end.
 
 Passing the kind gate is not a quality verdict. `turbo` passes as diverging
-because its lightness profile genuinely is diverging-shaped; its problem is hue
+because its lightness profile genuinely is diverging-shaped. Its problem is hue
 banding, which a lightness-only measure cannot see. The row is named "Colormap
 kind" for that reason.
 
@@ -332,16 +376,16 @@ kind" for that reason.
 | Ink primary / secondary / muted | `#000000`{ .sw style="--c:#000000" } / `#52514e`{ .sw style="--c:#52514e" } / `#777570`{ .sw style="--c:#777570" } | `figure.mplstyle` |
 | Grid / axis / surface | `#e1e0d9`{ .sw style="--c:#e1e0d9" } / `#c3c2b7`{ .sw style="--c:#c3c2b7" } / `#ffffff`{ .sw style="--c:#ffffff" } | `figure.mplstyle` |
 
-Muted ink was `#898781` until `check_text_readability` was written and failed the
-sheet's own tick labels on every figure in the repo: it measures 3.59:1 on white,
-under the 4.5:1 a glyph stem needs. `#777570` is 4.6:1 and still sits below the
-7.94:1 axis label, so the hierarchy survives the correction. The old spelling
-stays in `check_figure.py`'s `INK_TOKENS` so that figures built on the old sheet
-are still read as furniture; it is not a token to reach for. `tests/test_docs_match_code.py`
-now resolves every hex in this table against the sheet, so the table cannot quote
-a token the sheet does not ship.
+Muted ink was `#898781` until `check_text_readability` was written and failed
+the sheet's own tick labels on every figure in the repository. It measures
+3.59:1 on white, under the 4.5:1 a glyph stem needs. `#777570` is 4.6:1 and
+still sits below the 7.94:1 axis label, so the hierarchy survives the
+correction. The old spelling stays in `check_figure.py`'s `INK_TOKENS` so that
+figures built on the old sheet are still read as furniture; it is not a token to
+reach for. `tests/test_docs_match_code.py` now resolves every hex in this table
+against the sheet, so the table cannot quote a token the sheet does not ship.
 
-Status, drawn from the palette, always with icon or label:
+Status colors are drawn from the palette, and always carry an icon or label:
 
 ```
 good #009E73    warning #E69F00    critical #D55E00
@@ -349,13 +393,16 @@ good #009E73    warning #E69F00    critical #D55E00
 
 Status and series are mutually exclusive roles for a hue within one figure.
 
-Neutral backdrop: `#ffffff`{ .sw style="--c:#ffffff" } → `#e6e5de`{ .sw style="--c:#e6e5de" }
-→ `#c3c2b7`{ .sw style="--c:#c3c2b7" } → `#95938b`{ .sw style="--c:#95938b" }.
+Neutral backdrop: `#ffffff`{ .sw style="--c:#ffffff" } →
+`#e6e5de`{ .sw style="--c:#e6e5de" } → `#c3c2b7`{ .sw style="--c:#c3c2b7" } →
+`#95938b`{ .sw style="--c:#95938b" }.
 
 ### Categorical or ordinal?
 
-- **Categorical** = independent identities. Different models, different groups.
-- **Ordinal** = ordered steps. **A numbered cycle is ordinal** → viridis, not four hues.
+- **Categorical** means independent identities, such as different models or
+  different groups.
+- **Ordinal** means ordered steps. **A numbered cycle is ordinal**, so it takes
+  viridis rather than four hues.
 
 ### Validator
 
@@ -365,101 +412,128 @@ python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all # scatter
 python check_palette.py "#471365,#2c718e,#44bf70" --ordinal   # ramps
 ```
 
-Gates: lightness band, chroma floor, CVD separation ≥ 10.5, normal-vision ≥ 21,
-contrast ≥ 3:1. Separations are CAM02-UCS ΔE. CVD gating on protanopia/deuteranopia (~8% of males);
-tritan reported but not gated (~0.01%). Surface defaults to white; `--surface` for a
-tinted page.
+The gates are lightness band, chroma floor, CVD separation ≥ 10.5,
+normal-vision ≥ 21, and contrast ≥ 3:1. Separations are CAM02-UCS ΔE. CVD gating
+covers protanopia and deuteranopia, together about 8% of males; tritan is
+reported but not gated, at about 0.01%. Surface defaults to white, and
+`--surface` sets a tinted page.
 
-**Dichromacy is not the worst case, so the separation row is swept over severity.**
-Most colour vision deficiency is anomalous trichromacy — a cone whose peak sensitivity is
-shifted, not one that is missing — and simulating only the endpoint would be sound if the
-endpoint were the hardest view. Measured over 244 650 pairs of hues this validator would
-accept as series slots, 1.27% clear ΔE 10.5 under dichromacy and miss it at some lower
-severity, and dichromacy overstates separation by as much as 12.7 ΔE. `#8e4dc7` and
-`#1402ef` are one such pair: 19.2 at dichromacy, 8.3 at severity 0.9. So the row reports
-the worst view found and names the severity it was found at, using the Machado, Oliveira
-& Fernandes (2009) matrices for `ANOMALOUS_SEVERITIES` and the Viénot matrices at
-dichromacy. The bundled cycle's worst adjacent pair reads 31.7, which is what says the
-stricter reading is not a floor nobody can satisfy.
+**Dichromacy is not the worst case, so the separation row is swept over
+severity.** Most colour vision deficiency is anomalous trichromacy, meaning a
+cone whose peak sensitivity is shifted rather than one that is missing.
+Simulating only the endpoint would be sound if the endpoint were the hardest
+view.
 
-**Where the two floors come from.** A hue pair that reads as two on a filled band ought
-to read as one on a hairline, and that intuition is right: a small target does need more
-colour difference than a large one. Stone, Szafir & Setlur (2014) measured how much: the
-noticeable difference for half of observers rises as C + K/s, with s the target's visual
-angle in degrees, fitted from 0.333° to 6°, which comes to 6.1 CIELAB ΔE at a two-degree
-patch and 10.4 at a third of a degree.
+Measured over 244 650 pairs of hues this validator would accept as series slots,
+1.27% clear ΔE 10.5 under dichromacy and miss it at some lower severity, and
+dichromacy overstates separation by as much as 12.7 ΔE. `#8e4dc7` and `#1402ef`
+are one such pair, at 19.2 under dichromacy and 8.3 at severity 0.9.
 
-Before 0.8.0 that model could only sit beside the floors and be compared against them,
-because the floors were OKLab distances and OKLab has no calibrated metric, its authors
-fitted it for hue uniformity and never against discrimination data, so a distance of 8 in
-it was a number with no referent. Since 0.8.0 the floors are CAM02-UCS, which Luo, Cui &
-Li (2006) fitted so that Euclidean distance predicts perceived difference, and the model
-is what they are derived from:
+So the row reports the worst view found and names the severity it was found at,
+using the Machado, Oliveira and Fernandes (2009) matrices for
+`ANOMALOUS_SEVERITIES` and the Viénot matrices at dichromacy. The bundled
+cycle's worst adjacent pair reads 31.7, which is what says the stricter reading
+is not a floor nobody can satisfy.
 
-> One CAM02-UCS unit is a median **1.99 CIELAB ΔE\*ab** over the gamut this validator
-> accepts as series slots, so Stone et al.'s 10.4 is **5.23 CAM02-UCS**. `CVD_TARGET` is
-> 2× that and `NORMAL_FLOOR` is 4×.
+**Where the two floors come from.** A hue pair that reads as two on a filled
+band ought to read as one on a hairline, and that intuition is right: a small
+target does need more colour difference than a large one.
 
-The bridge is population-dependent and the population is load-bearing: over the whole
-sRGB cube the same ratio reads 1.85, which would put `CVD_TARGET` at 11.3 instead of
-10.5. The slot gamut is the right one because the lightness band and the chroma floor
-reject everything else before the separation rows are reached, the cube contains pairs
-this gate cannot be handed. `test_the_bridge_between_the_two_colour_spaces_is_population_dependent`
-measures both so the choice cannot quietly revert.
+Stone, Szafir and Setlur (2014) measured how much. The noticeable difference for
+half of observers rises as C + K/s, with s the target's visual angle in degrees,
+fitted from 0.333° to 6°. That comes to 6.1 CIELAB ΔE at a two-degree patch and
+10.4 at a third of a degree.
 
-The multiples are the one judgement in the derivation. 10.4 CIELAB is where half of
-observers **notice a difference**; a figure asks for more, because the reader is not
-detecting that two marks differ side by side, they are identifying which series a mark
-belongs to across a page from memory of a legend. 2× under simulation and 4× in full
-colour is where this project puts that margin. The guide used to describe the OKLab
-floors as landing at the same multiples, which is true and is a coincidence: it computed
-them through a whole-cube ratio against a metric that had no calibration.
+Before 0.8.0 that model could only sit beside the floors and be compared against
+them, because the floors were OKLab distances and OKLab has no calibrated
+metric. Its authors fitted it for hue uniformity and never against
+discrimination data, so a distance of 8 in it was a number with no referent.
+Since 0.8.0 the floors are CAM02-UCS, which Luo, Cui and Li (2006) fitted so
+that Euclidean distance predicts perceived difference, and the model is what
+they are derived from:
 
-**What is evidence for them.** The floors were derived without reference to any palette.
-Run against the published Okabe-Ito eight-colour set, `CVD_TARGET` clears all 28 pairs
-and `NORMAL_FLOOR` misses exactly one: orange `#E69F00` against yellow `#F0E442`, at
-20.75. Yellow is one of the two colours the shipped cycle already drops. Arriving at that
-independently is the strongest argument these numbers have, and it is why the result is
-pinned in `test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor`
-rather than sanded off with a friendlier fixture.
+> One CAM02-UCS unit is a median **1.99 CIELAB ΔE\*ab** over the gamut this
+> validator accepts as series slots, so Stone et al.'s 10.4 is **5.23
+> CAM02-UCS**. `CVD_TARGET` is 2× that and `NORMAL_FLOOR` is 4×.
 
-**Why there is still no size-weighted gate.** A gate multiplying the floors by Stone
-et al.'s size ratio was built and thrown away. Publication line widths are far below the
-range the model was fitted over: a 1pt stroke is 0.05° at reading distance, two decades
-outside the data, and extrapolating the fit there produces a number nothing supports.
+The bridge is population-dependent, and the population is load-bearing. Over the
+whole sRGB cube the same ratio reads 1.85, which would put `CVD_TARGET` at 11.3
+instead of 10.5. The slot gamut is the right one, because the lightness band and
+the chroma floor reject everything else before the separation rows are reached,
+and the cube contains pairs this gate cannot be handed.
+`test_the_bridge_between_the_two_colour_spaces_is_population_dependent` measures
+both so the choice cannot quietly revert.
 
-So the rule is a rule and not a gate: **a hairline is where a palette gets tested, so give
-thin strokes the widest-separated slots and do not lean on a pair that only just clears a
-floor.** `test_the_separation_floors_reproduce_the_size_model_they_derive_from` pins the
-arithmetic so the next person to propose the gate can re-derive this in one run.
+The multiples are the one judgement in the derivation. 10.4 CIELAB is where half
+of observers **notice a difference**. A figure asks for more, because the reader
+is not detecting that two marks differ side by side; they are identifying which
+series a mark belongs to, across a page, from memory of a legend. 2× under
+simulation and 4× in full colour is where this project puts that margin. The
+guide used to describe the OKLab floors as landing at the same multiples. That
+is true, and it is a coincidence: it computed them through a whole-cube ratio
+against a metric that had no calibration.
+
+**What is evidence for them.** The floors were derived without reference to any
+palette. Run against the published Okabe-Ito eight-colour set, `CVD_TARGET`
+clears all 28 pairs and `NORMAL_FLOOR` misses exactly one: orange `#E69F00`
+against yellow `#F0E442`, at 20.75. Yellow is one of the two colours the shipped
+cycle already drops. Arriving at that independently is the strongest argument
+these numbers have, and it is why the result is pinned in
+`test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor` rather
+than sanded off with a friendlier fixture.
+
+**Why there is still no size-weighted gate.** A gate multiplying the floors by
+Stone et al.'s size ratio was built and thrown away. Publication line widths are
+far below the range the model was fitted over: a 1pt stroke is 0.05° at reading
+distance, two decades outside the data, and extrapolating the fit there produces
+a number nothing supports.
+
+So the rule is a rule and not a gate. **A hairline is where a palette gets
+tested, so give thin strokes the widest-separated slots, and do not lean on a
+pair that only just clears a floor.**
+`test_the_separation_floors_reproduce_the_size_model_they_derive_from` pins the
+arithmetic, so the next person to propose the gate can re-derive this in one
+run.
 
 ### Text on fills
 
-4.5:1, or 3:1 at ≥14pt bold. `from check_palette import contrast; contrast("#471365", "#ffffff")`.
+Hold text to 4.5:1, or 3:1 at 14pt bold and above.
 
-`check_text_readability` enforces this against the backdrop each string *actually* got,
-measured off the rendered pixels — which is the only way to know, because the backdrop is
-whatever happened to be drawn under the label and no artist knows that about itself.
+```python
+from check_palette import contrast
+contrast("#471365", "#ffffff")
+```
+
+`check_text_readability` enforces this against the backdrop each string
+*actually* got, measured off the rendered pixels. That is the only way to know,
+because the backdrop is whatever happened to be drawn under the label, and no
+artist knows that about itself.
 
 ### Direct labels: the alignment is the decision
 
-A label is a box, not a point. On a curve with any slope, `ha="center"` is the one
-alignment that puts both ends of the box back down on the line: it clears the curve at
-the anchor and nowhere else, because across the label's own width the curve has moved
-further than the offset holding the text up. This shipped in `examples/demo.py` for
-months. Every check passed; all three labels sat on their own curves and their casing
-punched visible white gaps through the data.
+A label is a box, not a point. On a curve with any slope, `ha="center"` is the
+one alignment that puts both ends of the box back down on the line. It clears
+the curve at the anchor and nowhere else, because across the label's own width
+the curve has moved further than the offset holding the text up.
 
-- Align toward the side the curve is **leaving**. Descending curve: above it, clear
-  ground runs right (`ha="left"`); below it, clear ground runs left (`ha="right"`).
-- Anchor on the extreme of the data across the label's own span, not its value at one
-  point. Sampled noise routinely spikes further than any sane offset.
-- Casing (`pe.withStroke`) rescues a 0.7pt gridline behind a label. It does not rescue a
-  1.6pt curve — there it only hides the collision by deleting the data underneath, which
-  is why the gate measures the backdrop rather than the finished render.
-- When a panel has no clear ground anywhere — a filled field crossed by isolines is the
-  usual case — take the labels off the field entirely. `examples/gallery.py` is the one
-  figure in this repo that uses a legend, and that is the reason.
+This shipped in `examples/demo.py` for months. Every check passed, all three
+labels sat on their own curves, and their casing punched visible white gaps
+through the data.
+
+- Align toward the side the curve is **leaving**. On a descending curve, above
+  it, clear ground runs right, so use `ha="left"`; below it, clear ground runs
+  left, so use `ha="right"`.
+- Anchor on the extreme of the data across the label's own span, not on its
+  value at one point. Sampled noise routinely spikes further than any sane
+  offset.
+- Use casing (`pe.withStroke`) to rescue a 0.7pt gridline behind a label. It
+  does not rescue a 1.6pt curve, where it only hides the collision by deleting
+  the data underneath. That is why the gate measures the backdrop rather than
+  the finished render.
+- When a panel has no clear ground anywhere, take the labels off the field
+  entirely. A filled field crossed by isolines is the usual case.
+  `examples/gallery.py` has the one figure in this repository that uses a
+  legend, and that is the reason.
 
 ### Standing rules
 
@@ -467,112 +541,132 @@ punched visible white gaps through the data.
 - Status colors are status only.
 - Color follows the entity, not its rank.
 - Sequential is monotone in lightness, evenly stepped. Never jet.
-- Dashing means unobserved, projected, or threshold — nothing else. Pass
+- Dashing means unobserved, projected, or threshold, and nothing else. Pass
   `linestyles="solid"` to `contour` on signed data, because matplotlib dashes
-  negative levels by default and that reads here as a hedge the contour is not
+  negative levels by default, and that reads here as a hedge the contour is not
   making.
 
 ---
 
 ## Legibility budget
 
-**Decide on-page placement before authoring.** "8-inch figure" means nothing until you
-know what width the document gives it — a full page, a text block, two columns? Author it
-at that width, and the scale is 1.0, the type gate is exact, and there is nothing to
-compute.
+**Decide on-page placement before authoring.** "8-inch figure" means nothing
+until you know what width the document gives it: a full page, a text block, or
+two columns. Author it at that width, and the scale is 1.0, the type gate is
+exact, and there is nothing to compute.
 
-A figure placed below roughly 35% of the content width (two-column width for a landscape
-figure) puts every label at or below 6pt on the page, regardless of what the script says.
-`check_figure.py` warns when `placed_frac < 0.35`, but the right thing is to change the
-placement or the figure, not to shrink the type further.
+A figure placed below roughly 35% of the content width, which is two-column
+width for a landscape figure, puts every label at or below 6pt on the page
+regardless of what the script says. `check_figure.py` warns when `placed_frac <
+0.35`, but the right move is to change the placement or the figure, not to
+shrink the type further.
 
-Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of the twelve
-the table already knows (`python check_figure.py --venues`). The script derives the scale
-per figure and fails any string under 7.5pt on page. The scale is per figure because
-the shrink differs: a 14in
-figure on a 750pt slide shrinks to 0.74×, a 8.6in one is 1.21×, and the same 10pt label
-is fine in one and illegible in the other.
+Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of
+the twelve the table already knows (`python check_figure.py --venues`). The
+script derives the scale per figure and fails any string under 7.5pt on the
+page.
 
-**7.5pt is stricter than any journal that publishes a number** — Nature 5pt, Science 5–7pt
-for labels and 6–8pt for axes, PNAS 6–8pt with nothing under 2mm printed. Those are the
-sizes at which a string is still *possible* to read. 7.5 is where it is comfortable, and
-it costs nothing to hold, because the fix is nearly always cutting words.
+The scale is per figure because the shrink differs. A 14in figure on a 750pt
+slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
+one and illegible in the other.
 
-If text does not fit, cut it: "Acquisition function ranks the candidate molecules" →
-"Rank every candidate."
+**7.5pt is stricter than any journal that publishes a number.** Nature sets a
+5pt minimum and a 7pt maximum for text in figures. PNAS requires numbers,
+letters and symbols no smaller than 6pt after reduction, which is the same
+requirement its guidelines also state as 2mm. Science publishes no text floor at
+all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold
+part labels. Those are the sizes at which a string is still *possible* to read.
+7.5 is where it is comfortable, and it costs nothing to hold, because the fix is
+nearly always cutting words.
 
-**Text off the canvas has two fixes that are not fixes.** The Clipping gate fails when a
-string's bounding box crosses the canvas edge, and the cause is nearly always a figure
-authored at a size its labels do not fit in. Shrinking type until it fits pays for canvas
-space out of the legibility budget, and a string driven under 7.5pt on the page has
-bought a Clipping pass with a Type size failure.
+If text does not fit, cut it. "Acquisition function ranks the candidate
+molecules" becomes "Rank every candidate."
 
-`bbox_inches="tight"` is the one to actually watch, because it fails nothing. It trims
-the canvas to the drawn content, so the saved file is no longer the width you authored
-([matplotlib#11681](https://github.com/matplotlib/matplotlib/issues/11681)). Every number
-in this section is derived from that width: the page scale, the type floor, the stroke
-arithmetic. Trim the canvas and all of them are computed against a size the file does not
-have. Nothing reports it either, because `check_figure.py` reads the figure in memory and
-never sees the `savefig` call. `figure.mplstyle` says this at the top; it is repeated
-here because this is where the gate that catches the symptom sends a reader.
+**Text off the canvas has two fixes that are not fixes.** The Clipping gate
+fails when a string's bounding box crosses the canvas edge, and the cause is
+nearly always a figure authored at a size its labels do not fit in. Shrinking
+type until it fits pays for canvas space out of the legibility budget, and a
+string driven under 7.5pt on the page has bought a Clipping pass with a Type
+size failure.
 
-The fix is `constrained_layout=True` at figure creation, or a wider `figsize` and then
-re-deciding the placement, since the placed fraction just changed.
+`bbox_inches="tight"` is the one to actually watch, because it fails nothing. It
+trims the canvas to the drawn content, so the saved file is no longer the width
+you authored
+([matplotlib#11681](https://github.com/matplotlib/matplotlib/issues/11681)).
+Every number in this section is derived from that width: the page scale, the
+type floor, the stroke arithmetic. Trim the canvas and all of them are computed
+against a size the file does not have. Nothing reports it either, because
+`check_figure.py` reads the figure in memory and never sees the `savefig` call.
+`figure.mplstyle` says this at the top, and it is repeated here because this is
+where the gate that catches the symptom sends a reader.
 
-**Strokes have the same problem and the same arithmetic.** SIAM's instructions for
-authors: lines one point or thicker, because thinner lines break up or disappear in print.
-A 0.8pt stroke in a 9in figure placed at 5.5in prints at 0.49pt, so `check_line_weight`
-measures on the page through the same `page_scale`. Gridlines are held to a lower floor
-than data deliberately — a gridline that drops out costs a reference, a curve that drops
-out costs the finding.
+The fix is `constrained_layout=True` at figure creation, or a wider `figsize`
+followed by re-deciding the placement, since the placed fraction just changed.
 
-**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress takes
-embedded Type 1 or TrueType and does not accept Type 3, so the upload is refused before a
-reviewer sees it. ACM and Elsevier check embedding in production instead, which is the
-same problem surfacing after acceptance rather than a milder one. The figure renders
-identically either way, so nothing tells you until the latest and most expensive possible
-moment. `figure.mplstyle` sets `pdf.fonttype: 42` and `ps.fonttype: 42`.
+**Strokes have the same problem and the same arithmetic.** SIAM's instructions
+for authors call for lines one point or thicker, because thinner lines break up
+or disappear in print. A 0.8pt stroke in a 9in figure placed at 5.5in prints at
+0.49pt, so `check_line_weight` measures on the page through the same
+`page_scale`. Gridlines are held to a lower floor than data deliberately: a
+gridline that drops out costs a reference, and a curve that drops out costs the
+finding.
 
-**Describe the figure.** Across 100,000 public notebooks, 99.81% of programmatically
-generated images shipped with no alt text (Potluri et al., below), and matplotlib was the
-charting library behind more of them than anything else. `describe(fig, ...)` then
-`savefig(path, metadata=alt_metadata(fig, path))` — the path a second time, so the call
-can pick the key that format has. Say what the reader would have taken from
-looking — the numbers and the direction — not what the figure is made of. "A line chart
-with three lines" describes the file.
+**Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress
+takes embedded Type 1 or TrueType and does not accept Type 3, so the upload is
+refused before a reviewer sees it. ACM and Elsevier check embedding in
+production instead, which is the same problem surfacing after acceptance rather
+than a milder one. The figure renders identically either way, so nothing tells
+you until the latest and most expensive possible moment. `figure.mplstyle` sets
+`pdf.fonttype: 42` and `ps.fonttype: 42`.
+
+**Describe the figure.** Across 100,000 public notebooks, 99.81% of
+programmatically generated images shipped with no alt text (Potluri et al., in
+the references), and matplotlib was the charting library behind more of them
+than anything else.
+
+Call `describe(fig, ...)`, then
+`savefig(path, metadata=alt_metadata(fig, path))`, passing the path a second
+time so the call can pick the key that format takes. Say what the reader would
+have taken from looking, meaning the numbers and the direction, rather than what
+the figure is made of. "A line chart with three lines" describes the file.
 
 ---
 
 ## Prose
 
-Match the surrounding voice. Caption states the mechanism once. Every spatial claim
-checked against the render. No invented precision. No em-dashes in rendered strings.
+Match the surrounding voice. State the mechanism once, in the caption. Check
+every spatial claim against the render. Invent no precision. Use no em-dashes in
+rendered strings.
 
 ---
 
 ## Discipline
 
-- **Declare the read before you draw.** One sentence: what, for whom, the job.
-- **Prefer checks over adjectives.** A check you can run beats an adjective you have to feel.
-- **Every gate has a blind spot.** A figure that passes is not good — it is not-bad in
-  exactly the ways enumerated. When it still looks wrong, write the gate.
+- **Declare the read before you draw.** One sentence: what, for whom, and the
+  job it does.
+- **Prefer checks over adjectives.** A check you can run beats an adjective you
+  have to feel.
+- **Expect every gate to have a blind spot.** A figure that passes is not good;
+  it is not-bad in exactly the ways enumerated. When it still looks wrong, write
+  the gate.
 
-### Review checklist — only things no script can check
+### Review checklist, for the things no script can check
 
 - [ ] Uses the surrounding text's exact vocabulary
 - [ ] Every label checked against the drawn data, not the idea
 - [ ] Nothing drawn that the data does not support
-- [ ] Ordinal vs categorical decided correctly
+- [ ] Ordinal against categorical decided correctly
 - [ ] Placement decided before authoring; figure authored at its placed width
-- [ ] Named algorithm shown with its defining objects (paper/repo), not remembered
+- [ ] Named algorithm shown with its defining objects (paper or repo), not
+      remembered
 - [ ] Document compiled; caption states mechanism once; no em-dashes
 
 ---
 
 ## Ship
 
-Build, run tests, compile document. Smoke-test each figure so a broken one fails the build
-instead of shipping blank.
+Build, run the tests, and compile the document. Smoke-test each figure, so a
+broken one fails the build instead of shipping blank.
 
 ---
 
@@ -618,26 +712,26 @@ Ink tokens live in `figure.mplstyle`, not here.
 The colour rules above are not house preference. Each of the four colormap
 kinds, and the reason `misc` fails, comes from this literature.
 
-- Kovesi, P. (2015). Good Colour Maps: How to Design Them. arXiv:1509.03700. —
-  uniform incremental change in perceptual lightness as the governing
+- Kovesi, P. (2015). Good Colour Maps: How to Design Them. arXiv:1509.03700.
+  Uniform incremental change in perceptual lightness as the governing
   requirement, with separate stated criteria for linear, diverging, rainbow and
   cyclic maps. The back-travel measure is this criterion made mechanical.
 - Crameri, F., Shephard, G. E. & Heron, P. J. (2020). The misuse of colour in
   science communication. *Nature Communications* 11, 5444.
-  doi:10.1038/s41467-020-19160-7. — why rainbow-like and red-green maps are
-  still prevalent, and what they cost a reader.
+  doi:10.1038/s41467-020-19160-7. Why rainbow-like and red-green maps are still
+  prevalent, and what they cost a reader.
 - Nuñez, J. R., Anderton, C. R. & Renslow, R. S. (2018). Optimizing colormaps
   with consideration for color vision deficiency to enable accurate
-  interpretation of scientific data. *PLoS ONE* 13(7), e0199239. — the
-  CVD-safe side of the same question, and the argument the Okabe-Ito section
-  above rests on.
+  interpretation of scientific data. *PLoS ONE* 13(7), e0199239. The CVD-safe
+  side of the same question, and the argument the Okabe-Ito section above rests
+  on.
 - Moreland, K. (2009). Diverging Color Maps for Scientific Visualization. In
   *Advances in Visual Computing* (ISVC 2009), 92-103.
-  doi:10.1007/978-3-642-10520-3_9. — the midpoint rule: never a hue at the
-  centre, and why a diverging map needs a meaningful zero to diverge around.
+  doi:10.1007/978-3-642-10520-3_9. The midpoint rule: never a hue at the centre,
+  and why a diverging map needs a meaningful zero to diverge around.
 - Stone, M., Szafir, D. A. & Setlur, V. (2014). An Engineering Model for Color
   Difference as a Function of Size. In *Color and Imaging Conference* 2014(1),
-  253-258. — the size model. They fit the noticeable difference for 50% of
+  253-258. The size model. They fit the noticeable difference for 50% of
   observers as a linear function of inverse size over 11 target sizes from
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
   about 11 at a third of a degree. The section above is why the numbers here
@@ -645,10 +739,10 @@ kinds, and the reason `misc` fails, comes from this literature.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
-  doi:10.1109/TVCG.2009.113. — the severity model. Their Table 1 publishes a
-  simulation matrix at each severity from 0.0 to 1.0 in tenths, and severity
-  1.0 is calibrated against the same dichromacy model `simulate` uses, which is
-  what lets the two be read side by side.
+  doi:10.1109/TVCG.2009.113. The severity model. Their Table 1 publishes a
+  simulation matrix at each severity from 0.0 to 1.0 in tenths, and severity 1.0
+  is calibrated against the same dichromacy model `simulate` uses, which is what
+  lets the two be read side by side.
 
 Two more, for claims the sections above make outside colour.
 

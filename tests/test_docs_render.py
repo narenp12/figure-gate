@@ -22,6 +22,7 @@ and runs this file in the docs workflow, where a docs regression belongs.
 """
 
 import http.server
+import html
 import os
 import posixpath
 import re
@@ -674,6 +675,7 @@ def broken_links(pages, files, base):
         parent = posixpath.dirname(name)
         here = base + (f"{parent}/" if parent else "")
         for href in re.findall(r'href="([^"]+)"', text):
+            href = html.unescape(href)
             if href.startswith(("http://", "https://", "mailto:", "data:")):
                 continue
             if (name, href) in THEME_LINKS:
@@ -778,9 +780,10 @@ def test_no_filter_is_applied_to_gallery_figures():
 # was. The tab sync test in particular is the only thing that can show the link
 # feature is on.
 
-GETTING_STARTED_PATH = "/getting-started/"
+INSTALL_PATH = "/install/"
 HOW_TO_PATH = "/how-to/"
 GATES_PATH = "/gates/"
+DESIGN_PATH = "/design/"
 
 
 def _tab_groups(page):
@@ -808,7 +811,7 @@ def _tab_groups(page):
     }""")
 
 
-def test_getting_started_tabs_sync_the_shared_label_and_nothing_else(page, server):
+def test_install_tabs_sync_the_shared_label_and_nothing_else(page, server):
     """`content.tabs.link`, proven.
 
     The two groups share "Vendored" at different positions (0 in the install
@@ -821,10 +824,10 @@ def test_getting_started_tabs_sync_the_shared_label_and_nothing_else(page, serve
     - `Vendored` has a counterpart, so that group must move to its own
       "Vendored", and the previously active tab of each group hides its block.
     """
-    page.goto(server + GETTING_STARTED_PATH, wait_until="networkidle")
+    page.goto(server + INSTALL_PATH, wait_until="networkidle")
     groups = page.locator(".tabbed-set.tabbed-alternate")
     assert groups.count() == 2, (
-        "getting-started.md writes two tab groups (install routes and import "
+        "install.md writes two tab groups (install routes and import "
         f"lines); the build produced {groups.count()}")
     assert _tab_groups(page) == [
         {"labels": ["Vendored", "Installed", "conda-forge"],
@@ -866,14 +869,14 @@ def test_how_to_annotations_render_and_expand_in_the_browser(page, server):
     annotations.first.focus()
     tooltip = page.locator(".md-tooltip--active")
     page.wait_for_selector(".md-tooltip--active")
-    assert "The backend is set before pyplot imports" in tooltip.inner_text(), (
+    assert "Set the backend before pyplot imports" in tooltip.inner_text(), (
         f"the expanded annotation reads {tooltip.inner_text()[:80]!r} -- the "
         "ordered list that answers the marker is not reaching the tooltip")
 
 
 @pytest.mark.parametrize("path,count,starts_open", [
     (HOW_TO_PATH, 2, False),   # transcripts: closed, a click of the title opens
-    (GATES_PATH, 5, True),     # design notes: open, a click of the title folds
+    (DESIGN_PATH, 5, True),    # design notes: open, a click of the title folds
 ])
 def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
                                                starts_open):
@@ -882,7 +885,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
     The count is pinned because a collapsible that stops being one takes its
     story with it: the transcripts become a wall of text between recipes and
     the design notes can no longer be folded. Whether the note starts open is
-    itself pinned -- gates' notes read as prose and fold on demand, how-to's
+    itself pinned -- design's notes read as prose and fold on demand, how-to's
     transcripts are evidence kept out of the way until asked for.
     """
     page.goto(server + path, wait_until="networkidle")
@@ -904,7 +907,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
     assert (notes.nth(0).get_attribute("open") is not None) == starts_open
 
 
-def test_the_gates_flow_diagram_draws_an_svg(page, server):
+def test_the_design_flow_diagram_draws_an_svg(page, server):
     """mermaid, proven on the page.
 
     The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
@@ -936,7 +939,7 @@ def test_the_gates_flow_diagram_draws_an_svg(page, server):
         return root;
       };
     """)
-    page.goto(server + GATES_PATH, wait_until="networkidle")
+    page.goto(server + DESIGN_PATH, wait_until="networkidle")
     page.wait_for_selector("div.mermaid")
     drawn = page.evaluate("""() => {
       const svgs = window.__closedRoots
@@ -1032,35 +1035,45 @@ def _number_sort_key(cell):
     return float(match.group()) if match else 0.0
 
 
+# One tile per documentation page, grouped on the home page by Diataxis mode.
+# Contributing and Security lost their tiles when the grids became a map of the
+# four modes: neither is documentation of the tool, and both are still in the
+# nav under Project.
 TILE_ICONS = {
-    "rocket": "getting-started",
+    "rocket": "tutorial",
+    "download": "install",
     "wrench": "how-to",
     "filter": "gates",
-    "image": "gallery",
-    "book": "style-guide",
+    "terminal": "cli",
+    "package-check": "compatibility",
     "code": "api",
+    "layers": "design",
+    "book": "style-guide",
+    "shapes": "choosing-a-form",
+    "image": "gallery",
 }
 
 
 def home_article(built_site):
     """The home page's article, and nothing around it.
 
-    Seven of the page's `svg.lucide` live in the header, the search dialog and
-    the table of contents; scoping to the article is how "the grid's six icons
+    Eleven of the page's `svg.lucide` live in the header, the search dialog and
+    the table of contents; scoping to the article is how "the grids' ten icons
     are the only icons in the prose" is asserted without a list of chrome to
     keep in step here.
     """
     html = (built_site / "index.html").read_text(encoding="utf-8")
     article = re.search(r"<article class=\"[^\"]*\">(.*?)</article>", html, re.S)
     assert article, "the home page no longer renders an article container"
-    grid = re.search(r'<div class="grid cards">\s*<ul>(.*?)</ul>',
-                     article.group(1), re.S)
-    assert grid, "the card grid is no longer a `<div class=\"grid cards\">`"
-    return grid.group(1)
+    grids = re.findall(r'<div class="grid cards">\s*<ul>(.*?)</ul>',
+                       article.group(1), re.S)
+    assert grids, "the card grid is no longer a `<div class=\"grid cards\">`"
+    return "\n".join(grids)
 
 
-def test_the_home_card_grid_has_six_iconed_tiles(built_site):
-    """Six tiles, each with its designed lucide icon and a link that lands.
+def test_the_home_card_grids_have_one_iconed_tile_per_page(built_site):
+    """Ten tiles in two groups, each with its designed lucide icon and a link
+    that lands.
 
     The icon classes in `TILE_ICONS` are the design's answer to "which page is
     this", and the hrefs are checked against the built site rather than for
@@ -1070,8 +1083,9 @@ def test_the_home_card_grid_has_six_iconed_tiles(built_site):
     are exactly the links that check never sees.
     """
     lis = re.findall(r"<li>.*?</li>", home_article(built_site), re.S)
-    assert len(lis) == 6, (
-        f"the README's grid should hold six tiles, found {len(lis)}")
+    assert len(lis) == len(TILE_ICONS), (
+        f"the README's grids should hold {len(TILE_ICONS)} tiles, found "
+        f"{len(lis)}")
 
     base = deploy_base()
     files = {p.relative_to(built_site).as_posix()
@@ -1094,22 +1108,23 @@ def test_the_home_card_grid_has_six_iconed_tiles(built_site):
             f"tile href {href.group(1)} does not land on a built page")
         got[name] = landing.rstrip("/")
     assert got == TILE_ICONS, (
-        f"the tile hrefs are {got}, expected the six designed pages")
+        f"the tile hrefs are {got}, expected the designed pages")
 
 
-def test_the_six_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
-    """The icon-count rule behind the grid being the exception.
+def test_the_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
+    """The icon-count rule behind the grids being the exception.
 
-    The site's voice is contrast arithmetic, and the grid exists because one
-    icon per tile carries information. A seventh `svg.lucide` in the article is
-    a decoration the review never signed off on, and it is the count's whole
+    The site's voice is contrast arithmetic, and the grids exist because one
+    icon per tile carries information. An eleventh `svg.lucide` in the article
+    is a decoration the review never signed off on, and it is the count's whole
     job to name it.
     """
     icons = re.findall(r'class="lucide lucide-[a-z-]+"',
                        home_article(built_site))
-    assert len(icons) == 6, (
-        f"{len(icons)} icon(s) in the home article, expected the grid's 6 -- "
-        "a seventh icon is decoration the count was written to catch")
+    assert len(icons) == len(TILE_ICONS), (
+        f"{len(icons)} icon(s) in the home article, expected the grids' "
+        f"{len(TILE_ICONS)} -- one more is decoration the count was written "
+        "to catch")
 
 
 # --- this file skips, it does not error ---------------------------------------

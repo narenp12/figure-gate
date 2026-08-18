@@ -29,8 +29,10 @@ resolves, or it fails until somebody writes down why it cannot.
 
 import ast
 import builtins
+import contextlib
 import doctest
 import inspect
+import io
 import pathlib
 import re
 import subprocess
@@ -185,9 +187,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (19, 13), (
+    assert (len(tracked), len(PROSE_DOCS)) == (24, 17), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 19 and 13 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 24 and 17 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
@@ -206,6 +208,7 @@ def test_the_historical_class_holds_only_the_records():
         "specs/2026-07-30-standardized-docs-audit.md",
         "specs/2026-08-03-packaging-and-policy-design.md",
         "specs/2026-08-14-zensical-feature-revamp-design.md",
+        "specs/2026-08-15-docs-rewrite-ground-up-design.md",
     ], "the set of documents exempted as historical records changed"
 
 
@@ -341,6 +344,39 @@ def _cli_flags(module):
 
 CLI_FLAGS = {name: _cli_flags(module) for name, module in MODULES.items()}
 ALL_FLAGS = set().union(*CLI_FLAGS.values())
+
+
+def _report_marks():
+    """The bracketed marks a report actually prints.
+
+    Captured from a real report rather than listed here, so a mark renamed in
+    code stops resolving in prose instead of quietly disagreeing with it. The
+    self-test figure is the one that produces all of them: it fails hard rows,
+    warns on advisory ones, passes the rest, and its details carry both the
+    action mark and the reason mark.
+    """
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        cf.report(cf.self_test_figure(), "resolver probe", suggest=True)
+    return set(re.findall(r"\[[A-Z]+\]", buffer.getvalue()))
+
+
+def _row_names():
+    """Every row name the two checkers return.
+
+    `audit` names its gates on the `GATES` roster. `check` builds its row names
+    at run time and suffixes two of them with the comparison that ran, so those
+    are collected by calling it both ways rather than by pattern.
+    """
+    names = {gate.name for gate in cf.GATES}
+    swatches = ["#e69f00", "#56b4e9", "#009e73", "#0072b2"]
+    for kwargs in ({}, {"all_pairs": True}, {"ordinal": True}):
+        names |= {row[0] for row in cp.check(swatches, **kwargs)[1]}
+    return names
+
+
+REPORT_MARKS = _report_marks()
+ROW_NAMES = _row_names()
 
 
 def _cli_choices(module):
@@ -763,6 +799,13 @@ def resolve(span):
         return "snippet"
     if span in CLI_CHOICES:
         return "cli-value"
+    # The report's own vocabulary. A page that quotes a row's name or one of
+    # the marks a detail string carries is naming something the checker emits,
+    # so it is resolved against what the checker emits rather than exempted.
+    if span in REPORT_MARKS:
+        return "report-mark"
+    if span in ROW_NAMES:
+        return "row-name"
     # The caller's names, after every resolver that knows the code's own. A
     # sentence about a snippet is entitled to name what the snippet bound, and
     # nothing else is: the set is parsed out of the examples themselves.
@@ -794,6 +837,8 @@ UNRESOLVED_SPANS = {
     "cmasher.get_cmap_type()": "the oracle the kind thresholds were measured "
                                "against; an optional dev dependency, absent in "
                                "the runtime the skill ships into",
+    "loss.py": "the file the tutorial tells the reader to create; it exists "
+               "in the reader's working directory, not in this repository",
     "geometry": "a LaTeX package, named where the guide explains how to read a "
                 "text width out of a document",
     "OSError: not a valid package style": "the exception matplotlib raises for "
@@ -804,7 +849,7 @@ UNRESOLVED_SPANS = {
     "#": "the character itself, in the sentence about style-sheet colours "
          "written with a leading hash",
     "/plugin install figure-gate@figure-gate": "a Claude Code command, named "
-                                               "where docs/getting-started.md "
+                                               "where docs/install.md "
                                                "explains how to install the "
                                                "skill as a plugin; the "
                                                "resolvers see this project's "
@@ -1257,6 +1302,30 @@ RETRACTED_CLAIMS = {
                "'Type 3 fonts'",
         "retracted": "2026-07-29",
     },
+    "Science publishing a figure type-size range": {
+        "pattern": r"Science[^.]{0,40}\d\s*[-–]\s*\d\s*(pt|point)",
+        "instead": "Science publishes no text floor. It states a 6 point "
+                   "minimum for symbols, a 0.5 point minimum for line widths "
+                   "at the final reduced size, and 10 pt bold part labels",
+        "why": "the guide credited Science with '5-7pt for labels and 6-8pt "
+               "for axes'. Neither range is in Science's instructions for "
+               "preparing an initial or a revised manuscript, checked "
+               "2026-08-17. The numbers that are there are quoted in "
+               "EXTERNAL_CLAIMS under 'journal type floors'",
+        "retracted": "2026-08-17",
+    },
+    "PNAS requiring 2mm on top of its point floor": {
+        "pattern": r"PNAS[^.]{0,60}(2\s*mm[^.]{0,30}(and|plus)|"
+                   r"(and|with)[^.]{0,30}2\s*mm)",
+        "instead": "PNAS requires numbers, letters and symbols no smaller "
+                   "than 6pt after reduction, which its guidelines also "
+                   "state as 2mm. The two are the same requirement",
+        "why": "the guide read '6pt' and '2mm' as two separate floors and "
+               "wrote 'nothing under 2mm printed' as an extra constraint. "
+               "PNAS gives 2mm as the millimetre equivalent of its 6 point "
+               "minimum, and also states a maximum the guide never carried",
+        "retracted": "2026-08-17",
+    },
 }
 
 
@@ -1321,13 +1390,20 @@ EXTERNAL_CLAIMS = {
     },
     "journal type floors": {
         "document": "style-guide.md",
-        "anchor": "Nature 5pt, Science 5–7pt",
-        "source": "Nature figure specifications; Science guide to preparing "
-                  "figures; PNAS digital art guidelines",
-        "verified": "2026-07-29",
-        "quote": "Nature: minimum 5 pt, maximum 7 pt. Science: 5-7 pt labels, "
-                 "6-8 pt axes. PNAS: at least 6 pt after reduction, and "
-                 "numbers, letters and symbols at least 2 mm after reduction.",
+        "anchor": "Nature sets a 5pt minimum and a 7pt maximum",
+        "source": "Nature research figure guide, "
+                  "research-figure-guide.nature.com, building and exporting "
+                  "figure panels; PNAS, pnas.org/author-center/"
+                  "submitting-your-manuscript; Science instructions for "
+                  "preparing an initial manuscript, science.org",
+        "verified": "2026-08-17",
+        "quote": 'Nature: "Maximum text size: 7pt", "Minimum text size: 5pt". '
+                 'PNAS: "Ensure that all numbers, letters, and symbols are no '
+                 'smaller than 6 points (2 mm) and no larger than 12 points '
+                 '(6 mm) after reduction." Science publishes no text floor: '
+                 '"Size symbols so that they will be distinguishable when the '
+                 'figure is reduced (6 point minimum)" and "minimum of 0.5 '
+                 'point at the final reduced size" for line widths.',
     },
     "Type 3 fonts": {
         "document": "style-guide.md",
