@@ -22,6 +22,14 @@ pattern is `## Unreleased`, a heading that is absent for most of the life of
 the repository and present only once notes have been written for the next
 release. A test asserting it exists would fail on every clean checkout; the
 bump failing when it is missing is the intended behaviour, not a defect.
+
+That is true of the release bump only, and the config said it of every bump
+until 0.8.0. The cycle-opening bump runs immediately after a release, when the
+heading has just been consumed and the next one is unwritten, so it failed on a
+missing `## Unreleased` every time -- which is why 0.7.0 left the tree reading
+`0.7.0` rather than `0.8.0.dev0`, and why 0.8.0 could not be cut with the
+documented command. The entry excludes those parts now, and
+`test_the_changelog_is_left_alone_by_the_cycle_opening_bump` is that exclusion.
 """
 
 import pytest
@@ -106,6 +114,40 @@ def test_the_changelog_search_is_anchored_to_a_heading():
                  if e["filename"] == "CHANGELOG.md")
     assert entry.get("regex"), "an unanchored search rewrites inline mentions"
     assert entry["search"].startswith("^") and entry["search"].endswith("$")
+
+
+def test_the_changelog_is_left_alone_by_the_cycle_opening_bump():
+    """The release is two bumps, and only one of them writes the changelog.
+
+    `bump dev` cuts, and renames `## Unreleased` to the version. `bump minor`,
+    `patch` or `major` opens the next cycle, and runs when that heading has just
+    been consumed by the release and the next set of notes does not exist yet.
+    Without the exclusion the entry above applies to that bump too, looks for a
+    heading that cannot be there, and fails: the tree then keeps the version of
+    the release that already shipped, which is the state `parse` was rewritten
+    to prevent and the state 0.7.0 actually left behind.
+
+    Asserting the three parts by name rather than the presence of the key: a
+    part dropped from the list is a bump that starts failing again, and it
+    should fail here first.
+    """
+    entry = next(e for e in bumpversion()["files"]
+                 if e["filename"] == "CHANGELOG.md")
+    assert sorted(entry.get("exclude_bumps", [])) == ["major", "minor", "patch"], (
+        "the changelog entry must be excluded from the cycle-opening bumps and "
+        "from those only -- `dev` is the bump that cuts a release, and it is "
+        "the one that has to fail when no notes were written")
+
+
+def test_only_the_changelog_is_excluded_from_any_bump():
+    """The other three sites are the version itself. A bump that skipped one
+    would leave the four copies disagreeing, which is the failure this whole
+    config exists to prevent and the one that cost 0.5.0."""
+    excluded = {e["filename"] for e in bumpversion()["files"]
+                if e.get("exclude_bumps") or e.get("include_bumps")}
+    assert excluded == {"CHANGELOG.md"}, (
+        f"{sorted(excluded)} are filtered by bump part. Only the changelog has "
+        "a reason to be: the version sites move on every bump")
 
 
 def test_no_section_names_its_own_heading_inside_a_sentence():
