@@ -1,3 +1,7 @@
+---
+description: "check_palette.py and check_figure.py from a shell: their arguments, flags, exit codes, and the twelve venue widths."
+---
+
 # Commands
 
 figure-gate ships two command-line tools. Installed, they are on your PATH as

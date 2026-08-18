@@ -447,3 +447,64 @@ def test_the_two_schemes_do_not_share_one_color():
     assert cp.contrast(colors["default"], SLATES["classic"]) < BODY_TEXT_MIN, (
         "the light-mode color now clears the floor on dark too, so the "
         "override it exists to justify is no longer needed")
+
+
+# Seven were configured that no page used, and `pymdownx.emoji` was not inert:
+# it read the `:::` of a prose mkdocstrings mention as a shortcode and ate the
+# line. None = nothing to grep, so the entry says which test holds it instead.
+EXTENSION_SYNTAX = {
+    "admonition": r"^\s*(!!!|\?\?\?\+?) \w", "attr_list": r"\{ *[.#][A-Za-z]",
+    "md_in_html": r"markdown=[\"']?(span|block|1)", "tables": r"^\s*\|.*\|",
+    "footnotes": r"\[\^[^]]+\]", "abbr": r"^\*\[[^]]+\]:", "def_list": r"^:   \S",
+    "pymdownx.details": r"^\s*\?\?\?\+? \w", "pymdownx.inlinehilite": r"`#![a-z]",
+    "pymdownx.tabbed": r'^\s*=== "', "pymdownx.mark": r"==[^=\s][^=]*==",
+    "pymdownx.caret": r"\^\^[^^]+\^\^|\^[A-Za-z0-9]+\^",
+    "pymdownx.keys": r"\+\+[a-z0-9]+(\+[a-z0-9]+)*\+\+",
+    "pymdownx.tilde": r"~~[^~]+~~|~[A-Za-z0-9]+~", "pymdownx.superfences": r"^\s*```",
+    "pymdownx.emoji": r":[a-z][a-z0-9_-]+:", "pymdownx.highlight": r"^\s*``` ?\w",
+    "toc": None, "pymdownx.snippets": None, "zensical.extensions.mkdocstrings": None,
+}
+EXTENSION_TABLE = re.compile(r"^\[project\.markdown_extensions\.(.+?)\]\s*$")
+
+
+def test_every_configured_extension_is_used_by_a_page():
+    """Count first: a parser matching nothing would pass by checking nothing."""
+    found = (EXTENSION_TABLE.match(l) for l
+             in CONFIG.read_text(encoding="utf-8").splitlines())
+    extensions = sorted({m.group(1).replace('"', "").split(".handlers")[0]
+                         for m in found if m})
+    assert len(extensions) >= 10, (f"matched {len(extensions)} extension tables"
+                                   " - the config changed shape, and"
+                                   " EXTENSION_TABLE with it")
+    unmapped = [e for e in extensions if e not in EXTENSION_SYNTAX]
+    assert not unmapped, (f"zensical.toml configures {unmapped}: add its syntax "
+                          "to EXTENSION_SYNTAX, or map it to None and say why")
+    pages = [p.resolve().read_text(encoding="utf-8") for p in docs_paths("*.md")]
+    unused = [e for e in extensions if EXTENSION_SYNTAX[e]
+              and not any(re.search(EXTENSION_SYNTAX[e], t, re.M) for t in pages)]
+    assert not unused, (f"zensical.toml configures {unused} and no page the "
+                        "site serves uses their syntax. Drop them.")
+
+
+# Each of these emits markup. The two view-time features are in
+# test_docs_render.py, and `navigation.indexes` is not set: it measured as a
+# no-op, because no section in the nav points at a file.
+NAVIGATION_MARKUP = {
+    "navigation.tabs": "md-tabs",
+    "navigation.sections": "md-nav__item--section",
+    "navigation.path": "md-path",
+    "navigation.footer": "md-footer__link",
+}
+
+
+@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
+def test_a_configured_navigation_feature_reaches_the_built_page(feature, marker):
+    """The silent-typo guard, as an assertion."""
+    built = ROOT / "site" / "gates" / "index.html"
+    if not built.is_file():
+        pytest.skip("no built site - run `zensical build` first")
+    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
+        f"{feature} left the features list; drop this row with it")
+    assert marker in built.read_text(encoding="utf-8"), (
+        f"{feature} is configured and `{marker}` is absent from the built "
+        "page, so the name is doing nothing - check it against the theme's")
