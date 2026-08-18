@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-08-18
 
 **The separation gates measure in CAM02-UCS instead of OKLab, and both floors
 moved.** This is the largest correctness change the project has made and it
