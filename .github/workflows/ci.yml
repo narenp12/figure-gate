@@ -100,10 +100,11 @@ jobs:
   test:
     name: pytest, ${{ matrix.os }}, Python ${{ matrix.python }}, matplotlib ${{ matrix.matplotlib }}
     runs-on: ${{ matrix.os }}
-    # The suite runs in a couple of minutes. Without this, a stalled apt mirror
-    # in the TeX step below is not a failure, it is a job that sits on a runner
-    # until GitHub's six-hour cap, and the run stays yellow the whole time.
-    timeout-minutes: 20
+    # The suite runs in a couple of minutes. The bound stays because a hung job
+    # is not a failure, it is a runner held to GitHub's six-hour cap with the
+    # run yellow the whole time. It is 10 rather than 20 now that the TeX
+    # install is not in front of the tests.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       # Linux carries the version matrix; macOS and Windows get one leg each, on
@@ -167,21 +168,58 @@ jobs:
       - name: Install the differential oracle (this job only)
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: uv pip install --system cmasher
-      # Same shape, same reason, for the one test that needs a real TeX:
-      # `test_pgf_rejects_the_metadata_kwarg_at_any_value` asserts that
-      # matplotlib's PGF backend still refuses `metadata=`, which is a fact
-      # about the backend and not about the matplotlib version pinned on a leg.
-      # Newest matplotlib is where a change to it would surface first, so this
-      # leg is the one that needs the several hundred megabytes of TeX, and the
-      # other two skip the test.
-      #
-      # Every part of the command below is there for a reason the hang taught:
-      # `timeout` because a stalled mirror is not an error and apt will wait on
-      # it forever, the loop because the next mirror usually works, and no `-qq`
-      # on the install because a silent step gives a reader nothing to look at
-      # when it does stall again.
-      - name: Install TeX (for the PGF test, this leg only)
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
+      # The one test that needs a real TeX runs in the `pgf` job below rather
+      # than here. It skips itself on every leg of this matrix, which is what
+      # that job exists to assert.
+      - run: pytest -n auto -q
+
+      - name: The checker rejects a deliberately bad figure
+        run: python skill/scripts/check_figure.py
+
+      - name: Every gallery figure passes its own audit
+        run: python examples/gallery.py
+
+      - name: The example builds and passes its own gates
+        run: python examples/demo.py
+
+  # Its own job rather than a step on `test`, for the reason `lint` above gives:
+  # this says nothing about whether the gates work, so it should not wait behind
+  # a TeX install to say it. `test` carried the install for a while and paid for
+  # it twice. A stalled apt mirror delayed the whole suite's answer rather than
+  # one narrow assertion, and the several hundred megabytes of texlive-xetex sat
+  # in front of a run that finishes in about two minutes.
+  #
+  # What it checks: `test_pgf_rejects_the_metadata_kwarg_at_any_value` asserts
+  # that matplotlib's PGF backend still refuses `metadata=`. That is a fact
+  # about the backend rather than about the matplotlib version pinned on a leg,
+  # so one job answers it and the `test` matrix skips it everywhere.
+  #
+  # Ubuntu because the install below is apt. The equivalents elsewhere are
+  # MacTeX and MiKTeX, both slower to install and neither exercising anything
+  # this test is about: the assertion is that matplotlib raises, not that a
+  # particular TeX distribution renders.
+  #
+  # Every part of the install is there for a reason the hang taught: `timeout`
+  # because a stalled mirror is not an error and apt will wait on it forever,
+  # the loop because the next mirror usually works, and no `-qq` on the install
+  # because a silent step gives a reader nothing to look at when it does stall
+  # again.
+  pgf:
+    name: The PGF backend still refuses metadata=
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - name: Install
+        run: uv pip install --system pytest matplotlib
+      - name: Install TeX
         run: |
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq \
@@ -193,27 +231,16 @@ jobs:
           done
           echo "::error::could not install texlive-xetex in three attempts"
           exit 1
-      - run: pytest -n auto -q
 
-      # The test above skips itself when xelatex is missing, and a skip is
-      # invisible in a green run: that is exactly how test_palette_oracle.py sat
-      # dead for months. This leg is the only one that can assert the row, so
-      # assert here that it did, rather than trusting the step above ran.
+      # The test skips itself when xelatex is missing, and a skip is invisible
+      # in a green run: that is exactly how test_palette_oracle.py sat dead for
+      # months. This job is the only place the row can run, so assert that it
+      # ran rather than trusting the install step above.
       - name: The PGF test ran here rather than skipping
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: |
           pytest tests/test_figure.py::test_pgf_rejects_the_metadata_kwarg_at_any_value \
             -q -rs | tee "$RUNNER_TEMP/pgf.log"
           grep -q "1 passed" "$RUNNER_TEMP/pgf.log"
-
-      - name: The checker rejects a deliberately bad figure
-        run: python skill/scripts/check_figure.py
-
-      - name: Every gallery figure passes its own audit
-        run: python examples/gallery.py
-
-      - name: The example builds and passes its own gates
-        run: python examples/demo.py
 
   # The tests reconstruct the installed layout by copying files. That catches a
   # dropped force-include in pyproject.toml, but it cannot catch the build
