@@ -1,3 +1,7 @@
+---
+description: "Signatures and docstrings for the three modules, read out of the scripts when this page builds."
+---
+
 # API
 
 Signatures and docstrings are read out of `skill/scripts/` when this page

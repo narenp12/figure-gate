@@ -136,7 +136,14 @@ SELF = {"test_suite_balance"}
 # layout, so the proportion is paid the way this file accepts payment. Measured
 # 0.9954 before (4737 document lines against 4759 gate lines) and 0.9975 after
 # (4747 against 4759); set just above the after.
-DOCUMENT_TO_GATE_MAX = 0.998
+#
+# 0.998 -> 1.0 when the markdown-extension audit landed, and nothing gate-side
+# was paid against it. It is a documentation test, and it found seven
+# extensions no page used, one of which was eating a line of prose. Measured
+# 0.9914 before (4834 document lines against 4876 gate lines) and 0.9998 after
+# (4875 against 4876); set just above. The two sides are now within one line of
+# each other, so the next entry here is a gate-side measurement or a deletion.
+DOCUMENT_TO_GATE_MAX = 1.0
 
 # Below this the classification above is stale rather than wrong: modules have
 # been deleted or the glob has stopped matching, and every rate here is being

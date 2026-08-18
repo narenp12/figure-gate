@@ -1,3 +1,7 @@
+---
+description: "Build a figure that fails the checks, read the report, and fix it until every row passes at the size it prints."
+---
+
 # Gate your first figure
 
 In this tutorial you build a figure the way matplotlib builds one by default,
@@ -96,9 +100,13 @@ Composition audit: loss
   -> FIX THE MARKED CHECKS
 ```
 
-You have one `[FAIL]` and three `[WARN]` rows. A `[FAIL]` is a hard failure and
-sets the verdict. A `[WARN]` is advisory: it reports, but it never fails a
-build.
+You have one `[FAIL]` and three `[WARN]` rows.
+
+!!! note "A FAIL sets the verdict, a WARN does not"
+
+    A `[FAIL]` is a hard failure and sets the verdict. A `[WARN]` is advisory:
+    it reports, but it never fails a build. This is the distinction the rest of
+    the tutorial rests on.
 
 ## Step 3: Read the failing row
 

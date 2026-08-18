@@ -1,3 +1,7 @@
+---
+description: "Python and matplotlib floors, optional dependencies, import lines by version, and what the version policy promises."
+---
+
 # Compatibility
 
 What each file needs to run, and what changes between versions.

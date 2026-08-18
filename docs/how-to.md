@@ -1,3 +1,7 @@
+---
+description: "Task recipes: fix a failing row, gate a test suite, place a figure at a venue's width, attach alt text, move a threshold."
+---
+
 # How-to guides
 
 Each guide here solves one task. They assume you have the checkers installed and
