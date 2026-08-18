@@ -16,6 +16,15 @@ on:
 permissions:
   contents: read
 
+# Same shape as ci.yml. A superseded pull-request run analyses a tree that has
+# been replaced, and its alerts would be attributed to a commit already gone.
+# The scheduled and push runs get a unique group and are never touched: the
+# weekly run is the one that catches a query pack updated after a merge, so it
+# must not be cancellable by a pull request that happens to land beside it.
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: Analyze ${{ matrix.language }}

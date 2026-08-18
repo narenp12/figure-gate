@@ -11,6 +11,18 @@ on:
 permissions:
   contents: read
 
+# A second push to a pull request makes the first push's answer worthless: this
+# matrix is eight jobs across three operating systems, and the older run spends
+# all of it on a commit nobody is waiting on. Cancel it.
+#
+# Pushes are keyed on `github.run_id`, which is unique, so they never share a
+# group and a run on main is never cancelled or queued by anything. That is
+# deliberate and not symmetry for its own sake -- a shared group would put two
+# main pushes in one line, and GitHub evicts the pending one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # The documentation claims check_palette.py runs on Python 3.8+ with nothing
   # installed. That claim is why the file is usable from a non-Python
@@ -50,7 +62,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
       - run: uv python install 3.13
       - run: uv sync --group dev
 
@@ -85,7 +97,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
 
       # The gate itself lives in skill/scripts/audit_api.py, which `make
       # audit-api` also runs and tests/test_audit_api.py covers. This job used
@@ -140,9 +152,15 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          # Keyed on pyproject, not uv.lock: the lock is not committed, so the
-          # glob matched nothing and the key never changed when a dependency did.
-          cache-dependency-glob: "pyproject.toml"
+          # uv.lock now that it is committed. It used to say pyproject.toml,
+          # because the lock was gitignored and the glob matched nothing -- and
+          # pyproject only moves when a constraint is edited, so a transitive
+          # release changed what got installed without changing the key. The
+          # cache is only re-saved when the primary key misses ("if the provided
+          # `key` doesn't match an existing cache, a new cache is automatically
+          # created"), so a key that never moves is a cache that never refreshes.
+          # The lock moves exactly when the resolution does.
+          cache-dependency-glob: "uv.lock"
       - name: Install
         # Stated, because the default on the Windows leg is pwsh and the `if`
         # below is `[ ... ]`, which pwsh parses as an array literal and runs
@@ -216,7 +234,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
       - name: Install
         run: uv pip install --system pytest matplotlib
       - name: Install TeX
@@ -257,7 +275,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
       - run: uv python install 3.13
       - run: uv build --wheel
       - name: The wheel ships figure.mplstyle, and ships nothing else it should not
