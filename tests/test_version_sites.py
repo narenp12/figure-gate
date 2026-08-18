@@ -1,13 +1,13 @@
 """The `[tool.bumpversion]` config against the files it claims to rewrite.
 
 `uv run bump-my-version bump <part>` is the only supported way to move the
-version, because the version is written in four files and the release before
+version, because the version is written in five files and the release before
 this config existed moved two of them. The tool makes that one command, and
 this file makes the command's own configuration checkable.
 
 Two ways the config rots, both silent until a release:
 
-`current_version` is a fifth copy of the version. A hand-edit to
+`current_version` is a sixth copy of the version. A hand-edit to
 `pyproject.toml` that skips it leaves the tool searching for a string that is
 no longer in any of these files, and every entry fails at once.
 
@@ -137,6 +137,34 @@ def test_the_changelog_is_left_alone_by_the_cycle_opening_bump():
         "the changelog entry must be excluded from the cycle-opening bumps and "
         "from those only -- `dev` is the bump that cuts a release, and it is "
         "the one that has to fail when no notes were written")
+
+
+def test_the_lock_pattern_is_anchored_to_the_project_and_matches_once():
+    """uv.lock names a version for every package in the graph, and the
+    project's own is identified only by the `name` line above it.
+
+    `test_each_configured_pattern_is_in_the_file_it_points_at` proves the
+    pattern matches something. This proves it matches the right thing, and only
+    it: an unanchored `version = "X"` finds whichever package sorts first with
+    that number, and the lock currently holds annotated-types 0.8.0,
+    ast-serialize 0.6.0 and mdurl 0.1.2, all versions this project has shipped.
+    Cutting 0.8.0 unanchored would have pinned annotated-types to a version
+    that does not exist, in a file nobody reads in a diff.
+    """
+    import re
+
+    entry = next(e for e in bumpversion()["files"]
+                 if e["filename"] == "uv.lock")
+    assert 'name = "figure-gate"' in entry["search"], (
+        "the lock's search must carry the project's name, or it matches by "
+        "version number alone")
+
+    pattern = entry["search"].format(
+        current_version=re.escape(bumpversion()["current_version"]))
+    found = re.findall(pattern, (ROOT / "uv.lock").read_text(encoding="utf-8"),
+                       re.MULTILINE)
+    assert len(found) == 1, (
+        f"the lock pattern matches {len(found)} places, expected exactly one")
 
 
 def test_only_the_changelog_is_excluded_from_any_bump():

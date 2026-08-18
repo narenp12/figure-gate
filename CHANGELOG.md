@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+**The release procedure runs as written, and the version moves in five files
+rather than four.** Both halves are defects that only ever ran on a release
+commit, so nothing exercised them until 0.8.0 was being cut.
+
+- Every `[[tool.bumpversion.files]]` entry applied to every bump, so the
+  changelog's `^## Unreleased$` was required by the bump that opens the next
+  development cycle as well as by the one that cuts a release. That bump runs
+  immediately after a release, when the heading has just been renamed to the
+  version and the next notes do not exist, so it failed every time it was run.
+  0.7.0 is what that cost: its cycle never opened, the tree kept reading
+  `0.7.0`, and 0.8.0 could not be cut with the documented command.
+  `exclude_bumps` on that entry is the fix, and the release bump still refuses
+  to run without notes.
+- `uv.lock` records the project's own version and nothing wrote it, so it still
+  read `0.7.0` after 0.8.0 shipped. It is a bump entry now, anchored across the
+  `name` and `version` lines: the lock names a version for every package in the
+  graph, and it currently carries annotated-types 0.8.0, ast-serialize 0.6.0
+  and mdurl 0.1.2, all versions this project has shipped. An unanchored search
+  cutting 0.8.0 would have found annotated-types first, since the lock is
+  sorted by name, and pinned a dependency to a version that does not exist.
+
+The second one was not cosmetic. Any command that syncs the environment
+rewrites that line to match `pyproject.toml`, and a bump refuses to start on an
+unclean tree, so the version site nobody maintained was blocking the command
+that maintains the rest.
+
 ## 0.8.0 — 2026-08-18
 
 **The separation gates measure in CAM02-UCS instead of OKLab, and both floors

@@ -133,7 +133,7 @@ include = [
 ]
 exclude = [".DS_Store"]
 
-# The version is written in four files and a tag, and nothing wrote them
+# The version is written in five files and a tag, and nothing wrote them
 # together. 0.5.0 is what that costs: the bump moved pyproject.toml and
 # plugin.json, and all three pytest jobs failed on the release PR because
 # conda/recipe.yaml still said 0.4.0.
@@ -145,14 +145,14 @@ exclude = [".DS_Store"]
 #
 #     uv run bump-my-version bump dev
 #
-# rewrites all four, commits, and tags v<new>. Pushing the tag is still what
+# rewrites all five, commits, and tags v<new>. Pushing the tag is still what
 # publishes; release.yml has not moved.
 #
 # `dev` rather than `minor`, because the version between releases now carries a
 # `.devN` suffix -- see the `parse`/`serialize` block below for why. Cutting a
 # release drops the suffix; `bump minor` (or `patch`, or `major`) is what opens
-# the next development cycle afterwards. The release bump rewrites four files;
-# the cycle-opening bump rewrites three, for the reason under `exclude_bumps`
+# the next development cycle afterwards. The release bump rewrites five files;
+# the cycle-opening bump rewrites four, for the reason under `exclude_bumps`
 # below.
 #
 # Three things it deliberately does not do. `sha256` in the recipe is unknowable
@@ -278,6 +278,30 @@ replace = '"version": "{new_version}"'
 filename = "conda/recipe.yaml"
 search = '  version: "{current_version}"'
 replace = '  version: "{new_version}"'
+
+# The fifth site, and the one that was missed for four releases: uv.lock records
+# the project's own version and nothing wrote it, so it still read 0.7.0 after
+# 0.8.0 shipped.
+#
+# The cost is not a stale number in a file nobody reads. `uv run` without
+# `--no-sync` rewrites the line to match pyproject.toml, so the tree goes dirty
+# on its own, and bump-my-version refuses to start on an unclean tree. The
+# version site nobody was maintaining was blocking the command that maintains
+# the version sites.
+#
+# Anchored across two lines, because uv.lock holds a `version = ` line for every
+# package in the graph and the project's own is identified only by the `name`
+# above it. An unanchored search would rewrite whichever package sorted first
+# with a matching version, and that is not hypothetical: the lock currently
+# carries annotated-types 0.8.0, ast-serialize 0.6.0 and mdurl 0.1.2, all
+# versions this project has shipped. uv.lock is sorted by name, so cutting 0.8.0
+# unanchored would have found annotated-types before figure-gate and pinned a
+# dependency to a version that does not exist.
+[[tool.bumpversion.files]]
+filename = "uv.lock"
+regex = true
+search = 'name = "figure-gate"\nversion = "{current_version}"'
+replace = 'name = "figure-gate"\nversion = "{new_version}"'
 
 [tool.uv]
 package = false

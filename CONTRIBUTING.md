@@ -143,11 +143,17 @@ no install step in it to make sure the claim stays true.
 
 ## Cutting a release
 
-The version is written in four files and a tag. Do not edit any of them by
+The version is written in five files and a tag. Do not edit any of them by
 hand: `bump-my-version` writes `CHANGELOG.md`, `pyproject.toml`,
-`skill/.claude-plugin/plugin.json` and `conda/recipe.yaml` together, and 0.5.0
-is what a hand-run bump costs: the recipe was left at 0.4.0 and all three
-pytest jobs failed on the release PR.
+`skill/.claude-plugin/plugin.json`, `conda/recipe.yaml` and `uv.lock` together,
+and 0.5.0 is what a hand-run bump costs: the recipe was left at 0.4.0 and all
+three pytest jobs failed on the release PR.
+
+`uv.lock` joined that list after 0.8.0 shipped with it still reading 0.7.0. It
+matters more than a stale number in a generated file: any command that syncs the
+environment rewrites the line itself, and a bump refuses to start on an unclean
+tree, so the unmaintained site was blocking the command that maintains the
+others.
 
 Between releases the tree carries a development version, `X.Y.Z.devN`, and
 cutting the release is the step that drops the suffix. So there are two bumps,
