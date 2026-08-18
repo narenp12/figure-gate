@@ -29,7 +29,11 @@ jobs:
   analyze:
     name: Analyze ${{ matrix.language }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 10, down from 30. Measured across three runs: `python` peaks at 1m13s
+    # and `actions` at 48s, both including the query pack download. Ten leaves
+    # room for a cold pack and for `security-and-quality` growing, without
+    # leaving half an hour on the clock for a job that takes one minute.
+    timeout-minutes: 10
     permissions:
       # Writing alerts is the whole point; nothing here needs anything else.
       security-events: write

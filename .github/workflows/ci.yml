@@ -31,7 +31,14 @@ jobs:
   stdlib-only:
     name: check_palette on Python ${{ matrix.python }} (no dependencies)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 5 here and on `lint`, `api`, `package` and `skill`, down from 10 and 15.
+    # Measured across three successful runs on main, the slowest of those five
+    # took 22 seconds and the fastest 7. A single floor rather than a bound
+    # fitted to each one: the point of the number is to catch a hang, and five
+    # minutes is already more than an order of magnitude of headroom over jobs
+    # that do a checkout and run one script. `test` and `pgf` keep their own
+    # bounds and have their own reasons, written where they are set.
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -56,7 +63,7 @@ jobs:
   lint:
     name: ruff and mypy
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -86,7 +93,7 @@ jobs:
   api:
     name: A break in the public API is one the changelog admits to
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       # Tags, not just the tip. The default checkout has neither the history
       # nor the tags, so the comparison would have nothing to compare against
@@ -269,7 +276,7 @@ jobs:
   package:
     name: The wheel gates a figure the way the checkout does
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -338,7 +345,7 @@ jobs:
   skill:
     name: Skill metadata is valid
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

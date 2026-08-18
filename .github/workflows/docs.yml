@@ -56,7 +56,12 @@ jobs:
   build:
     name: The site builds in strict mode
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 5, down from 15. The 15 was sized around the apt call inside
+    # `--with-deps`, which is gone: this job now runs in 52 seconds with the
+    # browser cache warm and 77 with it cold. Fifteen minutes is what a stalled
+    # mirror cost three times on 2026-08-17, all of it yellow, and the bound is
+    # the thing that decides how long a stall is allowed to look like progress.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -260,7 +265,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     # The serialisation the workflow-level block used to claim, on the one job
     # that earns it. A second push while a deploy is in flight waits rather than
     # cancelling it mid-upload, which would leave Pages serving a partial site.
