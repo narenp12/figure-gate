@@ -2,7 +2,7 @@ schema_version: 1
 
 context:
   name: figure-gate
-  version: "0.8.0"
+  version: "0.9.0.dev0"
   python_min: "3.11"
 
 package:
