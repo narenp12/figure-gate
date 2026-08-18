@@ -174,8 +174,9 @@ Pass the path to both calls. `alt_metadata` reads the suffix to pick the key:
 PNG takes `Description`, PDF takes `Subject`. Called without a path, it assumes
 PNG, which warns on a PDF save and is rejected outright by SVG.
 
-The row wants 60 characters. If your document's caption already carries the
-description, you can leave the row: it is advisory and never fails a build.
+The row passes at 60 characters or more. If your document's caption already
+carries the description, you can leave the row: it is advisory and never fails
+a build.
 
 ## Read one row, or call one gate
 

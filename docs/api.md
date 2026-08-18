@@ -11,8 +11,8 @@ from figure_gate import check_palette as cp    # standard library only
 from figure_gate import suggest_fixes as sf
 ```
 
-Vendored — copied into your own project, which is the default route — they are
-whatever you named the files, imported flat:
+Vendoring, the default route, copies the files into your own project. They are
+then whatever you named them, imported flat:
 
 ```python
 import check_figure as cf

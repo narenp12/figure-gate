@@ -22,10 +22,11 @@ For the version each route needs, see [Compatibility](compatibility.md).
     cp figure-gate/skill/scripts/suggest_fixes.py     your-project/diagrams/  # optional
     ```
 
-    Copy `check_palette.py` even if you only want to check figures.
-    `check_figure.py` imports it, and that import is what the series-color and
-    colormap rows travel on. Without it, neither row raises: both report that
-    nothing was checked, and both pass.
+    !!! warning "Copy `check_palette.py` even if you only want to check figures"
+
+        `check_figure.py` imports it, and that import is what the series-color
+        and colormap rows travel on. Without it, neither row raises: both
+        report that nothing was checked, and both pass.
 
     `suggest_fixes.py` is optional. `check_figure.py` imports it lazily, so a
     copy without it audits identically. You lose only `report(fig, suggest=True)`
@@ -52,9 +53,9 @@ For the version each route needs, see [Compatibility](compatibility.md).
     conda install -c conda-forge figure-gate
     ```
 
-    conda-forge follows PyPI through the feedstock's autotick bot rather than in
-    the same hour, so the conda package is the previous release for a while
-    after each one. The badges on
+    conda-forge follows PyPI through the feedstock's autotick bot, which opens
+    the version bump some hours after a release. Until that merges, the conda
+    package is the previous release. The badges on
     [the repository](https://github.com/narenp12/figure-gate) show what each
     index is serving now.
 
@@ -116,9 +117,13 @@ looks beside the script, then in an `assets/` directory next to it.
 
 If you install the package rather than vendoring it, `figure.mplstyle` ships
 inside it, beside the module that reads it. That is where the style-sheet gate
-looks. Without a sheet to compare against, the gate reports a pass, including
-for the figure it exists to catch: one drawn with `plt.style.use` forgotten
-entirely.
+looks.
+
+!!! warning "The style-sheet gate passes when it finds no sheet"
+
+    Without a sheet to compare against, the gate reports a pass, including for
+    the figure it exists to catch: one drawn with `plt.style.use` forgotten
+    entirely.
 
 ## Install it as a Claude Code skill
 

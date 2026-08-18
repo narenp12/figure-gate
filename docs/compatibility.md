@@ -70,8 +70,9 @@ Two things about the contract:
   `(name, status, detail)` triple whose `status` is `True`, `False`, or
   `"warn"`. `check` returns the same shape.
 
-For how that contract is enforced, see
-[What the API promises](design.md#what-the-api-promises).
+On every pull request, CI compares the public API against the last tag and
+fails a build whose changelog does not name what moved.
+[What the API promises](design.md#what-the-api-promises) has the detail.
 
 ## Other plotting libraries
 
