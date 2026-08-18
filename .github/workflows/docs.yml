@@ -169,8 +169,82 @@ jobs:
       #
       # On pull requests too, like the rest of this job. A contrast regression
       # should fail before it is published, not after.
+      #
+      # No `--with-deps`. It stalled this job for its whole fifteen minutes
+      # three times on 2026-08-17, and it never reached the browser: uv had
+      # installed all 50 packages in 59ms, and the last line before thirteen
+      # minutes and thirty-nine seconds of silence was
+      #
+      #     Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease
+      #
+      # which is `apt-get update`. `--with-deps` runs that unconditionally --
+      # `installDependenciesLinux`, in the driver bundled with the playwright
+      # `uv.lock` pins, pushes `apt-get update` onto the command list before it
+      # has looked at whether even one package is missing -- and a stalled
+      # Ubuntu mirror is not an error, so apt waits on it forever.
+      # actions/runner-images has been collecting reports of this since 2020 and
+      # ships no supported way to swap the mirror.
+      #
+      # What that apt call was buying was then measured on a runner rather than
+      # argued about, with `playwright install-deps --dry-run chromium`, which
+      # simulates the install with `apt-get install -s` and names what apt would
+      # have had to fetch. Run 32099469230 answered: of the twenty-one packages
+      # in Playwright's `chromium` group, **none** were missing. ubuntu-latest
+      # ships Chrome, Chromium, Edge and Firefox, all apt-installed with their
+      # dependencies resolved, and every library Chromium links against arrives
+      # with them.
+      #
+      # The nine it did name were all fonts, and all from Playwright's `tools`
+      # group, which `installDeps` adds to every target unconditionally:
+      # fonts-freefont-ttf, fonts-ipafont-gothic, fonts-tlwg-loma-otf,
+      # fonts-unifont, fonts-wqy-zenhei and the xfonts-* bitmap set. Japanese,
+      # Chinese, Thai, Cyrillic X core fonts and a Unicode fallback. This site
+      # is English prose and hex codes, and the runner already carries
+      # fontconfig, freetype, Liberation and Noto, so those nine were the whole
+      # of what fifteen minutes were being risked for. Run 32099939002 is the
+      # first without them: Chromium launched and the render suite went 63
+      # passed, none skipped. The suite below is what keeps saying so, on every
+      # run.
+      #
+      # `--only-shell` would not have helped either: `chromium-headless-shell`
+      # is registered with `_dependencyGroup: "chromium"`, so it asks apt for
+      # the same twenty-one packages. It changes the download, which is the half
+      # the cache above already removed.
       - name: Install the browser the contrast gate renders in
-        run: uv run --group docs-test playwright install --with-deps chromium
+        run: uv run --group docs-test playwright install chromium
+
+      # The claim above, kept honest, and a hole closed on the way.
+      #
+      # `--with-deps` succeeding was never evidence that Chromium could start,
+      # and when it cannot, `test_docs_render.py`'s `browser` fixture calls
+      # `pytest.skip` rather than failing -- deliberately, so the figure gates do
+      # not require a 150MB browser on a contributor's laptop. In this job that
+      # is a trapdoor: a runner missing one library would take the contrast gate
+      # out of the run and report green.
+      #
+      # Launching here is the same call the fixture makes, with the skip
+      # removed. It runs Playwright's own `validateDependenciesLinux`, which
+      # walks `ldd` over the browser's libraries and names anything unresolved,
+      # so it asks the exact question -- can this browser start on this runner
+      # -- rather than the apt-shaped question `install-deps` asks, which drags
+      # the font group in with it.
+      #
+      # `pgf` in ci.yml bounds its own apt stall with `timeout` and a retry
+      # loop. That does not transfer: `pgf` runs `sudo apt-get` as its own
+      # direct child, so `timeout` has a process to signal, while `--with-deps`
+      # is node spawning sudo spawning apt. The stalled run recorded the
+      # outcome -- `Terminate orphan process: pid (2275) (playwright)` is the
+      # runner reaping what the job's own cancel could not.
+      - name: Chromium starts, so nothing it links against is missing
+        run: |
+          uv run --group docs-test python - <<'PY'
+          from playwright.sync_api import sync_playwright
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              print(f"launched {browser.version}")
+              browser.close()
+          PY
 
       - name: The rendered site clears the text contrast floor
         run: uv run --group docs-test pytest tests/test_docs_render.py -q
