@@ -1179,3 +1179,30 @@ def test_this_file_skips_rather_than_errors_without_the_docs_group(tmp_path):
     assert run.returncode == 0, (
         "without the docs-test group this file must skip, not error. It "
         f"exited {run.returncode}:\n{run.stdout}\n{run.stderr}")
+
+
+# `content.tooltips` has no markup of its own: the bundle selects `abbr[title]`
+# at view time and mounts its own element on hover, leaving the `title` in
+# place. A built-HTML grep sees the feature name in the config blob and nothing
+# else, so a misspelling here exits 0 and silently returns every reader to the
+# native popup -- slow to appear, unstyled, and invisible on touch.
+def test_the_glossary_abbreviations_get_the_themes_tooltip(page, server):
+    """`content.tooltips`, proven.
+
+    `docs/includes/abbreviations.md` is appended to every page, so `dE`, `CVD`,
+    `OKLab` and `rcParams` arrive as `<abbr title=...>` wherever they are
+    written. The assertion is that hovering one paints the theme's tooltip
+    carrying the glossary's own text, not that the `title` went away: the
+    bundle's selector needs the attribute and keeps it.
+    """
+    page.goto(server + GATES_PATH, wait_until="networkidle")
+    abbreviation = page.locator("abbr[title]").first
+    abbreviation.wait_for(state="attached")
+    glossary_text = abbreviation.get_attribute("title")
+    assert glossary_text, "the <abbr> carries no title for a tooltip to show"
+    abbreviation.hover()
+    tooltip = page.locator(".md-tooltip2, .md-tooltip").first
+    tooltip.wait_for(state="visible", timeout=3000)
+    assert glossary_text in tooltip.inner_text(), (
+        f"the tooltip reads {tooltip.inner_text()!r}, not the glossary's "
+        f"{glossary_text!r} - content.tooltips mounted on the wrong element")

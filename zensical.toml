@@ -90,11 +90,27 @@ variant = "modern"
 # Unknown names in this list are accepted silently -- a build with
 # "this.feature.does.not.exist" in it exits 0 and says nothing. So a typo here
 # is a setting that does nothing rather than an error, and the only way to know
-# a feature is on is to look at the built page.
+# a feature is on is to look at the built page. `test_docs_site.py` looks at
+# the markup for the four that emit some, and `test_docs_render.py` drives the
+# two that only exist at view time.
+#
+# Two names are absent because they measured as no-ops rather than because
+# nobody wanted them. `navigation.indexes` gives a section a landing page, and
+# no section in the nav above points at a file. `search.suggest` is a Material
+# feature Zensical's bundle does not implement: the string does not appear in
+# it, and the search UI it would complete has no input in the built markup.
 features = [
   "content.code.copy",
   "content.tabs.link",      # install's two tab groups share the "Vendored" label
   "content.code.annotate",  # how-to's numbered markers expand to prose
+  "content.tooltips",       # the glossary's <abbr>, on touch and without the delay
+  # The nav is Diataxis, so the reader's question is which of the four modes
+  # they are in. Tabs put the four across the header, sections group them in
+  # the sidebar, and path prints the trail. Footer chains the tutorial's steps.
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.path",
+  "navigation.footer",
   "navigation.top",
   "navigation.tracking",
   "search.highlight",

@@ -484,3 +484,27 @@ def test_every_configured_extension_is_used_by_a_page():
               and not any(re.search(EXTENSION_SYNTAX[e], t, re.M) for t in pages)]
     assert not unused, (f"zensical.toml configures {unused} and no page the "
                         "site serves uses their syntax. Drop them.")
+
+
+# Each of these emits markup. The two view-time features are in
+# test_docs_render.py, and `navigation.indexes` is not set: it measured as a
+# no-op, because no section in the nav points at a file.
+NAVIGATION_MARKUP = {
+    "navigation.tabs": "md-tabs",
+    "navigation.sections": "md-nav__item--section",
+    "navigation.path": "md-path",
+    "navigation.footer": "md-footer__link",
+}
+
+
+@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
+def test_a_configured_navigation_feature_reaches_the_built_page(feature, marker):
+    """The silent-typo guard, as an assertion."""
+    built = ROOT / "site" / "gates" / "index.html"
+    if not built.is_file():
+        pytest.skip("no built site - run `zensical build` first")
+    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
+        f"{feature} left the features list; drop this row with it")
+    assert marker in built.read_text(encoding="utf-8"), (
+        f"{feature} is configured and `{marker}` is absent from the built "
+        "page, so the name is doing nothing - check it against the theme's")
