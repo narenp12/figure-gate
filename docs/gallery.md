@@ -1,3 +1,7 @@
+---
+description: "Eleven audited figures covering the forms that are hard to check, and the defects that writing them found."
+---
+
 # Gallery
 
 `python examples/gallery.py` builds these eleven figures and audits each one.

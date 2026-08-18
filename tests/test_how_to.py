@@ -86,7 +86,8 @@ def quoted_from_code():
     venues = len(re.findall(r"^\s+\S+\s+[\d.]+ pt", listed, re.M))
     return ([("how-to.md", q) for q in out]
             + [("how-to.md", f"under the {cf.TYPE_FLOOR_PT}pt floor"),
-               ("how-to.md", f"The row wants {cf.ALT_TEXT_MIN_CHARS} characters"),
+               ("how-to.md",
+                f"passes at {cf.ALT_TEXT_MIN_CHARS} characters or more"),
                ("cli.md", f"prints all {WORDS[venues]} widths")])
 
 
