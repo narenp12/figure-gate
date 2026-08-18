@@ -30,7 +30,7 @@ table per module on [the gates](gates.md), with the measurement behind each on
 Everything else is here, including the 21 gate functions, at the bottom.
 `audit` is what most callers want: it runs all 21 and computes the renderer,
 canvas and scale arguments they take. Call one directly and that is yours to
-reproduce, which [the how-to](how-to.md#read-one-row-or-one-gate) covers.
+reproduce, which [the how-to](how-to.md#read-one-row-or-call-one-gate) covers.
 
 ## check_figure
 

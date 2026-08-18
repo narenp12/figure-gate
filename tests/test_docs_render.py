@@ -780,7 +780,7 @@ def test_no_filter_is_applied_to_gallery_figures():
 # was. The tab sync test in particular is the only thing that can show the link
 # feature is on.
 
-GETTING_STARTED_PATH = "/getting-started/"
+INSTALL_PATH = "/install/"
 HOW_TO_PATH = "/how-to/"
 GATES_PATH = "/gates/"
 DESIGN_PATH = "/design/"
@@ -811,7 +811,7 @@ def _tab_groups(page):
     }""")
 
 
-def test_getting_started_tabs_sync_the_shared_label_and_nothing_else(page, server):
+def test_install_tabs_sync_the_shared_label_and_nothing_else(page, server):
     """`content.tabs.link`, proven.
 
     The two groups share "Vendored" at different positions (0 in the install
@@ -824,10 +824,10 @@ def test_getting_started_tabs_sync_the_shared_label_and_nothing_else(page, serve
     - `Vendored` has a counterpart, so that group must move to its own
       "Vendored", and the previously active tab of each group hides its block.
     """
-    page.goto(server + GETTING_STARTED_PATH, wait_until="networkidle")
+    page.goto(server + INSTALL_PATH, wait_until="networkidle")
     groups = page.locator(".tabbed-set.tabbed-alternate")
     assert groups.count() == 2, (
-        "getting-started.md writes two tab groups (install routes and import "
+        "install.md writes two tab groups (install routes and import "
         f"lines); the build produced {groups.count()}")
     assert _tab_groups(page) == [
         {"labels": ["Vendored", "Installed", "conda-forge"],
@@ -869,7 +869,7 @@ def test_how_to_annotations_render_and_expand_in_the_browser(page, server):
     annotations.first.focus()
     tooltip = page.locator(".md-tooltip--active")
     page.wait_for_selector(".md-tooltip--active")
-    assert "The backend is set before pyplot imports" in tooltip.inner_text(), (
+    assert "Set the backend before pyplot imports" in tooltip.inner_text(), (
         f"the expanded annotation reads {tooltip.inner_text()[:80]!r} -- the "
         "ordered list that answers the marker is not reaching the tooltip")
 
@@ -907,7 +907,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
     assert (notes.nth(0).get_attribute("open") is not None) == starts_open
 
 
-def test_the_gates_flow_diagram_draws_an_svg(page, server):
+def test_the_design_flow_diagram_draws_an_svg(page, server):
     """mermaid, proven on the page.
 
     The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
@@ -939,7 +939,7 @@ def test_the_gates_flow_diagram_draws_an_svg(page, server):
         return root;
       };
     """)
-    page.goto(server + GATES_PATH, wait_until="networkidle")
+    page.goto(server + DESIGN_PATH, wait_until="networkidle")
     page.wait_for_selector("div.mermaid")
     drawn = page.evaluate("""() => {
       const svgs = window.__closedRoots
@@ -1035,17 +1035,22 @@ def _number_sort_key(cell):
     return float(match.group()) if match else 0.0
 
 
+# One tile per documentation page, grouped on the home page by Diataxis mode.
+# Contributing and Security lost their tiles when the grids became a map of the
+# four modes: neither is documentation of the tool, and both are still in the
+# nav under Project.
 TILE_ICONS = {
-    "rocket": "getting-started",
+    "rocket": "tutorial",
+    "download": "install",
     "wrench": "how-to",
-    "image": "gallery",
+    "filter": "gates",
+    "terminal": "cli",
+    "package-check": "compatibility",
+    "code": "api",
+    "layers": "design",
     "book": "style-guide",
     "shapes": "choosing-a-form",
-    "layers": "design",
-    "filter": "gates",
-    "code": "api",
-    "git-pull-request": "contributing",
-    "shield": "security",
+    "image": "gallery",
 }
 
 
@@ -1066,7 +1071,7 @@ def home_article(built_site):
     return "\n".join(grids)
 
 
-def test_the_home_card_grids_have_ten_iconed_tiles(built_site):
+def test_the_home_card_grids_have_one_iconed_tile_per_page(built_site):
     """Ten tiles in two groups, each with its designed lucide icon and a link
     that lands.
 
@@ -1078,8 +1083,9 @@ def test_the_home_card_grids_have_ten_iconed_tiles(built_site):
     are exactly the links that check never sees.
     """
     lis = re.findall(r"<li>.*?</li>", home_article(built_site), re.S)
-    assert len(lis) == 10, (
-        f"the README's grids should hold ten tiles, found {len(lis)}")
+    assert len(lis) == len(TILE_ICONS), (
+        f"the README's grids should hold {len(TILE_ICONS)} tiles, found "
+        f"{len(lis)}")
 
     base = deploy_base()
     files = {p.relative_to(built_site).as_posix()
@@ -1102,10 +1108,10 @@ def test_the_home_card_grids_have_ten_iconed_tiles(built_site):
             f"tile href {href.group(1)} does not land on a built page")
         got[name] = landing.rstrip("/")
     assert got == TILE_ICONS, (
-        f"the tile hrefs are {got}, expected the ten designed pages")
+        f"the tile hrefs are {got}, expected the designed pages")
 
 
-def test_the_ten_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
+def test_the_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
     """The icon-count rule behind the grids being the exception.
 
     The site's voice is contrast arithmetic, and the grids exist because one
@@ -1115,9 +1121,10 @@ def test_the_ten_tile_icons_are_the_only_icons_in_the_home_prose(built_site):
     """
     icons = re.findall(r'class="lucide lucide-[a-z-]+"',
                        home_article(built_site))
-    assert len(icons) == 10, (
-        f"{len(icons)} icon(s) in the home article, expected the grids' 10 -- "
-        "an eleventh icon is decoration the count was written to catch")
+    assert len(icons) == len(TILE_ICONS), (
+        f"{len(icons)} icon(s) in the home article, expected the grids' "
+        f"{len(TILE_ICONS)} -- one more is decoration the count was written "
+        "to catch")
 
 
 # --- this file skips, it does not error ---------------------------------------

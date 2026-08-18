@@ -51,6 +51,7 @@ GATE = {
     "test_audit_api",                 # the shape callers unpack
     "test_thresholds_are_constants",  # the AST sweep over both modules
     "test_example",                   # demo and gallery, through their own gates
+    "test_tutorial",                  # the tutorial's figures, row by row
 }
 
 # Holds a document to the code it describes.

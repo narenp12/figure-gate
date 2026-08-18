@@ -33,7 +33,10 @@ README = ROOT / "README.md"
 # page the claim actually lives on now.
 GATES = ROOT / "docs" / "gates.md"
 DESIGN = ROOT / "docs" / "design.md"
-GETTING_STARTED = ROOT / "docs" / "getting-started.md"
+TUTORIAL = ROOT / "docs" / "tutorial.md"
+INSTALL = ROOT / "docs" / "install.md"
+CLI = ROOT / "docs" / "cli.md"
+COMPATIBILITY = ROOT / "docs" / "compatibility.md"
 
 SURFACE = "#ffffff"
 
@@ -235,7 +238,7 @@ def gate_table_names():
     Splitting on the delimiter instead makes the column count irrelevant.
     """
     lines = GATES.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    start = next(i for i, l in enumerate(lines) if l.strip() == "## Figure gates")
     names = []
     for line in lines[start:]:
         if line.startswith("|"):
@@ -305,7 +308,7 @@ def table_advisory_names():
     """Gates the table marks *(advisory)*, from the same parse the roster test
     uses, so the two cannot disagree about which rows exist."""
     lines = GATES.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    start = next(i for i, l in enumerate(lines) if l.strip() == "## Figure gates")
     out = []
     for line in lines[start:]:
         if line.startswith("|"):
@@ -423,7 +426,7 @@ def gate_table_rows():
     roster check care too.
     """
     lines = GATES.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, l in enumerate(lines) if "**`check_figure.py`**" in l)
+    start = next(i for i, l in enumerate(lines) if l.strip() == "## Figure gates")
     rows = []
     for line in lines[start:]:
         if line.startswith("|"):
@@ -536,8 +539,8 @@ def prose_constants():
     every documentation file is fair game: prose, list items, headings.
     """
     out = []
-    for path in (GATES, DESIGN, README, GETTING_STARTED, GUIDE, SKILL / "SKILL.md",
-                 ROOT / "CONTRIBUTING.md"):
+    for path in (GATES, DESIGN, README, TUTORIAL, INSTALL, CLI, COMPATIBILITY,
+                 GUIDE, SKILL / "SKILL.md", ROOT / "CONTRIBUTING.md"):
         if not path.exists():
             continue
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -1099,8 +1102,9 @@ def test_the_readme_shows_the_demo_figures_own_alt_text():
 # beside a document still teaching the break. The CHANGELOG is excluded: it
 # quotes the broken form deliberately, as the history of it.
 
-TEACHING_DOCS = [README, GATES, GETTING_STARTED, SKILL_MD, GUIDE, DOCS_GALLERY,
-                 SKILL / "references" / "choosing-a-form.md",
+TEACHING_DOCS = [README, GATES, TUTORIAL, INSTALL, CLI, COMPATIBILITY,
+                 ROOT / "docs" / "how-to.md", DESIGN, SKILL_MD, GUIDE,
+                 DOCS_GALLERY, SKILL / "references" / "choosing-a-form.md",
                  ROOT / "CONTRIBUTING.md"]
 
 
@@ -1259,7 +1263,7 @@ WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
 
 ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
-    "the report() comment": (GETTING_STARTED,
+    "the report() comment": (TUTORIAL,
                              r"prints (\d+) rows, returns True if ok"),
     "the series-color row number": (DESIGN, r"That is row 12 of the (\d+)"),
     "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
@@ -1303,7 +1307,7 @@ GALLERY_PY = ROOT / "examples" / "gallery.py"
 
 GALLERY_COUNT_CLAIMS = {
     "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
-    "the gallery page": (DOCS_GALLERY, r"builds these (\w+) and audits"),
+    "the gallery page": (DOCS_GALLERY, r"builds these (\w+) figures and audits"),
     "the README": (README, r"Writing those (\w+) found"),
 }
 
@@ -1358,24 +1362,26 @@ GUIDE_FILES = {
 GUIDANCE_ANCHORS = {
     "Text collision": ("style-guide.md",
                        "hides the collision by deleting the data underneath"),
-    "Text readability": ("style-guide.md", "4.5:1, or 3:1 at ≥14pt bold"),
-    "Contrast stack": ("style-guide.md", "One thing opaque; ≤3 alpha levels"),
+    "Text readability": ("style-guide.md",
+                         "Hold text to 4.5:1, or 3:1 at 14pt bold"),
+    "Contrast stack": ("style-guide.md",
+                       "Keep one thing opaque, and use at most three alpha"),
     "Mark ratio": ("style-guide.md",
-                   "Emphasis = shape or label, not 5× the area"),
+                   "Emphasis is shape or a"),
     "Overplotting": ("choosing-a-form.md",
                      "At large n, marks stop being individually visible"),
     "Banking": ("choosing-a-form.md", "The failure is a resolution failure"),
     "Axis redundancy": ("style-guide.md",
-                        "Shared scale → shared axis furniture"),
-    "Type size": ("style-guide.md", "fails any string under 7.5pt on page"),
+                        "Give panels on a shared scale shared axis furniture"),
+    "Type size": ("style-guide.md",
+                  "fails any string under 7.5pt on the"),
     "Line weight": ("style-guide.md",
                     "Strokes have the same problem and the same arithmetic"),
     "Series color": ("style-guide.md", "### Categorical: Okabe-Ito"),
     "Dual axis": ("choosing-a-form.md", "**Dual y axes.**"),
     "Form": ("choosing-a-form.md", "The forms with no research-figure use"),
     "Identity channel": ("style-guide.md",
-                         "add a second channel when it must survive a "
-                         "photocopier"),
+                         "add a second channel when it must survive a"),
     "Label attribution": ("style-guide.md",
                           "### Direct labels: the alignment is the decision"),
     "Style sheet": ("style-guide.md", "**Build** on `figure.mplstyle`"),

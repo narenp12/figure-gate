@@ -84,7 +84,8 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # recipe is a claim about what the code does when you type it. `test_how_to.py`
 # runs the commands, recomputes the numbers and re-derives the row table from
 # the registry, so the page cannot drift from the behaviour it teaches.
-AUTHORED = {"gallery.md", "api.md", "design.md", "gates.md", "getting-started.md",
+AUTHORED = {"gallery.md", "api.md", "design.md", "gates.md", "tutorial.md",
+            "install.md", "cli.md", "compatibility.md",
             "how-to.md", "abbreviations.md"}
 
 
@@ -104,7 +105,7 @@ def nav_targets():
 def test_the_nav_is_still_parseable():
     """A parser that matches nothing agrees with nothing. Same guard as the
     gate-table parser in `test_docs_match_code.py`, and for the same reason."""
-    assert len(nav_targets()) == 13, (
+    assert len(nav_targets()) == 16, (
         f"matched {len(nav_targets())} nav entries in zensical.toml, expected "
         "13 - the nav changed shape and nav_targets() needs updating with it")
 

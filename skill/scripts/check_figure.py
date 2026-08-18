@@ -225,11 +225,14 @@ BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 #
-# Stricter than every journal that publishes a number: Nature's floor is 5pt,
-# Science asks 5-7pt for labels and 6-8pt for axes, PNAS 6-8pt with nothing
-# under 2mm printed. Those are the sizes at which a string is still *possible*
-# to read. 7.5 is the size at which it is comfortable, and it is cheap to hold
-# because the fix is nearly always cutting words rather than shrinking type.
+# Stricter than every journal that publishes a number: Nature sets a 5pt
+# minimum and a 7pt maximum, and PNAS requires nothing smaller than 6pt after
+# reduction, which its guidelines also state as 2mm. Science publishes no text
+# floor at all, only a 6pt minimum on symbols. Those are the sizes at which a
+# string is still *possible* to read. 7.5 is the size at which it is
+# comfortable, and it is cheap to hold because the fix is nearly always cutting
+# words rather than shrinking type. Verified 2026-08-17; the quotes are in
+# `EXTERNAL_CLAIMS` in tests/test_prose_claims.py.
 TYPE_FLOOR_PT = 7.5
 # Fraction of the content width below which `check_type_size` warns even when
 # every string clears the floor: a figure authored full width and placed in a
