@@ -537,7 +537,7 @@ def orbit():
            "Orbit diagram of the logistic map for r from 2.5 to 4. A single "
            "fixed point splits at r = 3, doubles repeatedly at an accelerating "
            "rate, and dissolves into a dense chaotic band at r about 3.57, with "
-           "windows of periodic behaviour inside it — the widest a period-3 "
+           "windows of periodic behaviour inside it; the widest is a period-3 "
            "window near r = 3.83.")
 
 
