@@ -104,7 +104,7 @@ Prescriptive style sheets already exist and are good:
 journal looks, [tueplots](https://github.com/pnkraemer/tueplots) and mpl_sizes
 for exact conference sizing. Accessibility tooling exists too:
 [matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text,
-Chart4Blind converts a chart image into an accessible one, and contrast
+[Chart4Blind](https://github.com/moured/chart4blind_code) converts a chart image into an accessible one, and contrast
 reporters check colors in isolation.
 
 Each of those acts before or beside the figure. None of them reads the built
