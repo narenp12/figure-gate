@@ -175,6 +175,49 @@ def test_the_leader_line_remedy_discharges_label_attribution():
     plt.close(fig)
 
 
+def test_a_secondary_axis_does_not_report_clipped_ticks():
+    """A secondary axis is a child axes, so it is not in fig.axes. _texts finds
+    its tick labels through findobj, but _ghost_ticks walked fig.axes only, so
+    ticks outside the secondary's own view were never recognised as ghosts."""
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_xaxis("top", functions=(lambda v: v * 2, lambda v: v / 2))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_a_secondary_y_axis_does_not_report_clipped_ticks():
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_yaxis("right", functions=(lambda v: v * 2, lambda v: v / 2))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_a_secondary_axis_on_the_identity_does_not_report_clipped_ticks():
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_xaxis("top", functions=(lambda v: v, lambda v: v))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_text_really_off_the_canvas_still_clips():
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.plot([0, 1], [0, 1])
+    ax.text(-3.5, 0.5, "far outside the canvas indeed")
+    r, _ = cf._renderer(fig)
+    status, _ = cf.check_clipping(fig, r)
+    assert status is False
+    plt.close(fig)
+
+
 def test_different_units_with_coinciding_ticks_are_not_redundant():
     """gates.md promises 'panels on a shared scale repeat tick labels'. The
     code compared tick strings only, so two unrelated quantities whose ticks

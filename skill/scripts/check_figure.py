@@ -514,13 +514,34 @@ def _tick_texts(fig: Figure) -> set[int]:
     return ids
 
 
+def _all_axes(fig: Figure) -> list[Any]:
+    """Every axes on the figure, including child axes.
+
+    `inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added through
+    `add_child_axes` and never reach `fig.axes`. Only the ghost-tick reader
+    uses this today, deliberately: recognising a child axes there removes
+    fires, while teaching the other rows to see child axes adds them and is a
+    separate change with a corpus sweep behind it.
+    """
+    out, seen = [], set()
+    stack = list(fig.axes)
+    while stack:
+        ax = stack.pop()
+        if id(ax) in seen:
+            continue
+        seen.add(id(ax))
+        out.append(ax)
+        stack.extend(getattr(ax, "child_axes", []) or [])
+    return out
+
+
 def _ghost_ticks(fig: Figure) -> set[int]:
     """Tick artists that exist on an axes but never reach the page: those on a
     hidden axes (`ax.axis("off")`), and those at locations outside the current
     view. Counting either as clipped text reports a defect that is not there.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         if not ax.axison:
             ids.update(id(t) for t in
                        ax.get_xticklabels() + ax.get_yticklabels())
