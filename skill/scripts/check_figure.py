@@ -1103,6 +1103,8 @@ def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
 def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy."""
+    import numpy as np
+
     alphas = []
     for ax in fig.axes:
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
@@ -1111,7 +1113,30 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             al = a.get_alpha()
             # unset alpha means opaque, and that is exactly what this check
             # wants to know about, so it counts as 1.0 rather than being skipped
-            alphas.append(1.0 if al is None else round(float(al), 2))
+            if al is None:
+                alphas.append(1.0)
+            elif np.ndim(al) == 0:
+                alphas.append(round(float(al), 2))
+            else:
+                # matplotlib has taken a per-point alpha array since 3.4, and
+                # `float()` raises on one. A raising non-advisory gate is turned
+                # into a hard `False` by `_rows`, so a legal figure failed on a
+                # defect in the checker rather than on anything in the figure.
+                #
+                # A ramp across one artist is ONE level, not one per value: the
+                # question this row asks is how many separate alpha decisions
+                # the reader has to resolve, and a continuous encoding is a
+                # single decision. Counting each value instead made an ordinary
+                # `pcolormesh` report sixteen levels of haze.
+                #
+                # Opacity is the exception and is read per value, because
+                # "is anything solid" is a fact about pixels rather than about
+                # how many choices were made.
+                values = np.atleast_1d(al).ravel()
+                if values.size:
+                    solid_here = float(values.max())
+                    alphas.append(round(solid_here if solid_here >= OPAQUE_ALPHA_MIN
+                                        else float(values.min()), 2))
     if not alphas:
         return True, "no data artists"
     levels = sorted(set(alphas))

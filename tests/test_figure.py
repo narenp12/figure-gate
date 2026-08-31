@@ -141,6 +141,41 @@ def test_contrast_stack_catches_too_many_alpha_levels():
     assert gates(rows)["Contrast stack"] is False
 
 
+def test_contrast_stack_survives_a_per_point_alpha_array():
+    """matplotlib has taken array alpha since 3.4. float() raises on one, and
+    _rows turns a raising non-advisory gate into False, so a legal figure was
+    hard-failed by a defect in the checker."""
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.scatter([0, 1], [0, 1], s=40, alpha=[0.5, 1.0])
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is True, detail
+    assert "raised" not in detail
+    plt.close(fig)
+
+
+def test_an_alpha_ramp_is_one_level_not_sixteen():
+    """A continuous alpha ramp across one artist is one decision the reader
+    resolves, not sixteen. Counting each value made an ordinary pcolormesh
+    report '16 levels reads as haze'."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.pcolormesh(np.arange(16).reshape(4, 4),
+                  alpha=np.linspace(0.2, 1.0, 16).reshape(4, 4))
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_an_array_alpha_with_nothing_opaque_still_fails():
+    """The over-fire fix must not blind the row to the defect it exists for."""
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.scatter([0, 1, 2], [0, 1, 2], s=40, alpha=[0.2, 0.4, 0.6])
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is False
+    assert "nothing is opaque" in detail
+    plt.close(fig)
+
+
 def test_mark_ratio_catches_an_ornamental_star():
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.scatter([1, 2, 3], [1, 2, 3], s=12)
