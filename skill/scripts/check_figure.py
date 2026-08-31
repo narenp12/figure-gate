@@ -1086,7 +1086,14 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
         # read against whatever resolution the author set. Do it here and
         # re-enter, so the whole body runs at the one resolution and `r` is
         # remeasured against it.
-        with _at_measure_dpi(fig):
+        #
+        # `_at_draw_rc` for the same reason and in the same order `audit` enters
+        # them. A figure whose builder reported on it has a record, and reading
+        # this gate under the caller's font list instead would put the two
+        # routes on two different faces: measured on `gallery-density` under
+        # matplotlib 3.8.4, ax0's ink fraction came back 0.07 through `audit`
+        # and 0.08 here.
+        with _at_draw_rc(fig), _at_measure_dpi(fig):
             r, canvas = _renderer(fig)
             return check_text_readability(fig, r, canvas, scale, placed_frac,
                                           venue)
@@ -1686,10 +1693,11 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     import numpy as np
 
     if canvas is None:
-        # Same reason as `check_text_readability`: an ink fraction is a count of
-        # pixels, and a count of pixels is only a measurement at a fixed
-        # resolution. See `MEASURE_DPI`.
-        with _at_measure_dpi(fig):
+        # Same reason as `check_text_readability`, and the same two context
+        # managers in the same order: an ink fraction is a count of pixels, and
+        # a count of pixels is only a measurement at a fixed resolution and a
+        # fixed font list. See `MEASURE_DPI` and `METRIC_RC_KEYS`.
+        with _at_draw_rc(fig), _at_measure_dpi(fig):
             _, canvas = _renderer(fig)
             return check_ink(fig, context_axes, canvas)
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)

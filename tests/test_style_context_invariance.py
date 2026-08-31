@@ -35,6 +35,7 @@ import io
 import sys
 from pathlib import Path
 
+import matplotlib
 import matplotlib.pyplot as plt
 import pytest
 
@@ -191,6 +192,50 @@ def test_the_record_is_taken_once_and_not_overwritten(modules):
             "a later audit overwrote the record with the caller's rcParams")
     finally:
         plt.close(fig)
+
+
+@pytest.mark.parametrize("gate", ("check_ink", "check_text_readability"))
+def test_a_gate_called_on_its_own_draws_under_the_record_audit_draws_under(
+        modules, gate, monkeypatch):
+    """The invariant `test_renderer_invariance.py` states for resolution, held
+    for the font list as well.
+
+    `check_ink` and `check_text_readability` are public and documented as
+    callable directly, and each builds its own canvas when it is not handed one.
+    Pinning the rcParams in `audit` alone put the two routes on two different
+    faces the moment a builder had reported on the figure, which every gallery
+    builder does. Measured on `gallery-density` under matplotlib 3.8.4, ax0's
+    ink fraction came back 0.07 through `audit` and 0.08 called straight.
+
+    Asserted on the font list live at the draw, not on the number that comes
+    out of it. Comparing the two routes' details is what CI already does, and
+    three of its four pytest legs passed the broken version: the two faces move
+    a fraction by about 0.01, so whether the defect is visible depends on which
+    side of a rounding boundary the figure happens to sit. The mechanism does
+    not depend on that.
+    """
+    fig = build(modules, "demo")
+    seen = []
+    real = cf._renderer
+    monkeypatch.setattr(
+        cf, "_renderer",
+        lambda f: (seen.append(matplotlib.rcParams["font.serif"][0]), real(f))[1])
+    try:
+        # A font list neither route was drawn under, so reading the caller's
+        # rcParams and reading the record give different answers.
+        with plt.rc_context({"font.serif": ["DejaVu Serif"]}):
+            if gate == "check_ink":
+                cf.check_ink(fig)
+            else:
+                cf.check_text_readability(fig, None)
+    finally:
+        plt.close(fig)
+
+    assert seen, f"{gate} never reached _renderer, so this asserts nothing"
+    assert set(seen) == {"STIX Two Text"}, (
+        f"{gate} called on its own drew under {sorted(set(seen))} rather than "
+        "the sheet's font list, which is what the figure was drawn under and "
+        "what `audit` measures it under")
 
 
 def test_the_record_does_not_alias_the_live_rcparams(modules):
