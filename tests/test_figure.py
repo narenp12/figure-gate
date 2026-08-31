@@ -1981,6 +1981,28 @@ def test_placed_frac_without_any_width_still_refuses():
     plt.close(fig)
 
 
+def test_venue_cannot_be_passed_positionally():
+    """The 4th positional is context_axes. A venue string lands there, is
+    iterated into a frozenset of ids because a string is iterable, nothing
+    raises, and the venue is discarded: a failing figure reported green."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot([0, 1], [0, 1])
+    ax.set_xlabel("x", fontsize=8)
+    with pytest.raises(TypeError):
+        cf.audit(fig, None, 1.0, "neurips")
+    assert gates(cf.audit(fig, venue="neurips")[1])["Type size"] is False
+    plt.close(fig)
+
+
+def test_scale_and_placed_frac_stay_positional():
+    """The break is scoped to the two arguments that were being confused."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1])
+    cf.audit(fig, 0.5)
+    cf.audit(fig, None, 0.5)
+    plt.close(fig)
+
+
 # --- label attribution: the case a KD-tree silently passed -------------------
 
 def test_polyline_does_not_bridge_a_gap_in_the_data():

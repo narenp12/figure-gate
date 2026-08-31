@@ -28,6 +28,13 @@ rewrites that line to match `pyproject.toml`, and a bump refuses to start on an
 unclean tree, so the version site nobody maintained was blocking the command
 that maintains the rest.
 
+### Changed
+
+- `check_figure.audit` and `check_figure.report` take `context_axes` and
+  `venue` as keyword-only arguments. A `venue` passed positionally landed in
+  the `context_axes` slot, where a string is iterable and so was accepted
+  silently, and the figure was then measured at the wrong page width.
+
 ## 0.8.0 — 2026-08-18
 
 **The separation gates measure in CAM02-UCS instead of OKLab, and both floors

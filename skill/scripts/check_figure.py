@@ -3026,6 +3026,7 @@ ADVISORY_GATES = _advisory_gates()
 
 
 def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
+          *,
           context_axes: Sequence[Axes] | None = None,
           venue: str | None = None,
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
@@ -3048,6 +3049,13 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     calculation outright. `context_axes` names axes whose fill is a context
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
+
+    `context_axes` and `venue` are keyword-only. They were positional until
+    0.9.0, and a `venue` passed in the `context_axes` slot was iterated into a
+    frozenset of axes ids rather than raising, because a string is iterable.
+    The venue was discarded and the figure was measured at the wrong width: a
+    wrong verdict, reported green, from an argument order. Keyword-only is the
+    only shape in which that call cannot be written.
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
@@ -3120,6 +3128,7 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
 
 def report(fig: Figure, name: str = "", scale: float | None = None,
            placed_frac: float = 1.0,
+           *,
            context_axes: Sequence[Axes] | None = None,
            venue: str | None = None, suggest: bool = False) -> bool:
     """`audit()`, printed. Returns the same `ok` bool and nothing else.
@@ -3137,6 +3146,14 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
 
+    `context_axes`, `venue` and `suggest` are keyword-only, matching `audit`.
+    They were positional until 0.9.0, and a `venue` passed in the
+    `context_axes` slot was iterated into a frozenset of axes ids rather than
+    raising, because a string is iterable. The venue was discarded and the
+    figure was measured at the wrong width: a wrong verdict, reported green,
+    from an argument order. Keyword-only is the only shape in which that call
+    cannot be written.
+
     Args:
         fig: The built figure.
         name: A heading for the table.
@@ -3149,7 +3166,8 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     Returns:
         `audit`'s `ok` bool. Advisory rows print as WARN without changing it.
     """
-    ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
+    ok, rows = audit(fig, scale, placed_frac,
+                     context_axes=context_axes, venue=venue)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False
     for label, status, detail in rows:
