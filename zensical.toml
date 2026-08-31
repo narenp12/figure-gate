@@ -166,6 +166,15 @@ logo = "lucide/fence"
 [project.markdown_extensions.tables]
 [project.markdown_extensions.toc]
 permalink = true
+# The contents sidebar stops at h3. Only the changelog goes deeper: each release
+# there is an h2 carrying a "What changed" and a "Why it changed" h3, and the
+# topical headings inside the second one are h4. Listing those put 28 entries
+# three levels deep in the sidebar of a 2400-line page, which is a worse index
+# than none. Every other document in the project has no h4 at all, and the API
+# page's symbol headings are h3 -- checked in the built HTML, not assumed, since
+# mkdocstrings chooses that level rather than the source doing it -- so nothing
+# else loses an entry to this.
+toc_depth = "2-3"
 [project.markdown_extensions.pymdownx.details]
 [project.markdown_extensions.pymdownx.highlight]
 anchor_linenums = true
