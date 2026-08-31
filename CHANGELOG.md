@@ -1,32 +1,145 @@
 # Changelog
 
+Each release is written in two blocks. **What changed** is the reference half:
+one line per change, naming the symbol, the row or the value that moved, and
+nothing else. **Why it changed** is the explanation half: the measurement, the
+defect it exposed, and what it cost. A release whose entry is already a short
+list of self-explaining lines carries the first block only.
+
+The split is deliberate. A reader who wants to know whether an upgrade will
+break them should not have to read an essay to find out, and the essays are
+worth keeping: most of them record a measurement that is the only evidence
+behind a threshold this project enforces.
+
 ## Unreleased
+
+### What changed
+
+#### Changed
+
+- `audit(context_axes)`, `audit(venue)`, `report(context_axes)`,
+  `report(venue)` and `report(suggest)` changed to keyword-only.
+- `check_figure.audit` measures under the rcParams the figure's first audit
+  saw. `METRIC_RC_KEYS` names them. `Style sheet` and the Type 3 clause of
+  `Fonts` still read the live rcParams.
+
+#### Added
+
+- `check_palette.cmap_kind_rgb` and `check_palette.cmap_back_travel_rgb`,
+  classifying a ramp from float sRGB. The hex-taking `cmap_kind` and
+  `cmap_back_travel` are unchanged.
+- Two gallery figures, `gallery-callout` and `gallery-secondary-scale`,
+  carrying an annotation drawn with a leader line and a secondary axis. The
+  corpus is thirteen figures.
+- `tests/test_style_context_invariance.py`, holding every row identical across
+  the sheet boundary for `demo` and `encoding`.
+
+#### Fixed
+
+- `Contrast stack` no longer fails a figure that uses matplotlib's per-point
+  alpha. An alpha ramp counts as one level.
+- `Text collision`, `Label attribution` and `Text readability` measure a
+  callout's string rather than its leader line.
+- `Label attribution` reads an annotation at the anchor its leader points to,
+  rather than at the string. A leader drawn to the wrong curve still fails.
+- `Label attribution` no longer judges a panel title, axis label or colorbar
+  label as a direct label.
+- `Axis redundancy` requires the panels to share limits, scale type and axis
+  title before it calls a tick column repeated.
+- `Clipping` recognises off-view ticks on a child axes, so `secondary_xaxis`
+  and `secondary_yaxis` no longer report them as clipped text.
+- `Colormap kind` classifies a ramp before the 8-bit round trip.
+- Auditing one figure twice returns one verdict, and a gate called on its own
+  reports what `audit` reports.
+- `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
+  a parameter change can be written down at all.
+- `docs/images` carries the two figures this cycle added to the corpus.
+- The release bump no longer requires `^## Unreleased$` on the bump that opens
+  the next development cycle. `exclude_bumps` on that entry; the release bump
+  still refuses to run without notes.
+- `uv.lock` is a bump entry, anchored across its `name` and `version` lines.
+
+### Why it changed
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release
 commit, so nothing exercised them until 0.8.0 was being cut.
 
-- Every `[[tool.bumpversion.files]]` entry applied to every bump, so the
-  changelog's `^## Unreleased$` was required by the bump that opens the next
-  development cycle as well as by the one that cuts a release. That bump runs
-  immediately after a release, when the heading has just been renamed to the
-  version and the next notes do not exist, so it failed every time it was run.
-  0.7.0 is what that cost: its cycle never opened, the tree kept reading
-  `0.7.0`, and 0.8.0 could not be cut with the documented command.
-  `exclude_bumps` on that entry is the fix, and the release bump still refuses
-  to run without notes.
-- `uv.lock` records the project's own version and nothing wrote it, so it still
-  read `0.7.0` after 0.8.0 shipped. It is a bump entry now, anchored across the
-  `name` and `version` lines: the lock names a version for every package in the
-  graph, and it currently carries annotated-types 0.8.0, ast-serialize 0.6.0
-  and mdurl 0.1.2, all versions this project has shipped. An unanchored search
-  cutting 0.8.0 would have found annotated-types first, since the lock is
-  sorted by name, and pinned a dependency to a version that does not exist.
+Every `[[tool.bumpversion.files]]` entry applied to every bump, so the
+changelog's `^## Unreleased$` was required by the bump that opens the next
+development cycle as well as by the one that cuts a release. That bump runs
+immediately after a release, when the heading has just been renamed to the
+version and the next notes do not exist, so it failed every time it was run.
+0.7.0 is what that cost: its cycle never opened, the tree kept reading `0.7.0`,
+and 0.8.0 could not be cut with the documented command.
 
-The second one was not cosmetic. Any command that syncs the environment
-rewrites that line to match `pyproject.toml`, and a bump refuses to start on an
-unclean tree, so the version site nobody maintained was blocking the command
-that maintains the rest.
+`uv.lock` records the project's own version and nothing wrote it, so it still
+read `0.7.0` after 0.8.0 shipped. That one was not cosmetic. Any command that
+syncs the environment rewrites that line to match `pyproject.toml`, and a bump
+refuses to start on an unclean tree, so the version site nobody maintained was
+blocking the command that maintains the rest. It needs anchoring rather than a
+plain search: the lock names a version for every package in the graph, it is
+sorted by name, and it currently carries annotated-types 0.8.0, ast-serialize
+0.6.0 and mdurl 0.1.2, all versions this project has shipped. An unanchored
+search cutting 0.8.0 would have found annotated-types first and pinned a
+dependency to a version that does not exist.
+
+**A string is iterable, so a `venue` passed positionally was accepted.** It
+landed in the `context_axes` slot, was iterated into a frozenset of axes ids
+rather than raising, and the figure was measured at the wrong page width: a
+wrong verdict, reported green, from an argument order. Keyword-only is the only
+shape in which that call cannot be written.
+
+**The gate that requires this to be written down could not be satisfied.**
+`audit_api.py` matched a name griffe reported with `\b` on both sides, and half
+the names it reports cannot clear that: a parameter change comes back as
+`audit(context_axes)`, and a `\b` after the `)` asks for a word character next
+to it, which no sentence puts there. So the keyword-only change above failed CI
+with the section naming every one of the five parameters. Eight releases passed
+because griffe had only ever reported bare names like `GATES` and `delta_e`,
+which end in a word character. Lookarounds instead, which keep what `\b` was
+there for: `delta_e` still does not match inside `delta_error`.
+
+**Most of the fixes above are one round of false positives, found by putting
+two constructs into the corpus that were not in it.** An annotation drawn with
+a leader line and a secondary axis between them exposed six rows that failed
+correct figures, and the pattern in all six is the same: a gate read an
+artist's window extent, or an rcParam, or a quantised colour, and took it for a
+fact about the figure when it was a fact about how the measurement was taken.
+
+An annotation's window extent spans its text and its arrow together, so a
+one-character label measured 285 points wide and ordinary annotated figures
+failed all three text rows. Drawing a leader line is the remedy
+`Label attribution`'s own `[FIX]` and `docs/gates.md` both offer, and taking it
+could not discharge the row: a leader exists to set the string away from the
+ink, so the string was measured nearer whichever curve lay in between. Two
+quantities in different units whose ticks happened to coincide were told to use
+`sharey`. `Contrast stack` called `float()` on an array, raised, and the raising
+gate became a hard failure. `winter` and `Wistia` failed on quantisation
+artifacts of about 0.001 OKLab, amplified by their narrow lightness spans.
+
+**Auditing one figure twice returned two verdicts, and it is the same
+measurement error one level up.** `examples/demo.py` builds and reports inside
+`plt.style.context` and hands the figure back with the context closed, so a
+caller who audited the returned object was measuring somewhere else. `demo` and
+`encoding` printed all-PASS from inside their own builders and failed the sweep
+that audited them a moment later.
+
+The mechanism is not a family fallback. `font.family` is captured into each
+Text artist's FontProperties at construction and does not move; the list that
+`serif` resolves through is not captured. The sheet leads `font.serif` with STIX
+Two Text and matplotlib's default leads it with DejaVu Serif, so the same label
+at the same nominal size measured 100.0 px instead of 82.0.
+`constrained_layout` re-solved against the wider tick labels and moved the axes
+9 px, the annotations are anchored in data coordinates and did not follow, and
+`Label attribution` read a label as nearest a curve that is not its own.
+
+Pinning the rcParams a measurement depends on is the same move `MEASURE_DPI`
+already makes for resolution, and it is the second half of one bug class: a
+measurement read against a knob nobody pinned. The record is taken at the first
+audit because there is no hook at construction, so a figure whose first audit
+happens outside its sheet records the wrong baseline and is then wrong
+consistently rather than differently each time.
 
 ### Changed
 
@@ -78,6 +191,41 @@ that maintains the rest.
   their narrow lightness spans.
 
 ## 0.8.0 — 2026-08-18
+
+### What changed
+
+- `delta_e` **changed** what it returns: CAM02-UCS ΔE, not OKLab ×100. Same
+  name, same signature, different number, and the sharpest edge in this release.
+- `oklab_distance` was **added**, returning exactly what `delta_e` returned
+  before.
+- `linear_to_cam02ucs` was **added**: a stdlib CIECAM02, held to colorspacious
+  within 1e-9 on identical XYZ.
+- `CVD_TARGET` **changed** 8.0 → **10.5**; `NORMAL_FLOOR` **changed**
+  15.0 → **21.0**; `CMAP_WRAP_DE_MAX` **changed** 3.0 → **1.0**.
+- All six cycle slots now clear all-pairs. Okabe-Ito's orange and yellow miss
+  the new normal-vision floor at 20.75 against 21.0.
+- `audit` draws at `MEASURE_DPI = 150` and hands the figure back on the dpi it
+  arrived on. `check_ink` and `check_text_readability` do the same when called
+  directly. No verdict changed at 150 dpi; verdicts at other authored dpi
+  changed to match it.
+- `DOCUMENT_TO_GATE_MAX` **changed** 0.92 → 0.93 → 0.998 → **1.009**.
+- `getting-started.md` is **gone**, split across `tutorial.md`, `install.md`
+  and `compatibility.md`. A link or bookmark to that page breaks.
+- Added: `tutorial.md`, `install.md`, `cli.md`, `compatibility.md`,
+  `docs/how-to.md`, and API-page entries for the 21 gate functions.
+- Added: `tests/test_renderer_invariance.py`,
+  `tests/test_external_style_corpus.py`, `tests/test_suite_balance.py`,
+  `tests/test_tutorial.py`, `tests/test_how_to.py`.
+- The declared `matplotlib>=3.8` floor is asserted against CI's matrix.
+- Seven unused markdown extensions removed from the site config;
+  `navigation.tabs`, `sections`, `path` and `footer` set; nine pages carry
+  their own meta description.
+- Corrected: `design.md`'s "0.988 specificity" credit, the Science type floor
+  (retracted, it publishes none), PNAS's 6pt (one requirement in two units, not
+  two floors), a blank panel's furniture reading, and the mermaid diamond on
+  `gates.md`.
+
+### Why it changed
 
 **The separation gates measure in CAM02-UCS instead of OKLab, and both floors
 moved.** This is the largest correctness change the project has made and it
@@ -365,6 +513,49 @@ line-weight, overplotting and alpha rows are asserted on what they print.
 measurement written to pay for it.
 
 ## 0.7.0 — 2026-08-03
+
+### What changed
+
+- Installed, the checkers are a package. `import check_figure` no longer
+  resolves; `from figure_gate import check_figure` does. The console scripts
+  `check-palette` and `check-figure` are unchanged, and vendoring is untouched.
+- `py.typed` ships. The style sheet installs to `figure_gate/figure.mplstyle`.
+  An install that named the sheet by its old path has to say the new one.
+- `pip install -e .` no longer works on a clone; `[tool.uv] package = false`
+  records that.
+- **New gate: `check_banking`**, advisory, with `BANKING_SLOPE_MAX = 10.0` and
+  `BANKING_MIN_POINTS = 8`. `GATES` gained a row and every row after
+  `Line weight` moved down one, so `audit()` returns 21 rows and not 20. This
+  breaks anything indexing that tuple rather than reading it by name.
+- The remediation marker `  <- ` became two marks, `[FIX]` and `[WHY]`.
+- `SERIES_ENCLOSED_FRAC = 0.7` **added**: a fill holding that share of another
+  series' ink is that series' band, rather than a rival, and a band no longer
+  has to be labelled to be recognised.
+- `MACHADO` and `simulate_anomalous` **added**, with `ANOMALOUS_SEVERITIES`.
+  The separation row takes the worst over them alongside dichromacy and names
+  the severity its verdict came from.
+- `scatter_diameter_pt` **added**. `s` is a squared diameter, not an area, so
+  `Mark ratio` and `Overplotting` both report different numbers than before.
+- Four gallery figures **added**: `gallery-uncertainty`, `gallery-counts`,
+  `gallery-residual`, `gallery-density`. The corpus is eleven figures.
+- `examples/gallery.py` and `examples/demo.py` are importable. The driver, the
+  argv read and the exit are under `__main__`; the builders return their
+  figures and write nothing with `OUT`/`out` set to None.
+- A gate that raises reports its own row instead of losing the audit. An
+  advisory that crashed warns; a hard gate that crashed fails.
+- The tree carries a development version between releases (`0.7.0.dev0` here).
+  `uv run bump-my-version bump dev` drops the suffix.
+- Nine thresholds moved to module level. Values unchanged, so no verdict moves.
+- Added: `tests/test_thresholds_are_constants.py`,
+  `tests/test_alt_text_numbers.py`, and `RETRACTED_CLAIMS`.
+- Corrected in alt text: the slope graph's `eleven of twelve rise`, the demo's
+  `reaches 0.05 by epoch 6`, and the field's `28-step ... from (-1.9, 2.2)`.
+- **Measured and not shipped:** a size-weighted separation gate. The finding
+  ships as a test; the gate does not.
+- CI runs the suite on macOS and Windows. The sdist config is an allowlist. The
+  wheel excludes `audit_api.py`.
+
+### Why it changed
 
 **Installed, the checkers are a package: `from figure_gate import
 check_figure`.** This is a breaking change on the install path and the reason
@@ -954,6 +1145,38 @@ to name a constant or a reason. Values are unchanged, so no verdict moves.
 
 ## 0.6.0 — 2026-07-30
 
+### What changed
+
+- The README is a landing page. The reference material moved to `docs/gates.md`
+  and `docs/getting-started.md`, both authored pages named in `AUTHORED`.
+  Nothing was duplicated in the move.
+- `docs/api.md` **added**: `:::` directives read by mkdocstrings at build time,
+  documenting fifteen functions. Eight of them gained a docstring.
+  `tests/test_api_reference.py` holds the page to the modules.
+- `PROSE_DOCS` is derived from git rather than listed: every tracked markdown
+  file, minus `CHANGELOG.md` and `specs/`, which are exempt by a rule and not a
+  list. Six resolver domains **added**, taking 229 unresolved spans to 23.
+- Three tools **added** to CI: ruff's `DOC102`, `DOC202`, `DOC403`, `DOC502`;
+  `griffe check` against the last tag, failing only when a break is not
+  mentioned in the Unreleased section; and `codespell` with three ignore-words.
+  `pymarkdownlnt` was measured and rejected.
+- `uv run bump-my-version bump minor` rewrites `CHANGELOG.md`,
+  `pyproject.toml`, `plugin.json` and `recipe.yaml`, commits, and tags `v<new>`.
+  `CHANGELOG.md` is first in the file list and the order is load-bearing.
+- `tests/test_version_sites.py` **added**, holding the bump config to the files
+  it points at.
+- `examples/demo.py` and `examples/gallery.py` take an optional output
+  directory. The default is unchanged.
+- The docs build installs `--only-group docs` instead of naming its
+  dependencies inline.
+- `make audit` **added**, with `specs/2026-07-30-standardized-docs-audit.md`
+  recording what each check proves and what it does not.
+- `conda/README.md` describes a submission that has happened rather than one
+  that is planned.
+- Em dashes removed from the README and the pages cut out of it.
+
+### Why it changed
+
 **The README is a landing page now, and the documentation is on the docs site.**
 It had grown to 361 lines carrying both threshold tables, three install routes,
 the usage examples, the retina history and the design notes, for a project that
@@ -1160,6 +1383,20 @@ is accepted and then ignored fails even though the other tests would still pass.
 
 ## 0.5.0 — 2026-07-30
 
+### What changed
+
+- The repository is a Claude Code plugin marketplace.
+  `/plugin marketplace add narenp12/figure-gate` installs the skill. Two CI
+  checks come with it, both in the `skill` job.
+- Ruff and mypy run in CI. Neither existed before. Thirteen findings were fixed
+  rather than suppressed; two carry a `noqa` with the reason beside it.
+  `per-file-target-version` reads `check_palette.py` against the 3.8 grammar,
+  and `E741` is ignored because `l` is the OKLab lightness channel.
+- `_back_travel` takes direction from net travel, `ls[-1] >= ls[0]`, rather
+  than by majority vote over the steps. No named colormap changes kind.
+
+### Why it changed
+
 **The repository is a Claude Code plugin marketplace.**
 `.claude-plugin/marketplace.json` lists the skill and `skill/.claude-plugin/plugin.json`
 describes it, so `/plugin marketplace add narenp12/figure-gate` installs it and
@@ -1205,6 +1442,31 @@ approximating. No named colormap changes kind.
 
 ## 0.4.0 — 2026-07-29
 
+### What changed
+
+- `check_palette.check()` **changed** what it returns: `(ok, rows)`, matching
+  `check_figure.audit()`. It returned `(rows, ok)` before. If you unpack it,
+  swap the names.
+- `requires-python` **changed** `>=3.9` → **`>=3.11`**. `check_palette.py` still
+  runs on 3.8 when vendored, and matplotlib stays floored at 3.8.
+- `GATES` **added**: one registry holding the twenty rows with their functions,
+  advisory flag and arguments. `ADVISORY_GATES` is derived from it.
+- `audit()` and `check()` gained docstrings. They were the only functions in
+  either module without one.
+- `NO_GUIDANCE` is empty: `Clipping` and `Ink coverage` have guidance, with a
+  test to keep a future re-entry deliberate.
+- `tests/test_prose_claims.py` **added**, sweeping the four prose documents.
+  `EXTERNAL_CLAIMS` carries claims about the world with a source and a date.
+- `KNOWN_DISAGREEMENTS` is compared only against colormaps the running
+  matplotlib has. A broken cmasher skips with its reason instead of erroring.
+- `conda/recipe.yaml` and `conda/update_recipe.py` **added**, with
+  `tests/test_conda_recipe.py` holding the recipe to `pyproject.toml`.
+- Corrected: RdBu's poles (`#b1182b` and `#2065ab` are t=0.098 and t=0.899, not
+  the ends), five `CMAP_*` constants attributed to the wrong module, Cleveland
+  & McGill's ordering, the ACM/Elsevier claim, and the uncited 99.81% figure.
+
+### Why it changed
+
 A minor release because it breaks a call. `check_palette.check()` returned
 `(rows, ok)` while `check_figure.audit()` returned `(ok, rows)`, and the README
 carried a paragraph warning readers about the difference. Documentation
@@ -1230,7 +1492,7 @@ floor skips it. Two things deliberately did not move with it:
 paragraph in the README is gone and a test holds both entry points to the same
 shape.
 
-### Prose is now swept, not spot-checked
+#### Prose is now swept, not spot-checked
 
 An accuracy audit of the reference material found five defects the doc suite
 could not have caught, because every assertion in it was written after somebody
@@ -1259,7 +1521,7 @@ with a source, a date and the passage that supports them, and the cited work
 has to appear in the document's own references. Anything a resolver cannot
 place is named in a ledger with the reason.
 
-### Clipping and Ink coverage have guidance
+#### Clipping and Ink coverage have guidance
 
 `NO_GUIDANCE` held the two gates the reference material never explained, on the
 argument that both were mechanical rows with nothing to advise. Both turned out
@@ -1272,7 +1534,7 @@ which it moves opposite to under the edit that reading suggests.
 
 The set is empty now, with a test to keep a future re-entry deliberate.
 
-### Standardization
+#### Standardization
 
 - **One gate registry.** `GATES` holds the twenty rows with their functions,
   their advisory flag and the arguments they need. `audit()` builds its rows
@@ -1284,7 +1546,7 @@ The set is empty now, with a test to keep a future re-entry deliberate.
   in a `<-` clause naming the fix. The five that do not are listed in the test
   suite with the reason, rather than being an invisible inconsistency.
 
-### The oracle no longer depends on which matplotlib you have
+#### The oracle no longer depends on which matplotlib you have
 
 - **`KNOWN_DISAGREEMENTS` is scoped to the registry it is about.**
   `test_only_the_three_known_colormaps_disagree_with_cmasher` asserted that all
@@ -1311,7 +1573,7 @@ The set is empty now, with a test to keep a future re-entry deliberate.
   `skill/scripts/` constructs a `ListedColormap`, so the filter cannot hide a
   defect of this project's.
 
-### A conda package
+#### A conda package
 
 `conda/recipe.yaml` is a rattler-build v1 recipe for conda-forge, so the install
 line will be `conda install -c conda-forge figure-gate` with no extra channel to
@@ -1337,6 +1599,37 @@ shipped.
 
 ## 0.3.0 — 2026-07-29
 
+### What changed
+
+- **New gate: `check_colormap`, row 18**, a hard failure. `Fonts` moves to 19
+  and `Alt text` to 20. A heatmap drawn in `jet` was a PASS in every release
+  before this and is a FAIL now.
+- `cmap_kind()` **added** to `check_palette.py`, stdlib only, with
+  `CMAP_SAMPLES = 256`, `CMAP_QUALITATIVE_N = 40`, `CMAP_SPAN_MIN = 0.02`,
+  `CMAP_BACKTRAVEL_MAX = 0.02` and `CMAP_WRAP_DE_MAX = 3.0`. `misc` is the only
+  outcome that fails; `jet`, `rainbow`, `hsv` and `gist_ncar` land there.
+- A qualitative colormap is routed to the palette gates for its separation rows
+  only.
+- `ANONYMOUS_CMAP_NAMES` **added**, holding all three spellings matplotlib uses
+  for an author-built colormap.
+- A seventh gallery figure, `gallery-encoding.png`.
+- Twenty-two swatches **added** across the style guide, gated at source and at
+  paint. `palette.css` reaches the page again: the scheme rules no longer carry
+  a `:root` prefix that matched nothing.
+- `GUIDANCE_ANCHORS` **added**, binding eighteen of the twenty gates to a
+  passage. `Clipping` and `Ink coverage` are named in an exemption set.
+- The style guide gained a references section: Kovesi, Crameri et al., Nuñez et
+  al., Moreland.
+- The README's Threshold column is resolved against the modules. Two prose rows
+  were converted to checkable numbers; seven remain a literal set.
+- `test_palette_oracle.py` skips per test rather than at collection, so the
+  test count is the same everywhere. The cmasher differential runs in CI.
+- `main` is branch-protected: fourteen required checks, enforced for admins.
+- `plans/` is untracked. `specs/` stays.
+- Suite: 286 → 482 tests. Gates: 19 → 20.
+
+### Why it changed
+
 A minor release, for the same reason 0.2.0 was one: a figure that passed on
 0.2.0 can fail on this one. There is a twentieth gate, and it is a hard failure
 rather than an advisory. A heatmap drawn in `jet` was a PASS in every release
@@ -1346,7 +1639,7 @@ The four sections below are the release in the order it happened: a gate, the
 site it was published on, an audit of the documents it arrived with, and the
 two ways the suite stayed green while CI was red.
 
-### A twentieth gate: colormap kind
+#### A twentieth gate: colormap kind
 
 Every gate before this one read artists that carry an identity: a line's
 colour, a bar's face, a scatter's marks. A figure whose entire content is one
@@ -1415,7 +1708,7 @@ rule instead". No such rule existed.
   written down in `specs/2026-07-28-colormap-kind-gate-design.md` with the
   measurements, rather than resolved with a guessed constant.
 
-### The swatches, and the stylesheet that had stopped reaching the page
+#### The swatches, and the stylesheet that had stopped reaching the page
 
 - **Twenty-two swatches across the style guide**: the Okabe-Ito table, the
   ink and furniture tokens, the achromatic ramp, the RdBu poles and midpoint,
@@ -1459,7 +1752,7 @@ rule instead". No such rule existed.
   failed, without the docs-test group) now has a test of its own that runs it
   in a subprocess with both distributions unimportable.
 
-### An audit of the documents the gate arrived with
+#### An audit of the documents the gate arrived with
 
 The gate shipped with 122 lines of logic and 13 lines of documentation: one
 table row, two counts, one comma in a roster sentence, and a figcaption. The
@@ -1525,7 +1818,7 @@ audit of that gap found a larger one behind it.
   publisher. A citation is the one claim in this project that cannot be gated
   without making the suite depend on the network, and it is worth saying so.
 
-### Two ways the suite was green and CI was not
+#### Two ways the suite was green and CI was not
 
 `main` failed CI on every run between the gate landing and this release. Both
 causes are invisible on a developer machine, which is how a green local suite
@@ -1561,7 +1854,7 @@ shipped them twice.
   above was merged into a `main` that was already red, and nothing was in the
   way.
 
-### Also
+#### Also
 
 - `plans/` is untracked. It held an implementation plan written for an agent to
   execute and its task queue, and the queue still recorded every task as
@@ -1572,6 +1865,36 @@ shipped them twice.
 Suite: 286 → 482 tests. Gates: 19 → 20.
 
 ## 0.2.0 — 2026-07-28
+
+### What changed
+
+- `Contour dash` fires on any negative level, asked of the strokes the set drew
+  rather than of `negative_linestyles`. It required *every* level to be
+  non-positive before, which is the one shape a signed field never has.
+- `check_mark_ratio` measures scatter and `plot` markers in one unit. The ratio
+  moves by 4/π.
+- `alt_metadata(fig, path)` takes an optional path and returns the key that
+  format has, or `None` for the formats that have none. Called without a path
+  it returns `Description`, as every earlier version did.
+- `ADVISORY_GATES` **added** as the one list. `Overplotting` and `Contour dash`
+  are advisory and were documented as able to fail.
+- A docs site, published to GitHub Pages from `.github/workflows/docs.yml`.
+  Every page except the gallery is a symlink to the file that already existed.
+- Dark mode takes sky `#56B4E9` for body links; light mode keeps Okabe-Ito blue
+  `#0072B2`.
+- Muted ink **changed** `#898781` → **`#777570`** in the guide's table, matching
+  what `figure.mplstyle` ships. The old spelling stays in `INK_TOKENS`.
+- Corrected: "only the first four slots clear all-pairs" is five; full-range
+  viridis is 1.26:1 on white, not 1.23:1 on the retired `#fcfcfb`; the
+  grayscale separations are relative luminance, not ΔL; `SKILL.md`'s roster
+  listed eighteen of nineteen gates; `demo.png`'s site alt text was a
+  paraphrase.
+- `_halo` no longer returns "no casing" when matplotlib's private `_gc` moves.
+- Smaller: `--venues` runs without matplotlib; the dual-axis message says "two
+  data scales"; `ordinal()` no longer divides by zero at `n=1`.
+- Suite: 224 → 268 → 286 tests.
+
+### Why it changed
 
 A minor release rather than a patch, because the gates now answer differently.
 Nothing here is a redefinition — every change is a fix to code that was not
@@ -1586,7 +1909,7 @@ The three sections below are three audits — the gates, the documentation site,
 then the documents themselves — run in that order, each finding the same
 species of defect one level further out.
 
-### An audit of the gates, and what it found
+#### An audit of the gates, and what it found
 
 Two of the nineteen rows were not measuring what they claimed, and four
 documented numbers were not the numbers the code computes. All six are the same
@@ -1687,7 +2010,7 @@ so each fix ships with the executable link that keeps it true.
 
 Suite: 224 → 268 tests.
 
-### Docs site
+#### Docs site
 
 Documentation only. No code, no thresholds, no packaging change — the wheel
 built from this commit is byte-identical in what it ships.
@@ -1785,7 +2108,7 @@ built from this commit is byte-identical in what it ships.
   looks emphatic on a near-black page; the mat is the surface that number is
   about.
 
-### An audit of the documentation, and what it found
+#### An audit of the documentation, and what it found
 
 Every number, roster and code sample in the published documents, read against
 the code that produces it. Five drifts, all the same species as the ones above,
@@ -1850,6 +2173,8 @@ Suite: 268 → 286 tests.
 One dead gate on the install path, and the missing way to point a live one at
 your own sheet. Nothing about the thresholds changed.
 
+### What changed
+
 - **The wheel ships `figure.mplstyle`.** It ships beside `check_figure.py`,
   which is the first location `_style_sheet` probes. Through 0.1.3 the wheel
   carried `skill/scripts` and nothing else, so on `uv add figure-gate` there was
@@ -1886,6 +2211,8 @@ Mostly the README. 0.1.2's fix shipped without the project page explaining the
 condition it fixed, and PyPI renders the README from the released sdist, so the
 explanation could not reach the project page without a release of its own.
 
+### What changed
+
 - **The README documents the HiDPI behaviour**, in a section under "Use it":
   what a Retina or scaled-display backend does to `fig.dpi`, both ways that went
   wrong through 0.1.1, and the one consequence a user can trip over — an audited
@@ -1905,6 +2232,8 @@ explanation could not reach the project page without a release of its own.
   stated. Neither function changed — unpacking is published API.
 
 ## 0.1.2 — 2026-07-28
+
+### What changed
 
 - **The audit no longer depends on the display it ran on.** A HiDPI GUI backend
   — macosx on a Retina display, Qt on a scaled desktop — sets `fig.dpi` to the
@@ -1943,6 +2272,8 @@ explanation could not reach the project page without a release of its own.
 
 ## 0.1.1 — 2026-07-27
 
+### What changed
+
 - Releases are signed. 0.1.0 went out through `uv publish`, which despite
   offering `--no-attestations` uploaded no provenance at all — PyPI's integrity
   endpoint 404s for both of its files. The upload now runs through the PyPA
@@ -1955,7 +2286,45 @@ explanation could not reach the project page without a release of its own.
 
 First release on PyPI. Everything below is the work that preceded it.
 
-### Four gates that were measuring the wrong thing
+### What changed
+
+- **Seven new gates**: `check_text_readability`, `check_line_weight`,
+  `check_fonts`, `check_series_color`, `check_dual_axis`, `check_form`,
+  `check_identity_channel`, `check_style_sheet`, `check_label_attribution`,
+  `check_overplotting` and `check_contour_dash`.
+- `figure.mplstyle` sets `axes.prop_cycle` to the six Okabe-Ito series slots,
+  and `pdf.fonttype: 42` / `ps.fonttype: 42`. Yellow and black are held out.
+- `xtick.color`/`ytick.color` **changed** `#898781` → **`#777570`**, 3.59:1 to
+  4.6:1 on white.
+- `audit(fig, venue=...)` **added** for twelve known venues, with
+  `python check_figure.py --venues` listing them. `CONTENT_WIDTH_PT` still wins
+  for anything not in the table.
+- `describe(fig, ...)`, `alt_metadata(fig)` and `check_alt_text` **added**,
+  advisory.
+- `audit(fig, context_axes=[ax])` **added**: a filled backdrop is a context
+  surface rather than data ink.
+- `check_palette.py` learns `--ink`, exempting listed hexes from the
+  chroma-floor and lightness-band rows.
+- **scipy is optional**, a `fast` extra. `uniform_filter` is replaced by a
+  numpy box blur, `KDTree` is gone from label attribution, and
+  `check_overplotting` falls back to an O(n²) numpy path.
+- Series color is scoped per panel. One series drawn several ways is one
+  identity. Label attribution ignores legend entries.
+- Polar radial tick labels are exempt from `check_text_readability`, and the
+  row reports how many went unjudged.
+- `check_redundancy` skips axes with `axison` false and counts only visible
+  tick labels.
+- `check_ink` decides emptiness structurally rather than by pixel fraction.
+- `examples/gallery.py` **added**: six figures, each audited, with CI failing
+  if any figure fails.
+- `skill/references/choosing-a-form.md` **added**, plus a step in `SKILL.md`.
+- Decided and written down: identity does not ride on label colour, and a
+  legend entry is not a direct label. `examples/demo.py` labels its curves
+  directly, with cartographic casing.
+
+### Why it changed
+
+#### Four gates that were measuring the wrong thing
 
 Found by running the checker over ordinary matplotlib figures nobody built for
 it — the corpus check CONTRIBUTING asks for, applied to the checker itself
@@ -1993,7 +2362,7 @@ rather than to a new gate.
   the page, and the grid is not held to the data floor. The gate was correct —
   it had simply never been watched work.
 
-### Text readability — the gate the demo needed
+#### Text readability — the gate the demo needed
 
 - **`check_text_readability` measures whether each string can be read where it
   sits.** Two clauses, both off rendered pixels. *Clutter*: the figure is drawn
@@ -2026,7 +2395,7 @@ rather than to a new gate.
   leaving, and by anchoring on the extreme of the noise across the label's own
   span rather than on one point.
 
-### Research-standard gates
+#### Research-standard gates
 
 - **`check_line_weight`: 1pt on the page, per SIAM's instructions for authors**
   ("lines one point or thicker; thinner lines may break up or disappear").
@@ -2041,7 +2410,7 @@ rather than to a new gate.
   carries — the hard gate is on the shipped sheet, in the test suite.
 - **`figure.mplstyle` now sets `pdf.fonttype: 42` and `ps.fonttype: 42`.**
 
-### Venue content widths
+#### Venue content widths
 
 - **`audit(fig, venue="neurips")`** replaces hand-measuring `CONTENT_WIDTH_PT`
   for twelve known venues (NeurIPS, ICLR, ICML, ACL, IEEE, Nature, LaTeX
@@ -2049,7 +2418,7 @@ rather than to a new gate.
   check_figure.py --venues` lists them. `CONTENT_WIDTH_PT` still works and still
   wins for anything not in the table.
 
-### Alt text
+#### Alt text
 
 - **`describe(fig, ...)` / `alt_metadata(fig)` / `check_alt_text`.** Across
   100,000 public Jupyter notebooks, 99.81% of programmatically generated images
@@ -2058,7 +2427,7 @@ rather than to a new gate.
   or SVG. Advisory: on a paper the description frequently *is* the caption, and
   the caption lives where this cannot see it.
 
-### `check_label_attribution` was passing nearly everything
+#### `check_label_attribution` was passing nearly everything
 
 - **Fixed a regression that had disabled the gate in its common case.** The
   comparison distance had been changed from "the minimum over every other curve"
@@ -2074,7 +2443,7 @@ rather than to a new gate.
   proximity to anything. Moved to the left of the panel where the log-log fan is
   three decades wide.
 
-### No hard scipy dependency
+#### No hard scipy dependency
 
 - The README promises three files and no install, and a hard `scipy` import had
   quietly broken it. `scipy.ndimage.uniform_filter` is replaced by a separable
@@ -2083,7 +2452,7 @@ rather than to a new gate.
   importable and an O(n²) numpy path when it is not. scipy is now an optional
   `fast` extra. Tested with the import forced to fail.
 
-### `examples/gallery.py` — six harder figures
+#### `examples/gallery.py` — six harder figures
 
 - Small multiples on shared scales; a filled field with isolines and a colorbar;
   an axis-free schematic; the three forms `choosing-a-form.md` argues for; a
@@ -2109,7 +2478,7 @@ rather than to a new gate.
   convergence plot's slope triangle sat in the only corner its direct labels
   could use. Both were obvious in the PNG and invisible to every check.
 
-### Overplotting / mark-density WARN
+#### Overplotting / mark-density WARN
 
 - **`check_overplotting` detects scatter marks that merge into a blob.** For
   each scatter (`PathCollection` with offsets), estimates the fraction of points
@@ -2119,7 +2488,7 @@ rather than to a new gate.
   the entire existing corpus clean (all well-separated scatters pass). A WARN,
   not a FAIL — dense marks are legitimate for some forms (e.g. a swarm plot).
 
-### Context-surface ink stops a standing WARN
+#### Context-surface ink stops a standing WARN
 
 - **Ink coverage accepts `context_axes`.** A filled contourf backdrop (loss
   landscape, terrain) saturated 100% of the axes pixels, triggering a standing
@@ -2131,7 +2500,7 @@ rather than to a new gate.
   with a few sparse marks now PASSes instead of WARNing. Existing heatmap
   behavior is unchanged (no `context_axes` → same as before).
 
-### Two false-signal fixes, no new gates
+#### Two false-signal fixes, no new gates
 
 - **Contour dash warns on auto-dashed negative levels.** A monochrome contour
   with all-negative Z ships dashed isolines via matplotlib default
@@ -2145,7 +2514,7 @@ rather than to a new gate.
   while keeping them in CVD/normal separation and contrast-vs-surface coverage.
   Mirrors `check_figure`'s `INK_TOKENS`.
 
-### The series-color and label gates learn the figure's structure
+#### The series-color and label gates learn the figure's structure
 
 The new gates above read a flat bag of hues and text, and a bag throws away the
 structure the author encoded — which panel a hue lives in, what kind of artist
@@ -2175,7 +2544,7 @@ back one piece of that structure.
   exempts as a value encoding — the intent lands in the code instead of a flat
   bag of hues.
 
-### Five new gates, and the two scripts finally speak
+#### Five new gates, and the two scripts finally speak
 
 The motivating failure, reproduced end to end: a figure drawn on matplotlib's
 default `tab10` cycle with a `twinx` second y axis passed every check in
@@ -2216,7 +2585,7 @@ to a protanopic reader. Two scripts in one project, and nothing connected them.
   harvested only from text matching exactly one series label, because a callout
   or a panel letter attributes nothing to a curve.
 
-### Decided: identity does not ride on label color
+#### Decided: identity does not ride on label color
 
 The usual advice is to color a direct label to match its series. Measured on
 this palette, against this project's own thresholds, it cannot be done: text
@@ -2231,7 +2600,7 @@ satisfies both, so labels stay ink black and identity rides on proximity, which
 stroke under the glyphs — so a gridline crossing behind a label stops breaking
 its edges.
 
-### Decided: a legend entry is not a direct label
+#### Decided: a legend entry is not a direct label
 
 The guide required a "visible direct label" for a sub-3:1 hue and `examples/demo.py`
 used a legend, so one of the two was wrong. Settled the strict way, because the
@@ -2239,7 +2608,7 @@ obligation follows from the measurement: a faint mark plus a legend leaves the
 reader matching a small faint swatch to a small faint curve, which is the step a
 direct label removes. The demo now labels its curves directly.
 
-### New reference
+#### New reference
 
 `skill/references/choosing-a-form.md`, plus a step in `SKILL.md`'s procedure.
 Grounded in statistical graphics rather than general information design —
@@ -2252,6 +2621,8 @@ not a significance test.
 ## Earlier in Unreleased
 
 Corrections, no new gates. Nothing that passed before fails now.
+
+### What changed
 
 - **Surface is white everywhere.** `check_palette.py` defaulted to `#fcfcfb`, a
   surface `figure.mplstyle` never rendered, so every contrast ratio in the style
@@ -2287,6 +2658,8 @@ Corrections, no new gates. Nothing that passed before fails now.
 ## 0.1.0 — 2026-07-22
 
 First release.
+
+### What changed
 
 - `check_palette.py` — lightness band, chroma floor, CVD separation (protanopia
   and deuteranopia, OKLab ΔE), normal-vision separation, contrast against the

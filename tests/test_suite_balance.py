@@ -45,6 +45,7 @@ GATE = {
     "test_palette_oracle",            # cmap_kind against matplotlib's registry
     "test_colour_space_oracle",       # CIECAM02 against colorspacious
     "test_renderer_invariance",       # every row, across five authored dpi
+    "test_style_context_invariance",  # every row, in and out of the sheet
     "test_external_style_corpus",     # every gate, over 28 external styles
     "test_style_sheet",               # the sheet applies and the gate sees it
     "test_suggest_fixes",             # the advice attached to a failing row
