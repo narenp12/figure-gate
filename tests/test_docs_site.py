@@ -122,7 +122,7 @@ def symlinks():
 
 def test_the_symlinks_were_found():
     """Both tests below are parametrized over this list, so an empty one does
-    not fail them -- it deletes them. Nineteen pages and images point out of
+    not fail them -- it deletes them. Twenty-one pages and images point out of
     `docs/`; if that count drops, either something became a copy (which
     `test_no_page_has_become_a_copy` catches) or this collection stopped
     working (which nothing else would).
@@ -132,8 +132,8 @@ def test_the_symlinks_were_found():
     the assertion had been moved to 17 and the prose still read twelve and 13.
     That is the defect this whole file exists to catch, one level in.
     """
-    assert len(symlinks()) == 19, (
-        f"found {len(symlinks())} symlinks under docs/, expected 19 - if the "
+    assert len(symlinks()) == 21, (
+        f"found {len(symlinks())} symlinks under docs/, expected 21 - if the "
         "site legitimately gained or lost a page, update this number with it")
 
 
