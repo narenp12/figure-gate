@@ -1,5 +1,8 @@
 # Auditing a figure outside the sheet it was built under changes the verdict
 
+Date: 2026-08-31
+Status: design
+
 Branched from `check-figure-false-positives`. Present on `main`.
 
 ## The report
@@ -51,15 +54,26 @@ Four draws, byte-identical geometry, one verdict.
 The audit is idempotent. What is not idempotent is the rcParams the figure is
 measured under.
 
-Outside the sheet, `font.family` falls back to the matplotlib default. Every
-glyph gets wider: `'Baseline'` 82.00 → 100.00 px, `'Tuned'` 62.31 → 74.00,
-`'Bayesian'` 87.44 → 106.00, all at unchanged heights, which is the signature
-of a font swap rather than a layout settle. `constrained_layout` then re-solves
-against wider tick labels and axis titles and moves the axes: `x0` 76.08 →
-85.08. The annotations are anchored in data coordinates, so the curves and the
-labels move by different amounts and `'Tuned'` lands nearer a neighbour.
+It is not a family fallback. `font.family` is captured into each Text artist's
+FontProperties at construction and does not move: measured on either side of
+the context boundary, every label still reports `family=['serif']` at
+`size=11.00`. What is not captured is the list that `serif` resolves through.
 
-`constrained_layout` is downstream of the font change, not the cause of it. A
+```
+inside the sheet   font.serif = ['STIX Two Text', 'STIXGeneral', 'DejaVu Serif']
+                   findfont -> STIXTwoText.ttf
+outside            font.serif = ['DejaVu Serif', 'Bitstream Vera Serif', ...]
+                   findfont -> DejaVuSerif.ttf
+```
+
+Same family, same nominal size, different face, so every glyph gets wider:
+`'Baseline'` 82.00 → 100.00 px, `'Tuned'` 62.31 → 74.00, `'Bayesian'` 87.44 →
+106.00. `constrained_layout` then re-solves against wider tick labels and axis
+titles and moves the axes: `x0` 76.08 → 85.08. The annotations are anchored in
+data coordinates, so the curves move with the axes and the labels do not move
+the same way, and `'Tuned'` lands nearer a neighbour.
+
+`constrained_layout` is downstream of the face change, not the cause of it. A
 figure with the layout engine live re-solves identically on every draw as long
 as the text it is solving around measures the same.
 
@@ -71,27 +85,52 @@ Two rows in the same sweep already say so and were read as separate noise:
 Both are `warn`, so neither failed the sweep, and the row that did fail was the
 one with no obvious connection to rcParams.
 
-## Scope
+## What shipped
 
-The defect is in how a figure is handed to `audit`, not in any gate. Options,
-in the order they should be considered:
+The defect is in how a figure is handed to `audit`, not in any gate, so the fix
+is one level above the gates and none of them changed.
 
-1. Have the sweep harness audit each builder inside the builder's own context.
-   Smallest change, fixes the reported symptom, leaves the trap in place for
-   the next caller.
-2. Have the figure carry the sheet it was drawn under, and have `audit` measure
-   inside it. Fixes the class. Needs a decision about a figure built under no
-   sheet, and about a figure whose sheet has since changed on disk.
-3. Have `audit` refuse, or warn loudly, when `Style sheet` reports drift on
-   this scale. Cheap, and turns a silent wrong verdict into a legible one, but
-   drift is legitimate for a figure built on another project's sheet, which is
-   exactly why that row is a warning today.
+`METRIC_RC_KEYS` names the rcParams a string's measured size depends on: the
+family and the six lists a family name resolves through, size and the four style
+axes, the two mathtext keys, `text.usetex` and `text.antialiased`.
+`_at_draw_rc` records them onto the figure at its first audit and runs every
+later audit under the recorded values. `audit` enters it alongside
+`_at_measure_dpi`, which is the same move for the same reason: a measurement
+read against a knob nobody pinned.
 
-Whichever lands, the fire-rate harness needs a regression that audits one
-builder twice, once inside its context and once outside, and asserts the
-verdicts agree.
+Two rows are deliberately left reading the live rcParams, because they answer
+for the environment rather than for the figure. `check_fonts` splits along that
+line on its own, since `pdf.fonttype` and `ps.fonttype` are not metric keys: its
+Type 3 clause still says what a `savefig` from here would embed, while its face
+clause reads the pinned family. `check_style_sheet` keeps reporting the drift
+that says the sheet is not applied.
+
+`tests/test_style_context_invariance.py` holds every other row identical across
+the two contexts for `demo` and `encoding`, asserts the three-audit agreement
+the report asked about, pins the record to the first audit rather than the
+latest, and — following `test_renderer_invariance.py` — puts the old behaviour
+back through the new code path by emptying `METRIC_RC_KEYS`, so the sweep is
+known to be able to fail.
+
+### The limitation, stated
+
+The record is taken at the first audit because that is the earliest moment this
+module is handed the figure; there is no hook at construction. A figure built
+under a sheet whose *first* audit happens outside it records the wrong baseline
+and is then wrong consistently rather than differently each time. `demo` and
+the gallery builders are not in that case: they call `cf.report` inside their
+own `@styled` context.
+
+Closing that would mean recording at draw time rather than at audit time, which
+needs either a hook this module does not have or a new public call for the
+author to make. Neither is worth it for a case the `Style sheet` and `Fonts`
+rows already flag.
 
 ## Reproduction
 
 Scripts used: `repro.py` (double audit), `repro3.py` (snapshot around
-`report`'s draw), `repro4.py` (both audits inside one held style context).
+`report`'s draw), `repro4.py` (both audits inside one held style context),
+`mech2.py` (the resolved font file on either side of the boundary). `mech.py`
+was a false start worth recording: it pinned `font.serif` to the same first
+entry the default list already has, so it could not have detected the face
+change and appeared to exonerate the fonts.

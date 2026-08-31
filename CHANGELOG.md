@@ -71,6 +71,20 @@ that maintains the rest.
 - `Colormap kind` classifies a ramp before the 8-bit round trip. `winter` and
   `Wistia` failed on quantisation artifacts of about 0.001 OKLab, amplified by
   their narrow lightness spans.
+- `audit` measures under the rcParams the figure's first audit saw, so auditing
+  one figure twice no longer returns two verdicts. `examples/demo.py` builds and
+  reports inside `plt.style.context`, and a caller who audited the returned
+  figure was measuring outside it: `font.family` is captured on each artist at
+  construction, but the list `serif` resolves through is not, so the same label
+  was set in DejaVu Serif rather than STIX Two Text and measured 100.0 px
+  instead of 82.0. `constrained_layout` re-solved against the wider text and
+  moved the axes 9 px, the annotations are anchored in data coordinates and did
+  not follow, and `Label attribution` reported a label as nearest a curve that
+  is not its own. `demo` and `encoding` printed all-PASS from inside their own
+  builders and failed the sweep that audited them a moment later.
+  `METRIC_RC_KEYS` names the keys that are pinned. `Style sheet` and the Type 3
+  clause of `Fonts` still read the live rcParams, because they report on the
+  environment rather than on the figure.
 
 ## 0.8.0 — 2026-08-18
 

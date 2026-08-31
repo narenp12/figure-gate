@@ -44,6 +44,7 @@ Checks, in the order `audit` runs them
 from __future__ import annotations
 
 import contextlib
+import copy
 import importlib
 import itertools
 import math
@@ -110,6 +111,51 @@ def _sibling(name: str) -> Any:
 # 150 because that is the number the thresholds were calibrated at and this is a
 # recalibration of nothing: the value it pins is the value they already assumed.
 MEASURE_DPI = 150.0
+
+# The rcParams a string's measured size depends on, pinned for the same reason
+# `MEASURE_DPI` is. A pixel count read against a resolution nobody pinned was
+# the first half of this bug class; a pixel count read against a font nobody
+# pinned is the second, and it is the harder half to see because nothing in the
+# figure looks different when it happens.
+#
+# A Text artist bakes its family at construction -- `font.family` is captured
+# into its FontProperties and does not fall back later. What is *not* baked is
+# the alias list that family resolves through. A label built under the skill's
+# sheet carries `family=['serif']`, and `serif` means `font.serif`, which the
+# sheet leads with STIX Two Text and matplotlib's default leads with DejaVu
+# Serif. Draw the same artist outside the sheet and it is set in a different
+# face at the same nominal size: on `examples/demo.py`, "Baseline" measures 82.0
+# px under the sheet and 100.0 px outside it, "Bayesian" 87.4 against 106.0.
+#
+# Nothing stops there. Wider tick labels and axis titles give
+# `constrained_layout` a different problem, so it re-solves and the axes move --
+# 9 px to the right on that figure. Annotations are anchored in data
+# coordinates, so the curves move with the axes and the labels do not move the
+# same way, and `check_label_attribution` reads 'Tuned' as nearer a curve that
+# is not its own. The figure never changed. The font list in effect when it was
+# measured did.
+#
+# `tests/test_style_context_invariance.py` holds every row identical across the
+# two contexts.
+METRIC_RC_KEYS = (
+    # The family, and the six lists a family name resolves through.
+    "font.family", "font.serif", "font.sans-serif", "font.cursive",
+    "font.fantasy", "font.monospace",
+    # Size and the four style axes. Most are baked into FontProperties at
+    # construction, but a relative size ("medium", "small") is resolved against
+    # `font.size`, and a figure that used one is measured against whatever
+    # `font.size` is live.
+    "font.size", "font.stretch", "font.style", "font.variant", "font.weight",
+    # Math strings are set by a different engine with its own faces.
+    "mathtext.fontset", "mathtext.default",
+    # usetex replaces the whole text pipeline; antialiasing decides what the
+    # pixel-reading gates find inside a glyph's box.
+    "text.usetex", "text.antialiased",
+)
+
+# Where the values above are stashed on a figure that has been audited once.
+# Private and prefixed, because it rides on an object this module does not own.
+DRAW_RC_ATTR = "_figure_gate_metric_rc"
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
@@ -419,6 +465,54 @@ def _at_measure_dpi(fig: Figure) -> Any:
     finally:
         if fig.dpi != after:
             fig.dpi = after
+
+
+@contextlib.contextmanager
+def _at_draw_rc(fig: Figure) -> Any:
+    """Measure `fig` under the `METRIC_RC_KEYS` its first audit saw.
+
+    The first audit of a figure records them; every later audit is run under the
+    recorded values. That is what makes the verdict a property of the figure
+    rather than of where the caller happened to be standing when they asked.
+
+    The bug this closes is that auditing one figure twice returned two answers.
+    `examples/demo.py` builds and reports inside
+    `plt.style.context(figure.mplstyle)` and hands the figure back with the
+    context closed, so its own report passed `Label attribution` and a sweep
+    that audited the returned figure failed it. See `METRIC_RC_KEYS` for what
+    moves in between.
+
+    Only `METRIC_RC_KEYS` are pinned, which is what keeps the two rows that ask
+    about the *environment* rather than about the figure still answering the
+    question they are for. `check_fonts` splits cleanly along that line without
+    being told to: `pdf.fonttype` and `ps.fonttype` are not metric keys, so its
+    Type 3 clause still reports what a `savefig` from where the caller is
+    standing would embed, while its face clause reads the pinned family and so
+    reports the face the figure was actually set in. `check_style_sheet`
+    compares all forty of the sheet's keys against the rcParams in effect; the
+    metric ones now answer for the figure and the rest for the environment,
+    which is a partial fix to the limitation its own docstring records.
+
+    The record is taken at the first audit because that is the earliest moment
+    this module is handed the figure; there is no hook at construction. A figure
+    built under a sheet and audited for the first time outside it therefore
+    records the wrong baseline, and is then wrong consistently rather than
+    differently each time. The two rows that already say so are `Style sheet`,
+    which reports the drift as a key count, and `Fonts`.
+    """
+    import matplotlib as mpl
+    recorded = getattr(fig, DRAW_RC_ATTR, None)
+    if recorded is None:
+        # rcParams values are mutable (the family lists), so copy rather than
+        # alias: a caller who mutates the live list in place would otherwise
+        # rewrite the record of what the figure was drawn under.
+        setattr(fig, DRAW_RC_ATTR,
+                {key: copy.deepcopy(mpl.rcParams[key])
+                 for key in METRIC_RC_KEYS})
+        yield
+        return
+    with mpl.rc_context(recorded):
+        yield
 
 
 def _renderer(fig: Figure) -> tuple[Any, Any]:
@@ -3196,7 +3290,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
         `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
         report order; `ok` is False only when a row is a hard False.
     """
-    with _at_measure_dpi(fig):
+    with _at_draw_rc(fig), _at_measure_dpi(fig):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
     # "warn" rows are advisory: they report something worth a look without
     # failing the build. Only a hard False gates.
