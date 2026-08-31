@@ -2786,18 +2786,29 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     for name, cmap in sorted(seen.items()):
         if cmap.N < cp.CMAP_QUALITATIVE_N:
             levels = [to_hex(cmap(i)) for i in range(cmap.N)]
+            floats = [tuple(cmap(i)[:3]) for i in range(cmap.N)]
         else:
             levels = [to_hex(cmap(i / (cp.CMAP_SAMPLES - 1)))
                       for i in range(cp.CMAP_SAMPLES)]
+            # Classified before the 8-bit round trip. Rounding each channel to
+            # 1/255 puts oscillations of about 0.001 OKLab into a smooth ramp,
+            # and back travel divides by the lightness span, so a narrow-span
+            # map turns that wobble into a large fraction: `winter` measured
+            # 0.0343 through hex against 0.0139 in float, straddling the 0.02
+            # floor, so a sequential map classified `misc`. `levels` stays hex
+            # because the qualitative branch below hands it to `cp.check`,
+            # which takes hex.
+            floats = [tuple(cmap(i / (cp.CMAP_SAMPLES - 1))[:3])
+                      for i in range(cp.CMAP_SAMPLES)]
 
-        kind = cp.cmap_kind(levels)
+        kind = cp.cmap_kind_rgb(floats)
 
         if kind == "misc":
             fails.append(
                 f"{name}: lightness reverses over "
-                f"{cp.cmap_back_travel(levels):.0%} of its span  [FIX] a reader "
-                "cannot order two values in it. viridis for sequential, RdBu "
-                "for diverging, twilight for cyclic")
+                f"{cp.cmap_back_travel_rgb(floats):.0%} of its span  [FIX] a "
+                "reader cannot order two values in it. viridis for sequential, "
+                "RdBu for diverging, twilight for cyclic")
             continue
 
         if kind == "qualitative":

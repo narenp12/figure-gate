@@ -175,6 +175,27 @@ def test_the_leader_line_remedy_discharges_label_attribution():
     plt.close(fig)
 
 
+def test_colormap_kind_passes_winter():
+    """winter failed the row on quantisation artifacts of about 0.001 OKLab,
+    not on anything a reader could see."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.imshow(np.arange(16).reshape(4, 4), cmap="winter")
+    status, detail = cf.check_colormap(fig)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_colormap_kind_still_fails_a_map_that_really_reverses():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.imshow(np.arange(16).reshape(4, 4), cmap="jet")
+    status, detail = cf.check_colormap(fig)
+    assert status is False, detail
+    assert "jet" in detail
+    plt.close(fig)
+
+
 def test_a_secondary_axis_does_not_report_clipped_ticks():
     """A secondary axis is a child axes, so it is not in fig.axes. _texts finds
     its tick labels through findobj, but _ghost_ticks walked fig.axes only, so

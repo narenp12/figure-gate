@@ -254,6 +254,77 @@ def test_named_colormaps_classify_as_measured(name, expected):
     assert cp.cmap_kind(cmap_samples(name)) == expected
 
 
+def test_winter_is_sequential_once_quantisation_is_out_of_the_way():
+    """winter's only reversals are +/-0.001 OKLab artifacts of 1/255 channel
+    steps in a linear ramp: 0.0139 measured in float against 0.0343 measured
+    through hex, on a 0.02 floor."""
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    np = pytest.importorskip("numpy")
+    rgb = [tuple(c) for c in colormaps["winter"](np.linspace(0, 1, 256))[:, :3]]
+    assert cp.cmap_back_travel_rgb(rgb) < cp.CMAP_BACKTRAVEL_MAX
+    assert cp.cmap_kind_rgb(rgb) == "sequential"
+
+
+def test_the_genuinely_reversing_maps_still_fail():
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    np = pytest.importorskip("numpy")
+    for name in ("spring", "cool", "gist_earth", "turbo", "jet", "hsv"):
+        rgb = [tuple(c) for c in colormaps[name](np.linspace(0, 1, 256))[:, :3]]
+        assert cp.cmap_back_travel_rgb(rgb) > cp.CMAP_BACKTRAVEL_MAX, name
+
+
+def test_the_hex_api_is_unchanged():
+    """Callers holding only hex keep working."""
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    np = pytest.importorskip("numpy")
+    from matplotlib.colors import to_hex
+    hexes = [to_hex(c) for c in colormaps["viridis"](np.linspace(0, 1, 256))]
+    assert cp.cmap_kind(hexes) == "sequential"
+
+
+def test_only_the_quantisation_casualties_move_to_the_float_path():
+    """Sweeping every installed colormap is what makes "one class of verdict
+    moved" a measurement rather than a hope.
+
+    Two maps move, each with its reverse, and both move in the same direction
+    for the same reason: their lightness never actually reverses, and the hex
+    path was reading 1/255 rounding as if it did. Back travel is divided by the
+    lightness span, so a narrow-span map turns the same absolute wobble into a
+    large fraction - `Wistia` spans 0.228 and reads 0.0561 through hex against
+    0.0000 in float, `winter` spans 0.430 and reads 0.0343 against 0.0139.
+
+    `Wistia` is not a new judgement. `tests/test_palette_oracle.py` already
+    records it as sequential by kind and the `misc` verdict as this project's
+    disagreement with cmasher, caused by exactly the rounding removed here. Its
+    real defect, a lightness range too narrow to read as an order, is a
+    separate measurement and is still deferred.
+    """
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    np = pytest.importorskip("numpy")
+    from matplotlib.colors import to_hex
+    t = np.linspace(0, 1, 256)
+    movers = {}
+    for name in sorted(colormaps):
+        try:
+            cols = colormaps[name](t)[:, :3]
+        except Exception:
+            continue
+        old = cp.cmap_kind([to_hex(c) for c in cols])
+        new = cp.cmap_kind_rgb([tuple(c) for c in cols])
+        if old != new:
+            movers[name] = (old, new)
+    assert movers == {
+        "winter": ("misc", "sequential"),
+        "winter_r": ("misc", "sequential"),
+        "Wistia": ("misc", "sequential"),
+        "Wistia_r": ("misc", "sequential"),
+    }, movers
+    # Every mover moves out of `misc`, so the float path only ever removes
+    # fires. A map that started passing and stopped would be a new failure
+    # mode and is what this half of the assertion is watching for.
+    assert all(old == "misc" for old, _new in movers.values()), movers
+
+
 def test_viridis_is_not_misc():
     pytest.importorskip("matplotlib")
     assert cp.cmap_kind(cmap_samples("viridis")) == "sequential"

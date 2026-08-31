@@ -63,7 +63,11 @@ the checks are reimplemented elsewhere.
 
 ::: check_palette.cmap_kind
 
+::: check_palette.cmap_kind_rgb
+
 ::: check_palette.cmap_back_travel
+
+::: check_palette.cmap_back_travel_rgb
 
 ::: check_palette.contrast
 
