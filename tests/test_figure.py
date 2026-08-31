@@ -175,6 +175,21 @@ def test_the_leader_line_remedy_discharges_label_attribution():
     plt.close(fig)
 
 
+def test_the_callout_and_secondary_builders_pass():
+    """Both were added because they broke the checker. They stay in the corpus
+    so the next change has to keep them passing."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+    import gallery
+    gallery.OUT = None
+    for name in ("callout", "secondary_scale"):
+        fig = getattr(gallery, name)()
+        ok, rows = cf.audit(fig)
+        plt.close(fig)
+        assert ok, (name, [r for r in rows if r[1] is False])
+
+
 def test_colormap_kind_passes_winter():
     """winter failed the row on quantisation artifacts of about 0.001 OKLab,
     not on anything a reader could see."""

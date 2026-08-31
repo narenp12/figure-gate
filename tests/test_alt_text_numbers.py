@@ -470,6 +470,24 @@ def check_density_binned_points(fig):
 
 # What each checked number is a claim about. The value the checker returns has
 # to be the number the sentence states.
+def check_secondary_scale_top_limit_mm(fig):
+    """The millimetre axis's upper end, read off the child axes that carries it.
+
+    A secondary axis is added through `add_child_axes` and never reaches
+    `fig.axes`, so the figure's own axes list cannot answer this: the number has
+    to come from the axes the reader is actually reading.
+
+    Drawn first, because a secondary axis holds the default 0..1 until a draw
+    runs its forward function over the parent's limits. Reading it undrawn
+    measures matplotlib's placeholder rather than the figure's millimetres.
+    """
+    fig.canvas.draw()
+    panel = _data_axes(fig)[0]
+    children = list(getattr(panel, "child_axes", []) or [])
+    assert len(children) == 1, f"expected one secondary axis, got {children}"
+    return float(children[0].get_xlim()[1])
+
+
 CHECKED = {
     ("demo", "0.12"): check_demo_bayesian_at_6,
     ("demo", "0.02"): check_demo_bayesian_at_12,
@@ -497,6 +515,7 @@ CHECKED = {
     ("gallery-counts", "2.4"): check_counts_modal_bin_high,
     ("gallery-density", "110"): check_density_scatter_points,
     ("gallery-density", "40000"): check_density_binned_points,
+    ("gallery-secondary-scale", "305"): check_secondary_scale_top_limit_mm,
 }
 
 # Numbers no resolver places, each with the reason. Anything here is a claim
@@ -544,8 +563,8 @@ def test_the_sweep_reads_every_described_figure():
     """Every assertion above is parametrized over the built figures. A capture
     that came back short would not fail them, it would delete them."""
     built = figures()
-    assert len(built) == 12, (
-        f"built {sorted(built)}, expected the demo and eleven gallery figures")
+    assert len(built) == 14, (
+        f"built {sorted(built)}, expected the demo and thirteen gallery figures")
     assert all(alt for _fig, alt in built.values()), (
         "a figure was built with no description attached")
 
