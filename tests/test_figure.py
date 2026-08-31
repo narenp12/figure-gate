@@ -259,8 +259,10 @@ def test_different_units_with_coinciding_ticks_are_not_redundant():
     code compared tick strings only, so two unrelated quantities whose ticks
     happen to read the same were told to use sharey."""
     fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
-    a.plot([0, 1], [0, 2]); a.set_ylabel("Distance (km)")
-    b.plot([0, 1], [0, 2]); b.set_ylabel("Duration (s)")
+    a.plot([0, 1], [0, 2])
+    a.set_ylabel("Distance (km)")
+    b.plot([0, 1], [0, 2])
+    b.set_ylabel("Duration (s)")
     r, _ = cf._renderer(fig)
     status, detail = cf.check_redundancy(fig, r)
     assert status is True, detail

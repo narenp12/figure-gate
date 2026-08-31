@@ -17,8 +17,8 @@ behind a threshold this project enforces.
 
 #### Changed
 
-- `check_figure.audit` and `check_figure.report` take `context_axes` and
-  `venue` as keyword-only arguments.
+- `audit(context_axes)`, `audit(venue)`, `report(context_axes)`,
+  `report(venue)` and `report(suggest)` changed to keyword-only.
 - `check_figure.audit` measures under the rcParams the figure's first audit
   saw. `METRIC_RC_KEYS` names them. `Style sheet` and the Type 3 clause of
   `Fonts` still read the live rcParams.
@@ -49,7 +49,11 @@ behind a threshold this project enforces.
 - `Clipping` recognises off-view ticks on a child axes, so `secondary_xaxis`
   and `secondary_yaxis` no longer report them as clipped text.
 - `Colormap kind` classifies a ramp before the 8-bit round trip.
-- Auditing one figure twice returns one verdict.
+- Auditing one figure twice returns one verdict, and a gate called on its own
+  reports what `audit` reports.
+- `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
+  a parameter change can be written down at all.
+- `docs/images` carries the two figures this cycle added to the corpus.
 - The release bump no longer requires `^## Unreleased$` on the bump that opens
   the next development cycle. `exclude_bumps` on that entry; the release bump
   still refuses to run without notes.
@@ -85,6 +89,16 @@ landed in the `context_axes` slot, was iterated into a frozenset of axes ids
 rather than raising, and the figure was measured at the wrong page width: a
 wrong verdict, reported green, from an argument order. Keyword-only is the only
 shape in which that call cannot be written.
+
+**The gate that requires this to be written down could not be satisfied.**
+`audit_api.py` matched a name griffe reported with `\b` on both sides, and half
+the names it reports cannot clear that: a parameter change comes back as
+`audit(context_axes)`, and a `\b` after the `)` asks for a word character next
+to it, which no sentence puts there. So the keyword-only change above failed CI
+with the section naming every one of the five parameters. Eight releases passed
+because griffe had only ever reported bare names like `GATES` and `delta_e`,
+which end in a word character. Lookarounds instead, which keep what `\b` was
+there for: `delta_e` still does not match inside `delta_error`.
 
 **Most of the fixes above are one round of false positives, found by putting
 two constructs into the corpus that were not in it.** An annotation drawn with
