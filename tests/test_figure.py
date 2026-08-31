@@ -175,6 +175,45 @@ def test_the_leader_line_remedy_discharges_label_attribution():
     plt.close(fig)
 
 
+def test_different_units_with_coinciding_ticks_are_not_redundant():
+    """gates.md promises 'panels on a shared scale repeat tick labels'. The
+    code compared tick strings only, so two unrelated quantities whose ticks
+    happen to read the same were told to use sharey."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    a.plot([0, 1], [0, 2]); a.set_ylabel("Distance (km)")
+    b.plot([0, 1], [0, 2]); b.set_ylabel("Duration (s)")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_panels_really_on_one_scale_still_fail():
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    for panel in (a, b):
+        panel.plot([0, 1], [0, 2])
+        panel.set_ylim(0, 2)
+        panel.set_ylabel("Signal (V)")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
+def test_a_row_spanning_mosaic_panel_is_not_redundant():
+    """A panel spanning two rows lands in both, and its tick column then reads
+    as repeated against itself."""
+    fig, axd = plt.subplot_mosaic([["a", "c"], ["b", "c"]],
+                                  figsize=(5, 3), constrained_layout=True)
+    axd["a"].plot([0, 1], [0, 1])
+    axd["b"].plot([0, 1], [0, 10])
+    axd["c"].plot([0, 1], [0, 100])
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
 def test_a_panel_title_is_not_a_direct_label():
     """A title's .axes is the parent axes, so it satisfied the `t.axes is ax`
     guard and was judged by proximity. A title repeating a series name does not

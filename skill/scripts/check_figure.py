@@ -1471,11 +1471,27 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
 
     dup_ticks = 0
     for _, axes in rows.items():
+        # Grouped by the scale as well as the tick strings. `docs/gates.md`
+        # promises this row fires on "panels on a shared scale", and comparing
+        # tick text alone broke that promise: two panels carrying different
+        # quantities in different units, whose tick strings happen to coincide,
+        # were told to use `sharey`. Taking that advice would put unrelated
+        # data on one axis, so the row was not merely noisy, it was wrong.
+        #
+        # The axis label is part of the key because limits and scale type alone
+        # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
+        # seconds and agree on every number while sharing no scale at all. What
+        # a reader reads as one scale is one quantity, and the label is where
+        # the figure says which quantity that is. Panels that name the same
+        # quantity, or name none, still group together, which is the
+        # small-multiples case this row exists for.
         cols_seen = Counter(
-            tuple(t.get_text() for t in a.get_yticklabels()
-                  if t.get_text() and t.get_visible())
+            (a.get_ylim(), a.get_yscale(), a.get_ylabel().strip(),
+             tuple(t.get_text() for t in a.get_yticklabels()
+                   if t.get_text() and t.get_visible()))
             for a in axes)
-        dup_ticks += sum(n - 1 for v, n in cols_seen.items() if v and n > 1)
+        dup_ticks += sum(n - 1 for (_lim, _scale, _label, v), n in cols_seen.items()
+                         if v and n > 1)
 
     ok = not dupes and not dup_ticks
     if ok:
