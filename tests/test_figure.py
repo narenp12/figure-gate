@@ -175,6 +175,66 @@ def test_the_leader_line_remedy_discharges_label_attribution():
     plt.close(fig)
 
 
+def test_a_panel_title_is_not_a_direct_label():
+    """A title's .axes is the parent axes, so it satisfied the `t.axes is ax`
+    guard and was judged by proximity. A title repeating a series name does not
+    point at that series."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Baseline")
+    ax.plot(x, np.sin(x) * 1.2, label="Ours")
+    ax.set_title("Baseline", fontsize=11)
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_an_axis_label_is_not_a_direct_label():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Signal")
+    ax.plot(x, np.cos(x), label="Noise")
+    ax.set_ylabel("Signal")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_a_colorbar_label_is_not_a_direct_label():
+    """A colorbar's label is its own axes' yaxis.label, and colorbar axes are
+    in fig.axes, so the same identity exclusion covers it."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Signal")
+    ax.plot(x, np.cos(x), label="Noise")
+    im = ax.scatter(x, np.sin(x) * 0.5, c=x, cmap="viridis")
+    fig.colorbar(im, ax=ax).set_label("Signal")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_a_real_direct_label_nearer_a_rival_still_fails():
+    """The exclusion must be by identity, not by string, or the row loses its
+    reason to exist."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.full_like(x, 1.0), label="Tuned")
+    ax.plot(x, np.full_like(x, 2.0), label="Baseline")
+    ax.text(5.0, 1.95, "Tuned", ha="center")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
 def test_a_leader_drawn_to_the_wrong_curve_still_fails():
     """The leader is read as a statement of attribution, not as an exemption
     for annotations. One pointing at the rival curve is exactly the defect this

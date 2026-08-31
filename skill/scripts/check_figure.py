@@ -2214,6 +2214,30 @@ def _series_distance(artist: Any, bb: Any, pts: np.ndarray) -> float:
     return _box_distance(bb, pts)
 
 
+def _furniture_text_ids(fig: Figure) -> set[int]:
+    """Text that labels the frame rather than pointing into it.
+
+    A title, an axis label and a colorbar label all report the axes as their
+    `.axes`, so they satisfied `check_label_attribution`'s `t.axes is ax` guard
+    and were judged as direct labels by proximity. Each of them routinely
+    repeats a series name without pointing at that series, and a title sitting
+    above the panel is nearer whichever curve happens to run high.
+
+    Excluded by identity rather than by string, because a genuine direct label
+    may carry the same string and must still be judged.
+    """
+    ids: set[int] = set()
+    for ax in fig.axes:
+        ids.add(id(ax.title))
+        ids.add(id(ax.xaxis.label))
+        ids.add(id(ax.yaxis.label))
+        for extra in ("_left_title", "_right_title"):
+            t = getattr(ax, extra, None)
+            if t is not None:
+                ids.add(id(t))
+    return ids
+
+
 def _attribution_box(t: Any, r: Any, bb: Any) -> Any:
     """Where a direct label points, for the proximity test.
 
@@ -2280,7 +2304,7 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     not - it passed `_child3` and failed `95% CI`.
     """
     bad, checked = [], 0
-    legend_ids = _legend_text_ids(fig)
+    legend_ids = _legend_text_ids(fig) | _furniture_text_ids(fig)
     all_texts = _texts(fig, r)
     for ax in fig.axes:
         px = {}
