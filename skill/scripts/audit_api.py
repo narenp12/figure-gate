@@ -117,10 +117,23 @@ def main() -> None:
     changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
     section, heading = _notes(changelog)
     paragraphs = section.split("\n\n")
+    # `(?<!\w)`/`(?!\w)` rather than `\b`, because half the names griffe reports
+    # end in a character `\b` cannot follow. A parameter change is reported as
+    # `audit(context_axes)`, and a `\b` after that `)` asks for a word character
+    # next to it -- so it matched only when the name was immediately followed by
+    # a letter, which no sentence does. The gate was unsatisfiable for that whole
+    # class of break: no wording of the notes could clear it, and the first
+    # parameter change this project made failed CI with the section naming every
+    # one of the five. Every earlier release passed because griffe had only ever
+    # reported bare names like `delta_e` and `GATES`, which end in a word
+    # character.
+    #
+    # The lookarounds keep what `\b` was there for: `delta_e` still does not
+    # match inside `delta_error`.
     silent = sorted(
         name for name in broken
         if not any(
-            re.search(rf"\b{re.escape(name)}\b", para)
+            re.search(rf"(?<!\w){re.escape(name)}(?!\w)", para)
             and re.search(CHANGED, para, re.I)
             for para in paragraphs
         )

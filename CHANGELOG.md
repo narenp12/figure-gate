@@ -30,10 +30,15 @@ that maintains the rest.
 
 ### Changed
 
-- `check_figure.audit` and `check_figure.report` take `context_axes` and
-  `venue` as keyword-only arguments. A `venue` passed positionally landed in
-  the `context_axes` slot, where a string is iterable and so was accepted
-  silently, and the figure was then measured at the wrong page width.
+- `audit(context_axes)`, `audit(venue)`, `report(context_axes)`,
+  `report(venue)` and `report(suggest)` changed to keyword-only. A `venue`
+  passed positionally landed in the `context_axes` slot, where a string is
+  iterable and so was accepted silently, and the figure was then measured at
+  the wrong page width.
+- `audit_api.py` matches a reported name with lookarounds rather than `\b`.
+  The parameter names griffe reports end in `)`, which `\b` cannot follow, so
+  the gate could not be satisfied for a parameter change by any wording. It is
+  the first such change this project has made.
 
 ### Added
 
