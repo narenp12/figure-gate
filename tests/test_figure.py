@@ -141,6 +141,286 @@ def test_contrast_stack_catches_too_many_alpha_levels():
     assert gates(rows)["Contrast stack"] is False
 
 
+def test_crossing_leader_arrows_are_not_a_text_collision():
+    """get_window_extent on an Annotation spans text and arrow together, so a
+    one-character label measured 285pt wide and two labels at opposite corners
+    were reported as overlapping."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 60)
+    ax.plot(x, np.sin(x))
+    ax.annotate("A", xy=(8, np.sin(8)), xytext=(2, 0.9),
+                arrowprops=dict(arrowstyle="->"))
+    ax.annotate("B", xy=(2, np.sin(2)), xytext=(8, -0.9),
+                arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_collisions(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_the_leader_line_remedy_discharges_label_attribution():
+    """gates.md and the row's own [FIX] both offer 'draw a leader line'. Taking
+    that advice used to create the failure it was offered to cure."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    x = [0, 2, 4, 6, 8, 10]
+    ax.plot(x, [1.0] * 6, label="Tuned")
+    ax.plot(x, [1.2] * 6, label="Baseline")
+    ax.set_ylim(0.9, 1.9)          # so the callout sits inside the view
+    ax.annotate("Tuned", xy=(5.0, 1.0), xytext=(5.0, 1.7), ha="center",
+                arrowprops=dict(arrowstyle="-", lw=1.0))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_the_callout_and_secondary_builders_pass():
+    """Both were added because they broke the checker. They stay in the corpus
+    so the next change has to keep them passing."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+    import gallery
+    gallery.OUT = None
+    for name in ("callout", "secondary_scale"):
+        fig = getattr(gallery, name)()
+        ok, rows = cf.audit(fig)
+        plt.close(fig)
+        assert ok, (name, [r for r in rows if r[1] is False])
+
+
+def test_colormap_kind_passes_winter():
+    """winter failed the row on quantisation artifacts of about 0.001 OKLab,
+    not on anything a reader could see."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.imshow(np.arange(16).reshape(4, 4), cmap="winter")
+    status, detail = cf.check_colormap(fig)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_colormap_kind_still_fails_a_map_that_really_reverses():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.imshow(np.arange(16).reshape(4, 4), cmap="jet")
+    status, detail = cf.check_colormap(fig)
+    assert status is False, detail
+    assert "jet" in detail
+    plt.close(fig)
+
+
+def test_a_secondary_axis_does_not_report_clipped_ticks():
+    """A secondary axis is a child axes, so it is not in fig.axes. _texts finds
+    its tick labels through findobj, but _ghost_ticks walked fig.axes only, so
+    ticks outside the secondary's own view were never recognised as ghosts."""
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_xaxis("top", functions=(lambda v: v * 2, lambda v: v / 2))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_a_secondary_y_axis_does_not_report_clipped_ticks():
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_yaxis("right", functions=(lambda v: v * 2, lambda v: v / 2))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_a_secondary_axis_on_the_identity_does_not_report_clipped_ticks():
+    fig, ax = plt.subplots(figsize=(3.4, 2.4), constrained_layout=True)
+    ax.plot([1, 2, 3], [1, 4, 9])
+    ax.secondary_xaxis("top", functions=(lambda v: v, lambda v: v))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_clipping(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_text_really_off_the_canvas_still_clips():
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.plot([0, 1], [0, 1])
+    ax.text(-3.5, 0.5, "far outside the canvas indeed")
+    r, _ = cf._renderer(fig)
+    status, _ = cf.check_clipping(fig, r)
+    assert status is False
+    plt.close(fig)
+
+
+def test_different_units_with_coinciding_ticks_are_not_redundant():
+    """gates.md promises 'panels on a shared scale repeat tick labels'. The
+    code compared tick strings only, so two unrelated quantities whose ticks
+    happen to read the same were told to use sharey."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    a.plot([0, 1], [0, 2])
+    a.set_ylabel("Distance (km)")
+    b.plot([0, 1], [0, 2])
+    b.set_ylabel("Duration (s)")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_panels_really_on_one_scale_still_fail():
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    for panel in (a, b):
+        panel.plot([0, 1], [0, 2])
+        panel.set_ylim(0, 2)
+        panel.set_ylabel("Signal (V)")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
+def test_a_row_spanning_mosaic_panel_is_not_redundant():
+    """A panel spanning two rows lands in both, and its tick column then reads
+    as repeated against itself."""
+    fig, axd = plt.subplot_mosaic([["a", "c"], ["b", "c"]],
+                                  figsize=(5, 3), constrained_layout=True)
+    axd["a"].plot([0, 1], [0, 1])
+    axd["b"].plot([0, 1], [0, 10])
+    axd["c"].plot([0, 1], [0, 100])
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_a_panel_title_is_not_a_direct_label():
+    """A title's .axes is the parent axes, so it satisfied the `t.axes is ax`
+    guard and was judged by proximity. A title repeating a series name does not
+    point at that series."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Baseline")
+    ax.plot(x, np.sin(x) * 1.2, label="Ours")
+    ax.set_title("Baseline", fontsize=11)
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_an_axis_label_is_not_a_direct_label():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Signal")
+    ax.plot(x, np.cos(x), label="Noise")
+    ax.set_ylabel("Signal")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_a_colorbar_label_is_not_a_direct_label():
+    """A colorbar's label is its own axes' yaxis.label, and colorbar axes are
+    in fig.axes, so the same identity exclusion covers it."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.sin(x), label="Signal")
+    ax.plot(x, np.cos(x), label="Noise")
+    im = ax.scatter(x, np.sin(x) * 0.5, c=x, cmap="viridis")
+    fig.colorbar(im, ax=ax).set_label("Signal")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_a_real_direct_label_nearer_a_rival_still_fails():
+    """The exclusion must be by identity, not by string, or the row loses its
+    reason to exist."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 50)
+    ax.plot(x, np.full_like(x, 1.0), label="Tuned")
+    ax.plot(x, np.full_like(x, 2.0), label="Baseline")
+    ax.text(5.0, 1.95, "Tuned", ha="center")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
+def test_a_leader_drawn_to_the_wrong_curve_still_fails():
+    """The leader is read as a statement of attribution, not as an exemption
+    for annotations. One pointing at the rival curve is exactly the defect this
+    row exists to catch, and it has to keep failing."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    x = [0, 2, 4, 6, 8, 10]
+    ax.plot(x, [1.0] * 6, label="Tuned")
+    ax.plot(x, [1.2] * 6, label="Baseline")
+    ax.set_ylim(0.9, 1.9)
+    ax.annotate("Tuned", xy=(5.0, 1.2), xytext=(5.0, 1.7), ha="center",
+                arrowprops=dict(arrowstyle="-", lw=1.0))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
+def test_strings_that_really_overlap_still_collide():
+    """The over-fire fix must not blind the row to a real collision."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    ax.plot([0, 1], [0, 1])
+    ax.annotate("Overlapping", xy=(0.5, 0.5), xytext=(0.5, 0.5),
+                arrowprops=dict(arrowstyle="->"))
+    ax.annotate("Overlapping", xy=(0.5, 0.5), xytext=(0.5, 0.5),
+                arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    status, _ = cf.check_collisions(fig, r)
+    assert status is False
+    plt.close(fig)
+
+
+def test_contrast_stack_survives_a_per_point_alpha_array():
+    """matplotlib has taken array alpha since 3.4. float() raises on one, and
+    _rows turns a raising non-advisory gate into False, so a legal figure was
+    hard-failed by a defect in the checker."""
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.scatter([0, 1], [0, 1], s=40, alpha=[0.5, 1.0])
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is True, detail
+    assert "raised" not in detail
+    plt.close(fig)
+
+
+def test_an_alpha_ramp_is_one_level_not_sixteen():
+    """A continuous alpha ramp across one artist is one decision the reader
+    resolves, not sixteen. Counting each value made an ordinary pcolormesh
+    report '16 levels reads as haze'."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.pcolormesh(np.arange(16).reshape(4, 4),
+                  alpha=np.linspace(0.2, 1.0, 16).reshape(4, 4))
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_an_array_alpha_with_nothing_opaque_still_fails():
+    """The over-fire fix must not blind the row to the defect it exists for."""
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.scatter([0, 1, 2], [0, 1, 2], s=40, alpha=[0.2, 0.4, 0.6])
+    status, detail = cf.check_contrast_stack(fig)
+    assert status is False
+    assert "nothing is opaque" in detail
+    plt.close(fig)
+
+
 def test_mark_ratio_catches_an_ornamental_star():
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.scatter([1, 2, 3], [1, 2, 3], s=12)
@@ -1943,6 +2223,28 @@ def test_placed_frac_without_any_width_still_refuses():
     ax.plot([0, 1], [0, 1])
     with pytest.raises(ValueError, match="placed_frac"):
         cf.page_scale(fig, placed_frac=0.5)
+    plt.close(fig)
+
+
+def test_venue_cannot_be_passed_positionally():
+    """The 4th positional is context_axes. A venue string lands there, is
+    iterated into a frozenset of ids because a string is iterable, nothing
+    raises, and the venue is discarded: a failing figure reported green."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot([0, 1], [0, 1])
+    ax.set_xlabel("x", fontsize=8)
+    with pytest.raises(TypeError):
+        cf.audit(fig, None, 1.0, "neurips")
+    assert gates(cf.audit(fig, venue="neurips")[1])["Type size"] is False
+    plt.close(fig)
+
+
+def test_scale_and_placed_frac_stay_positional():
+    """The break is scoped to the two arguments that were being confused."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1])
+    cf.audit(fig, 0.5)
+    cf.audit(fig, None, 0.5)
     plt.close(fig)
 
 

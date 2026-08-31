@@ -4,7 +4,7 @@ description: "Eleven audited figures covering the forms that are hard to check, 
 
 # Gallery
 
-`python examples/gallery.py` builds these eleven figures and audits each one.
+`python examples/gallery.py` builds these thirteen figures and audits each one.
 The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
@@ -94,6 +94,20 @@ Every alt text here is the string the figure itself carries, passed to
 <figure markdown="span">
   ![Two panels of log activity against log expression on one pair of scales. (a) 110 cells as a scatter, the two genotypes in two hues, with mark area carrying cell mass. (b) the same measurement on 40000 cells, where the marks would merge, drawn as a hexbin whose color is the count per bin.](images/gallery-density.png)
   <figcaption>Panel (a) varies mark area to carry a third variable. Panel (b) is the answer the overplotting row's own message gives at 40000 points. The shared window is set rather than inherited: limits driven by the large panel's tails squeezed the 110 marks of (a) into a corner until the overplotting row fired at 73%.</figcaption>
+</figure>
+
+## A callout that points
+
+<figure markdown="span">
+  ![A damped oscillation in millivolts against time in seconds. The amplitude decays from 1.0 at time zero, each swing smaller than the last, and a leader line marks the first trough at about 1.5 seconds, where the signal reaches -0.63.](images/gallery-callout.png)
+  <figcaption>The leader is the point of the figure. Three rows read one box per string, and on an annotation that box spanned the arrow too, so a one-character callout measured 285 points wide and two labels at opposite corners were reported as overlapping. No corpus figure drew a leader line, which is why three rows could misfire on one for as long as they did.</figcaption>
+</figure>
+
+## Two scales for one quantity
+
+<figure markdown="span">
+  ![Load in pounds rising linearly with length in inches, from 3 pounds at one inch to 25 pounds at twelve. A second axis across the top carries the same lengths in millimetres, 25 to 305, so the figure can be read in either unit.](images/gallery-secondary-scale.png)
+  <figcaption>A second axis carrying the same quantity in another unit is not a dual axis: there is still one data scale, and the top axis is a unit conversion of the bottom one. A secondary axis is a child axes and never reaches <code>fig.axes</code>, so ticks the locator placed outside its own view were read as clipped text rather than as ghosts.</figcaption>
 </figure>
 
 ---

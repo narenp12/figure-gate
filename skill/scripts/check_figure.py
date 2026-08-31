@@ -461,6 +461,27 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     return canvas.get_renderer(), canvas
 
 
+def _text_only_extent(t: Any, r: Any) -> Any:
+    """The extent of a Text artist's string, without its leader arrow.
+
+    `Annotation.get_window_extent` spans the text and the arrow together, so a
+    one-character callout with a leader running across the panel measured 285
+    points wide. Three rows read this box - Text collision, Label attribution
+    and Text readability, which samples the backdrop under the whole span - so
+    an ordinary annotated figure failed all three on the arrow's geometry
+    rather than on anything about the string.
+
+    `Text.get_window_extent` is the unbound superclass method, which measures
+    the glyphs and nothing else. It is called explicitly rather than by
+    temporarily clearing `arrowprops`, because mutating an artist mid-audit is
+    visible to anything else holding it.
+    """
+    from matplotlib.text import Annotation, Text
+    if isinstance(t, Annotation):
+        return Text.get_window_extent(t, renderer=r)
+    return t.get_window_extent(renderer=r)
+
+
 def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
     """Visible, non-empty Text artists with their window extents.
 
@@ -476,7 +497,7 @@ def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
         if not t.get_visible() or not str(t.get_text()).strip():
             continue
         try:
-            bb = t.get_window_extent(renderer=r)
+            bb = _text_only_extent(t, r)
         except Exception:
             continue
         if bb.width <= 0 or bb.height <= 0:
@@ -493,13 +514,34 @@ def _tick_texts(fig: Figure) -> set[int]:
     return ids
 
 
+def _all_axes(fig: Figure) -> list[Any]:
+    """Every axes on the figure, including child axes.
+
+    `inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added through
+    `add_child_axes` and never reach `fig.axes`. Only the ghost-tick reader
+    uses this today, deliberately: recognising a child axes there removes
+    fires, while teaching the other rows to see child axes adds them and is a
+    separate change with a corpus sweep behind it.
+    """
+    out, seen = [], set()
+    stack = list(fig.axes)
+    while stack:
+        ax = stack.pop()
+        if id(ax) in seen:
+            continue
+        seen.add(id(ax))
+        out.append(ax)
+        stack.extend(getattr(ax, "child_axes", []) or [])
+    return out
+
+
 def _ghost_ticks(fig: Figure) -> set[int]:
     """Tick artists that exist on an axes but never reach the page: those on a
     hidden axes (`ax.axis("off")`), and those at locations outside the current
     view. Counting either as clipped text reports a defect that is not there.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         if not ax.axison:
             ids.update(id(t) for t in
                        ax.get_xticklabels() + ax.get_yticklabels())
@@ -1103,6 +1145,8 @@ def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
 def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy."""
+    import numpy as np
+
     alphas = []
     for ax in fig.axes:
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
@@ -1111,7 +1155,30 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             al = a.get_alpha()
             # unset alpha means opaque, and that is exactly what this check
             # wants to know about, so it counts as 1.0 rather than being skipped
-            alphas.append(1.0 if al is None else round(float(al), 2))
+            if al is None:
+                alphas.append(1.0)
+            elif np.ndim(al) == 0:
+                alphas.append(round(float(al), 2))
+            else:
+                # matplotlib has taken a per-point alpha array since 3.4, and
+                # `float()` raises on one. A raising non-advisory gate is turned
+                # into a hard `False` by `_rows`, so a legal figure failed on a
+                # defect in the checker rather than on anything in the figure.
+                #
+                # A ramp across one artist is ONE level, not one per value: the
+                # question this row asks is how many separate alpha decisions
+                # the reader has to resolve, and a continuous encoding is a
+                # single decision. Counting each value instead made an ordinary
+                # `pcolormesh` report sixteen levels of haze.
+                #
+                # Opacity is the exception and is read per value, because
+                # "is anything solid" is a fact about pixels rather than about
+                # how many choices were made.
+                values = np.atleast_1d(al).ravel()
+                if values.size:
+                    solid_here = float(values.max())
+                    alphas.append(round(solid_here if solid_here >= OPAQUE_ALPHA_MIN
+                                        else float(values.min()), 2))
     if not alphas:
         return True, "no data artists"
     levels = sorted(set(alphas))
@@ -1425,11 +1492,27 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
 
     dup_ticks = 0
     for _, axes in rows.items():
+        # Grouped by the scale as well as the tick strings. `docs/gates.md`
+        # promises this row fires on "panels on a shared scale", and comparing
+        # tick text alone broke that promise: two panels carrying different
+        # quantities in different units, whose tick strings happen to coincide,
+        # were told to use `sharey`. Taking that advice would put unrelated
+        # data on one axis, so the row was not merely noisy, it was wrong.
+        #
+        # The axis label is part of the key because limits and scale type alone
+        # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
+        # seconds and agree on every number while sharing no scale at all. What
+        # a reader reads as one scale is one quantity, and the label is where
+        # the figure says which quantity that is. Panels that name the same
+        # quantity, or name none, still group together, which is the
+        # small-multiples case this row exists for.
         cols_seen = Counter(
-            tuple(t.get_text() for t in a.get_yticklabels()
-                  if t.get_text() and t.get_visible())
+            (a.get_ylim(), a.get_yscale(), a.get_ylabel().strip(),
+             tuple(t.get_text() for t in a.get_yticklabels()
+                   if t.get_text() and t.get_visible()))
             for a in axes)
-        dup_ticks += sum(n - 1 for v, n in cols_seen.items() if v and n > 1)
+        dup_ticks += sum(n - 1 for (_lim, _scale, _label, v), n in cols_seen.items()
+                         if v and n > 1)
 
     ok = not dupes and not dup_ticks
     if ok:
@@ -2168,6 +2251,60 @@ def _series_distance(artist: Any, bb: Any, pts: np.ndarray) -> float:
     return _box_distance(bb, pts)
 
 
+def _furniture_text_ids(fig: Figure) -> set[int]:
+    """Text that labels the frame rather than pointing into it.
+
+    A title, an axis label and a colorbar label all report the axes as their
+    `.axes`, so they satisfied `check_label_attribution`'s `t.axes is ax` guard
+    and were judged as direct labels by proximity. Each of them routinely
+    repeats a series name without pointing at that series, and a title sitting
+    above the panel is nearer whichever curve happens to run high.
+
+    Excluded by identity rather than by string, because a genuine direct label
+    may carry the same string and must still be judged.
+    """
+    ids: set[int] = set()
+    for ax in fig.axes:
+        ids.add(id(ax.title))
+        ids.add(id(ax.xaxis.label))
+        ids.add(id(ax.yaxis.label))
+        for extra in ("_left_title", "_right_title"):
+            t = getattr(ax, extra, None)
+            if t is not None:
+                ids.add(id(t))
+    return ids
+
+
+def _attribution_box(t: Any, r: Any, bb: Any) -> Any:
+    """Where a direct label points, for the proximity test.
+
+    A leader line is the remedy this row prints and `docs/gates.md` recommends,
+    and taking that advice could not discharge the row. The point of a leader is
+    that the string is set away from the ink, so its glyph box lands nearer
+    whatever curve happens to lie in between: the measured case had "Tuned"
+    205px from the curve it names and 145px from its neighbour, with the arrow
+    the only thing saying which was meant. Removing the arrow from the box, on
+    its own, moves the box away from both curves and leaves the rival nearest.
+
+    So an annotation carrying an arrow is judged at the arrow's anchor instead
+    of at its string. The row's premise is unchanged - a reader still has to be
+    able to tell which series is meant - but a leader is read as what it is, an
+    explicit statement of the attribution that proximity is otherwise guessing
+    at. A leader drawn to the wrong curve still fails, which a blanket
+    exemption for annotations would not catch.
+    """
+    if getattr(t, "arrow_patch", None) is None:
+        return bb
+    try:
+        x, y = t._get_position_xy(r)
+    except Exception:
+        # Private API. A matplotlib that moves it should fall back to measuring
+        # the string, rather than dropping the label out of the gate entirely.
+        return bb
+    from matplotlib.transforms import Bbox
+    return Bbox.from_bounds(float(x), float(y), 0.0, 0.0)
+
+
 def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """A direct label sitting nearer some other series than the one it names.
 
@@ -2204,7 +2341,7 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     not - it passed `_child3` and failed `95% CI`.
     """
     bad, checked = [], 0
-    legend_ids = _legend_text_ids(fig)
+    legend_ids = _legend_text_ids(fig) | _furniture_text_ids(fig)
     all_texts = _texts(fig, r)
     for ax in fig.axes:
         px = {}
@@ -2230,6 +2367,9 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
                 continue
             own_line = lines_list[match[0]]
             checked += 1
+            # An annotation with a leader is judged at its anchor, not at its
+            # string. See `_attribution_box`.
+            bb = _attribution_box(t, r, bb)
             # A floor on the own-curve distance: without it a label printed
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
@@ -2646,18 +2786,29 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     for name, cmap in sorted(seen.items()):
         if cmap.N < cp.CMAP_QUALITATIVE_N:
             levels = [to_hex(cmap(i)) for i in range(cmap.N)]
+            floats = [tuple(cmap(i)[:3]) for i in range(cmap.N)]
         else:
             levels = [to_hex(cmap(i / (cp.CMAP_SAMPLES - 1)))
                       for i in range(cp.CMAP_SAMPLES)]
+            # Classified before the 8-bit round trip. Rounding each channel to
+            # 1/255 puts oscillations of about 0.001 OKLab into a smooth ramp,
+            # and back travel divides by the lightness span, so a narrow-span
+            # map turns that wobble into a large fraction: `winter` measured
+            # 0.0343 through hex against 0.0139 in float, straddling the 0.02
+            # floor, so a sequential map classified `misc`. `levels` stays hex
+            # because the qualitative branch below hands it to `cp.check`,
+            # which takes hex.
+            floats = [tuple(cmap(i / (cp.CMAP_SAMPLES - 1))[:3])
+                      for i in range(cp.CMAP_SAMPLES)]
 
-        kind = cp.cmap_kind(levels)
+        kind = cp.cmap_kind_rgb(floats)
 
         if kind == "misc":
             fails.append(
                 f"{name}: lightness reverses over "
-                f"{cp.cmap_back_travel(levels):.0%} of its span  [FIX] a reader "
-                "cannot order two values in it. viridis for sequential, RdBu "
-                "for diverging, twilight for cyclic")
+                f"{cp.cmap_back_travel_rgb(floats):.0%} of its span  [FIX] a "
+                "reader cannot order two values in it. viridis for sequential, "
+                "RdBu for diverging, twilight for cyclic")
             continue
 
         if kind == "qualitative":
@@ -3001,6 +3152,7 @@ ADVISORY_GATES = _advisory_gates()
 
 
 def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
+          *,
           context_axes: Sequence[Axes] | None = None,
           venue: str | None = None,
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
@@ -3023,6 +3175,13 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     calculation outright. `context_axes` names axes whose fill is a context
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
+
+    `context_axes` and `venue` are keyword-only. They were positional until
+    0.9.0, and a `venue` passed in the `context_axes` slot was iterated into a
+    frozenset of axes ids rather than raising, because a string is iterable.
+    The venue was discarded and the figure was measured at the wrong width: a
+    wrong verdict, reported green, from an argument order. Keyword-only is the
+    only shape in which that call cannot be written.
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
@@ -3095,6 +3254,7 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
 
 def report(fig: Figure, name: str = "", scale: float | None = None,
            placed_frac: float = 1.0,
+           *,
            context_axes: Sequence[Axes] | None = None,
            venue: str | None = None, suggest: bool = False) -> bool:
     """`audit()`, printed. Returns the same `ok` bool and nothing else.
@@ -3112,6 +3272,14 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
 
+    `context_axes`, `venue` and `suggest` are keyword-only, matching `audit`.
+    They were positional until 0.9.0, and a `venue` passed in the
+    `context_axes` slot was iterated into a frozenset of axes ids rather than
+    raising, because a string is iterable. The venue was discarded and the
+    figure was measured at the wrong width: a wrong verdict, reported green,
+    from an argument order. Keyword-only is the only shape in which that call
+    cannot be written.
+
     Args:
         fig: The built figure.
         name: A heading for the table.
@@ -3124,7 +3292,8 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     Returns:
         `audit`'s `ok` bool. Advisory rows print as WARN without changing it.
     """
-    ok, rows = audit(fig, scale, placed_frac, context_axes, venue)
+    ok, rows = audit(fig, scale, placed_frac,
+                     context_axes=context_axes, venue=venue)
     print(f"\nComposition audit{': ' + name if name else ''}")
     warned = False
     for label, status, detail in rows:

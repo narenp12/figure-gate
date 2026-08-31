@@ -574,6 +574,48 @@ def cmap_kind(samples: Sequence[str]) -> str:
     return "misc"
 
 
+def _lightness_rgb(rgb: tuple[float, float, float]) -> float:
+    return linear_to_oklab(tuple(_srgb_to_linear(float(c)) for c in rgb))[0]
+
+
+def cmap_back_travel_rgb(samples: Sequence[tuple[float, float, float]]) -> float:
+    """`cmap_back_travel` on float sRGB, without the 8-bit round trip.
+
+    The hex API rounds every channel to 1/255 before lightness is computed. On
+    a smooth ramp those roundings are oscillations of about 0.001 OKLab that
+    accumulate into the measure: `winter` reads 0.0343 through hex against
+    0.0139 in float, which straddles the 0.02 floor and made a sequential map
+    classify `misc`. Maps that genuinely reverse are unaffected, because their
+    reversals are orders of magnitude larger than the rounding.
+
+    Args:
+        samples: `(r, g, b)` floats in 0..1, in ramp order.
+
+    Returns:
+        Backward lightness travel as a fraction of the ramp's span.
+    """
+    return _back_travel([_lightness_rgb(s) for s in samples])
+
+
+def cmap_kind_rgb(samples: Sequence[tuple[float, float, float]]) -> str:
+    """`cmap_kind` on float sRGB. See `cmap_back_travel_rgb` for why."""
+    if len(samples) < CMAP_QUALITATIVE_N:
+        return "qualitative"
+    ls = [_lightness_rgb(s) for s in samples]
+    if max(ls) - min(ls) < CMAP_SPAN_MIN:
+        return "misc"
+    if _back_travel(ls) < CMAP_BACKTRAVEL_MAX:
+        return "sequential"
+    half = len(ls) // 2
+    if (_back_travel(ls[:half + 1]) < CMAP_BACKTRAVEL_MAX
+            and _back_travel(ls[half:]) < CMAP_BACKTRAVEL_MAX):
+        first = tuple(_srgb_to_linear(float(c)) for c in samples[0])
+        last = tuple(_srgb_to_linear(float(c)) for c in samples[-1])
+        wrap = delta_e(first, last)
+        return "cyclic" if wrap < CMAP_WRAP_DE_MAX else "diverging"
+    return "misc"
+
+
 # --- gates ------------------------------------------------------------------
 
 # OKLab coordinates, not distances: where in the space a series hue should sit.

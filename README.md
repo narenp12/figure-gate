@@ -38,7 +38,7 @@ All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12,
 while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
 *`python examples/demo.py` builds that figure and audits it, and
-`python examples/gallery.py` covers the harder forms. Writing those eleven
+`python examples/gallery.py` covers the harder forms. Writing those thirteen
 found seven defects in the checks themselves.*
 
 ## Documentation
@@ -81,7 +81,7 @@ by what you came to do.
 <li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/design/">How the checkers decide</a></strong> — the measurement model, the evidence, and what a passing run does not mean</li>
 <li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/style-guide/">Figure style guide</a></strong> — the measurement behind each threshold, and the rules tried and reverted</li>
 <li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-shapes" viewBox="0 0 24 24"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/choosing-a-form/">Choosing a form</a></strong> — the decision no styling rule rescues, built on Cleveland and McGill's ordering</li>
-<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/gallery/">Gallery</a></strong> — eleven audited figures covering the forms that are hard to check</li>
+<li><svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <strong><a href="https://narenp12.github.io/figure-gate/gallery/">Gallery</a></strong> — thirteen audited figures covering the forms that are hard to check</li>
 </ul>
 </div>
 

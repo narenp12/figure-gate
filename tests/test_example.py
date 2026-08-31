@@ -62,8 +62,8 @@ def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     result = subprocess.run([sys.executable, str(GALLERY), str(tmp_path)],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
-    assert result.stdout.count("PASS  gallery-") == 11, result.stdout[-4000:]
-    assert len(list(tmp_path.glob("gallery-*.png"))) == 11, result.stdout[-4000:]
+    assert result.stdout.count("PASS  gallery-") == 13, result.stdout[-4000:]
+    assert len(list(tmp_path.glob("gallery-*.png"))) == 13, result.stdout[-4000:]
     # An advisory row does not fail the run, so a gate that over-fires here
     # would be invisible to the assertions above. Banking is the newest and the
     # loosest, and the corpus is the only evidence that its band is not a
@@ -85,7 +85,7 @@ def test_running_the_scripts_elsewhere_leaves_the_committed_pngs_alone(tmp_path)
     Both scripts run here, so a directory argument that is accepted and then
     ignored fails this even though the tests above would still pass."""
     committed = sorted(DEMO.parent.glob("*.png"))
-    assert len(committed) == 12, [p.name for p in committed]
+    assert len(committed) == 14, [p.name for p in committed]
     before = {path: (path.stat().st_mtime_ns, path.stat().st_size)
               for path in committed}
 

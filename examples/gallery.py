@@ -1,4 +1,4 @@
-"""Eleven figures hard enough to be worth checking.
+"""Thirteen figures hard enough to be worth checking.
 
     python examples/gallery.py [output-directory]
 
@@ -18,6 +18,8 @@ compositions where the checks have somewhere to hide:
     gallery-counts.png            bars from zero, and a second unit for them
     gallery-residual.png          a signed field: the fourth colormap kind
     gallery-density.png           marks that vary in area, then bins instead
+    gallery-callout.png           an annotation that points with a leader line
+    gallery-secondary-scale.png   one quantity carried on two unit scales
 
 The last four exist because measuring the first seven against every gate found
 rows that had never seen anything: no figure drew a band, a bar, a diverging
@@ -28,7 +30,7 @@ passes by having seen nothing looks exactly like a gate that passed.
 Each one is audited and the script exits non-zero if any figure fails, so these
 are regression tests with pictures attached rather than decoration.
 
-Importing this file builds nothing. The eleven builders are importable and each
+Importing this file builds nothing. The thirteen builders are importable and each
 returns its figure, so a change to a gate can be measured against the corpus:
 
     import gallery
@@ -120,7 +122,7 @@ def finish(fig, name, description, **audit_kw):
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
     open. That is the mode for measuring a change against this corpus: the
-    eleven figures are the evidence a gate is checked against, and getting at
+    thirteen figures are the evidence a gate is checked against, and getting at
     them used to mean either rewriting the committed PNGs or not getting at
     them at all.
     """
@@ -879,12 +881,72 @@ def density():
            context_axes=[b])
 
 
+# --- 12. a callout that points -----------------------------------------------
+# `check_collisions`, `check_label_attribution` and `check_text_readability` all
+# read one box per string, and on an Annotation that box used to span the arrow
+# too: a one-character callout measured 285 points wide. No corpus figure drew a
+# leader line, which is why three rows could misfire on one for as long as they
+# did.
+
+@styled
+def callout():
+    x = np.linspace(0, 10, 120)
+    y = np.exp(-0.3 * x) * np.cos(2 * x)
+
+    fig, ax = plt.subplots(figsize=(4.2, 2.8), constrained_layout=True)
+    ax.plot(x, y, color=SERIES[0], lw=1.6)
+    trough = int(np.argmin(y))
+    # Set above the curve and led down to the anchor, rather than beside it.
+    # A callout dropped below the trough lands on the x-axis label, which is a
+    # real collision and one this figure should not be shipping.
+    ax.annotate("first trough", xy=(x[trough], y[trough]),
+                xytext=(x[trough] + 2.7, 0.42), ha="center",
+                arrowprops=dict(arrowstyle="->", lw=1.0, color=MUTED))
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Amplitude (mV)")
+    return finish(fig, "gallery-callout",
+           "A damped oscillation in millivolts against time in seconds. The "
+           "amplitude decays from 1.0 at time zero, each swing smaller "
+           "than the last, and a leader line marks the first trough at "
+           "about 1.5 seconds, where the signal reaches -0.63.")
+
+
+# --- 13. two scales for one quantity -----------------------------------------
+# A secondary axis is a child axes, so it never reaches `fig.axes`. `_texts`
+# finds its tick labels through `findobj` while `_ghost_ticks` walked `fig.axes`
+# only, so ticks the locator placed outside the secondary's own view were read
+# as clipped rather than as ghosts.
+
+@styled
+def secondary_scale():
+    x = np.linspace(1, 12, 60)
+
+    fig, ax = plt.subplots(figsize=(4.2, 2.8), constrained_layout=True)
+    ax.plot(x, 2.0 * x + 1.0, color=SERIES[1], lw=1.6)
+    ax.set_xlabel("Length (in)")
+    ax.set_ylabel("Load (lb)")
+    # Pinned to the measured span rather than autoscaled. The secondary axis
+    # converts whatever the primary's limits are, so a 5% margin on the inches
+    # becomes a millimetre range that ends at 319 while the data ends at 305,
+    # and the alt text would be describing the margin rather than the data.
+    ax.set_xlim(x[0], x[-1])
+    ax.secondary_xaxis("top", functions=(lambda v: v * 25.4,
+                                         lambda v: v / 25.4)
+                       ).set_xlabel("Length (mm)")
+    return finish(fig, "gallery-secondary-scale",
+           "Load in pounds rising linearly with length in inches, from 3 "
+           "pounds at one inch to 25 pounds at twelve. A second axis across "
+           "the top carries the same lengths in millimetres, 25 to 305, so "
+           "the figure can be read in either unit.")
+
+
 BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
-            encoding, uncertainty, counts, residual, density)
+            encoding, uncertainty, counts, residual, density, callout,
+            secondary_scale)
 
 
 def main(argv=None):
-    """Build all eleven, audit each, and report. Returns a process exit code.
+    """Build all thirteen, audit each, and report. Returns a process exit code.
 
     Under `if __name__ == "__main__"`, so that importing this file builds
     nothing, writes no PNG, reads no `sys.argv` and does not exit the

@@ -189,6 +189,90 @@ def test_audit_api_unreleased_is_last_section(tmp_path, monkeypatch):
     assert exc_info.value.code == 0
 
 
+def test_audit_api_accepts_a_named_parameter_change(tmp_path, monkeypatch):
+    """A parameter break is reported as `audit(context_axes)`, and a name
+    ending in `)` is the case the matcher could not see.
+
+    `\\b` after a `)` asks for a word character next to it, which no sentence
+    puts there, so the gate was unsatisfiable for this whole class: the notes
+    named all five changed parameters and CI failed anyway. It went unnoticed
+    for eight releases because griffe had only ever reported bare names like
+    `GATES` and `delta_e`, which end in a word character and so match.
+    """
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog("## Unreleased\n\n`audit(context_axes)` and `audit(venue)` "
+                   "changed to keyword-only.\n"), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (
+            1,
+            "skill/scripts/check_figure.py:0: audit(context_axes): Parameter "
+            "kind was changed: positional or keyword -> keyword-only\n"
+            "skill/scripts/check_figure.py:0: audit(venue): Parameter kind was "
+            "changed: positional or keyword -> keyword-only\n",
+            ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code == 0, (
+        "the notes name both changed parameters and the gate still failed")
+
+
+def test_audit_api_still_fails_on_an_unnamed_parameter_change(tmp_path, monkeypatch):
+    """The other half of the pair above. Loosening the boundary must not turn
+    the gate into one that passes everything: a parameter the notes do not name
+    still has to fail."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog("## Unreleased\n\n`audit(context_axes)` changed to "
+                   "keyword-only.\n"), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_figure": (
+            1,
+            "skill/scripts/check_figure.py:0: audit(context_axes): Parameter "
+            "kind was changed: positional or keyword -> keyword-only\n"
+            "skill/scripts/check_figure.py:0: report(suggest): Parameter kind "
+            "was changed: positional or keyword -> keyword-only\n",
+            ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code != 0
+    assert "report(suggest)" in str(exc_info.value.code)
+
+
+def test_audit_api_does_not_match_a_name_inside_a_longer_one(tmp_path, monkeypatch):
+    """What `\\b` was there for, kept. `delta_e` named nowhere must not be
+    satisfied by a paragraph that happens to mention `delta_error`."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        _changelog("## Unreleased\n\n`delta_error` changed.\n"), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    griffe_output = {
+        "check_palette": (
+            1, "skill/scripts/check_palette.py:0: delta_e: Return value "
+               "was changed\n", ""),
+    }
+
+    mod = _load_audit_api()
+    with patch("subprocess.run", side_effect=_fake_run_factory(griffe_output)):
+        with pytest.raises(SystemExit) as exc_info:
+            mod.main()
+    assert exc_info.value.code != 0
+    assert "delta_e" in str(exc_info.value.code)
+
+
 def test_audit_api_changelog_accepts_other_break_words(tmp_path, monkeypatch):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(

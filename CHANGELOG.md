@@ -28,6 +28,55 @@ rewrites that line to match `pyproject.toml`, and a bump refuses to start on an
 unclean tree, so the version site nobody maintained was blocking the command
 that maintains the rest.
 
+### Changed
+
+- `audit(context_axes)`, `audit(venue)`, `report(context_axes)`,
+  `report(venue)` and `report(suggest)` changed to keyword-only. A `venue`
+  passed positionally landed in the `context_axes` slot, where a string is
+  iterable and so was accepted silently, and the figure was then measured at
+  the wrong page width.
+- `audit_api.py` matches a reported name with lookarounds rather than `\b`.
+  The parameter names griffe reports end in `)`, which `\b` cannot follow, so
+  the gate could not be satisfied for a parameter change by any wording. It is
+  the first such change this project has made.
+
+### Added
+
+- `check_palette.cmap_kind_rgb` and `check_palette.cmap_back_travel_rgb`
+  classify a ramp from float sRGB. The hex-taking `cmap_kind` and
+  `cmap_back_travel` are unchanged.
+- Two gallery figures, `gallery-callout` and `gallery-secondary-scale`,
+  carrying the two constructs that exposed most of the fixes below: an
+  annotation drawn with a leader line, and a secondary axis. The corpus is
+  thirteen figures.
+
+### Fixed
+
+- `Contrast stack` no longer fails a figure that uses matplotlib's per-point
+  alpha. `float()` raised on an array and the raising gate became a hard
+  failure. An alpha ramp now counts as one level, because a continuous
+  encoding is one decision the reader resolves.
+- `Text collision`, `Label attribution` and `Text readability` measure a
+  callout's string rather than its leader line. An annotation's window extent
+  spans text and arrow together, so a one-character label measured 285 points
+  wide and ordinary annotated figures failed all three rows.
+- `Label attribution` reads an annotation at the anchor its leader points to,
+  rather than at the string. Drawing a leader line is the remedy the row's own
+  `[FIX]` and `docs/gates.md` both offer, and taking it could not discharge the
+  row: a leader exists to set the string away from the ink, so the string was
+  measured nearer whichever curve lay in between. A leader drawn to the wrong
+  curve still fails.
+- `Label attribution` no longer judges a panel title, axis label or colorbar
+  label as a direct label.
+- `Axis redundancy` requires the panels to share limits, scale type and axis
+  title before it calls a tick column repeated. Two quantities in different
+  units whose ticks coincide were being told to use `sharey`.
+- `Clipping` recognises off-view ticks on a child axes, so a `secondary_xaxis`
+  or `secondary_yaxis` no longer reports them as clipped text.
+- `Colormap kind` classifies a ramp before the 8-bit round trip. `winter` and
+  `Wistia` failed on quantisation artifacts of about 0.001 OKLab, amplified by
+  their narrow lightness spans.
+
 ## 0.8.0 — 2026-08-18
 
 **The separation gates measure in CAM02-UCS instead of OKLab, and both floors
