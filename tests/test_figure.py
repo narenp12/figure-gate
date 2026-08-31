@@ -141,6 +141,71 @@ def test_contrast_stack_catches_too_many_alpha_levels():
     assert gates(rows)["Contrast stack"] is False
 
 
+def test_crossing_leader_arrows_are_not_a_text_collision():
+    """get_window_extent on an Annotation spans text and arrow together, so a
+    one-character label measured 285pt wide and two labels at opposite corners
+    were reported as overlapping."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 2.6), constrained_layout=True)
+    x = np.linspace(0, 10, 60)
+    ax.plot(x, np.sin(x))
+    ax.annotate("A", xy=(8, np.sin(8)), xytext=(2, 0.9),
+                arrowprops=dict(arrowstyle="->"))
+    ax.annotate("B", xy=(2, np.sin(2)), xytext=(8, -0.9),
+                arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_collisions(fig, r)
+    assert status is True, detail
+    plt.close(fig)
+
+
+def test_the_leader_line_remedy_discharges_label_attribution():
+    """gates.md and the row's own [FIX] both offer 'draw a leader line'. Taking
+    that advice used to create the failure it was offered to cure."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    x = [0, 2, 4, 6, 8, 10]
+    ax.plot(x, [1.0] * 6, label="Tuned")
+    ax.plot(x, [1.2] * 6, label="Baseline")
+    ax.set_ylim(0.9, 1.9)          # so the callout sits inside the view
+    ax.annotate("Tuned", xy=(5.0, 1.0), xytext=(5.0, 1.7), ha="center",
+                arrowprops=dict(arrowstyle="-", lw=1.0))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is not False, detail
+    plt.close(fig)
+
+
+def test_a_leader_drawn_to_the_wrong_curve_still_fails():
+    """The leader is read as a statement of attribution, not as an exemption
+    for annotations. One pointing at the rival curve is exactly the defect this
+    row exists to catch, and it has to keep failing."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    x = [0, 2, 4, 6, 8, 10]
+    ax.plot(x, [1.0] * 6, label="Tuned")
+    ax.plot(x, [1.2] * 6, label="Baseline")
+    ax.set_ylim(0.9, 1.9)
+    ax.annotate("Tuned", xy=(5.0, 1.2), xytext=(5.0, 1.7), ha="center",
+                arrowprops=dict(arrowstyle="-", lw=1.0))
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_label_attribution(fig, r)
+    assert status is False, detail
+    plt.close(fig)
+
+
+def test_strings_that_really_overlap_still_collide():
+    """The over-fire fix must not blind the row to a real collision."""
+    fig, ax = plt.subplots(figsize=(4, 2.6))
+    ax.plot([0, 1], [0, 1])
+    ax.annotate("Overlapping", xy=(0.5, 0.5), xytext=(0.5, 0.5),
+                arrowprops=dict(arrowstyle="->"))
+    ax.annotate("Overlapping", xy=(0.5, 0.5), xytext=(0.5, 0.5),
+                arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    status, _ = cf.check_collisions(fig, r)
+    assert status is False
+    plt.close(fig)
+
+
 def test_contrast_stack_survives_a_per_point_alpha_array():
     """matplotlib has taken array alpha since 3.4. float() raises on one, and
     _rows turns a raising non-advisory gate into False, so a legal figure was

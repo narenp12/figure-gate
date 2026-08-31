@@ -461,6 +461,27 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     return canvas.get_renderer(), canvas
 
 
+def _text_only_extent(t: Any, r: Any) -> Any:
+    """The extent of a Text artist's string, without its leader arrow.
+
+    `Annotation.get_window_extent` spans the text and the arrow together, so a
+    one-character callout with a leader running across the panel measured 285
+    points wide. Three rows read this box - Text collision, Label attribution
+    and Text readability, which samples the backdrop under the whole span - so
+    an ordinary annotated figure failed all three on the arrow's geometry
+    rather than on anything about the string.
+
+    `Text.get_window_extent` is the unbound superclass method, which measures
+    the glyphs and nothing else. It is called explicitly rather than by
+    temporarily clearing `arrowprops`, because mutating an artist mid-audit is
+    visible to anything else holding it.
+    """
+    from matplotlib.text import Annotation, Text
+    if isinstance(t, Annotation):
+        return Text.get_window_extent(t, renderer=r)
+    return t.get_window_extent(renderer=r)
+
+
 def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
     """Visible, non-empty Text artists with their window extents.
 
@@ -476,7 +497,7 @@ def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
         if not t.get_visible() or not str(t.get_text()).strip():
             continue
         try:
-            bb = t.get_window_extent(renderer=r)
+            bb = _text_only_extent(t, r)
         except Exception:
             continue
         if bb.width <= 0 or bb.height <= 0:
@@ -2193,6 +2214,36 @@ def _series_distance(artist: Any, bb: Any, pts: np.ndarray) -> float:
     return _box_distance(bb, pts)
 
 
+def _attribution_box(t: Any, r: Any, bb: Any) -> Any:
+    """Where a direct label points, for the proximity test.
+
+    A leader line is the remedy this row prints and `docs/gates.md` recommends,
+    and taking that advice could not discharge the row. The point of a leader is
+    that the string is set away from the ink, so its glyph box lands nearer
+    whatever curve happens to lie in between: the measured case had "Tuned"
+    205px from the curve it names and 145px from its neighbour, with the arrow
+    the only thing saying which was meant. Removing the arrow from the box, on
+    its own, moves the box away from both curves and leaves the rival nearest.
+
+    So an annotation carrying an arrow is judged at the arrow's anchor instead
+    of at its string. The row's premise is unchanged - a reader still has to be
+    able to tell which series is meant - but a leader is read as what it is, an
+    explicit statement of the attribution that proximity is otherwise guessing
+    at. A leader drawn to the wrong curve still fails, which a blanket
+    exemption for annotations would not catch.
+    """
+    if getattr(t, "arrow_patch", None) is None:
+        return bb
+    try:
+        x, y = t._get_position_xy(r)
+    except Exception:
+        # Private API. A matplotlib that moves it should fall back to measuring
+        # the string, rather than dropping the label out of the gate entirely.
+        return bb
+    from matplotlib.transforms import Bbox
+    return Bbox.from_bounds(float(x), float(y), 0.0, 0.0)
+
+
 def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """A direct label sitting nearer some other series than the one it names.
 
@@ -2255,6 +2306,9 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
                 continue
             own_line = lines_list[match[0]]
             checked += 1
+            # An annotation with a leader is judged at its anchor, not at its
+            # string. See `_attribution_box`.
+            bb = _attribution_box(t, r, bb)
             # A floor on the own-curve distance: without it a label printed
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
