@@ -1,4 +1,4 @@
-"""Thirteen figures hard enough to be worth checking.
+"""Nineteen figures hard enough to be worth checking.
 
     python examples/gallery.py [output-directory]
 
@@ -20,17 +20,35 @@ compositions where the checks have somewhere to hide:
     gallery-density.png           marks that vary in area, then bins instead
     gallery-callout.png           an annotation that points with a leader line
     gallery-secondary-scale.png   one quantity carried on two unit scales
+    gallery-survival.png          a Kaplan-Meier staircase, with censoring ticks
+    gallery-raster.png            spike times by trial, drawn as an event plot
+    gallery-rose.png              a direction, on the projection it belongs on
+    gallery-parity.png            predicted against observed, and a 1:1 line
+    gallery-phase.png             boundaries named by labels set along them
+    gallery-trendmap.png          a field with its own significance faded out
 
-The last four exist because measuring the first seven against every gate found
-rows that had never seen anything: no figure drew a band, a bar, a diverging
-map, a signed contour set or a `scatter`, so five checks had returned a passing
-row seven times over without once running the code that decides. A gate that
-passes by having seen nothing looks exactly like a gate that passed.
+Figures ten to thirteen exist because measuring the first seven against every
+gate found rows that had never seen anything: no figure drew a band, a bar, a
+diverging map, a signed contour set or a `scatter`, so five checks had returned
+a passing row seven times over without once running the code that decides. A
+gate that passes by having seen nothing looks exactly like a gate that passed.
+
+The last six answer the same question asked mechanically rather than by eye.
+Run under coverage, the thirteen never reached a rotated label's oriented box,
+a `LineCollection`'s widths, a step drawstyle, a polar axes, a per-point alpha
+array, or the equal-radii path in the overplotting gate: 281 statements of
+`check_figure.py` the corpus could not speak for. Each of the six is a form a
+reader would recognise before it is a branch, which is the order that matters,
+and together they took that 281 down to 239. The palette audit below took
+`check_palette.py` from 74% to 82% on the same measurement.
 
 Each one is audited and the script exits non-zero if any figure fails, so these
-are regression tests with pictures attached rather than decoration.
+are regression tests with pictures attached rather than decoration. `main` also
+runs `check_palette` over the sheet's own palette, which no figure exercises:
+the composition gates read hues off the artists, which is a different question
+from whether the palette was sound before anything was drawn with it.
 
-Importing this file builds nothing. The thirteen builders are importable and each
+Importing this file builds nothing. The nineteen builders are importable and each
 returns its figure, so a change to a gate can be measured against the corpus:
 
     import gallery
@@ -43,7 +61,7 @@ hard. Importing it ran every builder, overwrote every committed PNG, read
 process for good, and then called `sys.exit`.
 
 Writing them
-found seven defects in the checks themselves, and the comments below say which:
+found nine defects in the checks themselves, and the comments below say which:
 the readability gate reported a schematic's invisible tick labels, `check_ink`
 called every colorbar a saturated panel, the line-weight gate measured a
 colorbar's own dividers, a path and its start marker in one hue read as a
@@ -53,11 +71,22 @@ was passing nearly everything it was given, and `_encloses` tested a band's
 outline through the affine part of the transform only, so on a log axis a
 confidence band stopped being its own curve's band and became its rival.
 
-Two more defects were in the FIGURES and no gate caught either: the schematic's
-feedback loop ran off the bottom of the canvas, and the convergence plot's slope
-triangle sat in the only corner its direct labels could use. Both were obvious
-in the PNG and invisible to every check. That is step 7 of the procedure, and it
-is why the procedure has a step 7.
+The last two came in with the last six figures, and both were in code no figure
+had ever run: `check_line_weight` raised TypeError on an `EventCollection`,
+because a collection reports one width where every other reports a sequence;
+and `check_label_attribution` counted a curve's own censoring ticks as a rival
+series, which sits 0px away by construction because it is drawn ON the curve,
+so no placement of the label could clear it.
+
+Four defects were in the FIGURES and no gate caught any: the schematic's
+feedback loop ran off the bottom of the canvas, the convergence plot's slope
+triangle sat in the only corner its direct labels could use, the survival
+curves stopped at the last event and left their tail censoring ticks floating
+with no line beneath them, and the regime diagram's boundary labels were
+rotated by the data slope rather than the slope on the page, which on log axes
+is a different number and left both strings lying flat beside a rising curve.
+All four were obvious in the PNG and invisible to every check. That is step 7 of
+the procedure, and it is why the procedure has a step 7.
 """
 
 from pathlib import Path
@@ -122,7 +151,7 @@ def finish(fig, name, description, **audit_kw):
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
     open. That is the mode for measuring a change against this corpus: the
-    thirteen figures are the evidence a gate is checked against, and getting at
+    nineteen figures are the evidence a gate is checked against, and getting at
     them used to mean either rewriting the committed PNGs or not getting at
     them at all.
     """
@@ -940,13 +969,450 @@ def secondary_scale():
            "the figure can be read in either unit.")
 
 
+# --- 14. a survival curve ----------------------------------------------------
+# The first staircase in the corpus. `ax.step` keeps the points it was handed
+# and draws risers between them, so `_drawstyle_xy` expands the drawstyle before
+# any geometry is harvested; without it the label gate and the banking gate read
+# the diagonal chord of each riser rather than the two segments actually drawn.
+# Thirteen figures went by without one, because every other line here is a
+# function sampled finely enough that its polyline IS its shape.
+#
+# Kaplan-Meier is where a staircase is not a stylistic choice: the estimate only
+# changes at an observed event, and drawing through the flat stretch between two
+# events would assert a decline nobody measured.
+
+@styled
+def survival():
+    rng = np.random.default_rng(11)
+
+    def arm(scale, n):
+        """Right-censored times: the event, or the end of follow-up, whichever
+        came first. Censoring is what makes this an estimator rather than a
+        cumulative count, and the ticks below mark where it happened."""
+        event_time = rng.exponential(scale, n)
+        leaves = rng.uniform(4.0, 24.0, n)
+        return np.minimum(event_time, leaves), event_time <= leaves
+
+    def kaplan_meier(time, observed):
+        order = np.argsort(time)
+        time, observed = time[order], observed[order]
+        xs, ys = [0.0], [1.0]
+        surviving = 1.0
+        for t in np.unique(time[observed]):
+            at_risk = int((time >= t).sum())
+            events = int(((time == t) & observed).sum())
+            surviving *= 1.0 - events / at_risk
+            xs.append(float(t))
+            ys.append(surviving)
+        # Held flat to the last person still under observation, not stopped at
+        # the last event. Ending the line at the final death drew the tail
+        # censoring ticks with no curve beneath them, floating in the corner as
+        # marks belonging to nothing: the estimate does not stop there, it stops
+        # being able to change there.
+        xs.append(float(time.max()))
+        ys.append(surviving)
+        return np.array(xs), np.array(ys)
+
+    def held_at(xs, ys, when):
+        """The estimate at `when`. Right-continuous, so the value at a step is
+        the one after the drop, which is what the staircase draws."""
+        return ys[max(int(np.searchsorted(xs, when, side="right")) - 1, 0)]
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.0), constrained_layout=True)
+    # Both labels at one month, chosen where the arms are furthest apart so each
+    # is plainly nearest the curve it names. Set out at the right-hand end they
+    # sat in empty page with both curves long since flat, and each was nearer
+    # its rival than its own.
+    label_month = 5.0
+    # The lower arm is labelled BELOW its curve, not above it. Above, the page
+    # between the two arms belongs to the upper one: the control label placed
+    # up-and-right at month 5 landed on the treated curve, 0px from a series it
+    # does not name. Below the lower curve there is nothing but page.
+    for scale, color, name, side in ((7.0, SERIES[0], "treated", 1),
+                                     (3.4, SERIES[1], "control", -1)):
+        time, observed = arm(scale, 90)
+        xs, ys = kaplan_meier(time, observed)
+        # `where="post"` because the estimate holds its old value up to the
+        # event and drops at it. "pre" would drop one event early, which on a
+        # survival curve is a claim about who was still alive when.
+        #
+        # Labelled, because `check_label_attribution` joins a string to a series
+        # by the artist's own label and skips any figure where nothing matches.
+        # Drawn unlabelled, these two curves carried two direct labels the gate
+        # reported as "no direct labels matched to a series", which reads as a
+        # pass and is the row seeing nothing.
+        ax.step(xs, ys, where="post", color=color, lw=1.6, label=name)
+        censored = np.sort(time[~observed])
+        ax.plot(censored, [held_at(xs, ys, t) for t in censored],
+                linestyle="none", marker="|", markersize=5,
+                markeredgewidth=1.0, color=color)
+        # Up and to the RIGHT of the anchor, not centred over it. A survival
+        # curve only falls, so the page above a point is where the curve was a
+        # moment earlier: a centred label runs back into its own ink, which is
+        # what the readability row said when this was `ha="center"`.
+        #
+        # In ink, not in the curve's own hue. Okabe-Ito is a series palette and
+        # #e69f00 on this page is 2.1:1, so a label set in it fails the
+        # readability floor no matter where it is put; the curve it names is
+        # what identifies it.
+        ax.annotate(name, (label_month, held_at(xs, ys, label_month)),
+                    textcoords="offset points", xytext=(5 * side, 7 * side),
+                    ha="left" if side > 0 else "right",
+                    va="bottom" if side > 0 else "top", color=INK)
+
+    ax.set_xlabel("Months since randomisation")
+    ax.set_ylabel("Surviving fraction")
+    ax.set_xlim(0, 24)
+    ax.set_ylim(0, 1)
+    return finish(fig, "gallery-survival",
+           "Surviving fraction against months since randomisation, as two "
+           "Kaplan-Meier staircases over 24 months. Both arms start at 1.0 and "
+           "step down only at an observed event; the treated arm stays above "
+           "the control throughout, and short vertical ticks on each curve "
+           "mark the times where follow-up ended without an event.")
+
+
+# --- 15. a spike raster ------------------------------------------------------
+# `eventplot` draws an `EventCollection`, which is a `LineCollection`, and
+# `check_line_weight` reads a collection's widths as a sequence rather than as
+# one number. That branch had never run: the corpus draws lines as `Line2D` and
+# fields as meshes, and its only collections carry offsets or contour paths.
+# A gate measuring the wrong widths passes for the same reason it fails, so the
+# branch needed material rather than a fixture.
+
+@styled
+def raster():
+    rng = np.random.default_rng(3)
+    onset, offset = 0.0, 0.4
+
+    def trial():
+        """Poisson background, plus a driven burst while the stimulus is on."""
+        background = rng.uniform(-0.5, 1.0, rng.poisson(6))
+        driven = rng.normal(0.16, 0.07, rng.poisson(9)) + onset
+        spikes = np.concatenate([background, driven[(driven > onset)
+                                                    & (driven < offset)]])
+        return np.sort(spikes)
+
+    trials = [trial() for _ in range(18)]
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.0), constrained_layout=True)
+    # The stimulus window as two rules rather than a shaded span: a span is a
+    # patch behind every spike in the window, and the thing being read here is
+    # when a spike happened, not how bright the background is.
+    for edge in (onset, offset):
+        ax.axvline(edge, color=MUTED, lw=1.0)
+    ax.eventplot(trials, colors=INK, linewidths=1.0, linelengths=0.72)
+
+    ax.set_xlabel("Time from stimulus onset (s)")
+    ax.set_ylabel("Trial")
+    ax.set_xlim(-0.5, 1.0)
+    ax.set_ylim(-1, 18)
+    ax.set_yticks([0, 5, 10, 15])
+    # The grid stays on time and comes off trial, which is the same rule
+    # `counts` applies to its bars: a trial is a category, and a rule drawn
+    # through the middle of one row of spikes measures nothing. Time is the
+    # axis a reader actually reads a value off.
+    ax.grid(axis="y", visible=False)
+    return finish(fig, "gallery-raster",
+           "Spike times against trial, one row per trial, over 18 trials from "
+           "-0.5 to 1.0 seconds around stimulus onset. Two vertical rules mark "
+           "the stimulus window. Spikes are sparse and evenly spread outside "
+           "it and pile up inside it, so the response is locked to the "
+           "stimulus rather than to the trial.")
+
+
+# --- 16. a polar histogram ---------------------------------------------------
+# The first polar axes in the corpus, and `check_text_readability` carries a
+# clause written for one: radial tick labels sit on the data by construction, so
+# the gate sets them aside rather than reporting every ordinary polar plot at
+# 2.0:1. That clause was argued from eight figures none of which are here, so
+# `_polar_radial_ticks` had never been handed a polar axes to find them on.
+#
+# A direction is the case where a linear axis is wrong rather than ugly: 350
+# degrees and 10 degrees are 20 apart, and a bar chart of compass bins puts them
+# at opposite ends of the page.
+
+@styled
+def rose():
+    rng = np.random.default_rng(5)
+    directions = np.concatenate([rng.normal(1.05, 0.42, 320),
+                                 rng.normal(3.6, 0.75, 150)]) % (2 * np.pi)
+    edges = np.linspace(0, 2 * np.pi, 17)
+    counts, _ = np.histogram(directions, bins=edges)
+
+    fig, ax = plt.subplots(figsize=(3.8, 3.8), constrained_layout=True,
+                           subplot_kw={"projection": "polar"})
+    # Bars from r = 0, for the reason a linear bar chart needs a zero baseline:
+    # the bar encodes the count as length. The area of a polar wedge grows
+    # faster than its length, which is a separate and well-known distortion;
+    # equal-width bins keep it uniform across the figure.
+    ax.bar(edges[:-1], counts, width=np.diff(edges), bottom=0.0,
+           align="edge", color=SERIES[2], edgecolor=SURFACE, linewidth=1.0)
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    ax.set_thetagrids(np.arange(0, 360, 45),
+                      ["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+    ax.set_rlim(0, 80)
+    # The radial labels go in the emptiest sector. At 112.5 degrees they sat
+    # under the east lobe and the innermost of the three disappeared into a bar,
+    # which is the one failure a polar plot has that a rectangular one does not:
+    # the radial axis runs through the data wherever it is put.
+    ax.set_rgrids([20, 40, 60], angle=145.0)
+    ax.set_xlabel("Observations per 22.5 degree bin")
+    return finish(fig, "gallery-rose",
+           "Counts of wind direction in 16 bins of 22.5 degrees, drawn as bars "
+           "from the centre on a compass rose reading up to 80 per bin. The "
+           "distribution is bimodal: a dominant lobe covering northeast "
+           "through east, and a smaller one from the south-southwest, with "
+           "almost nothing from the north, the northwest or the southeast.")
+
+
+# --- 17. observed against predicted ------------------------------------------
+# Every scatter in this corpus varies its mark area, so `check_overplotting`
+# has only ever taken the mixed-radius path: marks grouped into radius octaves,
+# each group queried separately. The equal-radii shortcut, which is the branch
+# an ordinary `scatter` reaches and therefore the one most figures are judged
+# by, had never run once.
+#
+# A parity plot is where equal marks are the point. Each mark is one case and
+# nothing about it is being ranked, so varying the area would encode a variable
+# that does not exist.
+
+@styled
+def parity():
+    rng = np.random.default_rng(19)
+    observed = rng.uniform(0.6, 9.2, 84)
+    predicted = observed + rng.normal(0.0, 0.55, observed.size) + 0.1
+
+    fig, ax = plt.subplots(figsize=(3.8, 3.6), constrained_layout=True)
+    lims = (0.0, 10.0)
+    # The 1:1 line first, so the marks sit on top of it. It is furniture, not a
+    # fit: a fitted line here would be a second claim, and the question a parity
+    # plot asks is how far the marks are from equality.
+    ax.plot(lims, lims, color=MUTED, lw=1.0)
+    ax.scatter(observed, predicted, s=18.0, color=SERIES[0], edgecolors="none")
+
+    ax.set_xlabel("Observed solubility (mg/mL)")
+    ax.set_ylabel("Predicted solubility (mg/mL)")
+    ax.set_xlim(*lims)
+    ax.set_ylim(*lims)
+    ax.set_aspect("equal")
+    return finish(fig, "gallery-parity",
+           "Predicted against observed solubility for 84 compounds, both axes "
+           "from 0 to 10 milligrams per millilitre, with a 1:1 line. The marks scatter "
+           "evenly about the line across the whole range rather than fanning "
+           "out or bending away from it, so the error is roughly constant and "
+           "the model is not biased at either end.")
+
+
+# --- 18. a regime diagram ----------------------------------------------------
+# Every string in the first thirteen figures sits at 0 or 90 degrees, so the
+# oriented-box path three gates share had never run: `_corners` reconstructs a
+# rotated label's four corners, and `_oriented_mask` asks which sampled pixels
+# the label actually covers. On one 45-degree string, four fifths of the block
+# an axis-aligned box samples belongs to the label only through that box, and
+# `check_text_readability` was reporting strokes 30 pixels away from any glyph.
+#
+# A boundary label is where rotation is the right answer rather than a space
+# saving: the label names the curve, so it is set along it, and a reader follows
+# the two together.
+
+@styled
+def phase():
+    ratio = np.logspace(-0.3, 0.9, 200)
+
+    def boundary(coefficient):
+        return coefficient * ratio ** 2.2
+
+    def label_along(x, y, text, at, offset):
+        """Set the string at the angle the curve has ON THE PAGE.
+
+        Measured by transforming two neighbouring vertices and taking the angle
+        between them in display space, because that is the only place the
+        question has an answer. `text(rotation=...)` is in screen degrees, and
+        on this figure the data-space slope is not the screen slope: a decade of
+        Rayleigh number is a different number of points than a doubling of
+        aspect ratio. `transform_angles` was tried first and is the wrong tool
+        here, because it differentiates in DATA coordinates, and the data slope
+        of a power law on log axes is not the slope of the straight line drawn.
+        It returned about 3 degrees for a line the eye reads at 40, so both
+        labels came out flat beside a rising curve.
+
+        Called after a draw, for the same reason: `constrained_layout` sizes the
+        axes during one, so an angle measured before it is the angle of a panel
+        that is about to change shape.
+        """
+        i = int(at * (len(x) - 2))
+        (x0, y0), (x1, y1) = ax.transData.transform([[x[i], y[i]],
+                                                     [x[i + 1], y[i + 1]]])
+        angle = float(np.degrees(np.arctan2(y1 - y0, x1 - x0)))
+        ax.text(x[i], y[i] * offset, text, rotation=angle, rotation_mode="anchor",
+                ha="center", va="bottom", color=INK)
+
+    fig, ax = plt.subplots(figsize=(4.4, 3.2), constrained_layout=True)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    # Limits before the labels: `transform_angles` reads the transform that is
+    # in effect, and an autoscale that runs afterwards rotates every curve out
+    # from under its own string.
+    ax.set_xlim(0.5, 8.0)
+    ax.set_ylim(1e3, 1e7)
+    # Named ticks rather than the log locator's. Half a decade of x carries the
+    # minor labels 2x10^-1 and 3x10^-1, which run off the left edge and collide
+    # with each other; the aspect ratios a reader wants named are the round ones.
+    ax.set_xticks([0.5, 1.0, 2.0, 4.0, 8.0], ["0.5", "1", "2", "4", "8"])
+    ax.set_xticks([], minor=True)
+    steady, oscillatory = boundary(2.4e4), boundary(6.0e5)
+    ax.plot(ratio, steady, color=SERIES[0], lw=1.6, label="steady onset")
+    ax.plot(ratio, oscillatory, color=SERIES[1], lw=1.6,
+            label="oscillatory onset")
+    # Drawn once before the labels are placed, so the angles are measured
+    # against the panel `constrained_layout` actually settles on.
+    fig.canvas.draw()
+    # Clear of the curve, not resting on it: a label set along a stroke is a
+    # label on data ink, and the gate that reads its backdrop is right to say
+    # so. Placed at different points along the two curves, because the upper
+    # boundary leaves the top of the panel and a label two thirds along it would
+    # be set outside the frame.
+    label_along(ratio, steady, "steady onset", 0.62, 1.9)
+    label_along(ratio, oscillatory, "oscillatory onset", 0.30, 1.9)
+
+    ax.set_xlabel("Aspect ratio")
+    ax.set_ylabel("Rayleigh number")
+    return finish(fig, "gallery-phase",
+           "Two onset boundaries on a log-log plane of Rayleigh number from "
+           "1000 to 10000000 against aspect ratio from 0.5 to 8. Both are "
+           "straight on these axes and rise together at the same slope, so "
+           "they never meet; each is named by a label set along it, steady "
+           "onset on the lower and oscillatory onset on the upper.")
+
+
+# --- 19. a trend map with its own significance -------------------------------
+# matplotlib has taken a per-artist alpha ARRAY since 3.4, and `float()` raises
+# on one. `check_contrast_stack` reads the array rather than the scalar for
+# exactly this figure, counting a ramp across one artist as one alpha decision
+# and not as one per cell; a `pcolormesh` read the other way reports sixteen
+# levels of haze and fails a figure that made a single choice. Nothing in the
+# corpus carried an alpha array, so the branch that decides had never run.
+#
+# Fading the cells that are not significant is the alternative to stippling
+# them, and it is the same statement: the map is the estimate, and the reader is
+# being told which parts of it to spend attention on.
+
+@styled
+def trendmap():
+    lon, lat = np.meshgrid(np.linspace(-30, 30, 61), np.linspace(-20, 20, 41))
+    trend = (0.42 * np.sin(np.radians(4.0 * lon))
+             * np.cos(np.radians(6.0 * lat)) - 0.006 * lat)
+    # The significance mask is a second field, not a threshold on the first: a
+    # small trend measured precisely can be significant and a large one need
+    # not be, so masking on magnitude would be drawing the map twice.
+    noise = 0.09 * np.cos(np.radians(9.0 * lon + 5.0 * lat)) + 0.06
+    significant = np.abs(trend) > 2.0 * noise
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
+    lim = float(np.abs(trend).max())
+    mesh = ax.pcolormesh(lon, lat, trend, cmap="RdBu_r", vmin=-lim, vmax=lim,
+                         shading="nearest", rasterized=True)
+    mesh.set_alpha(np.where(significant, 1.0, 0.3).ravel())
+
+    ax.set_xlabel("Longitude (deg)")
+    ax.set_ylabel("Latitude (deg)")
+    ax.set_xlim(-30, 30)
+    ax.set_ylim(-20, 20)
+    bar = fig.colorbar(mesh, ax=ax, pad=0.02, ticks=[-0.4, -0.2, 0.0, 0.2, 0.4])
+    bar.set_label("Trend (K per decade)")
+    bar.outline.set_linewidth(0.0)
+    return finish(fig, "gallery-trendmap",
+           "Temperature trend in kelvin per decade across longitude -30 to 30 "
+           "and latitude -20 to 20, as a diverging red-blue field centred on "
+           "zero. A cooling lobe fills the western half and a warming lobe of "
+           "the same size the eastern half, with weaker lobes of the opposite "
+           "sign at the corners. Cells where the trend is smaller than twice "
+           "its own noise are drawn faded, so the two strong lobes stand out "
+           "from a background that is not being claimed.",
+           context_axes=[ax])
+
+
 BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
             encoding, uncertainty, counts, residual, density, callout,
-            secondary_scale)
+            secondary_scale, survival, raster, rose, parity, phase, trendmap)
+
+
+# --- the palette these figures are drawn with --------------------------------
+# `check_palette.py` is the other half of the package and no figure exercises
+# it: `check_figure.check_series_color` reads the hues off the artists, which is
+# a different question from whether the palette was sound before anything was
+# drawn with it. The corpus was measuring one module and claiming the pair.
+#
+# Both shapes are checked, because they are different rows and not a flag: a
+# categorical palette is gated on separation between slots, an ordinal ramp on
+# monotone lightness and even steps. The colours are read out of the sheet and
+# out of the colormaps these figures actually use, so this cannot drift from
+# what the pictures above are drawn with.
+
+def palettes():
+    """Gate the sheet's series palette and the ramps the figures use.
+
+    Returns `[(name, ok), ...]`, the same shape `results` carries, and prints
+    each row the way `check_figure.report` prints its own.
+    """
+    import check_palette as cp                                   # noqa: PLC0415
+    from matplotlib.colors import to_hex
+
+    def sample(name, lo, hi, n):
+        cmap = plt.get_cmap(name)
+        return [to_hex(cmap(t)) for t in np.linspace(lo, hi, n)]
+
+    # `check_palette` parses six-digit hex and nothing else, deliberately: it
+    # imports nothing outside the standard library, so it has no colour
+    # converter to lean on. `SURFACE` comes off `axes.facecolor`, which the
+    # sheet writes as the name `white`, so the conversion happens here rather
+    # than being wished on a module that cannot do it.
+    surface = to_hex(SURFACE)
+    # `t` in [0.05, 0.70], which is `VIRIDIS_WINDOW` in the style guide's
+    # appendix and not a range picked to pass: full-range viridis ends at
+    # #fde725, 1.26:1 on this page, and the Light-end contrast row is right to
+    # fail it. Windowing is what the guide tells a reader to do before drawing
+    # discrete tiers as standalone lines, so it is what the row should be
+    # handed. `check_figure.check_colormap` covers the continuous case, which
+    # is a different question and has a colorbar to answer it with.
+    tiers = sample("viridis", 0.05, 0.70, 5)
+    checks = (
+        ("figure.mplstyle series", dict(colors=SERIES, surface=surface,
+                                        ink=frozenset((INK, MUTED)))),
+        ("windowed viridis tiers", dict(colors=tiers, surface=surface,
+                                        ordinal=True)),
+    )
+
+    out = []
+    for name, kwargs in checks:
+        ok, rows = cp.check(**kwargs)
+        print(f"\nPalette audit: {name}")
+        for label, status, detail in rows:
+            tag = "WARN" if status == "warn" else ("PASS" if status else "FAIL")
+            print(f"  [{tag}] {label:<28} {detail}")
+        out.append((name, ok))
+
+    # `cmap_kind` reads a ramp's lightness profile and names it, and it is what
+    # `check_colormap` reports per artist -- through `cmap_kind_rgb`, its
+    # sibling, so the hex-sampled entry point the CLI uses had no caller here.
+    #
+    # `CMAP_QUALITATIVE_N` samples, not a handful: under 40 the function reads
+    # its input as a bag of category colours and answers "qualitative", which
+    # is the documented behaviour and not a disagreement with `check_colormap`.
+    # Sampling a colormap too coarsely and reading the answer as a defect is
+    # the mistake this call is here to keep visible.
+    kind = cp.cmap_kind(sample("viridis", 0.0, 1.0, cp.CMAP_QUALITATIVE_N))
+    ok = kind == "sequential"
+    print(f"\n  [{'PASS' if ok else 'FAIL'}] {'cmap_kind':<28} "
+          f"viridis reads as {kind}")
+    out.append(("viridis reads as sequential", ok))
+    return out
 
 
 def main(argv=None):
-    """Build all thirteen, audit each, and report. Returns a process exit code.
+    """Build all nineteen, audit each, and report. Returns a process exit code.
 
     Under `if __name__ == "__main__"`, so that importing this file builds
     nothing, writes no PNG, reads no `sys.argv` and does not exit the
@@ -963,11 +1429,17 @@ def main(argv=None):
     for build in BUILDERS:
         build()
 
+    # Kept out of `results`, which is the figure roster: a palette row has no
+    # PNG to name, and the roster is what the docs and the suite count.
+    palette_results = palettes()
+
     print("\n" + "=" * 62)
     for name, ok in results:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}.png")
+    for name, ok in palette_results:
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}")
     print("=" * 62 + "\n")
-    return 0 if all(ok for _, ok in results) else 1
+    return 0 if all(ok for _, ok in results + palette_results) else 1
 
 
 if __name__ == "__main__":

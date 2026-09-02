@@ -358,7 +358,7 @@ ignore = ["E741", "B905"]
 # the day it was added, which is the same argument the threshold gate was written
 # on: a check is worth having before it has something to say.
 #
-# The three exceptions are not typos, and each is a term the documents are right
+# The five exceptions are not typos, and each is a term the documents are right
 # to use:
 #
 #   vermillion  the Okabe-Ito palette's own name for entry 7, as Wong spells it
@@ -371,9 +371,15 @@ ignore = ["E741", "B905"]
 #   nd          "ND", Stone, Szafir & Setlur's notation for the noticeable
 #               difference, inside the passage EXTERNAL_CLAIMS quotes from them.
 #               A quote that is corrected is not a quote.
+#   trough      the local minimum of a waveform, in the callout example --
+#               `trough = int(np.argmin(y))` names it, and the alt text places
+#               "the first trough at about 1.5 seconds". codespell reads it as
+#               "through". Correcting it would be wrong twice over: the word is
+#               right, and the alt text is gated against the figure's own
+#               numbers by tests/test_alt_text_numbers.py.
 [tool.codespell]
 skip = "./site,./.venv,./.git,uv.lock,*.png,*.svg"
-ignore-words-list = "vermillion,commun,theses,nd"
+ignore-words-list = "vermillion,commun,theses,nd,trough"
 
 [tool.mypy]
 python_version = "3.11"
@@ -427,6 +433,42 @@ filterwarnings = [
     "ignore:Passing 'N' to ListedColormap is deprecated:DeprecationWarning",
 ]
 
+# Coverage is configured here but deliberately NOT in `addopts`. Two legs of the
+# test matrix run a bare `pytest -n auto -q` against a near-bare install --
+# `uv pip install --system pytest pytest-xdist` and nothing else -- and pytest
+# fails hard on an unknown argument rather than skipping it, so a `--cov` in
+# `addopts` would turn every one of those jobs red on a machine that never
+# wanted coverage. `make coverage` opts in; nothing else pays for it.
+[tool.coverage.run]
+# `skill/scripts`, not `figure_gate`. tests/conftest.py puts that directory on
+# `sys.path` and the suite imports `check_figure` flat, so `--cov=figure_gate`
+# matches no imported module and coverage exits with "No data was collected"
+# after a full green run -- a silent zero, not an error.
+source = ["skill/scripts"]
+
+[tool.coverage.report]
+show_missing = true
+# The `main()` bodies are NOT excluded, and the omission is the point. Each of
+# the three scripts ends in a self-test entrypoint that no test drives, which is
+# most of what separates this number from 100%. Excluding them would raise the
+# figure without covering a line; leaving them in keeps the gap legible.
+# `exclude_also`, never `exclude_lines`. The latter REPLACES coverage's default
+# list rather than adding to it, which silently un-excludes `# pragma: no cover`
+# -- the first draft of this block did exactly that, and the fallback at
+# skill/scripts/__init__.py:35 went from excluded to reported as a miss while
+# the total barely moved. A rising statement count is the tell.
+exclude_also = [
+    'if __name__ == "__main__":',
+    # Never executed at runtime by construction: the imports exist so the
+    # annotations resolve under mypy, and `from __future__ import annotations`
+    # keeps every annotation a string.
+    "if TYPE_CHECKING:",
+]
+# A ratchet, at the measurement it was set from: 91% over 1728 tests. It gates
+# `make coverage` only -- CI does not run coverage at all -- so it is a local
+# tripwire against a regression, not a merge gate.
+fail_under = 90
+
 # cmasher is a TEST ORACLE and never a runtime dependency. `cmap_kind` is a
 # port of its `get_cmap_type()` into OKLab, and `tests/test_palette_oracle.py`
 # differentials the two across matplotlib's registry. It earned its place
@@ -445,6 +487,7 @@ dev = [
     "codespell>=2.3",
     "mypy>=1.11",
     "pytest>=7.0",
+    "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.16",
     "scipy>=1.6",

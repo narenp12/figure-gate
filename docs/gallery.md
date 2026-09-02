@@ -1,17 +1,17 @@
 ---
-description: "Eleven audited figures covering the forms that are hard to check, and the defects that writing them found."
+description: "Nineteen audited figures covering the forms that are hard to check, and the defects that writing them found."
 ---
 
 # Gallery
 
-`python examples/gallery.py` builds these thirteen figures and audits each one.
+`python examples/gallery.py` builds these nineteen figures and audits each one.
 The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
 They exist because `demo.py`, one panel and three curves, is easy for a gate to
 pass, and passing an easy case is the wrong thing for a gate to be good at.
 These are the compositions where a check has somewhere to hide. Writing them
-found seven defects in the checks themselves, and two in the figures that no
+found nine defects in the checks themselves, and four in the figures that no
 check caught. Both kinds are listed at the end of this page.
 
 Every alt text here is the string the figure itself carries, passed to
@@ -110,9 +110,51 @@ Every alt text here is the string the figure itself carries, passed to
   <figcaption>A second axis carrying the same quantity in another unit is not a dual axis: there is still one data scale, and the top axis is a unit conversion of the bottom one. A secondary axis is a child axes and never reaches <code>fig.axes</code>, so ticks the locator placed outside its own view were read as clipped text rather than as ghosts.</figcaption>
 </figure>
 
+## A survival curve
+
+<figure markdown="span">
+  ![Surviving fraction against months since randomisation, as two Kaplan-Meier staircases over 24 months. Both arms start at 1.0 and step down only at an observed event; the treated arm stays above the control throughout, and short vertical ticks on each curve mark the times where follow-up ended without an event.](images/gallery-survival.png)
+  <figcaption>The first staircase in the corpus. <code>ax.step</code> keeps the points it was handed and draws risers between them, so the drawstyle has to be expanded before any geometry is harvested; read raw, the label and banking rows measure the diagonal chord of each riser instead of the two segments actually drawn.</figcaption>
+</figure>
+
+## A spike raster
+
+<figure markdown="span">
+  ![Spike times against trial, one row per trial, over 18 trials from -0.5 to 1.0 seconds around stimulus onset. Two vertical rules mark the stimulus window. Spikes are sparse and evenly spread outside it and pile up inside it, so the response is locked to the stimulus rather than to the trial.](images/gallery-raster.png)
+  <figcaption><code>eventplot</code> draws an <code>EventCollection</code>, which reports one linewidth where every other collection reports a sequence. The line-weight gate called <code>list()</code> on it and raised TypeError, which <code>_rows</code> turns into a hard fail: a legal figure failing on a defect in the checker.</figcaption>
+</figure>
+
+## A direction, on the projection it belongs on
+
+<figure markdown="span">
+  ![Counts of wind direction in 16 bins of 22.5 degrees, drawn as bars from the centre on a compass rose reading up to 80 per bin. The distribution is bimodal: a dominant lobe covering northeast through east, and a smaller one from the south-southwest, with almost nothing from the north, the northwest or the southeast.](images/gallery-rose.png)
+  <figcaption>The first polar axes here, and the readability gate carries a clause written for one: a polar radial label sits on the data by construction, so it is set aside rather than reported at 2.0:1. That clause was argued from eight figures, none of which were in this corpus.</figcaption>
+</figure>
+
+## Predicted against observed
+
+<figure markdown="span">
+  ![Predicted against observed solubility for 84 compounds, both axes from 0 to 10 milligrams per millilitre, with a 1:1 line. The marks scatter evenly about the line across the whole range rather than fanning out or bending away from it, so the error is roughly constant and the model is not biased at either end.](images/gallery-parity.png)
+  <figcaption>Every other scatter here varies its mark area, so the overplotting gate had only ever taken the mixed-radius path. Equal marks are the point of a parity plot: each mark is one case and nothing about it is ranked, so varying the area would encode a variable that does not exist.</figcaption>
+</figure>
+
+## Boundaries named along themselves
+
+<figure markdown="span">
+  ![Two onset boundaries on a log-log plane of Rayleigh number from 1000 to 10000000 against aspect ratio from 0.5 to 8. Both are straight on these axes and rise together at the same slope, so they never meet; each is named by a label set along it, steady onset on the lower and oscillatory onset on the upper.](images/gallery-phase.png)
+  <figcaption>Every string in the first thirteen figures sits at 0 or 90 degrees, so the oriented-box path three gates share had never run. On one 45-degree string, four fifths of the block an axis-aligned box samples belongs to the label only through that box, and strokes 30 pixels from any glyph were reported as ink under it.</figcaption>
+</figure>
+
+## A field with its own significance
+
+<figure markdown="span">
+  ![Temperature trend in kelvin per decade across longitude -30 to 30 and latitude -20 to 20, as a diverging red-blue field centred on zero. A cooling lobe fills the western half and a warming lobe of the same size the eastern half, with weaker lobes of the opposite sign at the corners. Cells where the trend is smaller than twice its own noise are drawn faded, so the two strong lobes stand out from a background that is not being claimed.](images/gallery-trendmap.png)
+  <figcaption>matplotlib has taken a per-artist alpha array since 3.4, and <code>float()</code> raises on one. The contrast-stack row reads the array rather than the scalar for exactly this figure, counting a ramp across one artist as a single alpha decision; counted per cell it reports sixteen levels of haze and fails a figure that made one choice.</figcaption>
+</figure>
+
 ---
 
-## Why the last four exist
+## Why figures ten to thirteen exist
 
 The first seven figures were audited against every gate, and the detail strings
 showed which rows had never measured anything. Five had not. No figure drew a
@@ -124,7 +166,22 @@ A row that passes by having seen nothing looks exactly like a row that passed.
 That is the blind spot [how the checkers decide](design.md#what-a-passing-run-does-not-mean)
 names, and this page had been an example of it.
 
-## The seven defects in the checks
+## Why the last six exist
+
+The same question, asked mechanically rather than by eye. Run under coverage,
+the thirteen figures above never reached a rotated label's oriented box, a
+`LineCollection`'s widths, a step drawstyle, a polar axes, a per-point alpha
+array, or the equal-radii path in the overplotting gate: 281 statements of
+`check_figure.py` that no figure here could speak for.
+
+Each of the six is a form a reader would recognise before it is a branch, which
+is the order that matters. A figure drawn to reach a line of code is not
+evidence about anything. They took the 281 down to 239, and two of them found
+defects in the checker on the way in. `main` also audits the sheet's own
+palette with `check_palette`, which no figure exercises: that took the second
+module from 74% to 82% on the same measurement.
+
+## The nine defects in the checks
 
 1. The readability gate reported a schematic's invisible tick labels.
 2. `check_ink` called every colorbar a saturated panel.
@@ -138,14 +195,24 @@ names, and this page had been an example of it.
 7. `_encloses` tested a band's outline through the affine part of the transform
    only, so on a log axis a confidence band stopped being its own curve's band
    and became its rival.
+8. `check_line_weight` raised TypeError on an `EventCollection`, which reports
+   one linewidth where every other collection reports a sequence.
+9. `check_label_attribution` counted a curve's own censoring ticks as a rival
+   series. A companion mark drawn along its curve, in its curve's colour, sits
+   0px away by construction, so no placement of the label could clear it.
 
-## The two defects no check caught
+## The four defects no check caught
 
 - The schematic's feedback arrow ran off the bottom of the canvas.
 - The convergence plot's slope triangle sat in the only corner its direct labels
   could use.
+- The survival curves stopped at the last event, leaving their tail censoring
+  ticks floating with no line beneath them.
+- The regime diagram's boundary labels were rotated by the slope in the data
+  rather than the slope on the page. On log axes those are different numbers,
+  and both strings came out flat beside a rising curve.
 
-Both were obvious in the PNG and invisible to every check. They are why the
+All four were obvious in the PNG and invisible to every check. They are why the
 procedure has a step that says to render the figure and look at it.
 
 ## The figure the checker is supposed to fail

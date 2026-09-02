@@ -29,8 +29,17 @@ behind a threshold this project enforces.
   classifying a ramp from float sRGB. The hex-taking `cmap_kind` and
   `cmap_back_travel` are unchanged.
 - Two gallery figures, `gallery-callout` and `gallery-secondary-scale`,
-  carrying an annotation drawn with a leader line and a secondary axis. The
-  corpus is thirteen figures.
+  carrying an annotation drawn with a leader line and a secondary axis.
+- Six gallery figures, `gallery-survival`, `gallery-raster`, `gallery-rose`,
+  `gallery-parity`, `gallery-phase` and `gallery-trendmap`: a Kaplan-Meier
+  staircase, a spike raster, a polar rose, a parity plot, boundaries labelled
+  along themselves, and a field faded by its own significance. The corpus is
+  nineteen figures.
+- `examples/gallery.py` audits the sheet's own palette with `check_palette`,
+  categorical and ordinal, alongside the figures. `main` fails on a palette row
+  as it does on a figure.
+- `check_figure.MARK_RIDE_TOL_PX` and `check_figure.MARK_RIDE_FRAC_MIN`, the
+  two thresholds separating a companion mark from a rival series.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
 
@@ -53,7 +62,17 @@ behind a threshold this project enforces.
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
   a parameter change can be written down at all.
-- `docs/images` carries the two figures this cycle added to the corpus.
+- `Line weight` no longer raises TypeError on an `EventCollection`, which
+  reports one linewidth where every other collection reports a sequence. A
+  raising non-advisory gate is a hard fail, so a spike raster failed on a defect
+  in the checker.
+- `Label attribution` no longer counts a series' own companion marks as a rival.
+  Censoring ticks drawn along a survival curve sit 0px from it by construction,
+  so no placement of a direct label could clear them.
+- `docs/images` carries the eight figures this cycle added to the corpus.
+- The home page's card icons render at 1.5rem. They are inline `<svg>` with a
+  viewBox and no width or height, which SVG defaults to 100%, so each one had
+  been taking the full width of its card.
 - The release bump no longer requires `^## Unreleased$` on the bump that opens
   the next development cycle. `exclude_bumps` on that entry; the release bump
   still refuses to run without notes.

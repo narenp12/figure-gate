@@ -53,22 +53,28 @@ GALLERY = Path(__file__).resolve().parent.parent / "examples" / "gallery.py"
 
 def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     """The harder half of the evidence. `demo.py` is one panel and three
-    curves; a gate that only ever runs on that has not been tried. These eleven
-    put a shared-axis grid, a filled field with a colorbar, an axis-free
-    schematic, three statistical forms, a log-log convergence plot, a dense
-    attractor, three colormapped complex-plane images, a pair of confidence
-    bands, a bar chart with a second unit, a signed field and a scatter beside
-    the hexbin of the same measurement through the same audit."""
+    curves; a gate that only ever runs on that has not been tried. These
+    nineteen put a shared-axis grid, a filled field with a colorbar, an
+    axis-free schematic, three statistical forms, a log-log convergence plot, a
+    dense attractor, three colormapped complex-plane images, a pair of
+    confidence bands, a bar chart with a second unit, a signed field, a scatter
+    beside the hexbin of the same measurement, a leader line, two unit scales, a
+    survival staircase, a spike raster, a polar rose, a parity plot, labels set
+    along their curves and a field faded by its own significance through the
+    same audit.
+
+    The palette rows `main` prints alongside them are counted separately: they
+    have no PNG, and this assertion is about the figures."""
     result = subprocess.run([sys.executable, str(GALLERY), str(tmp_path)],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
-    assert result.stdout.count("PASS  gallery-") == 13, result.stdout[-4000:]
-    assert len(list(tmp_path.glob("gallery-*.png"))) == 13, result.stdout[-4000:]
+    assert result.stdout.count("PASS  gallery-") == 19, result.stdout[-4000:]
+    assert len(list(tmp_path.glob("gallery-*.png"))) == 19, result.stdout[-4000:]
     # An advisory row does not fail the run, so a gate that over-fires here
     # would be invisible to the assertions above. Banking is the newest and the
     # loosest, and the corpus is the only evidence that its band is not a
-    # nuisance: the 14 series it reads across these figures span 0.19 to 2.95,
-    # inside a band of 0.1 to 10.
+    # nuisance: the 9 line panels it reads across these figures report typical
+    # segments from 20 to 63 degrees, well inside the band the row accepts.
     assert "[WARN] Banking" not in result.stdout, result.stdout[-4000:]
 
 
@@ -85,7 +91,7 @@ def test_running_the_scripts_elsewhere_leaves_the_committed_pngs_alone(tmp_path)
     Both scripts run here, so a directory argument that is accepted and then
     ignored fails this even though the tests above would still pass."""
     committed = sorted(DEMO.parent.glob("*.png"))
-    assert len(committed) == 14, [p.name for p in committed]
+    assert len(committed) == 20, [p.name for p in committed]
     before = {path: (path.stat().st_mtime_ns, path.stat().st_size)
               for path in committed}
 
