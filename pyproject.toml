@@ -358,7 +358,7 @@ ignore = ["E741", "B905"]
 # the day it was added, which is the same argument the threshold gate was written
 # on: a check is worth having before it has something to say.
 #
-# The three exceptions are not typos, and each is a term the documents are right
+# The five exceptions are not typos, and each is a term the documents are right
 # to use:
 #
 #   vermillion  the Okabe-Ito palette's own name for entry 7, as Wong spells it
@@ -371,9 +371,15 @@ ignore = ["E741", "B905"]
 #   nd          "ND", Stone, Szafir & Setlur's notation for the noticeable
 #               difference, inside the passage EXTERNAL_CLAIMS quotes from them.
 #               A quote that is corrected is not a quote.
+#   trough      the local minimum of a waveform, in the callout example --
+#               `trough = int(np.argmin(y))` names it, and the alt text places
+#               "the first trough at about 1.5 seconds". codespell reads it as
+#               "through". Correcting it would be wrong twice over: the word is
+#               right, and the alt text is gated against the figure's own
+#               numbers by tests/test_alt_text_numbers.py.
 [tool.codespell]
 skip = "./site,./.venv,./.git,uv.lock,*.png,*.svg"
-ignore-words-list = "vermillion,commun,theses,nd"
+ignore-words-list = "vermillion,commun,theses,nd,trough"
 
 [tool.mypy]
 python_version = "3.11"
