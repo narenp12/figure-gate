@@ -222,6 +222,17 @@ FRAME_TOL = 1e-3
 # that curve or this one?"
 LABEL_MARGIN = 2.0
 
+# When a second artist is a companion mark drawn along a series rather than a
+# rival for its label: its marks are the same colour, and this fraction of them
+# sit within this many display pixels of the series' own stroke. See
+# `_rides_on`. The tolerance is centre-to-stroke, not edge-to-stroke, so it is
+# generous next to a mark's own size; the fraction is high because a companion
+# rides the whole curve, and the shapes this must NOT catch -- a point cloud
+# above a line, a second series crossing the first -- touch it in one place or
+# in none.
+MARK_RIDE_TOL_PX = 3.0
+MARK_RIDE_FRAC_MIN = 0.9
+
 # How much of a series' ink a filled region has to hold before that region is
 # read as the series' own band rather than as a rival for its label. Measured
 # against the two shapes that have to end up on opposite sides of it: adjacent
@@ -1804,6 +1815,90 @@ def _colors_of(value: Any) -> list[Any]:
     return []
 
 
+def _ink_of(artist: Any) -> frozenset[str]:
+    """Every hex colour an artist is drawn in.
+
+    The same three getters `_data_colors_by_axes` reads, for the same reason: a
+    `Line2D` answers `get_color`, a `Collection` answers the other two, and a
+    marker-only `Line2D` can carry its hue on the edge alone.
+    """
+    out: set[str] = set()
+    for getter in ("get_color", "get_facecolor", "get_edgecolor"):
+        fn = getattr(artist, getter, None)
+        if fn is None:
+            continue
+        try:
+            value = fn()
+        except (ValueError, TypeError, AttributeError):
+            continue
+        out.update(h for h in (_hex(c) for c in _colors_of(value)) if h)
+    return frozenset(out)
+
+
+def _marks_px(artist: Any, ax: Axes) -> np.ndarray | None:
+    """Where an artist's own vertices are, in display space, undensified.
+
+    `_series_px` densifies, which is right for measuring distance TO a stroke
+    and wrong for asking where an artist's marks actually are: a marker-only
+    `Line2D` gets points interpolated along the chords between its marks, and
+    those chords cross page the artist never touched.
+    """
+    import numpy as np
+    from matplotlib.lines import Line2D
+    try:
+        if isinstance(artist, Line2D):
+            xy = np.asarray(artist.get_xydata(), dtype=float)
+        else:
+            xy = np.asarray(artist.get_offsets(), dtype=float)
+        if xy.ndim != 2 or len(xy) == 0:
+            return None
+        return np.asarray(ax.transData.transform(xy), dtype=float)
+    except (AttributeError, ValueError, TypeError):
+        return None
+
+
+def _rides_on(rival: Any, own: Any, own_px: np.ndarray, ax: Axes) -> bool:
+    """Whether `rival` is a companion mark drawn along `own`, not a rival series.
+
+    A curve and the marks laid along it are separate artists carrying a single
+    identity: censoring ticks on a survival curve, a start marker on a path,
+    the observations under a fitted line. A reader resolving a direct label
+    sees one thing, so the companion is not a series the label could be
+    confused with. Counted as a rival it sits 0px away by construction -- it is
+    drawn ON the curve -- so no placement of the label can clear it, and
+    `gallery.survival` could not carry a direct label at all.
+
+    Two clauses, and both are load-bearing:
+
+    - **One colour.** `check_series_color` already reads a path and its marker
+      in one hue as one series rather than as a wrapped colour cycle.
+    - **On the stroke.** Colour alone is too blunt, because two genuinely
+      different series can share a hue: an unstyled figure hands `plot` and
+      `scatter` the same first colour of the cycle, and
+      `test_label_attribution_sees_a_scatter_as_a_series` draws exactly that. A
+      point cloud sitting above a line is a rival whatever colour it is; ticks
+      lying along the line are not.
+
+    `MARK_RIDE_TOL_PX` is generous relative to a mark's own size, because the
+    mark is centred on the stroke and only its centre is being asked about.
+    """
+    import numpy as np
+    ink = _ink_of(own)
+    if not ink or _ink_of(rival) != ink:
+        return False
+    marks = _marks_px(rival, ax)
+    if marks is None or len(marks) == 0 or len(own_px) == 0:
+        return False
+    # Both sampled: this is a screening question, and a subsample answers it as
+    # well as the full cross product does on artists carrying tens of thousands
+    # of points.
+    marks = marks[:: max(len(marks) // 200, 1)]
+    stroke = own_px[:: max(len(own_px) // 2000, 1)]
+    near = np.hypot(marks[:, 0][:, None] - stroke[None, :, 0],
+                    marks[:, 1][:, None] - stroke[None, :, 1]).min(axis=1)
+    return bool((near <= MARK_RIDE_TOL_PX).mean() >= MARK_RIDE_FRAC_MIN)
+
+
 def _artist_kind(artist: Any) -> str:
     """A coarse artist family: a line, a scatter's marks, or a filled area.
 
@@ -2489,7 +2584,8 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
             rivals = [(line, p) for line, p in px.items()
                       if line is not own_line
                       and not _encloses(line, px[own_line])
-                      and not _encloses(own_line, p)]
+                      and not _encloses(own_line, p)
+                      and not _rides_on(line, own_line, px[own_line], ax)]
             if not rivals:
                 continue
             d_other = min(_series_distance(line, bb, p) for line, p in rivals)
@@ -2628,6 +2724,24 @@ def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
     return "warn", "; ".join(warned)
 
 
+def _collection_widths(artist: Any) -> list[float]:
+    """A collection's stroke widths, however many it reports.
+
+    `Collection.get_linewidth` returns the sequence it was given, and
+    `EventCollection` overrides it to return the single number instead, because
+    every event in one plot is drawn at one width. `list()` over that raises
+    TypeError, and `_rows` turns a raising non-advisory gate into a hard False,
+    so a spike raster failed the line-weight row on a defect in the checker
+    rather than on anything in the figure. The branch had never run: nothing in
+    the corpus drew a `LineCollection` until `gallery.raster` did.
+    """
+    raw = artist.get_linewidth()
+    try:
+        return [float(w) for w in raw]
+    except TypeError:
+        return [float(raw)]
+
+
 def check_line_weight(fig: Figure, scale: float | None = None,
                       placed_frac: float = 1.0,
                       venue: str | None = None) -> tuple[bool | str, str]:
@@ -2668,12 +2782,12 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                     continue
                 raw = [artist.get_linewidth()]
             elif isinstance(artist, LineCollection):
-                raw = list(artist.get_linewidth())
+                raw = _collection_widths(artist)
             elif getattr(artist, "filled", None) is False:
                 # An unfilled ContourSet is strokes. A *filled* one is bands
                 # whose linewidth is the seam between two fills, which no
                 # reader is being asked to see.
-                raw = list(artist.get_linewidth())
+                raw = _collection_widths(artist)
             else:
                 continue
             for w in raw:

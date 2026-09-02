@@ -120,7 +120,9 @@ def figures():
 
 WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
          "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
-         "twelve": 12, "thirteen": 13, "fourteen": 14}
+         "twelve": 12, "thirteen": 13, "fourteen": 14,
+         "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+         "nineteen": 19, "twenty": 20}
 
 # A number, and not a digit inside a name. `CIFAR-100`, `RK4` and `period-3`
 # are words with numerals in them, and a sweep that reads them as claims spends
@@ -488,7 +490,49 @@ def check_secondary_scale_top_limit_mm(fig):
     return float(children[0].get_xlim()[1])
 
 
+def check_raster_stimulus_rules(fig):
+    """The two rules marking the stimulus window, counted as drawn.
+
+    A count of rules and not of anything else: the raster's spikes are an
+    `EventCollection` and the only `Line2D`s on the panel are the two edges.
+    """
+    panel = _data_axes(fig)[0]
+    return float(len([line for line in panel.lines if line.get_visible()]))
+
+
+def check_rose_bin_count(fig):
+    """Bins, counted off the bars the rose actually drew."""
+    from matplotlib.patches import Rectangle
+    panel = _data_axes(fig)[0]
+    bars = [p for p in panel.patches if isinstance(p, Rectangle)]
+    assert bars, "the rose draws no bars"
+    return float(len(bars))
+
+
+def check_rose_bin_width_degrees(fig):
+    """The width of one bin, in degrees, off the bar rather than off the
+    arithmetic. `16 bins of 22.5 degrees` is two claims and they have to agree
+    with each other as well as with the figure."""
+    import math
+    from matplotlib.patches import Rectangle
+    panel = _data_axes(fig)[0]
+    bars = [p for p in panel.patches if isinstance(p, Rectangle)]
+    widths = {round(math.degrees(bar.get_width()), 6) for bar in bars}
+    assert len(widths) == 1, f"the bins are not one width: {sorted(widths)}"
+    return widths.pop()
+
+
+def check_parity_marks(fig):
+    """Compounds, as marks. One scatter, one mark per compound."""
+    panel = _data_axes(fig)[0]
+    return float(sum(len(coll.get_offsets()) for coll in panel.collections))
+
+
 CHECKED = {
+    ("gallery-raster", "Two"): check_raster_stimulus_rules,
+    ("gallery-rose", "16"): check_rose_bin_count,
+    ("gallery-rose", "22.5"): check_rose_bin_width_degrees,
+    ("gallery-parity", "84"): check_parity_marks,
     ("demo", "0.12"): check_demo_bayesian_at_6,
     ("demo", "0.02"): check_demo_bayesian_at_12,
     ("demo", "0.25"): check_demo_baseline_at_12,
@@ -563,8 +607,8 @@ def test_the_sweep_reads_every_described_figure():
     """Every assertion above is parametrized over the built figures. A capture
     that came back short would not fail them, it would delete them."""
     built = figures()
-    assert len(built) == 14, (
-        f"built {sorted(built)}, expected the demo and thirteen gallery figures")
+    assert len(built) == 20, (
+        f"built {sorted(built)}, expected the demo and nineteen gallery figures")
     assert all(alt for _fig, alt in built.values()), (
         "a figure was built with no description attached")
 

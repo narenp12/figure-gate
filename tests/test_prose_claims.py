@@ -306,6 +306,12 @@ def _matplotlib_names():
     names = set(dir(plt)) | set(dir(Axes)) | set(dir(Figure))
     names |= set(matplotlib.rcParams)
     names |= set(dir(matplotlib.colors)) | set(dir(matplotlib.cm))
+    # The artist classes. `check_figure` imports the ones it tests against
+    # inside the functions that test against them, so `dir(cf)` does not carry
+    # them and prose naming `LineCollection` resolved against nothing even
+    # though the checker branches on it.
+    names |= (set(dir(matplotlib.collections)) | set(dir(matplotlib.lines))
+              | set(dir(matplotlib.patches)) | set(dir(matplotlib.contour)))
     for owner in (plt.subplots, Figure.savefig, Axes.text, Axes.plot,
                   Axes.contour, Axes.scatter, Axes.imshow):
         try:
