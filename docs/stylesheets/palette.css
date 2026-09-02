@@ -168,6 +168,19 @@
   border-radius: 2px;
 }
 
+/* The home page's cards carry raw inline `<svg>` icons, copied from Lucide with
+   a `viewBox` and no width or height. SVG's own default for both is 100%, so an
+   unsized icon takes the full card width and the card's height with it: the
+   rocket on the tutorial card measured 480px square. Nothing in the theme sizes
+   a bare `<svg>`, because Material's icon shortcodes emit a `.twemoji` wrapper
+   these hand-written icons do not have. 1.5rem is the theme's own `.lg` icon
+   size, which is what a card icon is set in. */
+.md-typeset .grid.cards svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  vertical-align: -0.35rem;
+}
+
 .md-typeset figure figcaption {
   max-width: 42rem;
   margin: 0.4rem auto 0;
