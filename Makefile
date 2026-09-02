@@ -10,7 +10,7 @@
 # `specs/2026-07-30-standardized-docs-audit.md` is the long form: what each
 # target proves, and what it deliberately does not.
 
-.PHONY: audit audit-code audit-prose audit-docs audit-api audit-spelling test help
+.PHONY: audit audit-code audit-prose audit-docs audit-api audit-spelling test coverage help
 
 help:
 	@echo "make audit          every check below, in the order a failure is cheapest to read"
@@ -20,6 +20,7 @@ help:
 	@echo "make audit-api      the public API against the last release tag"
 	@echo "make audit-spelling codespell over prose and code"
 	@echo "make test           the full suite"
+	@echo "make coverage       the full suite, with line coverage over skill/scripts"
 
 # Ordered by how long each takes and how legible its failure is. Spelling and
 # lint fail in seconds and name a line; the site build takes a minute and fails
@@ -56,3 +57,10 @@ audit-api:
 
 test:
 	uv run pytest tests/ -n auto -q
+
+# The source path and the threshold live in `[tool.coverage.*]`; `--cov` with no
+# value picks them up. It is a separate target rather than a flag on `test`
+# because the number is only meaningful over the whole suite, and because CI
+# runs `test` on installs that have no coverage plugin at all.
+coverage:
+	uv run pytest tests/ -n auto -q --cov
