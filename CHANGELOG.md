@@ -70,6 +70,9 @@ behind a threshold this project enforces.
   Censoring ticks drawn along a survival curve sit 0px from it by construction,
   so no placement of a direct label could clear them.
 - `docs/images` carries the eight figures this cycle added to the corpus.
+- The home page's card icons render at 1.5rem. They are inline `<svg>` with a
+  viewBox and no width or height, which SVG defaults to 100%, so each one had
+  been taking the full width of its card.
 - The release bump no longer requires `^## Unreleased$` on the bump that opens
   the next development cycle. `exclude_bumps` on that entry; the release bump
   still refuses to run without notes.
