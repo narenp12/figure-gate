@@ -622,21 +622,35 @@ def _tick_texts(fig: Figure) -> set[int]:
 def _all_axes(fig: Figure) -> list[Any]:
     """Every axes on the figure, including child axes.
 
-    `inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added through
-    `add_child_axes` and never reach `fig.axes`. Only the ghost-tick reader
-    uses this today, deliberately: recognising a child axes there removes
-    fires, while teaching the other rows to see child axes adds them and is a
-    separate change with a corpus sweep behind it.
+    `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added through
+    `add_child_axes` and never reach `fig.axes`, so a gate that walks
+    `fig.axes` does not audit them. That was measured rather than assumed: the
+    same content moved from a panel into `ax.inset_axes` went unjudged by ten
+    rows, among them a 0.15pt hairline (Line weight), a `jet` heatmap
+    (Colormap kind) and a pie (Form). An inset is a panel the reader reads, so
+    every row that walks panels walks this instead.
+
+    The order is `fig.axes` first, then descendants generation by generation.
+    Top-level panels therefore keep the index they had, which is what the
+    `ax{i}` names in the detail strings are built from: teaching a row to see
+    an inset must not renumber the panels the author already knows.
+
+    `mpl_toolkits.axes_grid1.inset_locator.inset_axes` is a different route
+    that goes through `add_axes` and has always been visible. Both are called
+    "inset axes" in the wild, which is why the blind one has to be named
+    exactly.
     """
+    from collections import deque
+
     out, seen = [], set()
-    stack = list(fig.axes)
-    while stack:
-        ax = stack.pop()
+    queue = deque(fig.axes)
+    while queue:
+        ax = queue.popleft()
         if id(ax) in seen:
             continue
         seen.add(id(ax))
         out.append(ax)
-        stack.extend(getattr(ax, "child_axes", []) or [])
+        queue.extend(getattr(ax, "child_axes", []) or [])
     return out
 
 
@@ -1260,7 +1274,7 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     import numpy as np
 
     alphas = []
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
             if not a.get_visible():
                 continue
@@ -1354,7 +1368,7 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     741 pixels each - still reported 1.3x.
     """
     worst = None
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         sizes: list[float] = []
         for c in ax.collections:
             s: Any = getattr(c, "get_sizes", lambda: [])()
@@ -1531,7 +1545,7 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     dpi = fig.dpi
 
     bad = []
-    for i, ax in enumerate(fig.axes):
+    for i, ax in enumerate(_all_axes(fig)):
         for j, coll in enumerate(ax.collections):
             try:
                 offsets = coll.get_offsets()
@@ -1722,7 +1736,7 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     context_ids = frozenset(id(ax) for ax in context_axes)
 
     rows = []
-    for i, ax in enumerate(fig.axes):
+    for i, ax in enumerate(_all_axes(fig)):
         # A colorbar is a solid ramp by construction: 100% ink, always, on
         # every figure that has one. Measuring it means every heatmap in the
         # world stands at WARN for the one axes in it whose density is not a
@@ -1944,7 +1958,7 @@ def _data_colors_by_axes(
     - the ink tokens, per `INK_TOKENS` above
     """
     out = {}
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         items = []
         for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
             if not artist.get_visible():
@@ -2117,7 +2131,7 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
     from matplotlib.patches import Wedge
 
     bad = []
-    for i, ax in enumerate(fig.axes):
+    for i, ax in enumerate(_all_axes(fig)):
         if any(isinstance(p, Wedge) for p in ax.patches):
             bad.append(f"ax{i} pie/donut: angle and area are the two tasks the "
                        "eye judges worst - a dot plot or a bar reads as position")
@@ -2708,7 +2722,7 @@ def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
     from matplotlib.contour import ContourSet
 
     warned = []
-    for i, ax in enumerate(fig.axes):
+    for i, ax in enumerate(_all_axes(fig)):
         for c in ax.collections:
             if not isinstance(c, ContourSet):
                 continue
@@ -2765,7 +2779,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         scale = page_scale(fig, placed_frac, venue)
 
     thin, widths = [], []
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         # A colorbar's dividers ship at 0.4pt and are matplotlib's, not
         # anybody's design decision — the same reason `check_ink` skips this
         # axes entirely.
@@ -2902,7 +2916,7 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
     import numpy as np
     floor = 1.0 / BANKING_SLOPE_MAX
     bad, seen = [], []
-    for i, ax in enumerate(fig.axes):
+    for i, ax in enumerate(_all_axes(fig)):
         slopes = _banking_slopes(ax)
         if slopes is None or not len(slopes):
             continue
@@ -2977,7 +2991,7 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     from matplotlib.colors import to_hex
 
     seen: dict[Any, Any] = {}
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         if ax.get_label() == "<colorbar>":
             continue
         for artist in list(ax.images) + list(ax.collections):

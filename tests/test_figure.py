@@ -3539,3 +3539,175 @@ def test_the_row_says_the_defect_is_not_in_the_figure(monkeypatch):
     _, rows = cf.audit(fig)
     detail = next(r for r in rows if r[0] == "Clipping")[2]
     assert "defect in the checker" in detail, detail
+
+
+# --- child axes are panels too ----------------------------------------------
+#
+# `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` go through
+# `add_child_axes` and never reach `fig.axes`, so every row that walked
+# `fig.axes` audited the host and skipped the inset. The same content moved
+# from a panel into an inset went unjudged by ten rows. These build each of
+# those defects inside `ax.inset_axes` and assert the row that owns it is the
+# one that catches it. `mpl_toolkits.axes_grid1.inset_locator.inset_axes` is a
+# different route that goes through `add_axes` and was never blind, which is
+# why the blind one is named exactly in every test below.
+
+def _inset_host(inset=True):
+    """A host whose data sits in the lower-left, so an inset in the upper-right
+    is over ground rather than over the host's own curve. Otherwise the
+    over-fire control fails Text readability on a real collision, which is a
+    fact about the test figure rather than about child axes."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    x = np.linspace(0, 1, 50)
+    ax.plot(x, 0.35 * x, lw=1.6, color=OKABE[3])
+    ax.set_xlim(0, 2.4)
+    ax.set_ylim(0, 2.4)
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Signal")
+    sub = ax.inset_axes([0.55, 0.58, 0.4, 0.38]) if inset else None
+    return fig, ax, sub
+
+
+CHILD_AXES_ROWS = [
+    "Line weight", "Colormap kind", "Contrast stack", "Form", "Mark ratio",
+    "Series color", "Overplotting", "Ink coverage", "Contour dash", "Banking",
+]
+
+
+def test_an_ordinary_inset_fires_none_of_the_rows_that_now_see_it():
+    """The over-fire control for the whole section. Teaching ten rows to walk
+    child axes is only safe if a well-made inset still passes all ten."""
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1, 2], [0, 0.6, 0.2], lw=1.6, color=OKABE[4])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    g = gates(rows)
+    assert [r for r in CHILD_AXES_ROWS if g[r] is not True] == []
+
+
+def test_line_weight_measures_a_hairline_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1], [0, 1], lw=0.15, color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_colormap_kind_sees_a_jet_heatmap_inside_an_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    sub.imshow(np.arange(64).reshape(8, 8), cmap="jet")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Colormap kind"] is False
+
+
+def test_contrast_stack_counts_alpha_levels_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    for v in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65):
+        sub.plot([0, 1], [v, v], alpha=v, lw=2, color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contrast stack"] is False
+
+
+def test_form_catches_a_pie_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    sub.pie([3, 2, 1, 1])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Form"] is False
+
+
+def test_mark_ratio_measures_a_size_encoded_scatter_inside_an_inset():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax, sub = _inset_host()
+    sub.scatter(rng.random(20), rng.random(20), s=rng.random(20) * 900 + 4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Mark ratio"] is False
+
+
+def test_series_color_counts_hues_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    for i in range(9):
+        sub.plot([0, 1], [i, i], lw=2, color=plt.cm.tab20(i / 20))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is False
+
+
+def test_overplotting_measures_a_blob_inside_an_inset():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax, sub = _inset_host()
+    sub.scatter(rng.normal(size=4000), rng.normal(size=4000), s=16)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_ink_coverage_measures_a_saturated_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    sub.imshow(np.ones((8, 8)), cmap="Greys", vmin=0, vmax=1)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+
+
+def test_contour_dash_sees_undashed_contours_inside_an_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    grid = np.linspace(-2, 2, 40)
+    X, Y = np.meshgrid(grid, grid)
+    sub.contour(X, Y, X ** 2 - Y ** 2, levels=[-2, -1, 0, 1, 2], colors="k")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] == "warn"
+
+
+def test_banking_measures_the_aspect_of_an_inset():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    sub = ax.inset_axes([0.45, 0.45, 0.5, 0.5])
+    t = np.linspace(0, 40, 400)
+    sub.plot(t, np.sin(t))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    detail = next(d for r, _, d in rows if r == "Banking")
+    assert gates(rows)["Banking"] == "warn"
+    assert detail.startswith("ax1 "), detail
+
+
+def test_a_child_axes_does_not_renumber_the_panels_above_it():
+    """The `ax{i}` names in the detail strings are `_all_axes` indices, so the
+    order has to keep `fig.axes` first. A reader told 'ax1 pie' must find the
+    pie in the second panel, not behind an inset that was inserted ahead of
+    it."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+    a.plot([0, 1], [0, 1], lw=1.6, color=OKABE[3])
+    b.pie([3, 2, 1])
+    a.inset_axes([0.6, 0.6, 0.3, 0.3]).plot([0, 1], [0, 1], lw=1.6,
+                                            color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    order = cf._all_axes(fig)
+    plt.close(fig)
+    assert order[:2] == [a, b]
+    assert order[2] not in (a, b)
+    detail = next(d for r, _, d in rows if r == "Form")
+    assert detail.startswith("ax1 pie"), detail
+
+
+def test_a_secondary_axis_adds_no_new_fires():
+    """A secondary axis is a child axes carrying no data of its own. Walking
+    child axes must not turn a pure unit relabel into a finding."""
+    fig, ax, _ = _inset_host(inset=False)
+    ax.secondary_yaxis("right", functions=(lambda c: c * 2, lambda f: f / 2))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    g = gates(rows)
+    assert [r for r in CHILD_AXES_ROWS if g[r] is False] == []

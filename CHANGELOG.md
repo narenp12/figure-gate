@@ -22,6 +22,13 @@ behind a threshold this project enforces.
 - `check_figure.audit` measures under the rcParams the figure's first audit
   saw. `METRIC_RC_KEYS` names them. `Style sheet` and the Type 3 clause of
   `Fonts` still read the live rcParams.
+- `Line weight`, `Colormap kind`, `Contrast stack`, `Form`, `Mark ratio`,
+  `Series color`, `Overplotting`, `Ink coverage`, `Contour dash` and `Banking`
+  walk child axes. Content inside `ax.inset_axes` is judged where it went
+  unjudged before, so a figure carrying one can newly fail or warn.
+- `check_figure._all_axes` returns `fig.axes` first and descendants after, so
+  the `ax{i}` names in the detail strings keep their meaning for the panels
+  that were already numbered.
 
 #### Added
 
@@ -79,6 +86,31 @@ behind a threshold this project enforces.
 - `uv.lock` is a bump entry, anchored across its `name` and `version` lines.
 
 ### Why it changed
+
+**Ten rows were not looking at insets, and the suite could not have told
+anyone.** `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added
+through `add_child_axes` and never reach `fig.axes`, so a gate that walked
+`fig.axes` audited the host and skipped the child. Moving one piece of content
+from a panel into an inset and re-reading every row is what measured it: a
+0.15pt hairline, a `jet` heatmap, six alpha levels, a pie, a size-encoded
+scatter, nine hues, a 4000-point cloud, a saturated raster, undashed contours
+and a sine banked to 85 degrees all passed inside the inset and failed outside
+it. Ten rows, one construct.
+
+The route matters and is easy to get wrong.
+`mpl_toolkits.axes_grid1.inset_locator.inset_axes` goes through `add_axes` and
+was always visible; `ax.inset_axes` is the blind one, and it is the idiom
+matplotlib has documented since 3.0. A sweep written against the first route
+finds nothing and concludes there is nothing.
+
+This adds fires rather than removing them, so it was measured against the
+corpus before it shipped: the nineteen gallery builders plus `demo.build`,
+twenty figures, swept on `main` and on the branch and diffed row by row. No
+verdict moved and no detail string moved. That is the right answer and it is
+also weak evidence, for the reason the whole defect exists: the corpus has no
+figure with a data-carrying child axes, so it had nothing to move. The thirteen
+tests are where the construct actually lives, and eleven of them fail on the
+commit before this one.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release
