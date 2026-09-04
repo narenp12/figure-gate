@@ -3711,3 +3711,70 @@ def test_a_secondary_axis_adds_no_new_fires():
     plt.close(fig)
     g = gates(rows)
     assert [r for r in CHILD_AXES_ROWS if g[r] is False] == []
+
+
+# --- contrast stack: alpha baked into the colour ----------------------------
+#
+# `get_alpha()` is None whenever opacity was written into an RGBA colour
+# rather than passed as a keyword, and the two draw the same pixels. Reading
+# None as 1.0 meant the row saw `alpha levels [1.0]` on a figure where nothing
+# was opaque.
+
+def test_contrast_stack_reads_alpha_baked_into_an_rgba_colour():
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i, a in enumerate([0.2, 0.35, 0.5, 0.65, 0.8, 0.9]):
+        ax.plot([0, 1], [i, i], color=(0.1, 0.2, 0.7, a), lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False, detail
+    assert "0.35" in detail, detail
+
+
+def test_a_baked_alpha_and_a_keyword_alpha_agree():
+    """The two spellings draw the same pixels, so they have to read the same.
+    This is the defect stated as an equality rather than as a verdict."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color=(0.1, 0.2, 0.7, 0.4), lw=2)
+    baked = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color="#1a33b3", alpha=0.4, lw=2)
+    keyword = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert baked == keyword
+
+
+def test_a_plain_named_colour_still_counts_as_opaque():
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color="C0", lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail == "alpha levels [1.0]"
+
+
+def test_an_unfilled_patch_does_not_add_a_transparent_level():
+    """`fill=False` is the artist saying it does not draw that part, not a
+    level the reader has to resolve. Counting the face's alpha of 0 would put
+    every unfilled rectangle a step closer to the haze ceiling."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i in range(3):
+        ax.add_patch(plt.Rectangle((i, 0), 0.8, 1, fill=False, ec="k", lw=1.2))
+    ax.set_xlim(0, 3)
+    ax.set_ylim(0, 1.2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail == "alpha levels [1.0]"
+
+
+def test_one_translucent_series_against_a_solid_one_still_passes():
+    """The over-fire control: a translucent band under an opaque line is the
+    ordinary way to draw an interval, and it has a focal point."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color=(0.1, 0.2, 0.7, 0.4), lw=2)
+    ax.plot([0, 1], [1, 0], color="k", lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert "0.4" in detail and "1.0" in detail

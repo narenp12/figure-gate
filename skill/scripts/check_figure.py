@@ -1268,6 +1268,38 @@ def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
     return (hi + 0.05) / (lo + 0.05)
 
 
+def _baked_alphas(a: Any) -> list[float]:
+    """The alpha levels an artist's own colours carry.
+
+    `get_alpha()` is `None` whenever opacity was written into an RGBA colour
+    rather than passed as a keyword, and the two draw the same pixels:
+    `plot(color=(0.1, 0.2, 0.7, 0.4))` and `plot(color="#1a33b3", alpha=0.4)`
+    are the same line. Reading `None` as 1.0 meant six translucent lines
+    reported `alpha levels [1.0]` and passed, while the identical figure
+    written with `alpha=` failed.
+
+    A fully transparent colour contributes nothing: `facecolor="none"` on an
+    unfilled patch is the artist saying it does not draw that part, which is
+    not a level the reader has to resolve. Every unfilled rectangle in the
+    corpus would otherwise have added an alpha of 0.
+    """
+    from matplotlib.colors import to_rgba_array
+
+    out: list[float] = []
+    for name in ("get_facecolor", "get_edgecolor", "get_color"):
+        getter = getattr(a, name, None)
+        if getter is None:
+            continue
+        try:
+            rgba = to_rgba_array(getter())
+        except (ValueError, TypeError):
+            # An artist whose colour cannot be read is not a verdict about the
+            # figure. `_rows` would turn the raise into a hard `False`.
+            continue
+        out.extend(float(v) for v in rgba[:, 3] if v > 0.0)
+    return out
+
+
 def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy."""
@@ -1279,10 +1311,17 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             if not a.get_visible():
                 continue
             al = a.get_alpha()
-            # unset alpha means opaque, and that is exactly what this check
-            # wants to know about, so it counts as 1.0 rather than being skipped
+            # An unset alpha does not mean opaque; it means opacity was not
+            # passed as a keyword, and it may still be baked into the colour.
+            # Read the colours, and fall back to 1.0 only when they say
+            # nothing, which is what an artist drawn in a plain named colour
+            # does.
             if al is None:
-                alphas.append(1.0)
+                baked = _baked_alphas(a)
+                if baked:
+                    alphas.extend(round(v, 2) for v in baked)
+                else:
+                    alphas.append(1.0)
             elif np.ndim(al) == 0:
                 alphas.append(round(float(al), 2))
             else:
