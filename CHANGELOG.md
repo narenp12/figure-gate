@@ -78,6 +78,11 @@ behind a threshold this project enforces.
 - `Form` reads bars drawn as plain `Rectangle` patches. A truncated baseline
   built by hand rather than by `ax.bar` now fails the row, and the two
   spellings return the same detail string.
+- `Axis redundancy` measures the x direction. A column of panels repeating its
+  tick row now fails the row as a row of panels repeating its tick column
+  already did, under the same shared-scale requirement. Figures with stacked
+  panels on one x scale and no `sharex` can newly fail. The detail names
+  `repeated x tick row` beside the existing `repeated y tick column`.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -197,6 +202,36 @@ changes; but only two panels carry a bar at all and both carry a
 corpus panels. A fourteen-case adversarial set is what the constraints were
 measured against, and it is where the waterfall false positive was found. It
 ships as twelve tests.
+
+**Half of `Axis redundancy` was measuring nothing.** The tick-duplication test
+looped over row groups only, so a row of panels repeating a y tick column
+failed and the identical figure rotated, a column of panels repeating an x tick
+row, passed. Two stacked panels on one x scale printed the same run of numbers
+twice and the gate said the furniture was not duplicated.
+
+No documentation changed, and that is the finding rather than a convenience.
+`docs/gates.md` has said this row fires when "panels sharing limits, scale type
+and axis title repeat tick labels or axis titles", naming no direction, so the
+page has been describing the fixed behaviour the whole time and the code was
+the half that was wrong. Nothing in the suite could tell, because a claim about
+both directions is satisfied by a gate that measures one.
+
+The x direction inherits the shared-scale requirement rather than re-deciding
+it. That requirement was added in the round before this one, and reading tick
+strings alone told two panels carrying kilometres and seconds to use `sharex`,
+which would put unrelated data on one axis.
+
+It found a real fire in the suite's own fixtures. The row-spanning mosaic test
+stacks two panels on an identical x scale with no `sharex`, which is exactly
+the defect, and it had gone unnoticed because nothing looked. That fixture now
+names two distinct x quantities so the test measures the spanning panel it is
+about, and the fire it was tripping is described here rather than sanded off.
+
+Corpus: no verdict changes, and one figure of the twenty is exposed.
+`gallery-small-multiples` is the only one with a column of two or more panels,
+and it uses `sharex`, so its upper tick labels are hidden and the visible
+strings differ. That is thin, but the one exposed figure is the canonical
+correct case, which is the one worth not breaking.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release

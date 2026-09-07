@@ -283,16 +283,142 @@ def test_panels_really_on_one_scale_still_fail():
 
 def test_a_row_spanning_mosaic_panel_is_not_redundant():
     """A panel spanning two rows lands in both, and its tick column then reads
-    as repeated against itself."""
+    as repeated against itself.
+
+    `a` and `b` are given distinct x quantities so that only the spanning panel
+    is under test. They sit one above the other on an identical x scale, which
+    is a real repeated tick row and was a real fire once the x direction was
+    measured at all. Leaving it in would have this test go red for something it
+    is not about.
+    """
     fig, axd = plt.subplot_mosaic([["a", "c"], ["b", "c"]],
                                   figsize=(5, 3), constrained_layout=True)
     axd["a"].plot([0, 1], [0, 1])
+    axd["a"].set_xlabel("Distance (km)")
     axd["b"].plot([0, 1], [0, 10])
+    axd["b"].set_xlabel("Duration (s)")
     axd["c"].plot([0, 1], [0, 100])
     r, _ = cf._renderer(fig)
     status, detail = cf.check_redundancy(fig, r)
     assert status is True, detail
     plt.close(fig)
+
+
+# --- the x direction of the same row ----------------------------------------
+# The tick-duplication test ran over row groups only, so a row of panels
+# repeating a y tick column failed and the same figure rotated - a column of
+# panels repeating an x tick row - passed. The x direction inherits the
+# shared-scale requirement rather than re-deciding it; see the four keys in
+# `check_redundancy`.
+
+
+def _stacked(labels=("Signal (V)", "Signal (V)"), xlabels=(None, None),
+             sharex=False):
+    fig, axes = plt.subplots(2, 1, figsize=(3.2, 4), constrained_layout=True,
+                             sharex=sharex)
+    for ax, ylab, xlab in zip(axes, labels, xlabels):
+        ax.plot([0, 5, 10], [0, 1, 0])
+        ax.set_xlim(0, 10)
+        ax.set_ylabel(ylab)
+        if xlab:
+            ax.set_xlabel(xlab)
+    return fig, axes
+
+
+def test_stacked_panels_repeating_an_x_tick_row_fail():
+    fig, _ = _stacked()
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "repeated x tick row" in detail, detail
+
+
+def test_the_two_directions_of_one_defect_reach_the_same_verdict():
+    """A row of panels repeating a y column and a column of panels repeating an
+    x row are the same duplicated ink. Only the first was measured."""
+    wide, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    for panel in (a, b):
+        panel.plot([0, 1], [0, 2])
+        panel.set_ylim(0, 2)
+        panel.set_ylabel("Signal (V)")
+    tall, _ = _stacked()
+    try:
+        rw, _ = cf._renderer(wide)
+        rt, _ = cf._renderer(tall)
+        assert cf.check_redundancy(wide, rw)[0] is cf.check_redundancy(tall, rt)[0]
+    finally:
+        plt.close(wide)
+        plt.close(tall)
+
+
+def test_stacked_panels_on_a_shared_x_axis_pass():
+    """The over-fire control, and the fix the message names. `sharex` hides the
+    upper tick labels, so the visible strings differ and nothing is repeated."""
+    fig, _ = _stacked(sharex=True)
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_stacked_panels_of_different_quantities_are_not_redundant():
+    """The shared-scale requirement, inherited rather than re-decided.
+
+    `docs/gates.md` promises this row fires on panels sharing limits, scale
+    type and axis title. Comparing tick text alone told two panels carrying
+    kilometres and seconds to use `sharex`, and taking that advice would put
+    unrelated data on one axis. Half a gate keeping that promise is the same
+    stale claim as none of it keeping it.
+    """
+    fig, _ = _stacked(xlabels=("Distance (km)", "Duration (s)"))
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_both_directions_repeated_at_once_are_both_named():
+    fig, axd = plt.subplot_mosaic([["a", "b"], ["c", "d"]],
+                                  figsize=(5, 4), constrained_layout=True)
+    for ax in axd.values():
+        ax.plot([0, 5, 10], [0, 1, 0])
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 1)
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "repeated y tick column" in detail, detail
+    assert "repeated x tick row" in detail, detail
+
+
+def test_a_column_spanning_mosaic_panel_is_not_redundant():
+    """The mirror of the row-spanning case above. A panel spanning two columns
+    must not read as repeated against itself in the x direction."""
+    fig, axd = plt.subplot_mosaic([["a", "b"], ["c", "c"]],
+                                  figsize=(5, 3), constrained_layout=True)
+    # Distinct y scales throughout, so only the x direction is under test here.
+    axd["a"].plot([0, 1], [0, 1])
+    axd["a"].set_ylabel("Volts")
+    axd["b"].plot([0, 10], [0, 10])
+    axd["b"].set_ylabel("Amps")
+    axd["c"].plot([0, 100], [0, 100])
+    axd["c"].set_ylabel("Watts")
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
 
 
 def test_a_panel_title_is_not_a_direct_label():

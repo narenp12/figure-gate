@@ -1655,34 +1655,55 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
                 if n > 1:
                     dupes.append(f"{axis}label {label!r} x{n}")
 
-    dup_ticks = 0
-    for _, axes in rows.items():
-        # Grouped by the scale as well as the tick strings. `docs/gates.md`
-        # promises this row fires on "panels on a shared scale", and comparing
-        # tick text alone broke that promise: two panels carrying different
-        # quantities in different units, whose tick strings happen to coincide,
-        # were told to use `sharey`. Taking that advice would put unrelated
-        # data on one axis, so the row was not merely noisy, it was wrong.
-        #
-        # The axis label is part of the key because limits and scale type alone
-        # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
-        # seconds and agree on every number while sharing no scale at all. What
-        # a reader reads as one scale is one quantity, and the label is where
-        # the figure says which quantity that is. Panels that name the same
-        # quantity, or name none, still group together, which is the
-        # small-multiples case this row exists for.
-        cols_seen = Counter(
-            (a.get_ylim(), a.get_yscale(), a.get_ylabel().strip(),
-             tuple(t.get_text() for t in a.get_yticklabels()
-                   if t.get_text() and t.get_visible()))
-            for a in axes)
-        dup_ticks += sum(n - 1 for (_lim, _scale, _label, v), n in cols_seen.items()
-                         if v and n > 1)
+    # Both directions, on the same terms. A column of panels repeating its x
+    # tick row is the same duplicated ink as a row of panels repeating its y
+    # tick column, and only the second was measured: two stacked panels on one
+    # x scale printed the identical run of numbers twice and passed. The
+    # grouping mirrors the label check above, `rows` for y and `cols` for x,
+    # because only same-row panels can share a y axis and only same-column
+    # panels can share an x one.
+    #
+    # Grouped by the scale as well as the tick strings. `docs/gates.md`
+    # promises this row fires on "panels on a shared scale", and comparing
+    # tick text alone broke that promise: two panels carrying different
+    # quantities in different units, whose tick strings happen to coincide,
+    # were told to use `sharey`. Taking that advice would put unrelated
+    # data on one axis, so the row was not merely noisy, it was wrong. The x
+    # direction inherits that requirement rather than re-deciding it, or the
+    # promise goes stale for half the gate.
+    #
+    # The axis label is part of the key because limits and scale type alone
+    # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
+    # seconds and agree on every number while sharing no scale at all. What
+    # a reader reads as one scale is one quantity, and the label is where
+    # the figure says which quantity that is. Panels that name the same
+    # quantity, or name none, still group together, which is the
+    # small-multiples case this row exists for.
+    dup_ticks: dict[str, int] = {"y": 0, "x": 0}
+    for group, axis, lim_of, scale_of, label_of, ticks_of in (
+            (rows, "y", "get_ylim", "get_yscale", "get_ylabel",
+             "get_yticklabels"),
+            (cols, "x", "get_xlim", "get_xscale", "get_xlabel",
+             "get_xticklabels")):
+        for _, axes in group.items():
+            seen = Counter(
+                (getattr(a, lim_of)(), getattr(a, scale_of)(),
+                 getattr(a, label_of)().strip(),
+                 tuple(t.get_text() for t in getattr(a, ticks_of)()
+                       if t.get_text() and t.get_visible()))
+                for a in axes)
+            dup_ticks[axis] += sum(
+                n - 1 for (_lim, _scale, _label, v), n in seen.items()
+                if v and n > 1)
 
-    ok = not dupes and not dup_ticks
+    ok = not dupes and not any(dup_ticks.values())
     if ok:
         return True, "axis furniture not duplicated"
-    bits = dupes + ([f"repeated y tick column x{dup_ticks}"] if dup_ticks else [])
+    # "column" for y and "row" for x: a repeated y axis is a column of numbers
+    # standing beside a panel, and a repeated x axis is a row of them under it.
+    bits = dupes + [f"repeated {axis} tick {shape} x{dup_ticks[axis]}"
+                    for axis, shape in (("y", "column"), ("x", "row"))
+                    if dup_ticks[axis]]
     return False, "; ".join(bits) + "  [FIX] use sharex/sharey"
 
 
