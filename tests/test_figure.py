@@ -3248,9 +3248,19 @@ def test_line_weight_still_does_not_measure_spines_or_tick_marks():
     1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
     Measuring them would fail the corpus outright, which is the data floor
     failing the sheet's own design -- the thing the docstring says it must not
-    do. Tick marks are the same class and carry an open disagreement with
-    `check_svg` besides. If a later round decides to measure either, this test
-    is where that argument has to be made rather than absorbed.
+    do.
+
+    Tick marks are the same class, and they carry a second reason that is not
+    visible from this checkout. `skill/scripts/check_svg.py` does measure them,
+    and its own corpus pins ten of thirteen fixtures as firing on line weight
+    largely because of it. Both live on the unmerged `spec-r-svg-substrate`
+    branch, so a reader looking for them here will not find them; the point is
+    that the two substrates disagree about this stroke, and settling that by
+    side effect would overturn a pinned measurement on a branch this one does
+    not touch.
+
+    If a later round decides to measure either, this test is where that
+    argument has to be made rather than absorbed.
     """
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1], lw=1.5)
