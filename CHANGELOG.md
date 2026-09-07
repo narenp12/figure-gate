@@ -83,6 +83,10 @@ behind a threshold this project enforces.
   already did, under the same shared-scale requirement. Figures with stacked
   panels on one x scale and no `sharex` can newly fail. The detail names
   `repeated x tick row` beside the existing `repeated y tick column`.
+- `Line weight` measures patch edges and annotation arrows. A schematic drawn
+  entirely out of boxes and arrows was reported as having no strokes at all,
+  and its hairlines can newly fail. Spines and tick marks are still not
+  measured, deliberately.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -232,6 +236,35 @@ Corpus: no verdict changes, and one figure of the twenty is exposed.
 and it uses `sharex`, so its upper tick labels are hidden and the visible
 strings differ. That is thin, but the one exposed figure is the canonical
 correct case, which is the one worth not breaking.
+
+**`Line weight` was silent on the figure whose every stroke was the defect.**
+It read `ax.lines` and `ax.collections`, and a schematic is boxes and arrows
+and no `Line2D` at all, so one drawn wholly at 0.15pt returned `no strokes to
+measure`.
+
+What to add was decided by measuring the corpus first rather than by argument,
+because this row was expected to fire on almost everything. Counting every
+stroke the gate could reach, on twenty figures: patch edges, 20 strokes on 2
+figures, none under the floor. Annotation arrows, 5 strokes on 2 figures, none
+under. Tick marks, 377 strokes on 19 figures, none under. Spines, 57 strokes on
+**all twenty figures, every one of them under the floor**, because the sheet
+ships the axis rule at 0.72 to 0.8pt on purpose.
+
+So the item split in two on the evidence. Patch edges and arrows are data ink
+and cost nothing to start measuring. Spines are furniture, and adding them
+would fail the entire corpus, which is the data floor failing the sheet's own
+design: exactly what the row's docstring has always said it must not do. They
+stay out, and a test pins that as a decision rather than leaving it as an
+absence. Tick marks stay out too; they fire on nothing here, but they carry an
+open disagreement with `check_svg`, whose own corpus pins ten of thirteen fires
+on tick marks, and settling that by side effect would overturn a pinned
+measurement.
+
+Three detail strings moved on the corpus and no verdict did, which is the
+change working rather than noise: `gallery-rose` went from `no strokes to
+measure` to sixteen strokes, `gallery-schematic` from one to nine, and
+`gallery-callout` from one to two. Real content the gate had been blind to, all
+of it above the floor.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release

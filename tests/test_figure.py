@@ -3027,6 +3027,93 @@ def test_line_weight_does_not_fire_on_the_grid():
     assert gates(rows)["Line weight"] is True
 
 
+def test_line_weight_catches_a_schematic_drawn_entirely_in_patches():
+    """The defect: a schematic is boxes and arrows and no `Line2D` at all, so
+    one drawn wholly at 0.15pt reported `no strokes to measure`. The gate was
+    silent on the figure whose every stroke was the defect."""
+    from matplotlib.patches import Circle, FancyArrowPatch, Rectangle
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    for i in range(3):
+        ax.add_patch(Rectangle((i * 3, 0), 2, 1, facecolor="none",
+                               edgecolor="#333333", linewidth=0.15))
+    ax.add_patch(Circle((8, 0.5), 0.4, facecolor="none", edgecolor="#333333",
+                        linewidth=0.15))
+    ax.add_patch(FancyArrowPatch((2, 0.5), (3, 0.5), linewidth=0.15,
+                                 color="#333333", arrowstyle="->"))
+    ax.annotate("", xy=(6, 0.5), xytext=(5, 0.5),
+                arrowprops=dict(arrowstyle="->", linewidth=0.15,
+                                color="#333333"))
+    ax.set_xlim(-0.5, 9)
+    ax.set_ylim(-0.5, 1.5)
+    ax.axis("off")
+    try:
+        assert not ax.lines and not ax.collections
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "Rectangle edge" in detail, detail
+    assert "annotation arrow" in detail, detail
+
+
+def test_a_patch_edge_at_a_legal_weight_passes():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    ax.add_patch(Rectangle((0, 0), 2, 1, facecolor="none",
+                           edgecolor="#333333", linewidth=1.4))
+    ax.set_xlim(-0.5, 3)
+    ax.set_ylim(-0.5, 1.5)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_a_bar_with_no_edge_is_not_a_hairline():
+    """`patch.linewidth` defaults to 1.0 and `ax.bar` draws no edge, so reading
+    the width without asking whether an edge is drawn would count ink nobody
+    put on the page. Here it would have counted it at half scale."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.bar([1, 2, 3], [1, 2, 3])
+    ax.plot([1, 3], [1, 3], lw=3.0)
+    from matplotlib.colors import to_rgba
+    try:
+        assert ax.patches, "the fixture needs bars to be about anything"
+        assert all(to_rgba(p.get_edgecolor())[3] <= 0 for p in ax.patches), (
+            "matplotlib changed the default bar edge; this test is now "
+            "measuring something else")
+        assert all(p.get_linewidth() > 0 for p in ax.patches), (
+            "the width is still there to be misread, which is the point")
+        status, detail = cf.check_line_weight(fig, scale=0.5)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_still_does_not_measure_spines_or_tick_marks():
+    """A decision, pinned, not an oversight.
+
+    Measured on the corpus: every spine on all twenty figures is under the
+    1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
+    Measuring them would fail the corpus outright, which is the data floor
+    failing the sheet's own design -- the thing the docstring says it must not
+    do. Tick marks are the same class and carry an open disagreement with
+    `check_svg` besides. If a later round decides to measure either, this test
+    is where that argument has to be made rather than absorbed.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.2)
+    ax.tick_params(width=0.2)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
 # --- banking ---------------------------------------------------------------
 
 

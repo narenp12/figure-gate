@@ -2939,6 +2939,19 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     the printer costs the reader a reference; a data curve that drops out costs
     them the finding. The sheet ships the grid at 0.7pt deliberately, and
     failing it against the data floor would be failing the sheet's own design.
+
+    Patch edges and annotation arrows are data, and went unmeasured until they
+    were added here. A schematic is boxes and arrows and no `Line2D` at all, so
+    one drawn entirely at 0.15pt reported `no strokes to measure`: the gate was
+    silent on the figure whose every stroke was the defect.
+
+    Spines and tick marks are furniture and are still not measured, which is a
+    decision and not an oversight. Measured against the corpus, every spine on
+    all twenty figures is under this floor, because the sheet ships the axis
+    rule at 0.8pt on purpose. Adding them would fail the corpus outright,
+    which is the sheet's design being failed by the data floor exactly as the
+    paragraph above says it must not be. Tick marks are the same class, and
+    they carry an open disagreement with `check_svg` besides.
     """
     from matplotlib.lines import Line2D
     from matplotlib.collections import LineCollection
@@ -2947,6 +2960,34 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         scale = page_scale(fig, placed_frac, venue)
 
     thin, widths = [], []
+
+    def measure(width: Any, name: str) -> None:
+        """Put one authored width on the page and judge it there."""
+        on_page = float(width) * scale
+        if on_page <= 0:
+            return
+        widths.append(on_page)
+        if on_page < LINE_FLOOR_PT:
+            thin.append(f"{name} at {on_page:.2f}pt")
+
+    def stroked(artist: Any) -> bool:
+        """Whether this patch actually puts an edge on the page.
+
+        Three ways it does not, and all three are ordinary: `edgecolor="none"`
+        or a fully transparent one, a zero linewidth, and `linestyle="none"`.
+        A bar drawn with no edge is the default `ax.bar` gives, so reading its
+        `patch.linewidth` of 1.0 as a stroke would count ink nobody drew.
+        """
+        from matplotlib.colors import to_rgba
+        try:
+            if to_rgba(artist.get_edgecolor())[3] <= 0:
+                return False
+        except (ValueError, TypeError):
+            return False
+        if str(artist.get_linestyle()).strip().lower() in ("none", "", " "):
+            return False
+        return float(artist.get_linewidth() or 0.0) > 0.0
+
     for ax in _all_axes(fig):
         # A colorbar's dividers ship at 0.4pt and are matplotlib's, not
         # anybody's design decision — the same reason `check_ink` skips this
@@ -2972,15 +3013,22 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 raw = _collection_widths(artist)
             else:
                 continue
+            label = str(artist.get_label() or "")
+            name = label if label and not label.startswith("_") else "a stroke"
             for w in raw:
-                on_page = float(w) * scale
-                if on_page <= 0:
-                    continue
-                widths.append(on_page)
-                if on_page < LINE_FLOOR_PT:
-                    name = str(artist.get_label() or "")
-                    thin.append(f"{name if name and not name.startswith('_') else 'a stroke'}"
-                                f" at {on_page:.2f}pt")
+                measure(w, name)
+
+        # Patch edges and the arrow on an annotation. A schematic is drawn
+        # entirely out of these, and none of it reached the loop above. Spines
+        # and tick marks are furniture and stay out; see the docstring.
+        for patch in ax.patches:
+            if patch.get_visible() and stroked(patch):
+                measure(patch.get_linewidth(),
+                        f"a {type(patch).__name__} edge")
+        for text in ax.texts:
+            arrow = getattr(text, "arrow_patch", None)
+            if arrow is not None and arrow.get_visible() and stroked(arrow):
+                measure(arrow.get_linewidth(), "an annotation arrow")
 
     if not widths:
         return True, "no strokes to measure"
