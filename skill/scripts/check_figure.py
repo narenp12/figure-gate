@@ -1305,7 +1305,7 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     tail of alpha values reads as haze rather than hierarchy."""
     import numpy as np
 
-    alphas = []
+    alphas: list[float] = []
     for ax in _all_axes(fig):
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
             if not a.get_visible():

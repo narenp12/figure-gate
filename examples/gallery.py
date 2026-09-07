@@ -113,7 +113,7 @@ STYLE = SKILL / "assets" / "figure.mplstyle"
 # on every `pytest`. Resolved in `main` rather than from `sys.argv` at import,
 # because under a test runner `sys.argv[1]` is the runner's own argument and
 # this file would take it for an output directory.
-OUT = HERE
+OUT: Path | None = HERE
 
 # Read under the sheet, not with it left in effect. `plt.style.use` at module
 # scope put the sheet into every process that imported this file, and
