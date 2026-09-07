@@ -2161,6 +2161,106 @@ def check_dual_axis(fig: Figure) -> tuple[bool | str, str]:
                    "panels, small multiples, or index both to a common base")
 
 
+# How many rectangles standing on one baseline are enough to call them bars.
+# Two is a real chart - before and after - and the constraints below are what
+# keep the count this low: the rectangles have to be plain `Rectangle`, drawn
+# in data space, unrotated, standing on a shared edge, and *varying* along the
+# other axis. That last one is what a bar is: length encodes the value. It also
+# excludes the two shapes most likely to be mistaken for bars, a single-row
+# heatmap and a rug, both of which are equal-length by construction.
+FORM_BAR_MIN_PATCHES = 2
+
+# A shared baseline is shared to within this fraction of the axis span. Bars
+# built by hand from a loop over floats do not always land on the same bit
+# pattern, and a baseline is a drawing decision rather than a measurement.
+FORM_BAR_BASELINE_TOL = 1e-6
+
+
+def _baselined_bars(ax: Axes) -> str | None:
+    """`"vertical"`, `"horizontal"` or None: bars drawn as raw patches.
+
+    `ax.bar` leaves a `BarContainer` and `check_form` reads it. The same
+    figure drawn with `ax.add_patch(Rectangle(...))` leaves nothing but
+    patches, and carried a truncated baseline past the gate. Matplotlib is not
+    the only thing that draws bars this way: a script building a chart by hand
+    does, and so does any library that lays out its own geometry.
+
+    Four constraints, each closing a specific thing that is not a bar chart:
+
+    - `type(p) is Rectangle` exactly. `FancyBboxPatch` is not a subclass, so an
+      annotation's background box is already out, and being strict keeps a
+      future subclass from arriving as a bar.
+    - drawn in data space. `axvspan` and `axhspan` are `Rectangle`s too, and a
+      pair of shaded bands shares a baseline and varies in extent, which is
+      every other test here. They are drawn in a blended transform instead, so
+      `get_data_transform()` is not `ax.transData` and they never reach the
+      rest of this. `test_a_shaded_span_is_not_a_bar` pins that.
+    - unrotated, because a rotated rectangle has no baseline to stand on.
+    - standing on a *shared* edge, and varying along the other one.
+
+    The shared-edge test is the modal edge rather than a unanimous one, so a
+    stacked chart is read by its bottom row rather than not at all. On its own
+    that is too loose: a four-step waterfall had two segments land on the same
+    edge by arithmetic and was read as a two-bar chart. So every rectangle off
+    the modal edge has to *stand on* another one in its own column, which is
+    what stacking is and what floating is not.
+
+    That is also what keeps this gate off the offset baselines that are an open
+    argument rather than a defect. A Gantt chart shares no edge at all, and a
+    waterfall's segments neither share one nor sit on each other, so neither
+    reaches a verdict here.
+
+    Returns:
+        The bar direction, or None when these patches are not bars.
+    """
+    from matplotlib.patches import Rectangle
+
+    rects = []
+    for p in ax.patches:
+        if type(p) is not Rectangle or not p.get_visible():
+            continue
+        if p.get_data_transform() is not ax.transData:
+            continue
+        if abs(getattr(p, "get_angle", lambda: 0.0)() or 0.0) > 0.0:
+            continue
+        rects.append(p)
+    if len(rects) < FORM_BAR_MIN_PATCHES:
+        return None
+
+    for direction, base_of, span_of, cross_of, lim in (
+            ("vertical", lambda p: p.get_y(), lambda p: p.get_height(),
+             lambda p: (p.get_x(), p.get_width()), ax.get_ylim()),
+            ("horizontal", lambda p: p.get_x(), lambda p: p.get_width(),
+             lambda p: (p.get_y(), p.get_height()), ax.get_xlim())):
+        lo, hi = lim
+        tol = abs(hi - lo) * FORM_BAR_BASELINE_TOL
+        if not tol:
+            continue
+
+        bases = [base_of(p) for p in rects]
+        modal = Counter(round(b / tol) for b in bases).most_common(1)
+        key, count = modal[0]
+        if count < FORM_BAR_MIN_PATCHES:
+            continue
+
+        standing = [p for b, p in zip(bases, rects) if round(b / tol) == key]
+        # Equal-length rectangles on a common edge encode nothing by length: a
+        # rug, a single-row heatmap, a row of swatches.
+        if len({round(span_of(p), 12) for p in standing}) < 2:
+            continue
+
+        # Stacking, stated directly: anything off the baseline has to rest on
+        # the top edge of another rectangle in its own column. A waterfall
+        # segment rests on nothing, and that is the whole difference.
+        tops = {(cross_of(p), round((base_of(p) + span_of(p)) / tol))
+                for p in rects}
+        if all(round(base_of(p) / tol) == key
+               or (cross_of(p), round(base_of(p) / tol)) in tops
+               for p in rects):
+            return direction
+    return None
+
+
 def check_form(fig: Figure) -> tuple[bool | str, str]:
     """The mechanical subset of form choice - the three cases where the form is
     wrong no matter what the data is. `references/choosing-a-form.md` carries
@@ -2177,22 +2277,30 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         if hasattr(ax, "get_zlim"):
             bad.append(f"ax{i} 3D: perspective makes the encoding unreadable and "
                        "occludes data - facet or use color for the third variable")
-        for con in getattr(ax, "containers", []):
-            if not isinstance(con, BarContainer):
-                continue
-            vertical = getattr(con, "orientation", "vertical") == "vertical"
-            lim = ax.get_ylim() if vertical else ax.get_xlim()
-            scale = ax.get_yscale() if vertical else ax.get_xscale()
-            # A log axis cannot include zero, so a log bar chart is truncated by
-            # construction and this gate has nothing to say about it.
-            if scale == "linear" and min(lim) > 0:
-                axis = "y" if vertical else "x"
-                bad.append(
-                    f"ax{i} bars on a truncated {axis} axis (starts at "
-                    f"{min(lim):.4g}): bar length encodes the value, so a "
-                    "cut baseline misstates every ratio  [FIX] the fix is the "
-                    "form, not the axis - use a dot plot")
-            break
+        orientation = next(
+            (getattr(con, "orientation", "vertical")
+             for con in getattr(ax, "containers", [])
+             if isinstance(con, BarContainer)), None)
+        # Bars drawn by hand leave no container behind, so the patches are read
+        # directly when there is none. Same verdict either way, which is the
+        # point: the two spellings draw the identical figure.
+        if orientation is None:
+            orientation = _baselined_bars(ax)
+        if orientation is None:
+            continue
+
+        vertical = orientation == "vertical"
+        lim = ax.get_ylim() if vertical else ax.get_xlim()
+        scale = ax.get_yscale() if vertical else ax.get_xscale()
+        # A log axis cannot include zero, so a log bar chart is truncated by
+        # construction and this gate has nothing to say about it.
+        if scale == "linear" and min(lim) > 0:
+            axis = "y" if vertical else "x"
+            bad.append(
+                f"ax{i} bars on a truncated {axis} axis (starts at "
+                f"{min(lim):.4g}): bar length encodes the value, so a "
+                "cut baseline misstates every ratio  [FIX] the fix is the "
+                "form, not the axis - use a dot plot")
     if not bad:
         return True, "no pie, no 3D, no truncated bar baseline"
     return False, "; ".join(bad)

@@ -50,6 +50,9 @@ behind a threshold this project enforces.
 - `check_figure.RAMP_LUT_N`, `check_figure.RAMP_CHANNEL_TOL`,
   `check_figure.RAMP_SPACING_TOL` and `check_figure.RAMP_MIN_STEPS`, the four
   values deciding whether a panel's colours are samples of a registered ramp.
+- `check_figure.FORM_BAR_MIN_PATCHES` and
+  `check_figure.FORM_BAR_BASELINE_TOL`, the two values deciding whether a run
+  of rectangles standing on one edge is a bar chart.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
 
@@ -72,6 +75,9 @@ behind a threshold this project enforces.
   drawn in colours sampled off `jet`, `rainbow` or another map a reader cannot
   order now fail the row, where before no artist carried an array and nothing
   on the figure looked at the ramp at all.
+- `Form` reads bars drawn as plain `Rectangle` patches. A truncated baseline
+  built by hand rather than by `ax.bar` now fails the row, and the two
+  spellings return the same detail string.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -159,6 +165,38 @@ distinct ones, so the check was exposed to two panels rather than twenty. The
 corpus draws one or two series per panel almost everywhere. The 8000-palette
 measurement above is the real over-fire evidence here, and the sweep only
 confirms nothing already published moved.
+
+**A bar chart drawn by hand carried a truncated baseline straight through.**
+`Form` read `ax.containers` for a `BarContainer` and nothing else, so the same
+chart built from `ax.add_patch(Rectangle(...))` reported `no pie, no 3D, no
+truncated bar baseline`. Both spellings now return the same detail string,
+which is the test that states the defect directly.
+
+Reading rectangles as bars is easy to get wrong in the over-firing direction,
+so the constraints are narrow: the exact `Rectangle` type, drawn in data space,
+unrotated, standing on a shared edge, and varying in length along the other
+axis. Each one closes something specific. `axvspan` and `axhspan` are
+`Rectangle`s, and a pair of shaded bands shares an edge and varies in extent,
+which is every other test here; they are drawn in a blended transform, so
+`get_data_transform()` separates them and a test pins that rather than assuming
+it. Equal length excludes a rug and a single-row heatmap, neither of which says
+anything with length.
+
+The shared edge is the modal one rather than a unanimous one, so a stacked
+chart is read by its bottom row. On its own that was too loose: a four-step
+waterfall had two segments land on the same edge by arithmetic and was read as
+a two-bar chart. So anything off the modal edge has to rest on the top of
+another rectangle in its own column, which is what stacking is and what
+floating is not. That also keeps the gate off the offset baselines that are an
+open argument in this project rather than a settled defect, since deciding that
+argument by arithmetic accident would be the wrong answer twice over.
+
+The corpus could not have found any of this. Twenty figures swept, no verdict
+changes; but only two panels carry a bar at all and both carry a
+`BarContainer`, which is matched first, so the new route was exercised by zero
+corpus panels. A fourteen-case adversarial set is what the constraints were
+measured against, and it is where the waterfall false positive was found. It
+ships as twelve tests.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release

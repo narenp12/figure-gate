@@ -977,6 +977,234 @@ def test_a_dot_plot_is_the_sanctioned_alternative_and_passes():
     assert gates(rows)["Form"] is True
 
 
+# --- bars drawn as raw patches ----------------------------------------------
+# `ax.bar` leaves a `BarContainer`, which the gate read. The same chart built
+# from `ax.add_patch(Rectangle(...))` leaves nothing but patches and carried a
+# truncated baseline straight through. `cf._baselined_bars` is the reader; the
+# tests below are the defect, then the eleven things drawn with rectangles that
+# are not a truncated bar chart.
+
+
+def _patch_bars(vals, ylim, horizontal=False):
+    """A bar chart built the way a hand-written script builds one."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, v in enumerate(vals):
+        xy = (0, i - 0.4) if horizontal else (i - 0.4, 0)
+        wh = (v, 0.8) if horizontal else (0.8, v)
+        ax.add_patch(Rectangle(xy, *wh, color=OKABE[0]))
+    cat = (-0.5, len(vals) - 0.5)
+    ax.set_ylim(*(cat if horizontal else ylim))
+    ax.set_xlim(*(ylim if horizontal else cat))
+    return fig
+
+
+def test_form_catches_a_truncated_baseline_drawn_as_patches():
+    fig = _patch_bars([104, 108, 106, 111], (100, 115))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "truncated y axis" in detail, detail
+
+
+def test_the_two_spellings_of_a_truncated_bar_chart_read_identically():
+    """The equality that says this is one defect and not two rows.
+
+    `ax.bar` and a loop of `Rectangle`s draw the same figure, and the detail
+    string has to come out the same, not merely the verdict.
+    """
+    drawn = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    fig_c, ax = drawn
+    ax.bar(range(4), [104, 108, 106, 111], width=0.8, color=OKABE[0])
+    ax.set_xlim(-0.5, 3.5)
+    ax.set_ylim(100, 115)
+    fig_p = _patch_bars([104, 108, 106, 111], (100, 115))
+    try:
+        assert cf.check_form(fig_c) == cf.check_form(fig_p)
+    finally:
+        plt.close(fig_c)
+        plt.close(fig_p)
+
+
+def test_horizontal_patch_bars_name_the_x_axis():
+    fig = _patch_bars([104, 108, 106, 111], (100, 115), horizontal=True)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "truncated x axis" in detail, detail
+
+
+def test_stacked_patch_bars_are_read_by_their_bottom_row():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, (a, b) in enumerate([(60, 44), (70, 38), (65, 41)]):
+        ax.add_patch(Rectangle((i - 0.4, 0), 0.8, a, color=OKABE[0]))
+        ax.add_patch(Rectangle((i - 0.4, a), 0.8, b, color=OKABE[1]))
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(100, 115)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_patch_bars_that_keep_their_baseline_pass():
+    """The over-fire control, and it passes on a tree without this check too."""
+    fig = _patch_bars([104, 108, 106, 111], (0, 120))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_waterfall_is_not_read_as_bars():
+    """The false positive the modal-baseline rule produced on its own.
+
+    Two of this chart's four segments land on the same edge by arithmetic, and
+    that was enough to read them as a two-bar chart. Whether an offset baseline
+    is a defect at all is an open argument in this project, so deciding it here
+    by accident is the wrong answer twice over. Segments that rest on nothing
+    are what the stacking test excludes.
+    """
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    base = 100.0
+    for i, d in enumerate([4, -2, 5, -1]):
+        ax.add_patch(Rectangle((i - 0.4, min(base, base + d)), 0.8, abs(d),
+                               color=OKABE[0]))
+        base += d
+    ax.set_xlim(-0.5, 3.5)
+    ax.set_ylim(98, 112)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_gantt_chart_is_not_read_as_bars():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, (start, width) in enumerate([(2, 3), (4, 2), (5, 4)]):
+        ax.add_patch(Rectangle((start, i - 0.4), width, 0.8, color=OKABE[0]))
+    ax.set_ylim(-0.5, 2.5)
+    ax.set_xlim(1, 10)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_shaded_span_is_not_a_bar():
+    """`axvspan` and `axhspan` are `Rectangle`s, and a pair of them shares a
+    baseline and varies in extent, which is every other test in
+    `_baselined_bars`. They are drawn in a blended transform rather than
+    `transData`, and that is the only thing separating them.
+
+    Pinned rather than assumed: if a matplotlib release ever draws a span in
+    `transData`, this goes red instead of shading turning into a gate failure
+    on every figure that highlights a region.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    vs = ax.axvspan(2, 3, color="#eeeeee")
+    hs = ax.axhspan(101, 102, color="#eeeeee")
+    ax.set_ylim(100, 115)
+    try:
+        assert vs.get_data_transform() is not ax.transData
+        assert hs.get_data_transform() is not ax.transData
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_equal_length_rectangles_on_a_baseline_encode_nothing():
+    """A rug and a single-row heatmap both stand on one edge. Neither uses
+    length to say anything, which is what a bar does and the whole reason a
+    truncated baseline lies."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [101, 109], color=OKABE[0])
+    for x in np.linspace(0.05, 0.95, 20):
+        ax.add_patch(Rectangle((x, 100.2), 0.004, 0.5, color="#333333"))
+    ax.set_ylim(100, 115)
+    try:
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_an_annotation_background_box_is_not_a_bar():
+    """`FancyBboxPatch` is not a `Rectangle` subclass, and `_baselined_bars`
+    requires the exact type so a future one cannot arrive as a bar."""
+    from matplotlib.patches import FancyBboxPatch, Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    for x, y, h in ((2, 102, 0.8), (7, 108, 1.4)):
+        ax.add_patch(FancyBboxPatch((x, y), 1.0, h, boxstyle="round",
+                                    color="#eeeeee"))
+    ax.set_ylim(100, 115)
+    try:
+        assert not any(isinstance(p, Rectangle) for p in ax.patches)
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_rotated_rectangle_has_no_baseline_to_stand_on():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, v in enumerate([4, 8, 6, 11]):
+        ax.add_patch(Rectangle((i, 0), 0.5, v, angle=35, color=OKABE[0]))
+    ax.set_xlim(-0.5, 6)
+    ax.set_ylim(100, 115)
+    try:
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_one_highlight_rectangle_is_not_a_bar_chart():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    ax.add_patch(Rectangle((2, 102), 3, 4, fill=False, edgecolor="#333333"))
+    ax.set_ylim(100, 115)
+    try:
+        assert cf.FORM_BAR_MIN_PATCHES == 2
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_log_axis_patch_bar_chart_is_not_a_truncated_baseline():
+    """The log carve-out reaches the patch route too, or the two spellings
+    disagree on the one figure the gate deliberately says nothing about."""
+    fig = _patch_bars([10, 1000, 100000], (1, 1e6))
+    try:
+        fig.axes[0].set_yscale("log")
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
 # --- identity channel -------------------------------------------------------
 
 def test_identity_channel_warns_on_color_alone_and_does_not_gate():
