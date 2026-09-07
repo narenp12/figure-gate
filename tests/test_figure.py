@@ -3477,6 +3477,149 @@ def test_the_colormap_row_is_not_advisory():
     assert "Colormap kind" not in cf.ADVISORY_GATES
 
 
+# --- a ramp the author evaluated themselves ----------------------------------
+# `jet` sampled with `cmap(i / 5)` and handed to `ax.plot` draws no array, so
+# the whole figure passed: nothing array-carrying for Colormap kind, and six
+# hues against a ceiling of eight for Series color. The reverse lookup that
+# closes it is `cf._sampled_ramp`, and the tests below are in two halves -- the
+# defect, then the legitimate figures it must not touch.
+
+
+def _ramp_lines(name, n=6, lo=0.0, hi=1.0):
+    """`n` series drawn in colours sampled off `name`, the way a person does."""
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap(name)
+    fig, ax = plt.subplots()
+    x = np.linspace(0, 1, 20)
+    for i in range(n):
+        p = lo if n == 1 else lo + (hi - lo) * i / (n - 1)
+        ax.plot(x, x + i, color=cmap(p), label=f"s{i}")
+    return fig
+
+
+def test_a_pre_evaluated_jet_is_caught_though_no_artist_carries_an_array():
+    fig = _ramp_lines("jet")
+    try:
+        assert not [a for a in fig.axes[0].lines
+                    if getattr(a, "get_array", lambda: None)() is not None]
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "jet" in detail, detail
+    assert "ax0" in detail, detail
+
+
+def test_the_sampled_ramp_and_the_colormapped_one_reach_the_same_verdict():
+    """The equality that says this is one defect and not two rows.
+
+    A `jet` image and six `jet` lines are the same encoding spelled two ways,
+    and before this the first failed and the second passed clean.
+    """
+    drawn = heat("jet")
+    sampled = _ramp_lines("jet")
+    try:
+        assert cf.check_colormap(drawn)[0] is cf.check_colormap(sampled)[0]
+    finally:
+        plt.close(drawn)
+        plt.close(sampled)
+
+
+def test_a_ramp_sampled_over_part_of_its_span_is_still_a_sampled_ramp():
+    """`cmap(np.linspace(0.2, 0.8, 5))` is the other spelling people write."""
+    fig = _ramp_lines("jet", n=5, lo=0.2, hi=0.8)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_okabe_ito_series_are_not_read_as_a_sampled_ramp():
+    """The false positive that killed the first draft of this check.
+
+    Every categorical ListedColormap matplotlib registers -- `tab10`, `Set2`,
+    `Dark2`, and this project's own `okabe_ito` -- classifies `misc` over 256
+    samples, because a set of hues chosen to be told apart is not ordered in
+    lightness and never was. Matching against them made drawing series in
+    Okabe-Ito, the thing the skill tells people to do, fail this row. The
+    `CMAP_QUALITATIVE_N` split in `_unorderable_ramps` is what keeps them out,
+    and this is the test that fails if it is ever removed.
+
+    An over-fire control, so it is written to pass on a tree without the check
+    as well as one with it. A control that only runs one way proves the fix
+    fires and nothing about what it spares.
+    """
+    import matplotlib.pyplot as plt
+    okabe = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
+    fig, ax = plt.subplots()
+    x = np.linspace(0, 1, 20)
+    for i, c in enumerate(okabe):
+        ax.plot(x, x + i, color=c, label=f"s{i}")
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_pre_evaluated_viridis_is_not_gated_by_this_row():
+    """Only ramps a reader cannot order are matched.
+
+    Pre-evaluating viridis loses the colorbar, which is a real cost, but it is
+    not this row's argument and gating it here would fire on every ordered
+    single-hue stack in the corpus.
+    """
+    fig = _ramp_lines("viridis")
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_two_colors_are_not_enough_to_call_something_a_ramp():
+    """Two colours make one step, and one step is evenly spaced by definition,
+    so k=2 asks only whether both hues sit somewhere on some ramp. Measured: 17
+    of 4000 pairs drawn from the Okabe-Ito/tab10/Set2/Dark2 pool matched. At
+    three the same 4000 draws matched nothing, and neither did 4000
+    uniform-random sRGB palettes at any size from three to six.
+    """
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap("jet")
+    from matplotlib.colors import to_hex
+    assert cf.RAMP_MIN_STEPS == 3
+    assert cf._sampled_ramp([to_hex(cmap(0.0)), to_hex(cmap(1.0))]) is None
+    assert cf._sampled_ramp(
+        [to_hex(cmap(i / 2)) for i in range(3)]) == "jet"
+
+
+def test_one_hue_repeated_is_not_a_ramp_piled_at_a_point():
+    from matplotlib.colors import to_hex
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap("jet")
+    assert cf._sampled_ramp([to_hex(cmap(0.5))] * 4) is None
+
+
+def test_the_ramps_matched_against_are_continuous_and_unorderable():
+    """Pins the candidate set rather than the count: a matplotlib release that
+    adds or drops a colormap should not turn this red, but one that lets a
+    categorical palette in should.
+    """
+    import matplotlib as mpl
+    import check_palette as cp
+    luts = cf._unorderable_ramps()
+    assert "jet" in luts and "rainbow" in luts and "hsv" in luts
+    for name in ("viridis", "Blues", "RdBu", "tab10", "Set2", "twilight"):
+        assert name not in luts, name
+    for name in luts:
+        cmap = mpl.colormaps[name]
+        assert cmap.N >= cp.CMAP_QUALITATIVE_N, name
+        floats = [tuple(cmap(i / (cp.CMAP_SAMPLES - 1))[:3])
+                  for i in range(cp.CMAP_SAMPLES)]
+        assert cp.cmap_kind_rgb(floats) == "misc", name
+
+
 # --- a gate that raises ------------------------------------------------------
 # `audit` ran its gates in a list comprehension, so one exception anywhere
 # propagated and the caller lost the twenty rows already measured. No gate is

@@ -3003,6 +3003,122 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
 ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
+# A ramp the author evaluated themselves and handed over as plain colours draws
+# no array, so the loop below sees no colormap at all. Six `jet` steps built
+# with `cmap(i / 5)` and passed to `ax.plot` cleared every row on the figure:
+# nothing array-carrying for this one, and six hues against a ceiling of
+# `MAX_SERIES_HUES` for `check_series_color`. `jet` escaping the checker
+# outright is what these constants close.
+#
+# `_data_colors_by_axes` already names the rule in its own docstring - draw an
+# ordinal ramp `c=values, cmap=...`, "never as a pre-evaluated RGBA list" - and
+# until this ran, nothing enforced it.
+#
+# Recognised by reverse lookup, not by classifying the drawn colours. Handing
+# the panel's hues to `cmap_kind_rgb` would condemn every categorical palette,
+# Okabe-Ito included: a set of hues chosen to be told apart is not ordered in
+# lightness and was never meant to be. The narrow question is asked instead -
+# are these colours evenly spaced samples of a *registered* ramp a reader
+# cannot order - and it is answered against the 16 such maps matplotlib ships,
+# each in both directions.
+#
+# The candidate set inherits the `CMAP_QUALITATIVE_N` split the classifier
+# branch below makes, and that filter is load-bearing rather than tidy: without
+# it `tab10`, `Set2`, `Dark2` and this project's own registered `okabe_ito` all
+# classify `misc` over 256 samples, and using Okabe-Ito as a series palette -
+# the thing the skill tells people to do - would have failed this row.
+RAMP_LUT_N = 256
+RAMP_CHANNEL_TOL = 3.0 / 255.0
+RAMP_SPACING_TOL = 0.02
+# Two colours make one step, and one step is even by definition, so k=2 tests
+# only whether both hues sit on some ramp: 17 of 4000 four-way draws from the
+# Okabe-Ito/tab10/Set2/Dark2 pool matched something. At three the same 4000
+# draws matched nothing, and neither did 4000 uniform-random sRGB palettes, at
+# every size from three to six. The discriminating test turns out to be the
+# channel tolerance rather than the spacing one - a ramp is a curve through a
+# cube, and little lands within 3/255 of one by accident - so ordering is not
+# required either, and the positions are sorted before they are differenced.
+# That costs nothing measurable and catches the author who draws their series
+# out of ramp order.
+RAMP_MIN_STEPS = 3
+
+_RAMP_LUTS: dict[str, Any] | None = None
+
+
+def _unorderable_ramps() -> dict[str, Any]:
+    """`{name: (RAMP_LUT_N, 3) array}` for every registered continuous colormap
+    a reader cannot put two values of in order.
+
+    Built once and kept, because it costs a `cmap_kind_rgb` over 256 samples of
+    each of matplotlib's ~180 registered maps and the answer cannot change
+    inside a process. A map registered after the first call is missed, which is
+    the trade taken: an author who registers their own `jet` under a new name
+    is not the case this is for.
+    """
+    global _RAMP_LUTS
+    if _RAMP_LUTS is not None:
+        return _RAMP_LUTS
+
+    cp = _sibling("check_palette")
+    if cp is None:
+        _RAMP_LUTS = {}
+        return _RAMP_LUTS
+
+    import matplotlib as mpl
+    import numpy as np
+
+    luts = {}
+    for name in sorted(mpl.colormaps):
+        cmap = mpl.colormaps[name]
+        # Categorical maps are lists of hues, not ramps. See the note above.
+        if cmap.N < cp.CMAP_QUALITATIVE_N:
+            continue
+        floats = [tuple(cmap(i / (cp.CMAP_SAMPLES - 1))[:3])
+                  for i in range(cp.CMAP_SAMPLES)]
+        if cp.cmap_kind_rgb(floats) != "misc":
+            continue
+        luts[name] = np.array([cmap(i / (RAMP_LUT_N - 1))[:3]
+                               for i in range(RAMP_LUT_N)])
+    _RAMP_LUTS = luts
+    return _RAMP_LUTS
+
+
+def _sampled_ramp(hexes: Sequence[str]) -> str | None:
+    """The registered unorderable colormap these colours are evenly spaced
+    samples of, or None.
+
+    Args:
+        hexes: Distinct data colours drawn in one panel, in the order drawn.
+
+    Returns:
+        The colormap's name, or None when the colours are not a sampled ramp.
+    """
+    luts = _unorderable_ramps()
+    if len(hexes) <= RAMP_MIN_STEPS - 1 or not luts:
+        return None
+
+    import numpy as np
+    from matplotlib.colors import to_rgb
+
+    rgb = np.array([to_rgb(h) for h in hexes])
+    for name, lut in luts.items():
+        # Nearest LUT entry per colour, by worst channel rather than by mean:
+        # a hue that matches on two channels and misses on the third is not on
+        # this ramp, and an average would forgive it.
+        gaps = np.abs(lut[None, :, :] - rgb[:, None, :]).max(axis=2)
+        nearest = gaps.argmin(axis=1)
+        if gaps[np.arange(len(rgb)), nearest].max() > RAMP_CHANNEL_TOL:
+            continue
+        steps = np.diff(np.sort(nearest / (RAMP_LUT_N - 1)))
+        mean = steps.mean()
+        # A mean step no larger than the tolerance means the colours are piled
+        # at one point on the ramp rather than spread along it, which is one
+        # hue repeated and not an author stepping through a colormap.
+        if mean > RAMP_SPACING_TOL and abs(steps - mean).max() <= RAMP_SPACING_TOL:
+            return name
+    return None
+
+
 def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     """Whether each colormap in the figure encodes what its data is.
 
@@ -3013,6 +3129,12 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     values in order. A qualitative map is judged by the same all-pairs
     separation floor a hand-built palette is, because an image puts every
     category beside every other one.
+
+    A ramp the author evaluated themselves is caught too, by reverse lookup
+    rather than by classification: six `jet` steps handed to `ax.plot` as plain
+    colours carry no array, so the sampling above finds nothing to judge and
+    every row on the figure passes. See `_sampled_ramp` for how a sampled ramp
+    is told from a categorical palette, which is the whole difficulty.
 
     Two ways this row passes without having judged anything, both deliberate.
     A colormap matplotlib built from colours the author set on an artist is
@@ -3027,6 +3149,7 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
         return True, ("check_palette.py is not importable beside this file, "
                       "so no colormap was classified")
 
+    import matplotlib as mpl
     from matplotlib.colors import to_hex
 
     seen: dict[Any, Any] = {}
@@ -3048,10 +3171,34 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
                     continue
                 seen.setdefault(name, cmap)
 
+    fails, notes = [], []
+
+    # A ramp the author sampled themselves never reaches the loop above, so it
+    # is looked for in the drawn colours instead. See `_sampled_ramp`.
+    panel = {ax: i for i, ax in enumerate(_all_axes(fig))}
+    for ax, items in _data_colors_by_axes(fig).items():
+        distinct = list(dict.fromkeys(h for h, _, _ in items))
+        name = _sampled_ramp(distinct)
+        if name is None:
+            continue
+        ramp = mpl.colormaps[name]
+        floats = [tuple(ramp(i / (cp.CMAP_SAMPLES - 1))[:3])
+                  for i in range(cp.CMAP_SAMPLES)]
+        fails.append(
+            f"ax{panel.get(ax, '?')}: {len(distinct)} series colors are "
+            f"{name} sampled at even steps, and its lightness reverses over "
+            f"{cp.cmap_back_travel_rgb(floats):.0%} of its span  [FIX] a "
+            "reader cannot order two values in it. Draw the ramp as data - "
+            "c=values, cmap='viridis' - so it carries a colorbar, or step a "
+            "sequential map  [WHY] evaluating a colormap yourself hands over "
+            "plain colors, and the encoding stops being visible to anything "
+            "downstream, this row included")
+
     if not seen:
+        if fails:
+            return False, "; ".join(fails)
         return True, "no colormapped artists"
 
-    fails, notes = [], []
     for name, cmap in sorted(seen.items()):
         if cmap.N < cp.CMAP_QUALITATIVE_N:
             levels = [to_hex(cmap(i)) for i in range(cmap.N)]

@@ -49,7 +49,7 @@ panels first and the child axes after them.
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
 | Contour dash | none | a signed contour set dashes its negative levels *(advisory)* |
-| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation |
+| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation, and when a panel's series colours are `RAMP_MIN_STEPS = 3` or more evenly spaced samples of such a map, evaluated by the author rather than handed to an artist |
 | Fonts | Type 42 | PDF or PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 

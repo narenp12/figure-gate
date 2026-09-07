@@ -47,6 +47,9 @@ behind a threshold this project enforces.
   as it does on a figure.
 - `check_figure.MARK_RIDE_TOL_PX` and `check_figure.MARK_RIDE_FRAC_MIN`, the
   two thresholds separating a companion mark from a rival series.
+- `check_figure.RAMP_LUT_N`, `check_figure.RAMP_CHANNEL_TOL`,
+  `check_figure.RAMP_SPACING_TOL` and `check_figure.RAMP_MIN_STEPS`, the four
+  values deciding whether a panel's colours are samples of a registered ramp.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
 
@@ -65,6 +68,10 @@ behind a threshold this project enforces.
 - `Clipping` recognises off-view ticks on a child axes, so `secondary_xaxis`
   and `secondary_yaxis` no longer report them as clipped text.
 - `Colormap kind` classifies a ramp before the 8-bit round trip.
+- `Colormap kind` recognises a colormap the author evaluated themselves. Series
+  drawn in colours sampled off `jet`, `rainbow` or another map a reader cannot
+  order now fail the row, where before no artist carried an array and nothing
+  on the figure looked at the ramp at all.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -111,6 +118,47 @@ also weak evidence, for the reason the whole defect exists: the corpus has no
 figure with a data-carrying child axes, so it had nothing to move. The thirteen
 tests are where the construct actually lives, and eleven of them fail on the
 commit before this one.
+
+**`jet` escaped the checker entirely by being evaluated one step at a time.**
+Six series drawn `color=cmap(i / 5)` off `jet` passed every row on the figure:
+no artist carries an array, so `Colormap kind` found nothing to classify, and
+six hues sit under the eight `Series color` allows. The rule was already
+written down - `_data_colors_by_axes` says in its own docstring to draw an
+ordinal ramp as `c=values, cmap=...` and "never as a pre-evaluated RGBA list" -
+and nothing enforced it.
+
+It is caught by reverse lookup rather than by classification, and the
+difference is the whole difficulty. Handing the panel's drawn hues to
+`cmap_kind_rgb` would condemn every categorical palette, Okabe-Ito included: a
+set of hues chosen to be told apart is not ordered in lightness and was never
+meant to be. So the narrow question is asked instead - are these colours evenly
+spaced samples of a *registered* map a reader cannot order - against the
+sixteen such maps matplotlib ships, each in both directions.
+
+The first draft failed Okabe-Ito. Over 256 samples `tab10`, `Set2`, `Dark2` and
+this project's own registered `okabe_ito` all classify `misc`, for the same
+reason a categorical palette should, and matching against them made drawing
+series in Okabe-Ito fail the row. Inheriting the `CMAP_QUALITATIVE_N` split the
+qualitative branch already makes is what excludes them, and the control test
+pins it.
+
+`RAMP_MIN_STEPS = 3` is measured, not chosen. Two colours make one step and one
+step is evenly spaced by definition, so at two the check asks only whether both
+hues sit somewhere on some ramp: 17 of 4000 pairs drawn from an
+Okabe-Ito/`tab10`/`Set2`/`Dark2` pool matched. At three, those same 4000 draws
+matched nothing, and neither did 4000 uniform-random sRGB palettes at any size
+from three to six. The discriminating test turns out to be the 3/255 channel
+tolerance rather than the spacing one - a ramp is a curve through a cube, and
+little lands on one by accident - which is also why the drawn order is not
+required.
+
+The corpus sweep is clean and thin, and the thinness is the part worth
+recording. Twenty figures, no verdict changes, no detail-string changes; but
+only two of the twenty panels carrying series colours have three or more
+distinct ones, so the check was exposed to two panels rather than twenty. The
+corpus draws one or two series per panel almost everywhere. The 8000-palette
+measurement above is the real over-fire evidence here, and the sweep only
+confirms nothing already published moved.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release
