@@ -728,6 +728,156 @@ def test_type_floor_is_measured_on_the_page_not_in_the_figure():
         cf.CONTENT_WIDTH_PT = saved
 
 
+# --- mathtext is measured, against its own floor ----------------------------
+# `get_fontsize()` is the size the author asked for. Mathtext draws each script
+# level at 0.7 of the level above, so an 11pt label puts a glyph on the page at
+# 3.77pt and reported 11.0. Both halves of the fix are load-bearing: reading
+# the property let that glyph pass, and judging a script against the *body*
+# floor failed matplotlib's own log tick labels on three of twenty corpus
+# figures. See `cf.MATH_SCRIPT_FLOOR_PT`.
+
+
+def _labelled(label, base):
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.set_xlabel(label, fontsize=base)
+    ax.set_ylabel("y", fontsize=11)
+    ax.tick_params(labelsize=11)
+    return fig, ax
+
+
+def _type_size(label, base):
+    fig, _ax = _labelled(label, base)
+    try:
+        r, _ = cf._renderer(fig)
+        return cf.check_type_size(fig, r, scale=1.0)
+    finally:
+        plt.close(fig)
+
+
+def test_a_deeply_nested_script_is_caught_though_the_property_says_11pt():
+    """The defect. Three levels of subscript at a nominal 11pt puts a `k` on
+    the page at 3.77pt, and `get_fontsize()` returns 11.0 for all of it."""
+    fig, ax = _labelled(r"$x_{i_{j_{k}}}$", 11)
+    try:
+        assert ax.xaxis.label.get_fontsize() == 11.0
+        assert cf._script_min_pt(ax.xaxis.label) == pytest.approx(3.773, abs=1e-3)
+    finally:
+        plt.close(fig)
+    status, detail = _type_size(r"$x_{i_{j_{k}}}$", 11)
+    assert status is False, detail
+    assert "mathtext script" in detail, detail
+
+
+def test_a_first_level_script_is_not_held_to_the_body_floor():
+    """The over-fire control, and the reason this row has a second floor.
+
+    A subscript at a 10pt base renders at 7.0pt. That is under
+    `TYPE_FLOOR_PT`, and failing it is what condemned matplotlib's own
+    `$\\mathdefault{10^{-11}}$` log tick labels on three of the twenty corpus
+    figures. Setting a script smaller than its base is not a defect; it is how
+    mathematics has been typeset for a century, and 7.0pt is exactly the
+    *maximum* text size Nature publishes for figure text.
+    """
+    status, detail = _type_size(r"$x_i$", 10)
+    assert status is True, detail
+    status, detail = _type_size(r"$\mathdefault{10^{-11}}$", 10)
+    assert status is True, detail
+
+
+def test_the_script_floor_is_where_latex_and_nature_agree():
+    """5.0 is not chosen, it is where two independent sources land.
+
+    LaTeX's own table maps every body size from 5pt to 25pt to a script and a
+    scriptscript size and never goes below 5pt at any of them. Nature publishes
+    5pt as the minimum for any text in a figure. A second-level script at a
+    10pt base lands at 4.9pt, under both, and fires; at an 11pt base it lands
+    at 5.39pt and does not.
+    """
+    assert cf.MATH_SCRIPT_FLOOR_PT == 5.0
+    assert _type_size(r"$x_{i_j}$", 11)[0] is True
+    assert _type_size(r"$x_{i_j}$", 10)[0] is False
+
+
+def test_matplotlib_still_shrinks_scripts_without_a_floor():
+    """The divergence being caught is matplotlib's, and it is pinned here.
+
+    LaTeX has three math sizes and `\\scriptscriptstyle` serves every level
+    below the first, so nesting deeper than two stops shrinking. matplotlib
+    multiplies by `SHRINK_FACTOR` for `NUM_SIZE_LEVELS` levels with no floor.
+    If a release ever clamps it, this row has nothing left to catch and this
+    test is where that shows up.
+    """
+    from matplotlib import _mathtext
+    assert _mathtext.SHRINK_FACTOR == 0.7
+    assert _mathtext.NUM_SIZE_LEVELS >= 3
+    sizes = [cf._script_min_pt(_labelled(lbl, 10)[1].xaxis.label)
+             for lbl in (r"$x_i$", r"$x_{i_j}$", r"$x_{i_{j_k}}$")]
+    plt.close("all")
+    assert sizes == pytest.approx([7.0, 4.9, 3.43], abs=1e-3), sizes
+    assert sizes[2] < 5.0, (
+        "matplotlib has started clamping script sizes; the gate this pins is "
+        "no longer catching anything")
+
+
+def test_the_script_measurement_does_not_depend_on_dpi():
+    """It is compared against an on-page floor, so it must not carry the
+    measuring dpi. Pinned because nothing else in the row would notice."""
+    from matplotlib.mathtext import MathTextParser
+    import matplotlib.font_manager as fm
+    prop = fm.FontProperties(size=11.0)
+    seen = {tuple(round(g[1], 6) for g in
+                  MathTextParser("path").parse(r"$x_{i_j}$", dpi=d,
+                                               prop=prop).glyphs)
+            for d in (72, 100, cf.MEASURE_DPI)}
+    assert len(seen) == 1, seen
+
+
+def test_a_two_line_label_carrying_mathtext_parses_per_line():
+    """Handing the whole string to the parser makes it warn that it has no
+    glyph for U+000A and substitute a dummy, printed at every audit of a figure
+    whose only crime is a two-line axis label."""
+    import warnings
+    fig, ax = _labelled("first line\n" + r"$x_{i_{j_{k}}}$", 11)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            measured = cf._script_min_pt(ax.xaxis.label)
+    finally:
+        plt.close(fig)
+    assert measured == pytest.approx(3.773, abs=1e-3)
+
+
+def test_an_unparsable_math_string_returns_no_measurement():
+    """A gate that raises is a hard fail, so a label with an unbalanced brace
+    must not report a defect in the checker as a defect in the figure.
+
+    Only the helper is exercised, and deliberately: matplotlib refuses to
+    render this figure at all, raising out of `_renderer` before any gate is
+    reached, so there is no audit to assert about. That makes the guard
+    belt-and-braces rather than a live path today, which is the right amount of
+    caution for a parser this file does not own and whose grammar moves between
+    releases.
+    """
+    fig, ax = _labelled(r"$\frac{1$", 11)
+    try:
+        assert cf._script_min_pt(ax.xaxis.label) is None
+    finally:
+        plt.close(fig)
+
+
+def test_a_usetex_string_is_exempt_because_latex_clamps():
+    """Exempt on the merits, not for convenience. The defect is matplotlib's
+    uncapped nesting; real LaTeX stops at scriptscript, so a string it
+    typesets has nothing to catch, and this file cannot measure it anyway."""
+    fig, ax = _labelled(r"$x_{i_{j_{k}}}$", 11)
+    try:
+        ax.xaxis.label.set_usetex(True)
+        assert cf._script_min_pt(ax.xaxis.label) is None
+    finally:
+        plt.close(fig)
+
+
 def test_placed_frac_measures_the_width_the_figure_actually_ships_at():
     """A half-width figure is half the size on the page. Measured as full
     width it is certified at twice the type it ships at, which is the wrong

@@ -582,6 +582,33 @@ nearly always cutting words.
 If text does not fit, cut it. "Acquisition function ranks the candidate
 molecules" becomes "Rank every candidate."
 
+**A sub- or superscript is measured, and against a lower floor.** Mathtext does
+not render at the size you asked for: each nesting level is drawn at 0.7 of the
+level above, so `$x_{i_{j_{k}}}$` set at 11pt puts a `k` on the page at 3.77pt
+while `get_fontsize()` still reports 11.0.
+
+Holding those glyphs to 7.5pt would be wrong, and measuring it that way is what
+showed it. A first-level subscript at a 10pt base lands at 7.0pt, which is
+Nature's stated *maximum* for figure text and entirely publishable; failing it
+condemns every log axis, because `$\mathdefault{10^{-11}}$` is matplotlib's own
+tick label and no author wrote it. Setting a script smaller than its base is not
+a defect. It is how mathematics has been typeset for a century.
+
+The floor for a script is 5pt, which is where two independent sources land. The
+LaTeX2e kernel's own table, in `fontmath.ltx`, maps every body size from 5pt to
+25pt to a script and a scriptscript size, and never sets math type below 5pt at
+any of them; Nature publishes 5pt as its minimum for any text in a figure.
+
+What that catches is matplotlib's alone. LaTeX has three math sizes and
+`\scriptscriptstyle` serves every level below the first, so nesting deeper than
+two stops shrinking. matplotlib, in `matplotlib._mathtext`, keeps multiplying by
+0.7 for six levels, down to a ninth of the base. Figures rendered through
+`usetex` are exempt for the same reason: real LaTeX clamps, so there is nothing
+to catch.
+
+The fix is to cut a level of nesting or raise the base size. `$x_{i_{j_{k}}}$`
+is nearly always better written as two symbols and a definition in the caption.
+
 **Text off the canvas has two fixes that are not fixes.** The Clipping gate
 fails when a string's bounding box crosses the canvas edge, and the cause is
 nearly always a figure authored at a size its labels do not fit in. Shrinking

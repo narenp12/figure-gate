@@ -53,6 +53,9 @@ behind a threshold this project enforces.
 - `check_figure.FORM_BAR_MIN_PATCHES` and
   `check_figure.FORM_BAR_BASELINE_TOL`, the two values deciding whether a run
   of rectangles standing on one edge is a bar chart.
+- `check_figure.MATH_SCRIPT_FLOOR_PT`, the type floor for a mathtext sub- or
+  superscript, which is lower than the floor for body text and sourced
+  separately.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
 
@@ -87,6 +90,11 @@ behind a threshold this project enforces.
   entirely out of boxes and arrows was reported as having no strokes at all,
   and its hairlines can newly fail. Spines and tick marks are still not
   measured, deliberately.
+- `Type size` measures mathtext sub- and superscripts rather than reading the
+  declared size, and holds them to `MATH_SCRIPT_FLOOR_PT` rather than to
+  `TYPE_FLOOR_PT`. A figure with a script nested more than two deep can newly
+  fail. A first-level script is unaffected, which is what keeps the row off
+  matplotlib's own log-axis tick labels. `usetex` figures are exempt.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -265,6 +273,46 @@ change working rather than noise: `gallery-rose` went from `no strokes to
 measure` to sixteen strokes, `gallery-schematic` from one to nine, and
 `gallery-callout` from one to two. Real content the gate had been blind to, all
 of it above the floor.
+
+**A 3.77pt glyph cleared a 7.5pt floor, and the obvious fix failed the corpus.**
+Mathtext draws each script level at 0.7 of the level above, so `$x_{i_{j_{k}}}$`
+set at a nominal 11pt puts a `k` on the page at 3.77pt while `get_fontsize()`
+reports 11.0 for the whole string.
+
+Measuring it is easy: matplotlib's parser returns one entry per glyph carrying
+the size that glyph is set at, so nothing here has to know the shrink factor,
+and the result is dpi-independent. Doing only that, and judging every glyph
+against `TYPE_FLOOR_PT`, sent three of the twenty corpus figures to a hard fail.
+Two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
+matplotlib's own log-axis tick label. No author wrote it, and the row's advice,
+"cut words, do not shrink type", cannot be acted on against it.
+
+That was the row being wrong rather than the corpus being wrong. Setting a
+script smaller than its base is how mathematics has been typeset for a century,
+and `TYPE_FLOOR_PT` is explicitly a *comfort* floor stricter than any journal's:
+the 7.0pt those tick labels render at is Nature's stated maximum for figure
+text, and the 6.6pt exponent on `gallery-encoding` is above Nature's, PNAS's and
+Science's minimums alike. A body floor applied to script glyphs is a category
+error.
+
+So scripts get their own floor, and 5.0 is where two independent sources land.
+The LaTeX2e kernel's `fontmath.ltx` maps every body size from 5pt to 25pt to a
+script and a scriptscript size and never sets math type below 5pt at any of
+them; Nature publishes 5pt as its minimum for any figure text. Both are recorded
+in `EXTERNAL_CLAIMS`.
+
+What that leaves the row catching is matplotlib's divergence and nothing else.
+LaTeX has three math sizes, and `\scriptscriptstyle` serves every level below
+the first, so nesting deeper than two stops shrinking; matplotlib multiplies by
+0.7 for six levels with no floor. At an 11pt base LaTeX would set that `k` at
+6pt and matplotlib sets it at 3.77. `usetex` figures are exempt on the same
+argument rather than for convenience: real LaTeX clamps, so there is nothing
+there to catch.
+
+With the sourced floor the corpus is clean, and it is not clean for want of
+exposure. Twenty figures, no verdict changes and no detail-string changes, with
+22 script-carrying strings across four figures actually measured; the smallest
+is 6.65pt against a 5.0 floor.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release

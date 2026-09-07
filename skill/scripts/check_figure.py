@@ -291,6 +291,40 @@ BOLD_WEIGHT_MIN = 600
 # words rather than shrinking type. Verified 2026-08-17; the quotes are in
 # `EXTERNAL_CLAIMS` in tests/test_prose_claims.py.
 TYPE_FLOOR_PT = 7.5
+
+# Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
+# `TYPE_FLOOR_PT`.
+#
+# Mathtext does not render at the size the author asked for. Each nesting level
+# of a script is drawn at `SHRINK_FACTOR = 0.7` of the level above, so an 11pt
+# label puts a first-level subscript on the page at 7.7pt and `$x_{i_{j_{k}}}$`
+# puts a `k` there at 3.77pt. Reading `get_fontsize()` reports 11.0 for all of
+# it, which is how a 3.77pt glyph cleared a 7.5pt floor.
+#
+# Judging those glyphs against the body floor is wrong, and measuring it that
+# way is what proved it: three of the twenty corpus figures went to a hard fail,
+# and two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
+# matplotlib's own log-axis tick label and which no author wrote. Setting a
+# script smaller than its base is not a defect, it is how mathematics has been
+# typeset for a century, and `TYPE_FLOOR_PT` is a *comfort* floor deliberately
+# stricter than any journal's.
+#
+# 5.0 is where two independent sources agree the floor actually is. LaTeX's own
+# table in `fontmath.ltx` maps every body size to a script and a scriptscript
+# size, and across the whole table, 5pt to 25pt, it never sets math type below
+# 5pt. Nature publishes the same number as its minimum for any text in a figure.
+# A first-level script at a 10pt base lands at 7.0pt, which is Nature's stated
+# *maximum* and entirely publishable; the deep nesting that produced 3.77pt is
+# not.
+#
+# The divergence being caught is matplotlib's alone. LaTeX has exactly three
+# math sizes and `\scriptscriptstyle` is the default for every level below the
+# first, so nesting deeper than two reuses it and the type stops shrinking.
+# matplotlib keeps multiplying by 0.7 for `NUM_SIZE_LEVELS = 6` levels, down to
+# 0.118 of the base. That is why `usetex` figures are exempt: real LaTeX clamps,
+# so there is nothing to catch. Verified 2026-09-07; the quotes are in
+# `EXTERNAL_CLAIMS` in tests/test_prose_claims.py.
+MATH_SCRIPT_FLOOR_PT = 5.0
 # Fraction of the content width below which `check_type_size` warns even when
 # every string clears the floor: a figure authored full width and placed in a
 # third of a column is measured against a page it will not be printed on.
@@ -1707,6 +1741,61 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
     return False, "; ".join(bits) + "  [FIX] use sharex/sharey"
 
 
+def _script_min_pt(t: Any) -> float | None:
+    """The smallest size a *shrunk* mathtext glyph in this string renders at.
+
+    None when the string has no shrunk glyph to measure: it is not mathtext, it
+    is going to a real LaTeX installation, mathtext cannot parse it, or it is
+    all at the base size. A first-level script is included; what is excluded is
+    the unshrunk part, which `check_type_size` already measures by reading the
+    property.
+
+    This measures rather than estimating. matplotlib's own parser returns one
+    entry per glyph carrying the size that glyph is set at, so the 0.7 shrink
+    factor is never written down here and a future change to it needs no edit.
+    The parse is dpi-independent, which a test pins, so this does not have to
+    agree with `MEASURE_DPI` to be right.
+
+    `usetex` is exempt on the merits rather than for convenience. The defect is
+    matplotlib's uncapped nesting; LaTeX clamps at `\\scriptscriptstyle`, so a
+    string it typesets has nothing to catch.
+
+    A string mathtext cannot parse falls back to None. A gate that raises is a
+    hard fail, and failing a figure because a label has an unbalanced brace is
+    a defect in the checker reported as a defect in the figure.
+    """
+    s = str(t.get_text())
+    if not s or t.get_usetex():
+        return None
+
+    from matplotlib import cbook
+    from matplotlib.mathtext import MathTextParser
+
+    declared = float(t.get_fontsize())
+    glyphs = []
+    try:
+        prop = t.get_fontproperties().copy()
+        prop.set_size(declared)
+        parser = MathTextParser("path")
+        # Per line, the way `Text` lays one out. Handing the whole string over
+        # makes the parser warn that it has no glyph for U+000A and substitute
+        # a dummy, which is a warning printed at every audit of a figure whose
+        # only crime is a two-line axis label.
+        for line in s.splitlines() or [s]:
+            if line and cbook.is_math_text(line):
+                glyphs.extend(parser.parse(line, dpi=72, prop=prop).glyphs)
+    except Exception:                                            # noqa: BLE001
+        return None
+    if not glyphs:
+        return None
+
+    # Anything at the base size is not a script. The margin absorbs the float
+    # error in a chain of multiplications by 0.7 and nothing else; one shrink
+    # level is a 30% drop.
+    shrunk = [float(g[1]) for g in glyphs if float(g[1]) < declared * 0.99]
+    return min(shrunk) if shrunk else None
+
+
 def check_type_size(fig: Figure, r: Any, scale: float | None = None,
                     placed_frac: float = 1.0,
                     venue: str | None = None) -> tuple[bool | str, str]:
@@ -1717,24 +1806,50 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     missed anything set through rcParams, anything computed, and anything set by
     a helper. Reading `get_fontsize()` off the artists that actually rendered
     reports what is on the page instead of what is in the source.
+
+    Mathtext is measured rather than read, against its own floor. A script is
+    drawn at 0.7 of the level above it, so the property is not the size on the
+    page, and the sizes a script legitimately reaches are below what body text
+    may. Both halves matter: reading the property let a 3.77pt glyph pass, and
+    judging a script against the body floor failed matplotlib's own log tick
+    labels. See `MATH_SCRIPT_FLOOR_PT`.
     """
     scale = page_scale(fig, placed_frac, venue) if scale is None else scale
     ghosts = _ghost_ticks(fig)
+    texts = [t for t, _ in _texts(fig, r) if id(t) not in ghosts]
     sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
-             for t, _ in _texts(fig, r) if id(t) not in ghosts]
+             for t in texts]
     if not sizes:
         return True, "no text"
+
+    scripts = []
+    for t in texts:
+        pt = _script_min_pt(t)
+        if pt is not None and pt * scale < MATH_SCRIPT_FLOOR_PT:
+            scripts.append((round(pt * scale, 1), str(t.get_text())[:22]))
+
     small = sorted({(pt, s) for pt, s in sizes if pt < TYPE_FLOOR_PT})
     mn = min(pt for pt, _ in sizes)
-    if not small:
-        detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
-        if placed_frac < PLACED_FRAC_WARN:
-            return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
-                           " — labels may be too small to read; author at the"
-                           " width it ships at")
-        return True, detail
-    return False, (f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: {small[:4]}"
-                   "  [FIX] cut words, do not shrink type")
+    if small or scripts:
+        bits = []
+        if small:
+            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: "
+                        f"{small[:4]}  [FIX] cut words, do not shrink type")
+        if scripts:
+            bits.append(
+                f"mathtext script under {MATH_SCRIPT_FLOOR_PT}pt on page at "
+                f"scale {scale}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
+                "of nesting, or raise the base size  [WHY] matplotlib shrinks "
+                "0.7 per script level with no floor. LaTeX stops at "
+                "scriptscript and never sets math type under 5pt")
+        return False, "; ".join(bits)
+
+    detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
+    if placed_frac < PLACED_FRAC_WARN:
+        return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
+                       " — labels may be too small to read; author at the"
+                       " width it ships at")
+    return True, detail
 
 
 def _axes_drew_anything(ax: Axes) -> bool:

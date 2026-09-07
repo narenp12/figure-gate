@@ -38,7 +38,7 @@ panels first and the child axes after them.
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points sit close enough to some other point for the two marks to touch on the page *(advisory)* |
 | Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
-| Type size | `TYPE_FLOOR_PT = 7.5` | a string renders under 7.5pt *on the printed page* |
+| Type size | `TYPE_FLOOR_PT = 7.5`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 7.5pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. Scripts are measured rather than read off the property, and held to the lower floor because a script is set smaller than its base by convention |
 | Line weight | `LINE_FLOOR_PT = 1.0` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Gridlines, spines and tick marks are furniture and are not measured |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |

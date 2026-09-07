@@ -848,9 +848,28 @@ UNRESOLVED_SPANS = {
                "in the reader's working directory, not in this repository",
     "geometry": "a LaTeX package, named where the guide explains how to read a "
                 "text width out of a document",
+    "fontmath.ltx": "the LaTeX2e kernel file carrying the DeclareMathSizes "
+                    "table, cited as the source for the 5pt script floor; it "
+                    "lives in a TeX distribution, not in this checkout",
     "OSError: not a valid package style": "the exception matplotlib raises for "
                                           "a style path it cannot find, quoted "
                                           "so a reader recognises it",
+    # --- mathtext, quoted as a reader would type it ---------------------------
+    # These are strings a figure author writes into a label, not names in any
+    # module. `$x_{i_{j_{k}}}$` is the worked example the script floor exists
+    # for; `$\mathdefault{...}$` is what matplotlib itself puts in a log tick
+    # label, quoted so a reader recognises it in their own figure.
+    "$x_{i_{j_{k}}}$": "a mathtext string a figure author writes, quoted as "
+                       "the worked example for the script floor",
+    "$\\mathdefault{10^{-11}}$": "the mathtext matplotlib generates for a log "
+                                 "axis tick label, quoted so a reader "
+                                 "recognises it on their own figure",
+    "usetex": "matplotlib's rcParam for handing strings to a real LaTeX "
+              "installation, named where the guide says such figures are "
+              "exempt; the resolvers see this project's Python, not rcParams",
+    "get_fontsize()": "the matplotlib Text accessor the guide contrasts with a "
+                      "measured size; a method on somebody else's class rather "
+                      "than a name in these files",
     "(a)": "a panel label in a figure, quoted as it appears on the figure",
     "(b)": "a panel label in a figure, quoted as it appears on the figure",
     "#": "the character itself, in the sentence about style-sheet colours "
@@ -1411,6 +1430,37 @@ EXTERNAL_CLAIMS = {
                  '"Size symbols so that they will be distinguishable when the '
                  'figure is reduced (6 point minimum)" and "minimum of 0.5 '
                  'point at the final reduced size" for line widths.',
+    },
+    "LaTeX math script sizes": {
+        "document": "style-guide.md",
+        "anchor": "never sets math type below 5pt",
+        "source": "LaTeX2e kernel, fontmath.ltx, the DeclareMathSizes table, "
+                  "read at texmf-dist/tex/latex/base/fontmath.ltx; LaTeX2e "
+                  "font selection guide on math styles",
+        "verified": "2026-09-07",
+        "quote": 'fontmath.ltx declares {text}{text}{script}{scriptscript} as '
+                 '5->{5}{5}, 6->{5}{5}, 7->{5}{5}, 8->{6}{5}, 9->{6}{5}, '
+                 '10->{7}{5}, 11->{8}{6}, 12->{8}{6}, 14->{10}{7}, '
+                 '17->{12}{10}, 20->{14}{12}, 25->{20}{17}. The smallest math '
+                 'size anywhere in the table is 5pt. On the clamp: '
+                 '"\\\\scriptstyle (default for first-level sub and '
+                 'superscripts)" and "\\\\scriptscriptstyle (default for '
+                 'higher-level sub and superscripts)", so nesting below the '
+                 'second level reuses scriptscript and stops shrinking.',
+    },
+    "matplotlib mathtext shrink": {
+        "document": "style-guide.md",
+        "anchor": "0.7 of the level above",
+        "source": "matplotlib._mathtext, SHRINK_FACTOR and NUM_SIZE_LEVELS, "
+                  "read from the installed package",
+        "verified": "2026-09-07",
+        "quote": "SHRINK_FACTOR = 0.7 and NUM_SIZE_LEVELS = 6 in "
+                 "matplotlib/_mathtext.py, applied per nesting level with no "
+                 "absolute floor. Measured at a 10pt base, the glyph sizes "
+                 "are 10.0, 7.0, 4.9, 3.43, 2.401, 1.681 and then clamped by "
+                 "the level count rather than by any size. "
+                 "test_matplotlib_still_shrinks_scripts_without_a_floor "
+                 "asserts the first three against this.",
     },
     "Type 3 fonts": {
         "document": "style-guide.md",
