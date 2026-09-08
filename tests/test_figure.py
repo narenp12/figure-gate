@@ -3533,6 +3533,61 @@ def test_polyline_does_not_bridge_a_gap_in_the_data():
     plt.close(fig)
 
 
+def test_a_strokeless_line_is_read_as_marks_not_as_a_polyline():
+    """A `Line2D` that draws no stroke has no chords to measure a label against.
+
+    `plot(..., linestyle="none", marker=",")` is the ordinary spelling of a
+    dense cloud, and it is a `Line2D`, so `_series_px` sent it to `_polyline_px`
+    and densified the chords between marks the figure never joined. That is the
+    failure `_densify_px`'s docstring warns about and `_marks_px` already exists
+    to avoid in `_rides_on`; the same discriminator belongs here.
+
+    `gallery.orbit` is the figure that pays for it: 168,000 marks in scattered
+    order came back as 10,308,917 points, 157 MB, 61x the input.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    xy = np.array([(0.5, 0.5), (9.5, 9.5)] * 10)
+    cloud, = ax.plot(xy[:, 0], xy[:, 1], linestyle="none", marker=",")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    fig.canvas.draw()
+    got = cf._series_px(cloud, ax)
+    plt.close(fig)
+
+    assert got is not None
+    assert len(got) == len(xy), (
+        f"{len(got) - len(xy)} points invented along chords the figure never "
+        "drew"
+    )
+
+
+def test_a_cloud_drawn_as_plot_markers_is_not_a_rival_along_its_chords():
+    """The correctness half of the same defect, at the gate.
+
+    The cloud's marks sit in two far corners and nothing it draws comes near
+    the centre. Densified, its chords run corner to corner straight under the
+    label on the curve that owns it, so `Alpha` read as 0px from a neighbour
+    and the gate failed a figure whose ink is plainly unambiguous.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    ax.plot([0, 10], [5, 5], color=OKABE[0], label="Alpha")
+    corners = np.array([(0.4, 0.4), (9.6, 9.6)] * 8)
+    ax.plot(corners[:, 0], corners[:, 1], linestyle="none", marker="o",
+            color=OKABE[1], label="Beta")
+    ax.annotate("Alpha", (5, 5), ha="center", va="center")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+
+    assert gates(rows)["Label attribution"] is True, (
+        "the cloud's marks are in the corners; only its invented chords are "
+        "anywhere near the label"
+    )
+
+
 def test_label_attribution_sees_a_scatter_as_a_series():
     """`ax.lines` alone left a point cloud invisible twice over: it could not
     own a label, and it could not be the neighbour that made one ambiguous. A

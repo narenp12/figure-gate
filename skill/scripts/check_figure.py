@@ -3139,11 +3139,23 @@ def _is_filled(artist: Any) -> bool:
 def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
     """The positions one series actually put on the page, in display pixels.
 
-    A `Line2D` is a stroke and gets densified. A scatter is a set of marks and
-    is already the answer, so its offsets go through the transform its own
+    A `Line2D` that draws a stroke gets densified. A scatter is a set of marks
+    and is already the answer, so its offsets go through the transform its own
     collection uses rather than through `ax.transData`, which is the same
     transform on an ordinary axes and is not on one with an offset transform of
     its own.
+
+    A `Line2D` that draws no stroke is marks too, and is read as marks. It has
+    no chords, so densifying one invents a polyline joining marks the figure
+    never connected, which is the failure `_densify_px`'s docstring warns about
+    and `_marks_px` already exists to avoid one gate over. `_artist_kind` is the
+    discriminator in both places. The cost of getting this wrong is not only a
+    wrong verdict: `gallery.orbit` draws 168,000 points as `linestyle="none",
+    marker=","` in scattered order, and densifying to a 2px gap returned
+    10,308,917 of them, 157 MB, 61x the input, which is most of what an
+    `audit()` of that figure peaked at. Markers are read from the raw vertices
+    rather than through `_drawstyle_xy` because matplotlib draws them there:
+    "Markers *must* be drawn ignoring the drawstyle" (`lines.py`, `Line2D.draw`).
 
     A scatter is recognised by carrying sizes, the same discriminator
     `check_overplotting` uses. Everything else with paths is read as paths.
@@ -3169,6 +3181,12 @@ def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
     from matplotlib.lines import Line2D
     import numpy as np
     if isinstance(artist, Line2D):
+        if _artist_kind(artist) == "marks":
+            pts = _marks_px(artist, ax)
+            if pts is None:
+                return None
+            pts = pts[np.isfinite(pts).all(axis=1)]
+            return pts if len(pts) else None
         return _polyline_px(artist, ax)
     try:
         if len(getattr(artist, "get_sizes", lambda: [])()):

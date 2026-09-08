@@ -159,6 +159,11 @@ behind a threshold this project enforces.
 - `test_a_two_line_label_carrying_mathtext_parses_per_line` names the warning
   it guards against instead of raising on every warning.
 - The macOS CI leg runs pytest at `-n 2` rather than `-n auto`.
+- `Label attribution` reads a stroke-less `Line2D` as marks rather than as a
+  polyline. `check_figure._series_px` sends one to `_marks_px`, so a cloud
+  drawn as `plot(..., linestyle="none", marker=...)` is no longer measured
+  along chords the figure never drew. A label that read as ambiguous only
+  against those chords now passes.
 
 ### Why it changed
 
@@ -838,6 +843,42 @@ measurement read against a knob nobody pinned. The record is taken at the first
 audit because there is no hook at construction, so a figure whose first audit
 happens outside its sheet records the wrong baseline and is then wrong
 consistently rather than differently each time.
+
+**A gate that invents its own geometry pays for it twice.** `_series_px` sent
+every `Line2D` to `_polyline_px` and so to `_densify_px`, including one that
+draws no stroke. `plot(..., linestyle="none", marker=",")` is the ordinary
+spelling of a dense cloud, and `gallery.orbit` draws 168,000 points that way in
+scattered order: densifying to a 2px gap returned **10,308,917 points, 157 MB,
+61x the input**. An `audit()` of that figure peaked at 426 MB, 368 MB of it
+held by a polyline nobody drew.
+
+The correctness half came first. The gate was measuring a label against chords
+joining marks the figure never connected, which is exactly what `_densify_px`'s
+docstring warns about and what `_marks_px` was written to avoid one gate over,
+in `_rides_on`. Both now use the same discriminator, `_artist_kind`, which
+already returned `marks` for this artist. Marks are read from the raw vertices
+rather than through `_drawstyle_xy`, because matplotlib draws them there:
+"Markers *must* be drawn ignoring the drawstyle", `Line2D.draw`.
+
+The memory was the second half, and it is what turned a wrong verdict into a
+red CI leg. The macOS runner has half the memory of the Linux one, and the two
+`orbit` legs of `tests/test_renderer_invariance.py` build and audit that figure
+at five authored dpi each. Measured on the two tests that crashed their xdist
+workers: **991 MB peak resident, down to 417 MB**, and 14.4s down to 4.4s. The
+two `tests/test_example.py` subprocesses that came back on SIGKILL measure 641
+MB down to 350 MB. The `-n 2` cap on the macOS leg was headroom rather than a
+repair and is left in place; it is now headroom over a figure that no longer
+needs it.
+
+Corpus exposure, since a clean sweep proves nothing without it: 21 figures, 0
+verdict changes, and **9 stroke-less `Line2D` artists across 22 builders**, of
+which eight carry 19 points or fewer. Only `orbit` is large enough for the
+difference to be visible, and `orbit` matches no direct label, so the sweep was
+exposed to the memory cost and to almost none of the correctness change. The
+evidence for that half is the adversarial figure in
+`test_a_cloud_drawn_as_plot_markers_is_not_a_rival_along_its_chords`, whose
+marks sit in two far corners while its invented chords run straight under the
+label on the curve that owns it.
 
 ### Changed
 
