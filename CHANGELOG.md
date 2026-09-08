@@ -69,6 +69,9 @@ behind a threshold this project enforces.
 - `check_figure.MARK_ORNAMENT_GAP`, the factor by which the largest mark has to
   exceed the *next* largest before it reads as an ornament rather than as the
   top of a graded run. It picks the remedy, not the verdict.
+- `check_figure.ALPHA_RAMP_MIN_STEPS`, the number of distinct non-opaque alphas
+  on overlapping fills of one colour at which the run reads as one interval
+  encoding rather than as that many separate decisions.
 - `REMEDIES` (`suggest_fixes`) gains a second `Mark ratio` entry, for the case
   where the sizes are graded and clipping them would flatten an encoding. The
   existing clip entry keeps its code and its position; its suggestion text now
@@ -590,6 +593,61 @@ which is the same answer `Form` gives about a truncated axis. The verdict is
 unchanged in both cases. Corpus exposure: 1 of 21 panels carries more than one
 scatter size, `gallery-density` at 110 distinct sizes and 3.8x, which passes
 and did not move.
+
+**`Contrast stack` over-fired on both of the forms where alpha is doing real
+work.** Two complaints, and both were the row asking a question the figure was
+not answering.
+
+*A fan chart was allowed two bands.* The per-point branch has always held that
+a continuous alpha encoding on one artist counts once, "because a continuous
+encoding is a single decision". A fan chart is that same encoding spelled
+across separate artists, and it was counted once per band. Worse, the opaque
+median line the row itself demands for a focal point took one of the three
+slots, so with `ALPHA_LEVELS_MAX` at 3 a **three**-band fan already failed, and
+the printed advice was to draw fewer prediction intervals. Non-opaque alphas on
+overlapping fills of one colour now collapse to one level once there are
+`ALPHA_RAMP_MIN_STEPS` of them.
+
+The collapse is scoped to fills, and that scope is the whole of it. Overlapping
+fills in one colour are one interval encoding; *lines* in one colour are
+separate series told apart by opacity, which is precisely the haze this row
+exists to catch, and
+`test_contrast_stack_counts_alpha_levels_inside_an_inset` had six of them
+pinned. An earlier draft grouped by colour alone and turned that pin green.
+
+*A single flat alpha is not a stack.* "Nothing is opaque, so the figure has no
+focal point" presupposes something to focus on among alternatives. A density
+scatter drawn wholly at `alpha=0.3` asserts no hierarchy and has no ranking to
+leave headless, and the remedy the row printed - raise the artist that carries
+the point to alpha 1 - destroys the encoding it is aimed at, the same shape of
+defect as the `Mark ratio` clip above. The opacity test now applies only where
+more than one level is present. A per-point ramp also lands at one level and is
+*not* exempt, because there the ramp is the hierarchy; two levels with nothing
+opaque still fail.
+
+That leaves "is this figure too pale to read", which belongs to `Ink coverage`
+and is measured off pixels rather than guessed from alpha. Measured: a
+3000-point scatter at `alpha=0.01` still lays 12% ink across its panel and
+reads perfectly well as a density field, while three lines at `alpha=0.02`
+reach 1% and that row warns. Alpha alone cannot tell those apart.
+
+A contrast floor was built here first and then thrown away, which is the part
+worth keeping. Compositing each artist over its panel and requiring WCAG 2.1's
+3:1 non-text ratio sounds principled and condemns the project's own palette:
+Okabe-Ito orange `#E69F00` measures **2.25:1 on white at full opacity** and can
+never clear that floor at any alpha, while the green needs 0.9 and the blue
+0.7. It is also a floor this project deliberately keeps advisory in
+`check_palette`, where a sub-3:1 hue is legal and merely obligates a second
+channel. Borrowing it as a hard gate would have been the same category error as
+judging a mathtext script against the body type floor.
+`test_the_contrast_floor_this_row_does_not_use_would_condemn_okabe_ito` pins
+the measurement so the idea does not come back unexamined.
+
+Corpus exposure: 3 of 21 figures carry more than one alpha level or any filled
+region at all, `gallery-density`, `gallery-orbit` and `gallery-uncertainty`.
+None has three bands, so the corpus is not exposed to the collapse and its
+clean sweep says nothing about it; the evidence is an eleven-case constructed
+matrix instead. 0 verdict changes.
 
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside

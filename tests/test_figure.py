@@ -538,13 +538,140 @@ def test_an_alpha_ramp_is_one_level_not_sixteen():
 
 
 def test_an_array_alpha_with_nothing_opaque_still_fails():
-    """The over-fire fix must not blind the row to the defect it exists for."""
+    """The over-fire fix must not blind the row to the defect it exists for.
+
+    Also the boundary of the flat-alpha exemption below. This lands at one
+    level too, and it is not exempt: the ramp itself asserts a ranking, so
+    nothing being opaque leaves that ranking headless."""
     fig, ax = plt.subplots(figsize=(3, 2))
     ax.scatter([0, 1, 2], [0, 1, 2], s=40, alpha=[0.2, 0.4, 0.6])
     status, detail = cf.check_contrast_stack(fig)
     assert status is False
     assert "nothing is opaque" in detail
     plt.close(fig)
+
+
+# --- alpha that is doing work: a fan chart, and a flat wash
+
+def _fan(ax, n, colour):
+    """`n` nested prediction bands about one median line, one colour."""
+    import numpy as np
+    x = np.linspace(0, 10, 100)
+    mid = np.sin(x)
+    for i, w in enumerate(np.linspace(2.5, 0.5, n)):
+        ax.fill_between(x, mid - w, mid + w, color=colour, alpha=0.12 * (n - i))
+    ax.plot(x, mid, color=colour, lw=1.6)
+
+
+def test_a_fan_chart_is_one_alpha_decision_not_one_per_band():
+    """The per-point branch has always held that a continuous alpha encoding
+    is a single decision. A fan chart is that encoding spelled across separate
+    artists, and it was counted once per band."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    _fan(ax, 5, OKABE[0])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail.count(",") == 1, ("the five bands should have collapsed to "
+                                    f"one level beside the median: {detail}")
+
+
+def test_a_three_band_fan_chart_was_failing_on_the_line_the_row_demands():
+    """The sharpest form of the defect. With `ALPHA_LEVELS_MAX` at 3, the
+    opaque median line this row requires for a focal point took one of the
+    three slots, so a fan chart was allowed two bands before it failed and the
+    advice was to draw fewer prediction intervals."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    _fan(ax, 3, OKABE[0])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_a_fan_chart_with_no_median_line_is_still_headless():
+    """The over-fire control for the collapse. Bands alone assert a ranking
+    with nothing at the top of it, which is the defect the opacity half is
+    for, and collapsing them must not hide it."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    x = np.linspace(0, 10, 50)
+    for i, w in enumerate([2.5, 1.7, 0.9]):
+        ax.fill_between(x, -w, w, color=OKABE[0], alpha=0.15 * (4 - i))
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False and "nothing is opaque" in detail, detail
+
+
+def test_graded_lines_of_one_colour_are_haze_and_not_a_fan():
+    """The other over-fire control, and the reason the collapse is scoped to
+    filled regions. Overlapping fills in one colour are one interval encoding;
+    lines in one colour are separate series told apart by opacity, which is
+    exactly the haze this row exists to catch."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for v in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65):
+        ax.plot([0, 1], [v, v], alpha=v, lw=2, color=OKABE[3])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False, detail
+    assert "0.45" in detail, ("the six lines collapsed, and they are six "
+                              f"decisions: {detail}")
+
+
+def test_a_flat_single_alpha_is_not_a_stack():
+    """"Nothing is opaque, so the figure has no focal point" presupposes
+    something to focus on among alternatives. A density scatter drawn wholly
+    at one alpha asserts no hierarchy, and the remedy the row printed - raise
+    the artist that carries the point to alpha 1 - destroys the encoding."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.scatter(rng.normal(size=3000), rng.normal(size=3000), s=8,
+               color=OKABE[0], alpha=0.3)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_whether_a_pale_figure_reads_is_measured_off_pixels_not_alpha():
+    """Why the flat-alpha exemption does not open a hole. Alpha alone cannot
+    tell a readable density field from an invisible one, and `Ink coverage`
+    can: 3000 marks at alpha 0.01 still lay ink across the panel, while three
+    lines at 0.02 do not and that row warns."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.scatter(rng.normal(size=3000), rng.normal(size=3000), s=8,
+               color=OKABE[0], alpha=0.01)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] is True
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i in range(3):
+        ax.plot([0, 1], [i, i], color=OKABE[i], alpha=0.02, lw=1.6)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+
+
+def test_the_contrast_floor_this_row_does_not_use_would_condemn_okabe_ito():
+    """A rejected approach, pinned with the measurement that rejected it.
+
+    Compositing each artist over its panel and requiring WCAG 2.1's 3:1
+    non-text ratio sounds principled and fails the project's own palette.
+    Okabe-Ito orange never clears it at any alpha, including full opacity, and
+    the green needs 0.9. It is also a floor `check_palette` deliberately keeps
+    advisory, where a sub-3:1 hue is legal and merely obligates a second
+    channel."""
+    import numpy as np
+    from matplotlib.colors import to_rgb
+    page = np.array([255.0, 255.0, 255.0])
+    opaque = {name: cf._contrast_255(np.array(to_rgb(hexc)) * 255.0, page)
+              for name, hexc in (("orange", "#E69F00"), ("green", "#009E73"),
+                                 ("blue", "#0072B2"))}
+    assert opaque["orange"] < 3.0, opaque
+    assert round(opaque["orange"], 2) == 2.25, opaque
+    assert opaque["green"] > 3.0 and opaque["blue"] > 3.0, opaque
 
 
 def test_mark_ratio_catches_an_ornamental_star():

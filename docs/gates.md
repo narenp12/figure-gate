@@ -34,7 +34,7 @@ panels first and the child axes after them.
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
 | Text collision | oriented box overlap | two text boxes overlap, rotation included, tick labels on a shared axis exempted |
 | Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
-| Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels |
+| Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour are an interval encoding drawn once and count as a single level, so a fan chart's bands are one decision rather than one each. A single flat alpha asserts no hierarchy and is not judged for a focal point; whether a pale figure reads at all is the Ink coverage row, measured off pixels |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
 | Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
@@ -145,7 +145,7 @@ mostly because the answer is to draw something else.
 | Clipping | Turn on `constrained_layout`, or widen the figure | yes |
 | Text collision | Move one of the two named strings. Which one is free is yours to know | |
 | Text readability | Move the label to clear ground, or case it against the ink under it | |
-| Contrast stack | Take one artist to alpha 1, and keep to three alpha levels | yes |
+| Contrast stack | Take one artist to alpha 1, and keep to three alpha levels. A graded set of bands counts as one level, so a fan chart needs its median line rather than fewer intervals | yes |
 | Mark ratio | Clip the size array so the largest mark is 5x the smallest, when one mark is an ornament among marks otherwise alike. When the sizes are graded they encode a quantity and clipping flattens it, so carry the quantity by position instead | yes |
 | Overplotting | Thin the counts, or switch to `hexbin`. Alpha does not move this row | yes |
 | Axis redundancy | `sharex`/`sharey` at creation, or `ax.label_outer()` after | yes |

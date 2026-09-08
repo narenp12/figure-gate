@@ -158,6 +158,12 @@ METRIC_RC_KEYS = (
 DRAW_RC_ATTR = "_figure_gate_metric_rc"
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
+# Distinct non-opaque alphas on artists of one colour, at or above which the run
+# reads as a graded family drawn once rather than as that many separate
+# decisions. Three, for the same reason `RAMP_MIN_STEPS` is three: two values
+# are a pair and fit inside `ALPHA_LEVELS_MAX` regardless, so collapsing them
+# would change an answer that was never wrong.
+ALPHA_RAMP_MIN_STEPS = 3
 # The largest mark reads as an ornament rather than as the top of a graded run
 # when it exceeds the *next* largest by this factor. It picks the remedy, not
 # the verdict: a graded run is a size encoding, and clipping it is the wrong
@@ -1347,16 +1353,88 @@ def _baked_alphas(a: Any) -> list[float]:
     return out
 
 
+def _artist_rgb(a: Any) -> tuple[float, float, float] | None:
+    """One representative RGB for an artist, ignoring its alpha.
+
+    Only ever used to group artists into colour families, so which of several
+    colours an artist carries is not important as long as the choice is
+    consistent: the four bands of a fan chart are drawn in one colour and have
+    to land in one group.
+    """
+    from matplotlib.colors import to_rgba_array
+
+    for name in ("get_facecolor", "get_edgecolor", "get_color"):
+        getter = getattr(a, name, None)
+        if getter is None:
+            continue
+        try:
+            rgba = to_rgba_array(getter())
+        except (ValueError, TypeError):
+            continue
+        for row in rgba:
+            if row[3] > 0.0:
+                return (round(float(row[0]), 3), round(float(row[1]), 3),
+                        round(float(row[2]), 3))
+    return None
+
+
 def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
-    tail of alpha values reads as haze rather than hierarchy."""
+    tail of alpha values reads as haze rather than hierarchy.
+
+    Both halves used to over-fire, and on the two forms where alpha is doing
+    real work rather than decorating.
+
+    **A graded run of one colour is one decision, not one per band.** The
+    per-point branch below has always said so: an alpha array on a single
+    artist counts once, because "a continuous encoding is a single decision". A
+    fan chart is that same encoding spelled across separate artists, and it was
+    counted once per band. With `ALPHA_LEVELS_MAX` at 3 and the opaque median
+    line the row itself demands taking one of the three slots, a fan chart was
+    allowed **two** bands before it failed, and the row's advice was to draw
+    fewer prediction intervals. Non-opaque alphas on artists sharing a colour
+    now collapse to one level once there are `ALPHA_RAMP_MIN_STEPS` of them.
+    Artists of different colours never collapse, so five series at five alphas
+    still reads as five decisions, which is the case this half is for.
+
+    **A single alpha is not a stack.** "Nothing is opaque, so the figure has no
+    focal point" presupposes something to focus on among alternatives. A
+    density scatter drawn wholly at `alpha=0.3` asserts no hierarchy and has no
+    ranking to top out, and the remedy the row printed - raise the artist that
+    carries the point to alpha 1 - destroys the encoding it is aimed at, the
+    same defect `check_mark_ratio`'s clip remedy carried. The opacity test now
+    applies only where there is more than one level, which is where an author
+    has built a hierarchy and left it headless. Two levels with nothing opaque
+    still fail.
+
+    **Whether a pale figure is visible at all is `check_ink`'s question, not
+    this one, and it is measured off pixels rather than guessed from alpha.**
+    Measured: a 3000-point scatter at `alpha=0.01` still lays 12% ink across
+    the panel and is perfectly readable as a density field, while three lines
+    at `alpha=0.02` reach 1% and `Ink coverage` warns. Alpha alone cannot tell
+    those apart and the render can.
+
+    A contrast floor was tried here first and is the wrong tool, for the reason
+    worth recording. Compositing each artist over its panel and requiring WCAG
+    2.1's 3:1 non-text ratio sounds principled and condemns the project's own
+    palette: Okabe-Ito orange `#E69F00` measures **2.25:1 on white at full
+    opacity** and can never clear the floor at any alpha, and the green needs
+    0.9. That floor is also one this project deliberately keeps advisory, in
+    `check_palette`, where a sub-3:1 hue is legal and merely obligates a second
+    channel. Borrowing it as a hard gate here would have been the same category
+    error as judging a mathtext script against the body type floor.
+    """
     import numpy as np
 
     alphas: list[float] = []
+    families: dict[Any, set[float]] = {}
+    ranked = False
     for ax in _all_axes(fig):
+        collections_here = set(map(id, ax.collections))
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
             if not a.get_visible():
                 continue
+            before = len(alphas)
             al = a.get_alpha()
             # An unset alpha does not mean opaque; it means opacity was not
             # passed as a keyword, and it may still be baked into the colour.
@@ -1391,12 +1469,48 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
                     solid_here = float(values.max())
                     alphas.append(round(solid_here if solid_here >= OPAQUE_ALPHA_MIN
                                         else float(values.min()), 2))
+                    if float(values.min()) != solid_here:
+                        ranked = True       # the ramp itself is the hierarchy
+            # Only filled regions are grouped. A run of overlapping fills in one
+            # colour is an interval encoding drawn once, which is a fan chart;
+            # a run of LINES in one colour is several series told apart by
+            # opacity, which is the haze this row exists to catch, and
+            # `test_contrast_stack_counts_alpha_levels_inside_an_inset` pins
+            # exactly that at six lines of one colour.
+            if id(a) in collections_here:
+                key = _artist_rgb(a)
+                if key is not None:
+                    families.setdefault(key, set()).update(
+                        v for v in alphas[before:] if v < OPAQUE_ALPHA_MIN)
     if not alphas:
         return True, "no data artists"
-    levels = sorted(set(alphas))
+
     solid = any(x >= OPAQUE_ALPHA_MIN for x in alphas)
-    ok = len(levels) <= ALPHA_LEVELS_MAX and solid
+    # A graded run of one colour is one decision. Drop every member of such a
+    # run and put back a single representative, so the run costs one slot
+    # rather than one per band. Opacity is read off the raw values above,
+    # because whether anything is solid is a fact about pixels.
+    graded = {v for run in families.values() if len(run) >= ALPHA_RAMP_MIN_STEPS
+              for v in run}
+    if graded:
+        ranked = True
+    kept = {v for v in alphas if v not in graded}
+    for run in families.values():
+        if len(run) >= ALPHA_RAMP_MIN_STEPS:
+            kept.add(max(run))
+    levels = sorted(kept)
+
+    # A flat alpha is not a stack: one level and no ramp anywhere means no
+    # hierarchy is being asserted, so there is nothing to leave headless.
+    # `ranked` is what keeps this narrow. A per-point alpha array also lands at
+    # one level, and there the ramp IS the hierarchy, so nothing opaque really
+    # is a defect. Whether a pale figure is visible at all is `check_ink`'s
+    # question, and it reads pixels rather than alphas.
+    if len(levels) == 1 and not solid and not ranked:
+        return True, f"alpha levels {levels} (one flat level, so no stack to rank)"
+
     note = ""
+    ok = len(levels) <= ALPHA_LEVELS_MAX and solid
     if not solid:
         note = ("  [FIX] raise the artist that carries the point to alpha 1"
                 "  [WHY] nothing is opaque, so the figure has no focal point")
