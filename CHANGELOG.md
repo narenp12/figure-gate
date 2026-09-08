@@ -66,6 +66,14 @@ behind a threshold this project enforces.
 - `check_figure.bars_rest_on_a_shared_edge`, whether a panel's bars stand on
   one edge or each carry their own offset, which is what separates a bar chart
   from a Gantt chart or a waterfall.
+- `check_figure.MARK_ORNAMENT_GAP`, the factor by which the largest mark has to
+  exceed the *next* largest before it reads as an ornament rather than as the
+  top of a graded run. It picks the remedy, not the verdict.
+- `REMEDIES` (`suggest_fixes`) gains a second `Mark ratio` entry, for the case
+  where the sizes are graded and clipping them would flatten an encoding. The
+  existing clip entry keeps its code and its position; its suggestion text now
+  says which case it is for and what it costs. A caller reading `REMEDIES` by
+  index rather than by `gate` sees the row move.
 - A twentieth gallery figure, `gallery-broadening`: a spectrum whose inset
   carries four curves of its own, sampled off an ordered ramp, over two panels
   stacked on one x scale. The corpus is twenty figures.
@@ -533,6 +541,55 @@ truncated bar and a row of three equal truncated bars both go from failing to
 passing, and both still misstate their values. A stacked chart is the same trap
 from the other side, since it uses `bottom=` too and its bottom row does rest
 on a real baseline, so "carries an offset" was never the discriminator.
+
+**`Mark ratio` was right to fire on a size-encoded scatter, and the fix it
+printed destroyed the encoding.** The standing complaint was that the row
+contradicts its own docstring, which ended "this gate is about marks whose size
+is not carrying the value". Nothing else in the project ever behaved as though
+that were an exemption: the how-to's worked example is a size ratio, the remedy
+clips a size array, and a test pins the row firing on a size-encoded scatter
+inside an inset. That one sentence was the only thing saying otherwise and it
+is gone.
+
+The bar exemption is about the channel, not about intent. Cleveland and McGill
+put position and length near the top of the perceptual ranking and area near
+the bottom, which `references/choosing-a-form.md` already states and cites. A
+bar thirty times another bar is read as thirty. A mark thirty times another
+mark is not read as thirty by anybody, whoever meant what by it, so a bubble
+chart is the last figure that should be exempt: it is precisely the case where
+the reader is asked to decode a number off the weak channel.
+
+What the argument was really pointing at is one line below the verdict. The row
+printed `[FIX] cap at 5.0x` unconditionally, and `suggest_fixes` offered a
+snippet that clips the size array. Run against a 60-mark bubble chart, that
+snippet collapses **52 of the 60 onto one size**, draws every value from 5.8 to
+39.9 identically, and turns the row green. It fixes the audit by destroying the
+data.
+
+That shipped because of a real gap in the round-trip harness, which is worth
+naming: `tests/test_suggest_fixes.py` executes every snippet against a figure
+that fails its gate and requires the gate to pass afterwards. Clipping passes
+that test for both cases. The harness cannot see that the figure no longer says
+what it said, and its `Mark ratio` fixture is an ornament, so the destructive
+case was never built. `test_clipping_a_size_encoding_really_does_destroy_it`
+now pins the cost directly.
+
+The advice is now branched on `MARK_ORNAMENT_GAP`, the ratio of the largest
+mark to the *next* largest, which is the stated harm ("one mark far larger than
+the rest") measured directly rather than inferred from the full range:
+
+```text
+ornamental star        33.3      bubble chart, continuous     1.02
+two `plot` markers    100.0      bubble chart, 3 categories   1.00
+                                 gallery-density              1.06
+```
+
+Above the gap, capping the range is right and the row says so. Below it the
+sizes are graded, and the row says the fix is the form rather than the numbers,
+which is the same answer `Form` gives about a truncated axis. The verdict is
+unchanged in both cases. Corpus exposure: 1 of 21 panels carries more than one
+scatter size, `gallery-density` at 110 distinct sizes and 3.8x, which passes
+and did not move.
 
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside

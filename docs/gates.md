@@ -146,7 +146,7 @@ mostly because the answer is to draw something else.
 | Text collision | Move one of the two named strings. Which one is free is yours to know | |
 | Text readability | Move the label to clear ground, or case it against the ink under it | |
 | Contrast stack | Take one artist to alpha 1, and keep to three alpha levels | yes |
-| Mark ratio | Clip the size array so the largest mark is 5x the smallest | yes |
+| Mark ratio | Clip the size array so the largest mark is 5x the smallest, when one mark is an ornament among marks otherwise alike. When the sizes are graded they encode a quantity and clipping flattens it, so carry the quantity by position instead | yes |
 | Overplotting | Thin the counts, or switch to `hexbin`. Alpha does not move this row | yes |
 | Axis redundancy | `sharex`/`sharey` at creation, or `ax.label_outer()` after | yes |
 | Type size | Cut words. Do not shrink type | |

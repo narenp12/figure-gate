@@ -158,6 +158,19 @@ METRIC_RC_KEYS = (
 DRAW_RC_ATTR = "_figure_gate_metric_rc"
 
 MARK_RATIO_MAX = 5.0        # area ratio of largest to smallest data mark
+# The largest mark reads as an ornament rather than as the top of a graded run
+# when it exceeds the *next* largest by this factor. It picks the remedy, not
+# the verdict: a graded run is a size encoding, and clipping it is the wrong
+# answer whatever the ratio. Measured on the four shapes this row sees, as
+# largest over second largest:
+#
+#     ornamental star        33.3      bubble chart, continuous     1.02
+#     two `plot` markers    100.0      bubble chart, 3 categories   1.00
+#                                      gallery-density              1.06
+#
+# Three sizes with one mark each lands at 4.0 and is read as graded, which is
+# the right side of the line: three deliberately chosen sizes are a scale.
+MARK_ORNAMENT_GAP = 5.0
 ALPHA_LEVELS_MAX = 3        # distinct transparency levels in one figure
 # Alpha at or above which a mark counts as opaque. `check_contrast_stack`
 # requires one such mark, so a figure drawn entirely in washes is caught; 0.99
@@ -1584,8 +1597,33 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
 
     Reads scatter sizes and line markers, both converted to the area of the
     disc actually drawn. Bars and other patches are deliberately NOT counted: a
-    bar thirty times another bar is the encoding working, not a defect. This
-    gate is about marks whose size is not carrying the value.
+    bar thirty times another bar is the encoding working, not a defect.
+
+    **The bar exemption is about the channel, not about whether size carries a
+    value.** This docstring used to end "this gate is about marks whose size is
+    not carrying the value", which reads as an exemption for a size-encoded
+    scatter and is not one. Cleveland and McGill ranked the elementary
+    perceptual tasks and put position and length near the top and area near the
+    bottom; `references/choosing-a-form.md` states it and cites them. A bar
+    thirty times another bar is read as thirty because length is judged well. A
+    mark thirty times another mark is not read as thirty by anybody, whether or
+    not the author meant it as the encoding. A bubble chart is precisely the
+    case where the reader is asked to decode a number off the weak channel, so
+    it is the last figure that should be exempt.
+
+    The row's own how-to, its remedy and
+    `test_mark_ratio_measures_a_size_encoded_scatter_inside_an_inset` all
+    already judged size-encoded scatters. That one sentence was the only thing
+    saying otherwise, and it is now gone.
+
+    What the size distribution does change is the *advice*. When the largest
+    mark exceeds the next largest by `MARK_ORNAMENT_GAP` it is one ornament
+    stuck on top of a plot, and capping the size range is the fix. When the
+    sizes are graded the figure is encoding something, and clipping the array
+    silently flattens the values it encodes: measured on a 60-mark bubble
+    chart, the snippet this project used to print unconditionally collapsed 52
+    of the 60 onto one size, drew every value from 5.8 to 39.9 identically, and
+    turned the row green. There the fix is the form, not the numbers.
 
     Both operands go through one conversion because the two APIs take different
     quantities and neither is an area. `markersize` is a diameter in points.
@@ -1613,17 +1651,24 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
                 sizes.append(math.pi * (ms / 2.0) ** 2)
         if len(sizes) < 2:
             continue
-        ratio = max(sizes) / min(sizes)
+        sizes.sort()
+        ratio = sizes[-1] / sizes[0]
         if worst is None or ratio > worst[0]:
-            worst = (ratio, min(sizes), max(sizes))
+            worst = (ratio, sizes[0], sizes[-1], sizes[-1] / sizes[-2])
     if worst is None:
         return True, "fewer than two mark sizes"
-    ratio, lo, hi = worst
+    ratio, lo, hi, gap = worst
+    if ratio <= MARK_RATIO_MAX:
+        fix = ""
+    elif gap > MARK_ORNAMENT_GAP:
+        fix = f"  [FIX] cap at {MARK_RATIO_MAX}x"
+    else:
+        fix = ("  [FIX] the fix is the form, not the sizes - these are graded, "
+               "so they are encoding something, and clipping the array flattens "
+               "the values it encodes. Carry the quantity by position instead")
     return (ratio <= MARK_RATIO_MAX,
             f"largest/smallest mark area {ratio:.1f}x  "
-            f"(drawn area {lo:.0f} to {hi:.0f} pt^2)"
-            + ("" if ratio <= MARK_RATIO_MAX
-               else f"  [FIX] cap at {MARK_RATIO_MAX}x"))
+            f"(drawn area {lo:.0f} to {hi:.0f} pt^2)" + fix)
 
 
 def _radius_octaves(radius_px: np.ndarray) -> list[np.ndarray]:

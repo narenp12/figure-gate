@@ -556,6 +556,54 @@ def test_mark_ratio_catches_an_ornamental_star():
     assert gates(rows)["Mark ratio"] is False
 
 
+def test_mark_ratio_still_judges_a_size_encoded_scatter():
+    """The answer to a standing argument, written down rather than assumed.
+
+    The docstring used to end "this gate is about marks whose size is not
+    carrying the value", which reads as an exemption for a bubble chart. It is
+    not one, and nothing else in the project ever behaved as though it were.
+    The bar exemption is about the channel: Cleveland and McGill put length
+    near the top of the perceptual ranking and area near the bottom, so a bar
+    thirty times another bar is read as thirty and a mark thirty times another
+    mark is not, whoever meant what by it."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(rng.random(60), rng.random(60), s=rng.uniform(1, 40, 60) * 20)
+    try:
+        ok, detail = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_mark_ratio_tells_an_ornament_from_an_encoding_in_its_advice():
+    """The verdict is the same for both; the advice must not be. Capping the
+    range is right for one mark stuck on top of a plot and destroys a graded
+    one, so the row says which it is looking at."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 2], s=[10, 10, 900])
+    try:
+        ok, ornament = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert f"cap at {cf.MARK_RATIO_MAX}x" in ornament, ornament
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(rng.random(60), rng.random(60), s=rng.uniform(1, 40, 60) * 20)
+    try:
+        ok, graded = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert "the fix is the form" in graded, graded
+    assert "cap at" not in graded, graded
+
+
 def test_mark_ratio_sees_line_markers_not_only_scatter():
     """`ax.plot(marker=...)` is a mark like any other. Reading only
     `collections` meant a 3pt marker beside a 30pt one passed clean."""
