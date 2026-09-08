@@ -44,7 +44,7 @@ panels first and the child axes after them.
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
 | Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
 | Dual axis | none | a `twinx` second scale carries data of its own |
-| Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles |
+| Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset, as a Gantt chart and a waterfall do, have no shared baseline to cut and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |

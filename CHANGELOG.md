@@ -63,6 +63,9 @@ behind a threshold this project enforces.
 - `check_figure.marker_stroke_pt` and `check_figure.collection_stroke_pt`, the
   stroke a `plot` marker and a `scatter` each actually lay down around a mark,
   which is zero whenever the edge is not drawn at all.
+- `check_figure.bars_rest_on_a_shared_edge`, whether a panel's bars stand on
+  one edge or each carry their own offset, which is what separates a bar chart
+  from a Gantt chart or a waterfall.
 - A twentieth gallery figure, `gallery-broadening`: a spectrum whose inset
   carries four curves of its own, sampled off an ordered ramp, over two panels
   stacked on one x scale. The corpus is twenty figures.
@@ -487,6 +490,49 @@ drawn, both of those `gallery-survival`'s `"|"` and `"_"` where the stroke was
 already the whole measured width. **0 verdict changes.** The exposure is
 honestly near zero and the figure that would have moved is the one that proves
 the naive reading wrong.
+
+**`Form` failed a Gantt chart and a waterfall for a baseline neither of them
+has, and only when they were drawn the documented way.** `_baselined_bars`
+excluded both from the day it landed: a Gantt shares no edge at all, and a
+waterfall's segments neither share one nor rest on each other. But that
+function is the fallback for bars built by hand out of rectangles, and
+`check_form` consulted it only when there was no `BarContainer` to read. A
+container says these are bars; it does not say they stand on a baseline. So
+`ax.barh(y, width, left=...)` and `ax.bar(x, height, bottom=...)` went straight
+to the truncation verdict, and one figure passed drawn by hand and failed drawn
+with the helper matplotlib documents for it.
+
+The row's own advice is the tell. "Bar length encodes the value, so a cut
+baseline misstates every ratio" is true of a bar chart, where every length is
+measured from one edge. A Gantt bar's length is a duration and its position is
+a start date; a waterfall segment's length is a delta and its base is the
+running total. Neither is measured from the axis edge, so there is no ratio to
+misstate and "use a dot plot" is not a fix for either.
+
+Constructed rather than swept, because the corpus cannot decide this: 2 of 21
+figures carry bars, `gallery-counts` and `gallery-rose`, both on a shared
+baseline and neither moved. Six forms, drawn both ways:
+
+```text
+bar chart, truncated     fail      gantt, ax.barh(left=)       pass
+bar chart, full          pass      waterfall, ax.bar(bottom=)  pass
+stacked, truncated       fail      stacked, full               pass
+```
+
+Before the change the two offset-baseline forms failed. After it all six agree
+with their own reading, and the hand-drawn and container spellings of one Gantt
+return the same verdict.
+
+`bars_rest_on_a_shared_edge` is deliberately narrower than `_baselined_bars`
+rather than the same test with an orientation passed in. Detection carries two
+guards that are right for deciding whether a heap of rectangles is a bar chart
+at all and wrong for deciding whether bars stand on a baseline: at least
+`FORM_BAR_MIN_PATCHES` of them on the edge, and more than one distinct length.
+Reusing them would have opened a hole at exactly two points, measured: a single
+truncated bar and a row of three equal truncated bars both go from failing to
+passing, and both still misstate their values. A stacked chart is the same trap
+from the other side, since it uses `bottom=` too and its bottom row does rest
+on a real baseline, so "carries an offset" was never the discriminator.
 
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside

@@ -1378,6 +1378,127 @@ def test_a_gantt_chart_is_not_read_as_bars():
     assert ok is True, detail
 
 
+# --- an offset baseline is not a cut one
+
+def _gantt():
+    """Length is a duration, position is a start date. `ax.barh` leaves a
+    `BarContainer`, so this is the spelling that reached the verdict."""
+    fig, ax = plt.subplots(figsize=(6, 3), constrained_layout=True)
+    ax.barh([0, 1, 2], [3, 2, 4], left=[2, 4, 5], color=OKABE[0])
+    ax.set_xlim(1, 10)
+    ax.set_ylim(-0.5, 2.5)
+    return fig
+
+
+def _waterfall():
+    """Length is a delta, base is the running total."""
+    fig, ax = plt.subplots(figsize=(6, 3.4), constrained_layout=True)
+    base, bottoms, heights = 100.0, [], []
+    for d in [4, -2, 5, -1]:
+        bottoms.append(min(base, base + d))
+        heights.append(abs(d))
+        base += d
+    ax.bar([0, 1, 2, 3], heights, bottom=bottoms, color=OKABE[0])
+    ax.set_ylim(98, 112)
+    return fig
+
+
+def _stacked_bars(lim):
+    """`bottom=` as well, and the trap: the bottom row rests on a real
+    baseline and the total length IS measured from it."""
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    low = [100, 104, 102, 107]
+    ax.bar([0, 1, 2, 3], low, color=OKABE[0])
+    ax.bar([0, 1, 2, 3], [4, 4, 4, 4], bottom=low, color=OKABE[1])
+    ax.set_ylim(*lim)
+    return fig
+
+
+def test_a_gantt_drawn_with_barh_is_not_a_truncated_bar_chart():
+    """`_baselined_bars` has always excluded a Gantt chart, and the container
+    route never asked it. `ax.barh(left=...)` leaves a `BarContainer`, which
+    said "bars" and settled the verdict, so the same figure passed drawn by
+    hand and failed drawn the documented way."""
+    fig = _gantt()
+    try:
+        assert cf._baselined_bars(fig.axes[0]) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_waterfall_drawn_with_bar_bottom_is_not_a_truncated_bar_chart():
+    """The container spelling of `test_a_waterfall_is_not_read_as_bars`."""
+    fig = _waterfall()
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_stacked_bar_chart_on_a_cut_axis_still_fails():
+    """The over-fire control, and the reason "has a `bottom=` offset" is not
+    the discriminator. A stack uses `bottom=` too, its bottom row stands on a
+    real baseline, and cutting that baseline misstates every total."""
+    fig = _stacked_bars((99, 115))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False and "truncated y axis" in detail, detail
+
+    fig = _stacked_bars((0, 120))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_the_detection_guards_are_not_reused_for_the_baseline_question():
+    """`_baselined_bars` returns None for a single bar and for a row of equal
+    bars, and both answers are right for deciding whether a heap of rectangles
+    is a bar chart at all. Neither is right once a `BarContainer` has said so:
+    a single truncated bar and three equal truncated bars still misstate their
+    values, and routing the container through the detection guards would have
+    opened a hole exactly there."""
+    for name, heights in (("one bar", [104]), ("equal bars", [104, 104, 104])):
+        fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+        ax.bar(range(len(heights)), heights, color=OKABE[0])
+        ax.set_ylim(100, 112)
+        try:
+            assert cf._baselined_bars(ax) is None, name
+            assert cf.bars_rest_on_a_shared_edge(ax, vertical=True), name
+            ok, detail = cf.check_form(fig)
+        finally:
+            plt.close(fig)
+        assert ok is False, (name, detail)
+
+
+def test_the_two_spellings_of_one_gantt_agree():
+    """The hand-drawn route and the container route are the same figure, so
+    they answer alike. That equality is the whole defect this closes."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 3), constrained_layout=True)
+    for i, (start, width) in enumerate([(2, 3), (4, 2), (5, 4)]):
+        ax.add_patch(Rectangle((start, i - 0.4), width, 0.8, color=OKABE[0]))
+    ax.set_xlim(1, 10)
+    ax.set_ylim(-0.5, 2.5)
+    try:
+        by_hand = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+
+    fig = _gantt()
+    try:
+        by_container = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert by_hand == by_container, (by_hand, by_container)
+
+
 def test_a_shaded_span_is_not_a_bar():
     """`axvspan` and `axhspan` are `Rectangle`s, and a pair of them shares a
     baseline and varies in extent, which is every other test in

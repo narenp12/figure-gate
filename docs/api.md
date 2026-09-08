@@ -60,6 +60,8 @@ Composition. Takes a built figure, measures what it renders at print size.
 
 ::: check_figure.collection_stroke_pt
 
+::: check_figure.bars_rest_on_a_shared_edge
+
 ## check_palette
 
 Colour. Standard library only, so these are also the functions to port when

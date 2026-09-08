@@ -2552,16 +2552,8 @@ FORM_BAR_MIN_PATCHES = 2
 FORM_BAR_BASELINE_TOL = 1e-6
 
 
-def _baselined_bars(ax: Axes) -> str | None:
-    """`"vertical"`, `"horizontal"` or None: bars drawn as raw patches.
-
-    `ax.bar` leaves a `BarContainer` and `check_form` reads it. The same
-    figure drawn with `ax.add_patch(Rectangle(...))` leaves nothing but
-    patches, and carried a truncated baseline past the gate. Matplotlib is not
-    the only thing that draws bars this way: a script building a chart by hand
-    does, and so does any library that lays out its own geometry.
-
-    Four constraints, each closing a specific thing that is not a bar chart:
+def _bar_rects(ax: Axes) -> list[Any]:
+    """The rectangles on `ax` that could be bars, by four exact constraints.
 
     - `type(p) is Rectangle` exactly. `FancyBboxPatch` is not a subclass, so an
       annotation's background box is already out, and being strict keeps a
@@ -2572,67 +2564,133 @@ def _baselined_bars(ax: Axes) -> str | None:
       `get_data_transform()` is not `ax.transData` and they never reach the
       rest of this. `test_a_shaded_span_is_not_a_bar` pins that.
     - unrotated, because a rotated rectangle has no baseline to stand on.
-    - standing on a *shared* edge, and varying along the other one.
+    - visible.
 
-    The shared-edge test is the modal edge rather than a unanimous one, so a
-    stacked chart is read by its bottom row rather than not at all. On its own
-    that is too loose: a four-step waterfall had two segments land on the same
-    edge by arithmetic and was read as a two-bar chart. So every rectangle off
-    the modal edge has to *stand on* another one in its own column, which is
-    what stacking is and what floating is not.
+    `ax.bar` puts its rectangles here too, so this reaches the container
+    spelling and the hand-drawn one alike.
+    """
+    from matplotlib.patches import Rectangle
 
-    That is also what keeps this gate off the offset baselines that are an open
-    argument rather than a defect. A Gantt chart shares no edge at all, and a
-    waterfall's segments neither share one nor sit on each other, so neither
-    reaches a verdict here.
+    return [p for p in ax.patches
+            if type(p) is Rectangle
+            and p.get_visible()
+            and p.get_data_transform() is ax.transData
+            and not abs(getattr(p, "get_angle", lambda: 0.0)() or 0.0) > 0.0]
+
+
+def _bar_axis(ax: Axes, vertical: bool) -> tuple[Callable, Callable, Callable,
+                                                 tuple[float, float]]:
+    """`(base_of, span_of, cross_of, lim)` for one bar direction."""
+    if vertical:
+        return (lambda p: p.get_y(), lambda p: p.get_height(),
+                lambda p: (p.get_x(), p.get_width()), ax.get_ylim())
+    return (lambda p: p.get_x(), lambda p: p.get_width(),
+            lambda p: (p.get_y(), p.get_height()), ax.get_xlim())
+
+
+def bars_rest_on_a_shared_edge(ax: Axes, vertical: bool) -> bool:
+    """Do these bars stand on one edge, or does each carry its own offset?
+
+    The question that separates a bar chart from a Gantt chart or a waterfall,
+    and the only thing `check_form` needs to know once a `BarContainer` has
+    already said these are bars.
+
+    A bar chart's lengths are all measured from one edge, so cutting that edge
+    misstates every one of them. A Gantt bar's length is a duration and its
+    position is a start date; a waterfall segment's length is a delta and its
+    base is the running total. Neither is measured from the axis edge, so
+    neither has a baseline to truncate, and the row's own advice - "the fix is
+    the form, not the axis" - is not actionable against them.
+
+    The shared edge is the modal one rather than a unanimous one, so a stacked
+    chart is read by its bottom row rather than not at all. On its own that is
+    too loose: a four-step waterfall had two segments land on the same edge by
+    arithmetic. So every rectangle off the modal edge has to *stand on* the top
+    of another one in its own column, which is what stacking is and what
+    floating is not.
+
+    This is deliberately narrower than `_baselined_bars`, which has to decide
+    whether a heap of rectangles is a bar chart *at all* and carries two guards
+    for that: at least `FORM_BAR_MIN_PATCHES` of them, and more than one
+    distinct length. Both are right for detection and wrong here. A single
+    truncated bar and a row of equal truncated bars are bar charts on the
+    container's own word, and they still misstate their values; measured, both
+    pass `check_form` if the detection guards are reused for this question.
+
+    Args:
+        ax: The panel.
+        vertical: The bar direction, from the container.
+
+    Returns:
+        True when the bars share a baseline, including by stacking on it, and
+        when there is nothing here to judge.
+    """
+    rects = _bar_rects(ax)
+    if not rects:
+        return True                          # the container's word stands
+    base_of, span_of, cross_of, lim = _bar_axis(ax, vertical)
+    lo, hi = lim
+    tol = abs(hi - lo) * FORM_BAR_BASELINE_TOL
+    if not tol:
+        return True
+    key, _ = Counter(round(base_of(p) / tol) for p in rects).most_common(1)[0]
+    tops = {(cross_of(p), round((base_of(p) + span_of(p)) / tol)) for p in rects}
+    return all(round(base_of(p) / tol) == key
+               or (cross_of(p), round(base_of(p) / tol)) in tops
+               for p in rects)
+
+
+def _baselined_bars(ax: Axes) -> str | None:
+    """`"vertical"`, `"horizontal"` or None: bars drawn as raw patches.
+
+    `ax.bar` leaves a `BarContainer` and `check_form` reads it. The same
+    figure drawn with `ax.add_patch(Rectangle(...))` leaves nothing but
+    patches, and carried a truncated baseline past the gate. Matplotlib is not
+    the only thing that draws bars this way: a script building a chart by hand
+    does, and so does any library that lays out its own geometry.
+
+    Four constraints, each closing a specific thing that is not a bar chart.
+    Three of them are `_bar_rects`; the fourth is standing on a *shared* edge
+    and varying along the other one, which is `bars_rest_on_a_shared_edge`.
+
+    Two further guards belong to detection alone and are the reason this is a
+    separate function rather than the shared-edge test with an orientation
+    bolted on. At least `FORM_BAR_MIN_PATCHES` rectangles have to stand on the
+    edge, and their lengths have to differ: equal-length rectangles on a common
+    edge encode nothing by length, and are a rug, a single-row heatmap or a row
+    of swatches. Neither guard is right once a `BarContainer` has already said
+    these are bars, which is what `bars_rest_on_a_shared_edge` documents.
+
+    The shared-edge test is also what keeps this off the offset baselines that
+    are an open argument rather than a defect. A Gantt chart shares no edge at
+    all, and a waterfall's segments neither share one nor sit on each other, so
+    neither reaches a verdict here.
 
     Returns:
         The bar direction, or None when these patches are not bars.
     """
-    from matplotlib.patches import Rectangle
-
-    rects = []
-    for p in ax.patches:
-        if type(p) is not Rectangle or not p.get_visible():
-            continue
-        if p.get_data_transform() is not ax.transData:
-            continue
-        if abs(getattr(p, "get_angle", lambda: 0.0)() or 0.0) > 0.0:
-            continue
-        rects.append(p)
+    rects = _bar_rects(ax)
     if len(rects) < FORM_BAR_MIN_PATCHES:
         return None
 
-    for direction, base_of, span_of, cross_of, lim in (
-            ("vertical", lambda p: p.get_y(), lambda p: p.get_height(),
-             lambda p: (p.get_x(), p.get_width()), ax.get_ylim()),
-            ("horizontal", lambda p: p.get_x(), lambda p: p.get_width(),
-             lambda p: (p.get_y(), p.get_height()), ax.get_xlim())):
+    for direction in ("vertical", "horizontal"):
+        vertical = direction == "vertical"
+        base_of, span_of, _, lim = _bar_axis(ax, vertical)
         lo, hi = lim
         tol = abs(hi - lo) * FORM_BAR_BASELINE_TOL
         if not tol:
             continue
 
         bases = [base_of(p) for p in rects]
-        modal = Counter(round(b / tol) for b in bases).most_common(1)
-        key, count = modal[0]
+        key, count = Counter(round(b / tol) for b in bases).most_common(1)[0]
         if count < FORM_BAR_MIN_PATCHES:
             continue
 
         standing = [p for b, p in zip(bases, rects) if round(b / tol) == key]
-        # Equal-length rectangles on a common edge encode nothing by length: a
-        # rug, a single-row heatmap, a row of swatches.
         if len({round(span_of(p), 12) for p in standing}) < 2:
             continue
 
-        # Stacking, stated directly: anything off the baseline has to rest on
-        # the top edge of another rectangle in its own column. A waterfall
-        # segment rests on nothing, and that is the whole difference.
-        tops = {(cross_of(p), round((base_of(p) + span_of(p)) / tol))
-                for p in rects}
-        if all(round(base_of(p) / tol) == key
-               or (cross_of(p), round(base_of(p) / tol)) in tops
-               for p in rects):
+        if bars_rest_on_a_shared_edge(ax, vertical):
             return direction
     return None
 
@@ -2662,6 +2720,14 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         # point: the two spellings draw the identical figure.
         if orientation is None:
             orientation = _baselined_bars(ax)
+        # A container says these are bars; it does not say they stand on a
+        # baseline. `ax.barh(left=...)` draws a Gantt chart and
+        # `ax.bar(bottom=...)` draws a waterfall, and each bar there carries
+        # its own offset, so there is no shared edge for a truncated axis to
+        # cut. The hand-drawn route has always excluded both. The container
+        # route reached the verdict without ever asking.
+        elif not bars_rest_on_a_shared_edge(ax, orientation == "vertical"):
+            orientation = None
         if orientation is None:
             continue
 
