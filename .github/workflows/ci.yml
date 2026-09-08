@@ -196,7 +196,20 @@ jobs:
       # The one test that needs a real TeX runs in the `pgf` job below rather
       # than here. It skips itself on every leg of this matrix, which is what
       # that job exists to assert.
+      #
+      # Worker count is bounded on macOS and left to `auto` everywhere else.
+      # The arm64 `macos-latest` image carries about half the memory of the
+      # x86 one it replaced, and `auto` gives every core a worker that builds
+      # gallery figures of its own while `test_example.py` runs the whole
+      # twenty-figure corpus in a subprocess beside them. That fits until the
+      # corpus grows: this leg was killed outright, `returncode -9` with the
+      # buffered stdout lost, taking two xdist workers with it, on the commit
+      # that added the twentieth figure. Two workers is the cap, not a fix for
+      # a leak; the figures here are closed where they are built.
       - run: pytest -n auto -q
+        if: matrix.os != 'macos-latest'
+      - run: pytest -n 2 -q
+        if: matrix.os == 'macos-latest'
 
       - name: The checker rejects a deliberately bad figure
         run: python skill/scripts/check_figure.py

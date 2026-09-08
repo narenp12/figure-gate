@@ -149,8 +149,73 @@ behind a threshold this project enforces.
   the next development cycle. `exclude_bumps` on that entry; the release bump
   still refuses to run without notes.
 - `uv.lock` is a bump entry, anchored across its `name` and `version` lines.
+- `Series color` no longer reads an inset-zoom connector as a data hue.
+  `indicate_inset_zoom` builds its connectors out of `ConnectionPatch`, and
+  matplotlib gives each a facecolor off the property cycle although the shape
+  it draws is a line. `_data_colors_by_axes` excludes them.
+- `gallery-broadening` sets its connectors' width itself. `lw=` on
+  `indicate_inset_zoom` reaches the indicator rectangle and, on matplotlib
+  3.8, not the connectors.
+- `test_a_two_line_label_carrying_mathtext_parses_per_line` names the warning
+  it guards against instead of raising on every warning.
+- The macOS CI leg runs pytest at `-n 2` rather than `-n auto`.
 
 ### Why it changed
+
+**The declared floor is a different checker, and nothing on this branch had
+been run against it.** CI carries matplotlib 3.8.4 on one leg and every local
+run used the current release, so twenty-one commits went up green and came
+back with three failures the developer machine cannot produce. All three are
+worth writing down because none of them is a version guard in a gate.
+
+`indicate_inset_zoom` is the whole story for two of them. It returns a
+rectangle and four `ConnectionPatch` connectors, and on 3.8 the `lw=` given to
+it reaches the rectangle only: the connectors keep `patch.linewidth`, which
+this sheet ships at 0.7. They also carry a facecolor off the property cycle,
+`#E69F00`, although a connector draws a line and fills nothing. On the current
+release neither is visible to the gates, because the connectors are not in
+`ax.patches` at all.
+
+Those two failures needed opposite answers, which is the part worth keeping.
+`Series color` counting `#E69F00` as a fifth data hue against the four viridis
+samples the panel encodes with is a checker defect: a connector carries no
+identity, and no reader is being asked to tell it from a series. `Line weight`
+reporting a 0.70pt stroke is not a defect. The stroke is drawn, the row's own
+docstring says patch edges are data, and the author had asked for 1.0 and
+silently not got it. So the checker changed on the colour and the figure
+changed on the width, and treating them alike in either direction would have
+been wrong once.
+
+Corpus exposure, since a clean sweep proves nothing without it: 21 figures, 0
+verdict changes, and on the current release **0 of 20** gallery figures carry a
+reachable `ConnectionPatch` at all. The sweep was exposed to nothing and could
+not have moved. On 3.8.4 exactly one figure carries them, four connectors of
+which two are visible. The evidence here is the adversarial test and the full
+suite run against the floor, not the sweep.
+
+The mathtext failure was a test measuring its dependencies. It asserted a
+measurement under a blanket `warnings.simplefilter("error")`; on 3.8.4 the
+parse reaches `_fontconfig_pattern`, which calls pyparsing's deprecated
+`parseString` and `resetCache`, and `_script_min_pt` turns any exception into
+None deliberately, so the row reported no measurement and the test read
+`None == 3.773`. The parse itself is identical on both versions, glyphs at
+3.773, 5.39, 7.7 and 11.0pt. The filter now names the U+000A warning the test
+exists to catch.
+
+**The macOS leg was killed, and the reason was not the one it looked like.**
+Three processes died at once, `returncode -9` with the buffered stdout lost
+and two xdist workers reported `node down: Not properly terminated`, which
+reads like a leak. It is not. Holding the whole built corpus costs 135 MB and
+the module that caches it was the obvious suspect and the wrong one; the cost
+is in `audit`, where one pass over `gallery-orbit`'s 4000-point band takes
+530 MB for its canvases, KD-trees and pixel blocks. `test_renderer_invariance`
+is parametrised over all twenty builders, so `-n auto` on the arm64
+`macos-latest` image gives three workers a heavy figure each, at ~600 MB
+apiece, beside `test_example.py` running the entire gallery in a subprocess.
+That image carries 3 cores and 7 GB against ubuntu's 4 and 16, which is why
+this leg alone fails and why it passed until the corpus grew. Two workers is a
+cap on concurrency, not a repair: nothing here leaks, and the figures are
+closed where they are built.
 
 **Ten rows were not looking at insets, and the suite could not have told
 anyone.** `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added

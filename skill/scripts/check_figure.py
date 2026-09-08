@@ -2567,13 +2567,25 @@ def _data_colors_by_axes(
       a continuous encoding and answers to the viridis rule instead. This is
       also the escape hatch for an ordinal ramp: draw it `c=values, cmap=...`,
       never as a pre-evaluated RGBA list, and it is read as the value it is.
+    - a `ConnectionPatch`, which joins two points and carries no identity. It
+      is apparatus: `indicate_inset_zoom` builds its connectors out of them,
+      and matplotlib gives each one a facecolor off the property cycle even
+      though the shape it draws is a line. Read as a filled area, two
+      connectors on one panel put the cycle's first hue up against the four
+      the panel actually encodes with, which fails `Series color` for a colour
+      nothing in the figure means. Whether the connector's *stroke* is thick
+      enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
+    from matplotlib.patches import ConnectionPatch
+
     out = {}
     for ax in _all_axes(fig):
         items = []
         for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
             if not artist.get_visible():
+                continue
+            if isinstance(artist, ConnectionPatch):
                 continue
             if getattr(artist, "get_array", lambda: None)() is not None:
                 continue

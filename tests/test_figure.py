@@ -1011,15 +1011,27 @@ def test_the_script_measurement_does_not_depend_on_dpi():
 def test_a_two_line_label_carrying_mathtext_parses_per_line():
     """Handing the whole string to the parser makes it warn that it has no
     glyph for U+000A and substitute a dummy, printed at every audit of a figure
-    whose only crime is a two-line axis label."""
+    whose only crime is a two-line axis label.
+
+    The filter names that warning rather than raising on every warning. Under a
+    blanket `simplefilter("error")` this test measures matplotlib's
+    dependencies instead of this file: on the declared 3.8.4 floor the parse
+    reaches `_fontconfig_pattern`, which calls pyparsing's deprecated
+    `parseString` and `resetCache`, and `_script_min_pt` turns any exception
+    into None on purpose, so the test failed with `None == 3.773` for a reason
+    that had nothing to do with per-line parsing.
+    """
     import warnings
     fig, ax = _labelled("first line\n" + r"$x_{i_{j_{k}}}$", 11)
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             measured = cf._script_min_pt(ax.xaxis.label)
     finally:
         plt.close(fig)
+    newline = [w for w in caught
+               if "\\n" in str(w.message) or "0a" in str(w.message).lower()]
+    assert not newline, [str(w.message) for w in newline]
     assert measured == pytest.approx(3.773, abs=1e-3)
 
 
@@ -5118,6 +5130,33 @@ def test_series_color_counts_hues_inside_an_inset():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Series color"] is False
+
+
+def test_an_inset_connector_is_not_a_data_hue():
+    """`indicate_inset_zoom` builds its connectors out of `ConnectionPatch`,
+    and matplotlib gives each one a facecolor off the property cycle even
+    though the shape it draws is a line. Read as a filled area, two connectors
+    put the cycle's first hue against the hues the panel actually encodes with.
+
+    Caught on the declared 3.8.4 floor, where the connectors sit in
+    `ax.patches`. The number this pins is the count, not a verdict: a hue
+    nothing in the figure means must not reach the row at all.
+    """
+    from matplotlib.patches import ConnectionPatch
+    fig, ax, sub = _inset_host()
+    for i, color in enumerate(("#472a7a", "#2f6b8e", "#1fa187")):
+        ax.plot([0, 1], [i, i], lw=2, color=color)
+    _rect, connectors = ax.indicate_inset_zoom(sub)
+    assert any(isinstance(c, ConnectionPatch) for c in connectors), (
+        "matplotlib stopped building the connectors out of ConnectionPatch; "
+        "this test is measuring nothing")
+    for connector in connectors:
+        connector.set_visible(True)
+        connector.set_facecolor("#e69f00")
+    hues = {h for entries in cf._data_colors_by_axes(fig).values()
+            for h, _, _ in entries}
+    plt.close(fig)
+    assert "#e69f00" not in hues, hues
 
 
 def test_overplotting_measures_a_blob_inside_an_inset():

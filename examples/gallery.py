@@ -1472,8 +1472,16 @@ def broadening():
     # up and to the left it chose one connector that ran the full diagonal of
     # the panel, through all four curves. The two upward ones say the same
     # thing over clear ground.
+    #
+    # The width is set again on each connector because `lw=` above reaches the
+    # indicator rectangle and, on matplotlib 3.8, not the connectors: they keep
+    # `patch.linewidth`, which this sheet ships at 0.7, and `Line weight` is
+    # right to fail a 0.70pt stroke that the author asked to be 1.0. Setting it
+    # here is the figure agreeing with the row rather than the row being taught
+    # to look away.
     for connector, shown in zip(connectors, (False, True, False, True)):
         connector.set_visible(shown)
+        connector.set_linewidth(1.0)
 
     for y, color in zip(spectra[1:], ramp[1:]):
         diff_ax.plot(nu, y - spectra[0], color=color, lw=1.3)
