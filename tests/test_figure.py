@@ -2039,9 +2039,12 @@ def test_overplotting_reads_a_cloud_drawn_with_plot_markers():
 
 def test_the_two_spellings_of_one_cloud_report_the_same_number():
     """`plot(ms=4)` and `scatter(s=16)` draw the same 4pt disc, so the row has
-    to answer identically. It is the reason `marker_extent_pt` leaves the edge
-    stroke out: `scatter_diameter_pt` leaves it out too, and a row that reads
-    the two spellings differently is the defect this pair closes."""
+    to answer identically.
+
+    Under bare matplotlib defaults they really do draw the same mark, stroke
+    included: `lines.markeredgewidth` and `patch.linewidth` are both 1.0 and
+    both spellings render 5.16pt of ink. The agreement is measured, not bought
+    by leaving the stroke off both sides."""
     x, y = _dense_cloud()
     fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
     ax.plot(x, y, "o", ms=4)
@@ -2055,6 +2058,87 @@ def test_the_two_spellings_of_one_cloud_report_the_same_number():
 
     assert (from_plot.replace("line0", "MARKS")
             == from_scatter.replace("col0", "MARKS")), (from_plot, from_scatter)
+
+
+# --- the edge stroked around a mark is ink
+
+def test_the_marker_stroke_widens_the_drawn_mark():
+    """A stroke is centred on the outline, so it puts half its width outside
+    on each side and the bounding box grows by one full `markeredgewidth`.
+    Rendered at 600 dpi, `"o"` at ms 5 measures 6.12pt against a 5pt path."""
+    fig, ax = plt.subplots()
+    line, = ax.plot([0.0], [0.0], marker="o", ms=5, mew=1.0, ls="none",
+                    mec="#333333")
+    w, h = cf.marker_extent_pt(line, 150.0)
+    plt.close(fig)
+    assert (round(w, 6), round(h, 6)) == (6.0, 6.0)
+
+
+def test_a_bar_marker_gains_the_stroke_across_and_not_along():
+    """Marker strokes are butt-capped, so a segment does not grow past its own
+    ends. Ink minus path at 600 dpi is +1.20 across and +0.04 along at mew 1,
+    and +2.04 against +0.16 at mew 2: the stroke widens an axis exactly when
+    the path has extent in the other one."""
+    fig, ax = plt.subplots()
+    line, = ax.plot([0.0], [0.0], marker="|", ms=5, mew=2.0, ls="none",
+                    mec="#333333")
+    w, h = cf.marker_extent_pt(line, 150.0)
+    plt.close(fig)
+    assert (round(w, 6), round(h, 6)) == (2.0, 5.0)
+
+
+def test_an_edge_that_is_not_drawn_widens_nothing():
+    """`figure.mplstyle` ships `lines.markeredgewidth: 0.0`, and a width of
+    zero or a transparent edge colour is the artist declining to stroke."""
+    fig, ax = plt.subplots()
+    unstroked, = ax.plot([0.0], [0.0], marker="o", ms=5, mew=0.0, ls="none")
+    colourless, = ax.plot([1.0], [1.0], marker="o", ms=5, mew=2.0, ls="none",
+                          mec="none")
+    assert cf.marker_stroke_pt(unstroked) == 0.0
+    assert cf.marker_stroke_pt(colourless) == 0.0
+    assert cf.marker_extent_pt(colourless, 150.0) == (5.0, 5.0)
+    plt.close(fig)
+
+
+def test_a_scatter_spelled_edgecolors_none_is_not_widened_by_its_linewidth():
+    """The false positive the naive version of this change would have shipped.
+    `edgecolors="none"` leaves `get_edgecolors()` an empty array while
+    `get_linewidths()` still reports the `patch.linewidth` default, so a width
+    read on its own widens the mark by a stroke that is never laid down. This
+    is how `gallery-parity` is spelled."""
+    fig, ax = plt.subplots()
+    coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, edgecolors="none")
+    plt.close(fig)
+    assert len(coll.get_edgecolors()) == 0
+    assert float(np.max(coll.get_linewidths())) > 0.0
+    assert cf.collection_stroke_pt(coll) == 0.0
+
+
+def test_a_scatter_that_does_stroke_its_edge_is_widened_by_it():
+    """The other half: an edge that is drawn is ink, and two marks whose
+    strokes meet have met."""
+    fig, ax = plt.subplots()
+    coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, facecolor="#4477aa",
+                      edgecolors="#333333", linewidths=0.7)
+    plt.close(fig)
+    assert cf.collection_stroke_pt(coll) == pytest.approx(0.7)
+
+
+def test_counting_the_stroke_does_not_fire_on_a_parity_style_scatter():
+    """The corpus figure the question reaches. Taking its reported 0.70pt as
+    drawn carries it past `OVERPLOT_THRESHOLD`; reading whether the edge is
+    drawn at all leaves it where the render puts it."""
+    rng = np.random.default_rng(19)
+    observed = rng.uniform(0.6, 9.2, 84)
+    predicted = observed + rng.normal(0.0, 0.55, observed.size) + 0.1
+    fig, ax = plt.subplots(figsize=(3.8, 3.6), constrained_layout=True)
+    ax.set_xlim(0.0, 10.0)
+    ax.set_ylim(0.0, 10.0)
+    ax.set_aspect("equal")
+    ax.scatter(observed, predicted, s=18.0, edgecolors="none")
+    verdict, detail = cf.check_overplotting(fig)
+    plt.close(fig)
+    assert verdict is True, detail
 
 
 def test_overplotting_leaves_a_marked_line_alone():

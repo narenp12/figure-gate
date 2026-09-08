@@ -1444,15 +1444,39 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
     render for `o . s ^ D * | _ ,` across two sizes; every prediction landed
     within a pixel of the drawn bounding box.
 
-    The edge stroke is deliberately NOT added, except to an axis the path has
-    no extent in at all. `markeredgewidth` widens the drawn mark - `"o"` at
-    `ms=4.5, mew=1` measures 11px where the path alone predicts 9 - but
-    `scatter_diameter_pt` leaves the same stroke out on the other side, and a
-    row that reads the two spellings of one figure differently is the defect
-    this pair exists to close. Both under-report by the stroke, together, and
-    `check_overplotting` says what counting it would cost. A bar marker is the
-    exception because there the stroke is the whole mark: with no fallback its
-    width is zero and it can never touch anything.
+    The edge stroke is counted, and where it lands is measured rather than
+    assumed. A stroke is centred on the path, so it puts half its width
+    outside the outline on each side and widens the bounding box by one full
+    `markeredgewidth`; but marker strokes are butt-capped, so it does not
+    reach past the *ends* of an open path. Rendered at 600 dpi, ink minus path:
+
+    ```text
+    "o"  mew 1  +1.12 across  +1.12 down     "|"  mew 1  +1.20 across  +0.04 down
+    "o"  mew 2  +2.08 across  +2.08 down     "|"  mew 2  +2.04 across  +0.16 down
+    ```
+
+    One rule covers both: **the stroke widens an axis exactly when the path has
+    extent in the other one.** A disc has extent in both, so both grow. A bar
+    marker is a segment with extent in one, so it grows across the stroke and
+    not along it. That subsumes the older special case, which returned the
+    stroke as a fallback for an axis of zero extent and arrived at the same
+    number by a narrower argument.
+
+    Counting it is what makes this agree with the render rather than with
+    `scatter_diameter_pt`. The two were once left to under-report together on
+    the theory that a row reading the two spellings differently is a defect,
+    but that symmetry is a property of two rcParams and not of the two APIs:
+    under bare matplotlib defaults `lines.markeredgewidth` and
+    `patch.linewidth` are both 1.0 and one 4pt mark draws 5.16pt either way,
+    while under this project's own `figure.mplstyle` they are 0.0 and 0.7 and
+    the same mark draws 4.20pt from `plot` against 4.92pt from `scatter`.
+    Leaving the stroke out bought agreement in the case that already agreed
+    and manufactured it in the case that does not. `check_overplotting` states
+    what the corpus paid for the change, which was nothing.
+
+    An edge that is not drawn adds nothing: a zero width, or an edge colour
+    that is transparent or `"none"`, is the artist declining to stroke rather
+    than a stroke of no consequence.
 
     Args:
         line: A `Line2D`.
@@ -1471,8 +1495,76 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
     style = MarkerStyle(marker)
     box = style.get_path().transformed(style.get_transform()).get_extents()
     size = float(line.get_markersize())
-    edge = float(line.get_markeredgewidth())
-    return (box.width * size or edge), (box.height * size or edge)
+    stroke = marker_stroke_pt(line)
+    width, height = box.width * size, box.height * size
+    return (width + (stroke if height else 0.0),
+            height + (stroke if width else 0.0))
+
+
+def marker_stroke_pt(line: Any) -> float:
+    """The stroke `line` actually lays down around each marker, in points.
+
+    Zero when the edge is not drawn at all, which `figure.mplstyle` is the
+    reason to care about: it ships `lines.markeredgewidth: 0.0`, so every
+    `plot` marker in this project's own gallery is unstroked and any widening
+    read off the width alone would be measuring ink that is not on the page.
+
+    `get_markeredgecolor` resolves `"auto"` to a real colour itself, so the
+    only strings that reach `to_rgba` here are ones it understands, `"none"`
+    among them at alpha 0.
+
+    Args:
+        line: A `Line2D`.
+
+    Returns:
+        `markeredgewidth` in points, or 0.0 if nothing is stroked.
+    """
+    from matplotlib.colors import to_rgba
+
+    width = float(line.get_markeredgewidth())
+    if width <= 0.0:
+        return 0.0
+    try:
+        if to_rgba(line.get_markeredgecolor())[3] <= 0.0:
+            return 0.0
+    except (ValueError, TypeError):        # an exotic colour spec; it draws
+        return width
+    return width
+
+
+def collection_stroke_pt(coll: Any) -> float:
+    """The stroke a scatter actually lays down around each mark, in points.
+
+    The `scatter` half of `marker_stroke_pt`, and the reason it is a separate
+    function is that a `Collection` says "nothing is stroked" a third way that
+    a `Line2D` has no equivalent of. `edgecolors="none"` leaves
+    `get_edgecolors()` an empty `(0, 4)` array while `get_linewidths()` keeps
+    reporting the `patch.linewidth` default, so a width read on its own is a
+    width for a stroke that never happens.
+
+    That case is not hypothetical. `gallery-parity` is spelled exactly this
+    way, and taking its reported 0.70pt as drawn moves it from 48.8% contact
+    to 58.3% and past `OVERPLOT_THRESHOLD` - a hard false positive, on the one
+    corpus figure the question reaches at all, off ink the render does not
+    contain.
+
+    Args:
+        coll: A `Collection`, normally the `PathCollection` from `scatter`.
+
+    Returns:
+        The drawn stroke width in points, or 0.0 if nothing is stroked.
+    """
+    import numpy as np
+
+    edges = np.asarray(coll.get_edgecolors(), dtype=float)
+    if edges.size == 0:                          # edgecolors="none"
+        return 0.0
+    if edges.ndim == 2 and edges[:, 3].max() <= 0.0:
+        return 0.0
+    widths = np.asarray(coll.get_linewidths(), dtype=float)
+    if widths.size == 0:
+        return 0.0
+    return max(float(widths.max()), 0.0)
 
 
 def _str_equal(value: Any, text: str) -> bool:
@@ -1678,16 +1770,30 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     predicted and accepted, where the density IS the finding. The row warns
     rather than fails for that reason.
 
-    Both sides measure the marker's path and not the edge stroked around it,
-    so both under-report the drawn mark by `markeredgewidth`. Counting it is
-    the more truthful measurement and is not made here, because it is a
-    threshold-boundary move on this corpus rather than a correctness one:
-    `gallery-parity` is the only figure it reaches and it sits at 49%, so
-    counting the edge carries it to 55% and flips the verdict on marks that
-    the render shows losing 27% of themselves, well under what 55% reads as
-    elsewhere (`gallery-forms` loses 50% at 71%). Deciding that is deciding
-    where the threshold goes, and it wants its own commit and its own
-    argument.
+    Both sides count the edge stroked around the mark, because that stroke is
+    ink and two marks whose strokes meet have met. `marker_stroke_pt` and
+    `collection_stroke_pt` are the two halves, and each answers "is an edge
+    drawn at all" before it answers "how wide", which is the whole difficulty:
+    a `Line2D` under `figure.mplstyle` reports `markeredgewidth` 0.0, and a
+    `scatter` spelled `edgecolors="none"` keeps reporting a `patch.linewidth`
+    of 0.70 for a stroke it never lays down.
+
+    This was left undone for a round on a stated cost that measurement did not
+    support - `gallery-parity` moving from 49% to 55% and flipping. Parity is
+    spelled `edgecolors="none"`, so the 55% was that phantom 0.70pt and the
+    figure does not move. What the corpus actually holds, every mark-drawing
+    artist on all 21 figures:
+
+    ```text
+    mark-cloud artists                10
+      with a stroke actually drawn     2   both gallery-survival's "|" and "_"
+      verdict changes                  0
+    ```
+
+    Both of the two are bar markers, where the stroke was already the whole
+    measured width, so nothing on the corpus moves. The change is a
+    correctness one and its exposure is honestly near zero; the figure that
+    would have moved is the one that proves the naive version wrong.
 
     Two separate errors used to make this roughly 1.8x too lenient, and a
     scatter of 64 discs each overlapping its neighbours by a quarter of their
@@ -1748,7 +1854,8 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
             # already match. `np.resize` tiles, which is that same cycle.
             if sizes.size != n:
                 sizes = np.resize(sizes, n)
-            radius_px = scatter_diameter_pt(sizes) / 2.0 * dpi / 72.0
+            drawn = scatter_diameter_pt(sizes) + collection_stroke_pt(coll)
+            radius_px = drawn / 2.0 * dpi / 72.0
 
             frac = _contact_fraction(xy, radius_px, cKDTree)
             if frac > OVERPLOT_THRESHOLD:

@@ -60,6 +60,9 @@ behind a threshold this project enforces.
   the sheet boundary for `demo` and `encoding`.
 - `check_figure.marker_extent_pt`, the width and height in points that a `plot`
   marker actually draws, which is not `markersize` for every marker.
+- `check_figure.marker_stroke_pt` and `check_figure.collection_stroke_pt`, the
+  stroke a `plot` marker and a `scatter` each actually lay down around a mark,
+  which is zero whenever the edge is not drawn at all.
 - A twentieth gallery figure, `gallery-broadening`: a spectrum whose inset
   carries four curves of its own, sampled off an ordered ramp, over two panels
   stacked on one x scale. The corpus is twenty figures.
@@ -446,10 +449,44 @@ artists on 3 of 20 figures, of which 2 figures moved. The scatter half of the
 same row is exposed at 3 artists on 2 figures. Both sides measure the marker's
 path and not the edge stroked around it, which under-reports the drawn mark by
 `markeredgewidth` on both, consistently. Counting it is more truthful and is
-not done here: `gallery-parity` is the only figure it reaches, it sits at 49%,
-and counting the edge carries it to 55% on marks the render shows losing 27% of
-themselves. That is a decision about where the threshold goes, and it wants its
-own commit.
+left to its own commit below, where the stated cost turned out not to be real.
+
+**The edge stroked around a mark is ink, and the reason for leaving it out was
+a property of two rcParams rather than of the two APIs.** The argument for
+under-reporting together was that `scatter_diameter_pt` omits the stroke, so
+counting it on the `plot` side alone would make one row read the two spellings
+of one figure differently. Measured at 600 dpi, that symmetry holds only where
+matplotlib already draws symmetric marks. Under bare defaults
+`lines.markeredgewidth` and `patch.linewidth` are both 1.0 and one 4pt mark
+renders 5.16pt either way; under this project's own `figure.mplstyle` they are
+0.0 and 0.7, and the same mark renders 4.20pt from `plot` against 4.92pt from
+`scatter`. Omitting the stroke bought agreement in the case that already agreed
+and manufactured it in the case that does not.
+
+Where the stroke lands is measured too, because marker strokes are butt-capped
+and a segment does not grow past its own ends. Ink minus path, at 600 dpi:
+
+```text
+"o"  mew 1  +1.12 across  +1.12 down     "|"  mew 1  +1.20 across  +0.04 down
+"o"  mew 2  +2.08 across  +2.08 down     "|"  mew 2  +2.04 across  +0.16 down
+```
+
+One rule covers both, and it subsumes the older bar-marker special case rather
+than sitting beside it: the stroke widens an axis exactly when the path has
+extent in the other one.
+
+The stated cost of this change was `gallery-parity` moving from 49% to 55% and
+flipping. That number was wrong. Parity is spelled `edgecolors="none"`, which
+leaves `get_edgecolors()` an empty array while `get_linewidths()` goes on
+reporting the 0.70pt `patch.linewidth` default, so the 55% was a stroke the
+render does not contain — the naive version of this change would have shipped a
+hard false positive on the one corpus figure the question reaches. Asking
+whether an edge is drawn before asking how wide it is, the corpus holds 10
+mark-cloud artists across all 21 figures, 2 of them with a stroke actually
+drawn, both of those `gallery-survival`'s `"|"` and `"_"` where the stroke was
+already the whole measured width. **0 verdict changes.** The exposure is
+honestly near zero and the figure that would have moved is the one that proves
+the naive reading wrong.
 
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside
