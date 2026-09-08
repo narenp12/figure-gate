@@ -134,6 +134,14 @@ behind a threshold this project enforces.
   Censoring ticks drawn along a survival curve sit 0px from it by construction,
   so no placement of a direct label could clear them.
 - `docs/images` carries the eight figures this cycle added to the corpus.
+- `gates.md` carries the rule and not the argument, which its own intro already
+  routes to the style guide. Six `Fails when` cells and two remedy cells drop
+  the rationale they had grown; it lands on the pages that own it, where none
+  of it existed: the gridline-as-ink exemption and the white-on-white contrast
+  case under the style guide's "Text on fills", the three-alpha budget beside
+  the composition bullet it qualifies, the reverse ramp lookup under "hand the
+  ramp to a colormap", and the Gantt and waterfall baselines under
+  `choosing-a-form.md`'s baseline section. No heading moved, so no link breaks.
 - The home page's card icons render at 1.5rem. They are inline `<svg>` with a
   viewBox and no width or height, which SVG defaults to 100%, so each one had
   been taking the full width of its card.
