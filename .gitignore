@@ -34,3 +34,7 @@ docs/superpowers/
 
 # Isolated implementation worktrees.
 .worktrees/
+
+# `make sweep` writes here. A sweep is evidence for one comparison, not a
+# file the repository carries.
+sweep.json

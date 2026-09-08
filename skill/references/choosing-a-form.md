@@ -107,6 +107,15 @@ A log axis has the same constraint as a cut bar baseline: it cannot contain
 zero, so it cannot carry a bar. Use points, and say in the caption that the
 scale is multiplicative.
 
+**A bar that carries its own offset has no baseline to cut.** A Gantt bar's
+length is a duration and its position is a start date; a waterfall segment's
+length is a delta and its base is the running total. Neither length is measured
+from the axis edge, so moving that edge misstates nothing and `check_figure.py`
+does not judge them. The obligation has not gone away, it has moved: the reader
+is comparing lengths that share no origin, which is rank 3 with the alignment
+that rank 2 would have given taken away, and the fix for that is the form rather
+than the axis.
+
 ## Paired data: draw the pairing
 
 **Two bars side by side throw away the pairing.** If each subject was measured
