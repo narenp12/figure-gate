@@ -1198,6 +1198,115 @@ def test_series_color_catches_a_seventh_hue():
         (n, d) for n, _, d in rows)["Series color"]
 
 
+# --- single-hue ordinal ramps: a negative result, with the measurement
+#
+# Filed complaint: "Series color rejects every 4-step single-hue ramp, so
+# ordered stacks are unconditionally red." The premise is false, and the
+# exemption that would have been built for it is worse than the problem.
+# These four tests hold both halves so neither has to be rediscovered.
+
+def _ordered_stack(colors):
+    """Four categories stacked in order, one band per colour."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    base = np.zeros(4)
+    for i, c in enumerate(colors):
+        h = np.array([3.0, 4.0, 2.0, 5.0]) + i
+        ax.bar([0, 1, 2, 3], h, bottom=base, color=c, label=f"band {i}")
+        base += h
+    ax.set_ylim(0, base.max() * 1.1)
+    ax.legend()
+    return fig
+
+
+def test_a_four_step_single_hue_ordered_stack_passes_when_it_is_stepped():
+    """The premise, refuted by construction. A 4-step single-hue ramp on an
+    ordered stack is not rejected; one whose steps are too close is."""
+    fig = _ordered_stack(["#0c0c0c", "#595959", "#a5a5a5", "#f2f2f2"])
+    try:
+        status, detail = cf.check_series_color(fig)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_the_ramp_that_does_fail_fails_on_a_light_end_both_modes_flag():
+    """ColorBrewer Blues 4 is the case the complaint was really about, and the
+    row is not asking a wrong question of it. Its two lightest steps are dE 9.5
+    apart under protanopia, and `check_palette`'s *ordinal* rows independently
+    fail the same end for contrast against the surface. Two different questions,
+    one answer: the light end of that scheme does not hold up on a white page."""
+    blues = ["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"]
+    fig = _ordered_stack(blues)
+    try:
+        status, detail = cf.check_series_color(fig)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "#eff3ff" in detail and "#bdd7e7" in detail, detail
+
+    cp = pytest.importorskip("check_palette")
+    _, rows = cp.check(blues, ordinal=True)
+    ordinal = {n: s for n, s, _ in rows}
+    assert ordinal["Lightness monotone"] is True, ordinal
+    assert ordinal["Light-end contrast"] is False, ordinal
+
+
+def test_a_single_hue_ramp_runs_out_of_room_at_five_steps():
+    """The real constraint, stated rather than left to be rediscovered. One
+    hue has a finite lightness range and the adjacent floors want about 21 dE,
+    which caps a single-hue ordinal encoding at four steps even in grey, the
+    most separable hue there is."""
+    cp = pytest.importorskip("check_palette")
+    import numpy as np
+    for k, want in ((4, True), (5, False)):
+        greys = [f"#{int(v * 255):02x}{int(v * 255):02x}{int(v * 255):02x}"
+                 for v in np.linspace(0.05, 0.95, k)]
+        _, rows = cp.check(greys)
+        got = {n: s for n, s, _ in rows}["Normal-vision floor (adjacent)"]
+        assert got is want, (k, got, greys)
+
+
+def test_a_colour_only_ramp_detector_is_a_coin_flip_at_these_lengths():
+    """Why no exemption was built, pinned so the idea does not come back.
+
+    The obvious fix is to notice that a panel's hues are a ramp and swap the
+    categorical rows for the ordinal ones. `cmap_kind` refuses to classify
+    fewer than `CMAP_QUALITATIVE_N` samples for exactly this reason, and
+    reaching past it to the underlying monotone-lightness test shows why: on
+    random draws from an Okabe-Ito/tab10/Set2/Dark2 pool it calls them a ramp
+    about 2/k! of the time, which is simply the chance that k arbitrary colours
+    come out sorted. At four steps that is roughly one panel in ten silently
+    losing its CVD separation gate, which is the row's whole reason to exist."""
+    cp = pytest.importorskip("check_palette")
+    import matplotlib as mpl
+    import numpy as np
+
+    pool = list(dict.fromkeys(
+        OKABE
+        + [mpl.colors.to_hex(mpl.colormaps["tab10"](i)) for i in range(10)]
+        + [mpl.colors.to_hex(mpl.colormaps["Set2"](i)) for i in range(8)]))
+    rng = np.random.default_rng(0)
+    rate = {}
+    for k in (3, 4):
+        hits = 0
+        for _ in range(1500):
+            pick = list(rng.choice(pool, size=k, replace=False))
+            ls = [cp.linear_to_oklab(cp.hex_to_linear(h))[0] for h in pick]
+            if (cp._back_travel(ls) < cp.CMAP_BACKTRAVEL_MAX
+                    and max(ls) - min(ls) >= cp.CMAP_SPAN_MIN):
+                hits += 1
+        rate[k] = hits / 1500.0
+
+    assert 0.25 < rate[3] < 0.45, rate      # 2/3! = 0.33
+    assert 0.04 < rate[4] < 0.16, rate      # 2/4! = 0.083
+    assert rate[4] < rate[3], rate
+
+    # And the classifier this project actually ships declines to guess.
+    assert cp.cmap_kind(["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"]) \
+        == "qualitative"
+
+
 def test_series_color_catches_two_identities_sharing_a_hue():
     """What a seventh series looks like after the cycler wraps: matplotlib
     reuses slot 1 without complaint and the legend confidently lists both."""

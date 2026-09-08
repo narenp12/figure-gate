@@ -2602,6 +2602,40 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     all asked of one axes at a time, because the panel is the unit a reader
     separates hues within - a figure-wide bag gated hues that never share a
     frame against each other.
+
+    **A single-hue ordinal ramp is judged categorically here on purpose, and
+    the standing complaint about it does not survive measurement.** The
+    complaint is that this rejects every 4-step single-hue ramp, leaving
+    ordered stacks unconditionally red. It does not. Measured on an ordered
+    stacked bar chart, `#0c0c0c #595959 #a5a5a5 #f2f2f2` passes both separation
+    rows, and so does a 3-step blue. What fails is a scheme whose steps are too
+    close: ColorBrewer Blues 4 fails because `#eff3ff` and `#bdd7e7` are dE 9.5
+    apart under protanopia, and `check_palette`'s *ordinal* rows fail the same
+    end independently, for contrast against the surface. The row is asking for
+    wider steps, which is what its own advice says, and that is achievable.
+
+    There is a real ceiling underneath, worth stating rather than leaving to be
+    rediscovered: one hue has a finite lightness range and the adjacent floors
+    want about 21 dE, so a single-hue ordinal encoding runs out of room at five
+    steps even in grey.
+
+    The exemption was built and thrown away, which is the part to keep.
+    Detecting "these hues are a ramp" and swapping in the ordinal rows sounds
+    obvious, and at these lengths a colour-only detector is a coin flip:
+    reaching past `cmap_kind`'s `CMAP_QUALITATIVE_N` guard to the underlying
+    monotone-lightness test calls random draws from an
+    Okabe-Ito/tab10/Set2/Dark2 pool a ramp about **2/k!** of the time, which is
+    just the chance that k arbitrary colours come out sorted - 35% at three
+    steps and 10% at four. Each false positive silently disables the CVD
+    separation gate, which is the only reason this row exists. That guard is a
+    decision, not an oversight. `check_series_color`'s four
+    `single_hue`/`ramp_detector` tests pin both halves.
+
+    The escape hatch `_data_colors_by_axes` documents - draw an ordinal ramp as
+    `c=values, cmap=...` and it is read as the value it is - is genuinely
+    unavailable to a stacked bar chart, which has no colormap route. That is
+    the grain of truth in the complaint, and the answer to it is to step the
+    ramp wider rather than to guess at intent from four hexes.
     """
     by_ax = _data_colors_by_axes(fig)
     if not by_ax:

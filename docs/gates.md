@@ -153,7 +153,7 @@ mostly because the answer is to draw something else.
 | Line weight | Raise `linewidth` to clear 1pt *at the placed scale* | |
 | Banking | Set the panel aspect or the figure size to the ratio the row names | |
 | Ink coverage | Look at the named panel: empty and saturated both read as a defect | |
-| Series color | Fold the tail into "Other", or facet. Both need a redraw | yes |
+| Series color | Fold the tail into "Other", or facet. Both need a redraw. For a single-hue ordinal ramp, step it wider: four steps pass when they clear the separation floors, and one hue runs out of room at five. Where the form allows it, draw the ramp as a colormap rather than as a list of hexes and it is read as the value it is | yes |
 | Dual axis | Split the two scales into two panels | |
 | Form | Redraw: bars from zero, no pie, no 3D | |
 | Identity channel | Direct labels, not a legend | |

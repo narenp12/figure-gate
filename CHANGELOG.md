@@ -649,6 +649,57 @@ None has three bands, so the corpus is not exposed to the collapse and its
 clean sweep says nothing about it; the evidence is an eleven-case constructed
 matrix instead. 0 verdict changes.
 
+**`Series color` on a single-hue ordinal ramp: no change, and the measurement
+that decided it.** The standing complaint was that this row rejects every
+4-step single-hue ramp, leaving ordered stacks unconditionally red. The
+premise does not survive construction. On an ordered stacked bar chart,
+`#0c0c0c #595959 #a5a5a5 #f2f2f2` passes both separation rows, and so does a
+3-step blue:
+
+```text
+Greys 4, even steps      pass        ColorBrewer Blues 4    fail
+Blues 3                  pass        single hue, 5 steps    fail
+```
+
+What fails is a scheme whose steps are too close. ColorBrewer Blues 4 fails
+because `#eff3ff` and `#bdd7e7` are dE 9.5 apart under protanopia, and
+`check_palette`'s *ordinal* rows fail the same end independently for contrast
+against the surface: `#eff3ff` at 1.11:1. Two different questions, one answer,
+which is that the light end of that scheme does not hold up on a white page.
+The row's own advice, re-step the ramp, is the right one and is achievable.
+
+There is a real ceiling underneath and it is now stated rather than left to be
+rediscovered: one hue has a finite lightness range and the adjacent floors want
+about 21 dE, so a single-hue ordinal encoding runs out of room at five steps
+even in grey, the most separable hue there is.
+
+The exemption was built and thrown away, which is the part worth keeping.
+Detecting "these hues are a ramp" and swapping the categorical rows for the
+ordinal ones is the obvious fix, and at these lengths a colour-only detector is
+a coin flip. `cmap_kind` refuses to classify fewer than `CMAP_QUALITATIVE_N`
+samples; reaching past that guard to the underlying monotone-lightness test
+calls random draws from an Okabe-Ito/tab10/Set2/Dark2 pool a ramp about **2/k!**
+of the time, which is simply the chance that k arbitrary colours come out
+sorted:
+
+```text
+k=3   categorical pool 34.8%   uniform sRGB 34.0%     (2/3! = 33%)
+k=4   categorical pool  9.7%   uniform sRGB  9.2%     (2/4! =  8%)
+k=5   categorical pool  2.8%   uniform sRGB  1.9%
+k=6   categorical pool  0.4%   uniform sRGB  0.2%
+```
+
+At four steps that is roughly one panel in ten silently losing its CVD
+separation gate, which is the only reason this row exists. The 40-sample guard
+is a decision, not an oversight, and four tests now pin both halves so neither
+has to be rediscovered.
+
+The grain of truth in the complaint is real and is written down: the escape
+hatch `_data_colors_by_axes` documents, drawing an ordinal ramp as
+`c=values, cmap=...` so it is read as the value it is, is genuinely unavailable
+to a stacked bar chart, which has no colormap route. The answer there is to
+step the ramp wider, not to guess at intent from four hexes.
+
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside
 `plt.style.context` and hands the figure back with the context closed, so a
