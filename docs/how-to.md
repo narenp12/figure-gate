@@ -58,10 +58,9 @@ report(self_test_figure(), "self-test", suggest=True)  # (2)!
       ...
     ```
 
-    Two remedies for one row, and picking between them is the reader's job.
-    The row says which case it is looking at: a mark that dwarfs the *next*
-    largest is an ornament and the clip is right, while graded sizes are an
-    encoding that the clip would flatten.
+    Where a row prints two remedies, pick by what the detail names. A mark
+    that dwarfs the *next* largest is an ornament, and the clip is right;
+    graded sizes are an encoding that the clip would flatten.
 
 To work with the remedies as data rather than as printed text:
 

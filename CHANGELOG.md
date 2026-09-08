@@ -202,13 +202,12 @@ tolerance rather than the spacing one - a ramp is a curve through a cube, and
 little lands on one by accident - which is also why the drawn order is not
 required.
 
-The corpus sweep is clean and thin, and the thinness is the part worth
-recording. Twenty figures, no verdict changes, no detail-string changes; but
-only two of the twenty panels carrying series colours have three or more
-distinct ones, so the check was exposed to two panels rather than twenty. The
-corpus draws one or two series per panel almost everywhere. The 8000-palette
-measurement above is the real over-fire evidence here, and the sweep only
-confirms nothing already published moved.
+The corpus sweep is clean, and it is thin. Twenty figures, no verdict changes,
+no detail-string changes; but only two of the twenty panels carrying series
+colours have three or more distinct ones, so the check was exposed to two
+panels rather than twenty. The corpus draws one or two series per panel almost
+everywhere. The 8000-palette measurement above is the real over-fire evidence
+here, and the sweep only confirms nothing already published moved.
 
 **A bar chart drawn by hand carried a truncated baseline straight through.**
 `Form` read `ax.containers` for a `BarContainer` and nothing else, so the same
@@ -422,10 +421,10 @@ readability row names for a gridline. A `bbox` was tried first and passed
 nothing, correctly - the backdrop is sampled with the text hidden, which takes
 the box with it.
 
-Not a defect but worth writing down: `gallery-orbit.png` is rebuilt here with
-no pixel changed. Its embedded `Description` still carried an em dash from
-before that sentence was rewritten, so the committed PNG's alt text and the
-source's had been two different strings.
+One thing here is not a defect. `gallery-orbit.png` is rebuilt with no pixel
+changed: its embedded `Description` still carried an em dash from before that
+sentence was rewritten, so the committed PNG's alt text and the source's had
+been two different strings.
 
 **`Overplotting` could not see half the ways a cloud is drawn, and the corpus
 figure that says so in a comment was one of them.** `ax.plot(x, y, "o")` and
@@ -493,7 +492,7 @@ The stated cost of this change was `gallery-parity` moving from 49% to 55% and
 flipping. That number was wrong. Parity is spelled `edgecolors="none"`, which
 leaves `get_edgecolors()` an empty array while `get_linewidths()` goes on
 reporting the 0.70pt `patch.linewidth` default, so the 55% was a stroke the
-render does not contain — the naive version of this change would have shipped a
+render does not contain. The naive version of this change would have shipped a
 hard false positive on the one corpus figure the question reaches. Asking
 whether an edge is drawn before asking how wide it is, the corpus holds 10
 mark-cloud artists across all 21 figures, 2 of them with a stroke actually

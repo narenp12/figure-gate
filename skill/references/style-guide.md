@@ -91,6 +91,15 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
   that disappears into a filled band is not a marker.
 - Make ordinal emphasis a lightness ramp, not a transparency stack.
 
+**The three-level budget counts decisions, not artists.** Overlapping fills of
+one colour are one interval encoding drawn once, so a fan chart's bands are a
+single decision however many bands there are; counted per band, a figure that
+made one choice fails for making it legibly. Going the other way, a single flat
+alpha across everything asserts no hierarchy at all, so there is nothing there
+to judge for a focal point. Whether a figure that pale reads at all is a
+different question, and `check_ink` answers it off the rendered pixels rather
+than off the alpha values.
+
 ### Panel occupancy
 
 `check_ink` measures the fraction of each axes rectangle whose pixels differ
@@ -268,6 +277,15 @@ hues.
 A ramp drawn as standalone *lines* has no colormap to hand it to. Keep those
 tiers few and evenly stepped, and validate with `--ordinal`, since the
 composition gate measures them against the categorical floor.
+
+**Evaluating a bad map yourself does not hide it.** `color=cmap(i / 5)` off
+`jet` puts no array on any artist, so for a long time nothing on the figure was
+a colormap to classify and six hues sat comfortably under the `MAX_SERIES_HUES`
+ceiling. `check_colormap` now asks the question in reverse: are a panel's drawn
+hues `RAMP_MIN_STEPS = 3` or more evenly spaced samples of some *registered*
+map, and does that map classify `misc`. Asking it that narrowly is what keeps
+Okabe-Ito out of it, since a set of hues chosen to be told apart is not ordered
+in lightness and was never meant to be.
 
 ### Diverging: `RdBu`, as shipped
 
@@ -508,6 +526,20 @@ contrast("#471365", "#ffffff")
 *actually* got, measured off the rendered pixels. That is the only way to know,
 because the backdrop is whatever happened to be drawn under the label, and no
 artist knows that about itself.
+
+**A rule under a label is ground for one question and ink for the other.** The
+row asks two things of every string: whether it clears the contrast floor, and
+whether data ink crosses its glyphs. The second is measured as pixels differing
+from a local average, and near a gridline through an annotated heatmap cell the
+pixels that differ are the *cell's*, not the rule's - the average is pulled
+toward the rule for a few pixels either side of it. So the exemption takes the
+ground the label sits on as an anchor beside the furniture, and the shoulder
+between them is explained by the pair rather than counted as a mark competing
+with the text.
+
+Contrast is a separate question with a separate answer. White text lying on a
+white rule measures 1.0:1 wherever the two meet, and the reader loses the glyph
+there whatever the rule was for, so that fails the row and should.
 
 ### Direct labels: the alignment is the decision
 

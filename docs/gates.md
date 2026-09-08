@@ -23,9 +23,8 @@ it arrived on. `audit()` returns these 21 rows in this order.
 
 Where a row below says *panel*, it means every axes on the figure, an
 `ax.inset_axes` or a `secondary_xaxis` included. Those are added through
-`add_child_axes` and never reach `fig.axes`, so content placed in one used to
-go unjudged. The panel numbering in a detail string counts the top-level
-panels first and the child axes after them.
+`add_child_axes` and never reach `fig.axes`. The panel numbering in a detail
+string counts the top-level panels first and the child axes after them.
 
 <div class="sortable" markdown>
 
@@ -33,23 +32,23 @@ panels first and the child axes after them.
 |---|---|---|
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
 | Text collision | oriented box overlap | two text boxes overlap, rotation included, tick labels on a shared axis exempted |
-| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs. Furniture is exempt, and so is the ground the label sits on, so a gridline through an annotated heatmap cell is not counted as ink. A rule lying under text still counts against contrast, because white text on a white rule is 1.0:1 wherever the two meet |
-| Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour are an interval encoding drawn once and count as a single level, so a fan chart's bands are one decision rather than one each. A single flat alpha asserts no hierarchy and is not judged for a focal point; whether a pale figure reads at all is the Ink coverage row, measured off pixels |
+| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs. Furniture, and the ground the label sits on, do not count as ink; a rule lying under the text still counts against contrast |
+| Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour count as a single level. A single flat alpha is not judged for a focal point |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
 | Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
-| Type size | `TYPE_FLOOR_PT = 7.5`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 7.5pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. Scripts are measured rather than read off the property, and held to the lower floor because a script is set smaller than its base by convention |
+| Type size | `TYPE_FLOOR_PT = 7.5`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 7.5pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. Scripts are measured rather than read off the property |
 | Line weight | `LINE_FLOOR_PT = 1.0` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Gridlines, spines and tick marks are furniture and are not measured |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
 | Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
 | Dual axis | none | a `twinx` second scale carries data of its own |
-| Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset, as a Gantt chart and a waterfall do, have no shared baseline to cut and are not judged here |
+| Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
 | Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
 | Contour dash | none | a signed contour set dashes its negative levels *(advisory)* |
-| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation, and when a panel's series colours are `RAMP_MIN_STEPS = 3` or more evenly spaced samples of such a map, evaluated by the author rather than handed to an artist |
+| Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation, and when a panel's series colours are `RAMP_MIN_STEPS = 3` or more evenly spaced samples of such a map, sampled in code rather than handed to an artist |
 | Fonts | Type 42 | PDF or PS export would embed Type 3, or no named typeface resolves *(advisory)* |
 | Alt text | `ALT_TEXT_MIN_CHARS = 60` | no description is attached, or the attached one is under 60 characters *(advisory)* |
 
@@ -145,15 +144,15 @@ mostly because the answer is to draw something else.
 | Clipping | Turn on `constrained_layout`, or widen the figure | yes |
 | Text collision | Move one of the two named strings. Which one is free is yours to know | |
 | Text readability | Move the label to clear ground, or case it against the ink under it | |
-| Contrast stack | Take one artist to alpha 1, and keep to three alpha levels. A graded set of bands counts as one level, so a fan chart needs its median line rather than fewer intervals | yes |
-| Mark ratio | Clip the size array so the largest mark is 5x the smallest, when one mark is an ornament among marks otherwise alike. When the sizes are graded they encode a quantity and clipping flattens it, so carry the quantity by position instead | yes |
+| Contrast stack | Take one artist to alpha 1, and keep to three alpha levels. A fan chart's bands are one level, so it needs its median line rather than fewer intervals | yes |
+| Mark ratio | Clip the size array when one mark is an ornament among marks otherwise alike. When the sizes are graded, carry the quantity by position instead | yes |
 | Overplotting | Thin the counts, or switch to `hexbin`. Alpha does not move this row | yes |
 | Axis redundancy | `sharex`/`sharey` at creation, or `ax.label_outer()` after | yes |
 | Type size | Cut words. Do not shrink type | |
 | Line weight | Raise `linewidth` to clear 1pt *at the placed scale* | |
 | Banking | Set the panel aspect or the figure size to the ratio the row names | |
 | Ink coverage | Look at the named panel: empty and saturated both read as a defect | |
-| Series color | Fold the tail into "Other", or facet. Both need a redraw. For a single-hue ordinal ramp, step it wider: four steps pass when they clear the separation floors, and one hue runs out of room at five. Where the form allows it, draw the ramp as a colormap rather than as a list of hexes and it is read as the value it is | yes |
+| Series color | Fold the tail into "Other", or facet. Both need a redraw. For a single-hue ordinal ramp, step it wider, or hand it to a colormap rather than a list of hexes | yes |
 | Dual axis | Split the two scales into two panels | |
 | Form | Redraw: bars from zero, no pie, no 3D | |
 | Identity channel | Direct labels, not a legend | |

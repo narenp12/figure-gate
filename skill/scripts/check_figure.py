@@ -1452,15 +1452,15 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     at `alpha=0.02` reach 1% and `Ink coverage` warns. Alpha alone cannot tell
     those apart and the render can.
 
-    A contrast floor was tried here first and is the wrong tool, for the reason
-    worth recording. Compositing each artist over its panel and requiring WCAG
-    2.1's 3:1 non-text ratio sounds principled and condemns the project's own
-    palette: Okabe-Ito orange `#E69F00` measures **2.25:1 on white at full
-    opacity** and can never clear the floor at any alpha, and the green needs
-    0.9. That floor is also one this project deliberately keeps advisory, in
-    `check_palette`, where a sub-3:1 hue is legal and merely obligates a second
-    channel. Borrowing it as a hard gate here would have been the same category
-    error as judging a mathtext script against the body type floor.
+    A contrast floor was tried here first and is the wrong tool. Compositing
+    each artist over its panel and requiring WCAG 2.1's 3:1 non-text ratio
+    sounds principled and condemns the project's own palette: Okabe-Ito orange
+    `#E69F00` measures **2.25:1 on white at full opacity** and can never clear
+    the floor at any alpha, and the green needs 0.9. That floor is also one
+    this project deliberately keeps advisory, in `check_palette`, where a
+    sub-3:1 hue is legal and merely obligates a second channel. Borrowing it as
+    a hard gate here would have been the same category error as judging a
+    mathtext script against the body type floor.
     """
     import numpy as np
 
@@ -2820,11 +2820,11 @@ def _bar_axis(ax: Axes, vertical: bool) -> tuple[Callable, Callable, Callable,
 
 
 def bars_rest_on_a_shared_edge(ax: Axes, vertical: bool) -> bool:
-    """Do these bars stand on one edge, or does each carry its own offset?
+    """Whether these bars stand on one edge or each carries its own offset.
 
-    The question that separates a bar chart from a Gantt chart or a waterfall,
-    and the only thing `check_form` needs to know once a `BarContainer` has
-    already said these are bars.
+    What separates a bar chart from a Gantt chart or a waterfall, and the only
+    thing `check_form` needs to know once a `BarContainer` has already said
+    these are bars.
 
     A bar chart's lengths are all measured from one edge, so cutting that edge
     misstates every one of them. A Gantt bar's length is a duration and its
@@ -2840,13 +2840,14 @@ def bars_rest_on_a_shared_edge(ax: Axes, vertical: bool) -> bool:
     of another one in its own column, which is what stacking is and what
     floating is not.
 
-    This is deliberately narrower than `_baselined_bars`, which has to decide
-    whether a heap of rectangles is a bar chart *at all* and carries two guards
-    for that: at least `FORM_BAR_MIN_PATCHES` of them, and more than one
-    distinct length. Both are right for detection and wrong here. A single
-    truncated bar and a row of equal truncated bars are bar charts on the
-    container's own word, and they still misstate their values; measured, both
-    pass `check_form` if the detection guards are reused for this question.
+    This is deliberately narrower than the detection path that reads a heap of
+    loose rectangles, which has to decide whether they are a bar chart *at all*
+    and carries two guards for that: at least `FORM_BAR_MIN_PATCHES` of them,
+    and more than one distinct length. Both are right for detection and wrong
+    once a container has already answered the question. A single truncated bar
+    and a row of equal truncated bars are bar charts on the container's own
+    word, and they still misstate their values; measured, both pass
+    `check_form` if the detection guards are reused for this question.
 
     Args:
         ax: The panel.
