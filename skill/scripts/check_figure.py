@@ -1844,6 +1844,102 @@ def _radius_octaves(radius_px: np.ndarray) -> list[np.ndarray]:
     return [np.flatnonzero(key == k) for k in np.unique(key)]
 
 
+def _ragged_ranges(start: np.ndarray, count: np.ndarray) -> np.ndarray:
+    """`concatenate([arange(s, s + c) for s, c in zip(start, count)])`, vectorised.
+
+    One range per (mark, neighbouring cell) pair, holding that cell's members.
+    Building them a range at a time is the Python loop over marks that the grid
+    exists to avoid, so they are built as one cumulative sum instead: ones
+    everywhere, and at each range's first slot the jump from where the previous
+    range ended to where this one starts.
+    """
+    import numpy as np
+    keep = count > 0
+    start, count = start[keep], count[keep]
+    total = int(count.sum())
+    if total == 0:
+        return np.empty(0, dtype=np.int64)
+    out = np.ones(total, dtype=np.int64)
+    out[0] = start[0]
+    out[np.cumsum(count)[:-1]] = start[1:] - (start[:-1] + count[:-1]) + 1
+    return np.cumsum(out)
+
+
+# Candidate pairs held at once. The comparison keeps a few float64 arrays this
+# long, so the cap is what bounds the fallback's memory no matter how the marks
+# are piled up: 4M pairs is about 100MB of working set.
+GRID_PAIR_CAP = 1 << 22
+
+
+def _grid_contacts(xy: np.ndarray, radius_px: np.ndarray, src: np.ndarray,
+                   dst: np.ndarray, reach: float, hit: np.ndarray) -> None:
+    """Set `hit[i]` for every `src` mark whose disc meets some `dst` mark's.
+
+    A uniform grid of cell width `reach`, which bounds `r_i + r_j` across these
+    two groups. Two marks closer than the width sit at most one cell apart on
+    each axis, so a mark is compared against the 3x3 block around its own cell
+    and against nothing else, and the pairs that block misses are pairs that
+    were already too far apart to touch.
+
+    The width is the pair of groups' bound rather than the whole scatter's for
+    the reason `_radius_octaves` exists: an oversized mark widens only the
+    blocks it is itself an end of, and it is one mark. Widening every block
+    instead is what cost 62 million candidate pairs in the note above.
+
+    This is the scipy-free path, and it has to stay near-linear rather than
+    merely correct. The dense distance matrix it replaced was both: exact, and
+    226GB on `gallery.orbit`'s 168000 marks, which is a figure the CI leg that
+    installs matplotlib and nothing else audits on every run.
+    """
+    import numpy as np
+    if len(src) == 0 or len(dst) == 0 or not np.isfinite(reach) or reach <= 0.0:
+        return
+
+    pts = np.concatenate([xy[src], xy[dst]])
+    origin = pts.min(axis=0)
+    # +1 so every index is positive, and a span two wider than the tallest
+    # column so that a neighbour one cell above or below cannot carry the key
+    # of a cell in the next column along.
+    grid = np.floor((pts - origin) / reach).astype(np.int64) + 1
+    span = int(grid[:, 1].max()) + 2
+    src_grid, dst_grid = grid[:len(src)], grid[len(src):]
+
+    key = dst_grid[:, 0] * span + dst_grid[:, 1]
+    order = np.argsort(key, kind="stable")
+    cells, first, size = np.unique(key[order], return_index=True,
+                                   return_counts=True)
+
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            want = (src_grid[:, 0] + dx) * span + (src_grid[:, 1] + dy)
+            at = np.minimum(np.searchsorted(cells, want), len(cells) - 1)
+            found = cells[at] == want
+            count = np.where(found, size[at], 0)
+            if not count.any():
+                continue
+            start = np.where(found, first[at], 0)
+
+            # Walk the block in slices of `GRID_PAIR_CAP` candidates. A single
+            # cell holding more than that is still one slice, because a slice
+            # never splits a mark's range in two.
+            cumulative = np.cumsum(count)
+            lo = 0
+            while lo < len(src):
+                taken = int(cumulative[lo - 1]) if lo else 0
+                hi = int(np.searchsorted(cumulative, taken + GRID_PAIR_CAP,
+                                         side="right"))
+                hi = min(max(hi, lo + 1), len(src))
+                members = dst[order[_ragged_ranges(start[lo:hi], count[lo:hi])]]
+                owners = src[np.repeat(np.arange(lo, hi), count[lo:hi])]
+                gap = np.hypot(xy[owners, 0] - xy[members, 0],
+                               xy[owners, 1] - xy[members, 1])
+                touch = ((owners != members)
+                         & (gap < radius_px[owners] + radius_px[members]))
+                if touch.any():
+                    hit[owners[touch]] = True
+                lo = hi
+
+
 def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> float:
     """Fraction of the marks at `xy` whose disc intersects another mark's.
 
@@ -1870,8 +1966,8 @@ def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> fl
     a one-point tree.
 
     `cKDTree` is passed in rather than imported so the caller decides once
-    whether scipy is present; None falls back to the O(n^2) distance matrix,
-    which is the same answer and is only reached without scipy installed.
+    whether scipy is present; None takes the same grouping over a uniform grid
+    instead of a tree, in `_grid_contacts`, for the same answer.
     """
     import numpy as np
     n = len(xy)
@@ -1879,11 +1975,21 @@ def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> fl
     uniform = bool(np.ptp(radius_px) == 0.0)
 
     if cKDTree is None:
-        d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
-                     xy[:, 1][:, None] - xy[None, :, 1])
-        np.fill_diagonal(d, np.inf)
-        return float((d < radius_px[:, None] + radius_px[None, :]
-                      ).any(axis=1).sum()) / n
+        hit = np.zeros(n, dtype=bool)
+        here = np.flatnonzero(np.isfinite(xy).all(axis=1)
+                              & np.isfinite(radius_px))
+        groups = [g[np.isin(g, here)] for g in _radius_octaves(radius_px)]
+        for target in groups:
+            if len(target) == 0:
+                continue
+            r_target = float(radius_px[target].max())
+            for group in groups:
+                todo = group[~hit[group]]
+                if len(todo) == 0:
+                    continue
+                reach = float(radius_px[todo].max()) + r_target
+                _grid_contacts(xy, radius_px, todo, target, reach, hit)
+        return float(hit.sum()) / n
 
     if uniform:
         dists, _idx = cKDTree(xy).query(xy, k=2)

@@ -164,6 +164,10 @@ behind a threshold this project enforces.
   drawn as `plot(..., linestyle="none", marker=...)` is no longer measured
   along chords the figure never drew. A label that read as ambiguous only
   against those chords now passes.
+- `Overplotting` answers a large cloud without scipy installed. The scipy-free
+  branch of `_contact_fraction` enumerated every pair as a dense matrix, which
+  on `gallery.orbit`'s 168000 marks is 226GB; it walks a uniform grid now, over
+  the same radius-octave grouping the scipy path uses, for the same answer.
 
 ### Why it changed
 
@@ -843,6 +847,39 @@ measurement read against a knob nobody pinned. The record is taken at the first
 audit because there is no hook at construction, so a figure whose first audit
 happens outside its sheet records the wrong baseline and is then wrong
 consistently rather than differently each time.
+
+**A fallback nobody runs is a gate nobody has.** `_contact_fraction` takes a
+tree when scipy is present and enumerated every pair when it was not. The
+enumeration was written as the obviously-correct branch, and it is correct:
+it is also quadratic in memory, and the pytest legs of CI install matplotlib
+and nothing else on purpose, so it is the branch CI actually runs. On
+`gallery.orbit`'s 168000 marks it asks for a 168000 x 168000 float64 matrix,
+**226GB**, on every audit of that figure.
+
+Only the macOS leg went red, which is what made this look like a memory
+ceiling rather than a bug. It is a difference in what the two kernels do with
+an impossible mapping: Linux refuses it and macOS accepts it and then kills
+the process, so the leg came back on SIGKILL, `returncode -9`, with two xdist
+workers down beside it and the buffered stdout that would have named the
+figure lost with them. The `-n 2` cap on that leg, and the note above it
+blaming the arm64 image's memory, were both written against this symptom. The
+cap is left in place and the note now says what was actually wrong.
+
+The replacement is a uniform grid of cell width `r_maxA + r_maxB` over the
+same octave grouping, so a mark is compared against the 3x3 block around its
+own cell and against nothing else, and the width is a pair of groups' bound
+rather than the scatter's for the reason the grouping exists: one oversized
+mark widens only the blocks it is an end of. Measured on the leg that was
+failing: the four tests it killed now pass in 19.3s with no scipy, against
+21.1s for the same tests with scipy installed.
+
+Held to brute force rather than to the other implementation. The dense
+enumeration moved into `tests/test_figure.py` as a fixture, and both real
+paths are asserted against it across graded radii, one oversized mark,
+zero-radius marks and sub-pixel marks. Corpus exposure, which the scipy sweep
+does not provide because it never reaches this branch: the 21-figure sweep run
+with scipy uninstalled is byte-identical to the sweep with it, and before this
+it could not be run at all.
 
 **A gate that invents its own geometry pays for it twice.** `_series_px` sent
 every `Line2D` to `_polyline_px` and so to `_densify_px`, including one that

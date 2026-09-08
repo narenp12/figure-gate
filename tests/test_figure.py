@@ -2297,6 +2297,23 @@ def test_eclipse_is_caught_without_scipy_too(monkeypatch):
     assert verdict[0] == "warn", verdict
 
 
+def _dense_contact_fraction(xy, radius):
+    """Every pair, enumerated, as the reference the two real paths are held to.
+
+    This used to be `_contact_fraction`'s own scipy-free branch. It is a test
+    fixture now because it is quadratic in memory as well as in time, which is
+    what took the near-bare CI leg down on a 168000-mark figure; the shipped
+    fallback walks a uniform grid instead. Keeping the enumeration here keeps
+    the differential tests below pointed at brute force rather than at the
+    other implementation.
+    """
+    import numpy as np
+    d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                 xy[:, 1][:, None] - xy[None, :, 1])
+    np.fill_diagonal(d, np.inf)
+    return float((d < radius[:, None] + radius[None, :]).any(axis=1).sum()) / len(xy)
+
+
 def test_contact_fraction_fast_path_agrees_with_the_exact_one():
     """The uniform-radii shortcut rests on one identity: where `r_i + r_j` is a
     constant, some mark is within it exactly when the nearest mark is. Assert it
@@ -2309,10 +2326,12 @@ def test_contact_fraction_fast_path_agrees_with_the_exact_one():
         xy = rng.uniform(0, 400, size=(300, 2))
         radius = np.full(len(xy), spread / 2.0)
         fast = cf._contact_fraction(xy, radius, cKDTree)
-        exact = cf._contact_fraction(xy, radius, None)
+        exact = _dense_contact_fraction(xy, radius)
         assert fast == pytest.approx(exact), (
             f"at radius {spread / 2}: nearest-neighbour {fast}, all-pairs "
             f"{exact}")
+        assert cf._contact_fraction(xy, radius, None) == pytest.approx(exact), (
+            "the scipy-free grid disagrees with the enumeration")
         # And nudging one radius off constant moves it onto the pair path
         # without moving the answer.
         radius[0] += 1e-9
@@ -2320,12 +2339,12 @@ def test_contact_fraction_fast_path_agrees_with_the_exact_one():
 
 
 def test_contact_fraction_is_exact_across_radius_octaves():
-    """The mixed-radii path groups marks by radius octave and bounds each group
-    by its own largest radius rather than the scatter's. That bound is the whole
-    correctness argument, so assert it against the full pair enumeration on the
-    shapes that stress it: graded radii spanning six octaves, a single oversized
-    mark among uniform ones, and zero-radius marks, which draw nothing and can
-    still be contacted."""
+    """Both paths group marks by radius octave and bound each group by its own
+    largest radius rather than the scatter's. That bound is the whole
+    correctness argument, so assert both against the full pair enumeration on
+    the shapes that stress it: graded radii spanning six octaves, a single
+    oversized mark among uniform ones, and zero-radius marks, which draw
+    nothing and can still be contacted."""
     import numpy as np
     cKDTree = pytest.importorskip("scipy.spatial").cKDTree
     rng = np.random.default_rng(11)
@@ -2342,9 +2361,48 @@ def test_contact_fraction_is_exact_across_radius_octaves():
             radius = rng.choice([0.0, 2.0, 50.0], n)
         else:                       # everything sub-pixel
             radius = rng.uniform(0.0, 2.0, n)
-        assert (cf._contact_fraction(xy, radius, cKDTree)
-                == cf._contact_fraction(xy, radius, None)), (
+        exact = _dense_contact_fraction(xy, radius)
+        assert cf._contact_fraction(xy, radius, cKDTree) == exact, (
             f"trial {trial}: shape {shape}, n {n}")
+        assert cf._contact_fraction(xy, radius, None) == exact, (
+            f"scipy-free, trial {trial}: shape {shape}, n {n}")
+
+
+def test_the_scipy_free_contact_path_answers_a_cloud_it_cannot_enumerate():
+    """The fallback has to be near-linear, not merely correct.
+
+    `gallery.orbit` draws the logistic map's attractor as 168000 marks in a
+    stroke-less `Line2D`, and `check_overplotting` measures it on every audit.
+    The scipy-free branch answered that by enumerating every pair, which at
+    this n is a 168000 x 168000 float64 matrix: 226GB. macOS maps it and the
+    kernel kills the process, so the CI leg that installs matplotlib and
+    nothing else came back on SIGKILL, `returncode -9`, taking two xdist
+    workers with it and losing the buffered stdout that would have said why.
+    Linux refuses the mapping instead, which is why only the one leg was red.
+
+    The fixture is the real attractor rather than a uniform cloud because the
+    grid's cost is a function of how the marks pile up, and this is the pile
+    that has to be affordable. Asserted against scipy rather than against the
+    enumeration for the reason the test exists: the enumeration does not fit.
+    """
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rs = np.linspace(2.5, 4.0, 1400)
+    keep, burn = 120, 400
+    x = np.full(rs.size, 0.4)
+    for _ in range(burn):
+        x = rs * x * (1 - x)
+    xs = np.empty((keep, rs.size))
+    for k in range(keep):
+        x = rs * x * (1 - x)
+        xs[k] = x
+    xy = np.column_stack([np.repeat(rs, keep) * 400.0, xs.T.ravel() * 400.0])
+    radius = np.full(len(xy), 0.5)
+
+    assert len(xy) * len(xy) * 8 > 200e9, (
+        "this fixture no longer reproduces the allocation it was written for")
+    assert (cf._contact_fraction(xy, radius, None)
+            == cf._contact_fraction(xy, radius, cKDTree))
 
 
 def test_contact_fraction_does_not_inflate_the_query_radius():
