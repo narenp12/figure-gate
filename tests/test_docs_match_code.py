@@ -1068,9 +1068,9 @@ def test_the_examples_still_describe_every_figure():
     """Eleven figures, eleven descriptions, plus the demo. A refactor that
     changes the call shape would otherwise leave this file comparing the site
     against a shorter list and finding no disagreement."""
-    assert len(described_strings()) == 20, (
+    assert len(described_strings()) == 21, (
         f"read {len(described_strings())} descriptions out of demo.py and "
-        "gallery.py, expected 20 - the call shape changed and "
+        "gallery.py, expected 21 - the call shape changed and "
         "described_strings() needs updating with it")
 
 

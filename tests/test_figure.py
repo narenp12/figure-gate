@@ -3345,8 +3345,10 @@ def test_a_bar_with_no_edge_is_not_a_hairline():
 def test_line_weight_still_does_not_measure_spines_or_tick_marks():
     """A decision, pinned, not an oversight.
 
-    Measured on the corpus: every spine on all twenty figures is under the
-    1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
+    Measured on the corpus: all 69 spines on all twenty-one figures are under
+    the 1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
+    Tick marks, remeasured at the same time, are 444 strokes on 20 figures with
+    none under it.
     Measuring them would fail the corpus outright, which is the data floor
     failing the sheet's own design -- the thing the docstring says it must not
     do.

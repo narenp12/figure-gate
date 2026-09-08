@@ -3194,9 +3194,9 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     silent on the figure whose every stroke was the defect.
 
     Spines and tick marks are furniture and are still not measured, which is a
-    decision and not an oversight. Measured against the corpus, every spine on
-    all twenty figures is under this floor, because the sheet ships the axis
-    rule at 0.8pt on purpose. Adding them would fail the corpus outright,
+    decision and not an oversight. Measured against the corpus, all 69 spines
+    on all twenty-one figures are under this floor, because the sheet ships the
+    axis rule at 0.8pt on purpose. Adding them would fail the corpus outright,
     which is the sheet's design being failed by the data floor exactly as the
     paragraph above says it must not be. Tick marks are the same class, and
     they carry an open disagreement with `check_svg` besides.

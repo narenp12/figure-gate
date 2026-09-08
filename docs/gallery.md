@@ -1,10 +1,10 @@
 ---
-description: "Nineteen audited figures covering the forms that are hard to check, and the defects that writing them found."
+description: "Twenty audited figures covering the forms that are hard to check, and the defects that writing them found."
 ---
 
 # Gallery
 
-`python examples/gallery.py` builds these nineteen figures and audits each one.
+`python examples/gallery.py` builds these twenty figures and audits each one.
 The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
@@ -150,6 +150,13 @@ Every alt text here is the string the figure itself carries, passed to
 <figure markdown="span">
   ![Temperature trend in kelvin per decade across longitude -30 to 30 and latitude -20 to 20, as a diverging red-blue field centred on zero. A cooling lobe fills the western half and a warming lobe of the same size the eastern half, with weaker lobes of the opposite sign at the corners. Cells where the trend is smaller than twice its own noise are drawn faded, so the two strong lobes stand out from a background that is not being claimed.](images/gallery-trendmap.png)
   <figcaption>matplotlib has taken a per-artist alpha array since 3.4, and <code>float()</code> raises on one. The contrast-stack row reads the array rather than the scalar for exactly this figure, counting a ramp across one artist as a single alpha decision; counted per cell it reports sixteen levels of haze and fails a figure that made one choice.</figcaption>
+</figure>
+
+## An inset that carries its own data
+
+<figure markdown="span">
+  ![Infrared absorbance against wavenumber from 1000 to 1100 inverse centimetres, for four temperatures from 100 to 400 kelvin, drawn in samples of a single purple-to-green ramp and labelled on the curves where they are furthest apart. A broad band centred near 1064 grows with temperature, while a narrow doublet on its short-wavenumber flank broadens and loses height as it broadens. An inset over the upper left, joined to the region it magnifies, holds wavenumbers 1038 to 1052: the doublet is two resolved lines at the coldest temperature and a single merged peak by 300 kelvin. The lower panel, on the same wavenumber scale, is each spectrum minus the coldest; it is positive across the band and dips below zero at the two line centres, which is what broadening at constant line strength looks like.](images/gallery-broadening.png)
+  <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale &mdash; the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
 </figure>
 
 ---

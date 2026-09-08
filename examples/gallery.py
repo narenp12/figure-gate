@@ -1,4 +1,4 @@
-"""Nineteen figures hard enough to be worth checking.
+"""Twenty figures hard enough to be worth checking.
 
     python examples/gallery.py [output-directory]
 
@@ -26,12 +26,17 @@ compositions where the checks have somewhere to hide:
     gallery-parity.png            predicted against observed, and a 1:1 line
     gallery-phase.png             boundaries named by labels set along them
     gallery-trendmap.png          a field with its own significance faded out
+    gallery-broadening.png        an inset carrying its own four curves
 
 Figures ten to thirteen exist because measuring the first seven against every
 gate found rows that had never seen anything: no figure drew a band, a bar, a
 diverging map, a signed contour set or a `scatter`, so five checks had returned
 a passing row seven times over without once running the code that decides. A
 gate that passes by having seen nothing looks exactly like a gate that passed.
+
+The twentieth is there for a construct rather than a form. Ten rows were taught
+to look inside `ax.inset_axes` and the corpus had no figure with one carrying
+data, so the sweep that shipped that fix had nothing it could move.
 
 The last six answer the same question asked mechanically rather than by eye.
 Run under coverage, the thirteen never reached a rotated label's oriented box,
@@ -48,7 +53,7 @@ runs `check_palette` over the sheet's own palette, which no figure exercises:
 the composition gates read hues off the artists, which is a different question
 from whether the palette was sound before anything was drawn with it.
 
-Importing this file builds nothing. The nineteen builders are importable and each
+Importing this file builds nothing. The twenty builders are importable and each
 returns its figure, so a change to a gate can be measured against the corpus:
 
     import gallery
@@ -98,6 +103,7 @@ import numpy as np
 
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
+from matplotlib import patheffects as pe
 from matplotlib.patches import FancyBboxPatch
 
 HERE = Path(__file__).resolve().parent
@@ -151,7 +157,7 @@ def finish(fig, name, description, **audit_kw):
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
     open. That is the mode for measuring a change against this corpus: the
-    nineteen figures are the evidence a gate is checked against, and getting at
+    twenty figures are the evidence a gate is checked against, and getting at
     them used to mean either rewriting the committed PNGs or not getting at
     them at all.
     """
@@ -1351,9 +1357,151 @@ def trendmap():
            context_axes=[ax])
 
 
+# --- 20. an inset that carries its own data ----------------------------------
+# The construct ten rows were taught to look inside and the corpus then had no
+# example of. `ax.inset_axes` is added through `add_child_axes` and never
+# reaches `fig.axes`, so a gate walking `fig.axes` audited the host panel and
+# skipped the child; the fix shipped with a sweep that could not move, because
+# every inset in the corpus was empty. This figure is the sweep's material.
+#
+# Three things at once, which is why it is one figure and not three. The inset
+# carries four curves of its own, so the child-axes traversal has artists to
+# find. Those four are drawn in colours sampled off `viridis` for an ordered
+# variable, which is the case `check_colormap_kind`'s sampled-ramp reader was
+# written for and was exposed to two panels of twenty. And the two panels are
+# stacked on one x, which is the direction `check_redundancy` could not measure
+# until this cycle and had one panel of twenty to measure it on.
+#
+# The zoom is the point of the form rather than decoration: the doublet is
+# 3.4 wavenumbers wide inside a 100-wavenumber window, so at the scale that
+# shows the band it is one stroke, and at the scale that resolves it the band
+# is off the page. `indicate_inset_zoom` draws the connectors, so the reader is
+# told where the inset came from instead of being asked to infer it.
+
+@styled
+def broadening():
+    nu = np.linspace(1000.0, 1100.0, 2400)
+    temps = (100, 200, 300, 400)
+    # Two collisionally broadened lines on a band that grows with temperature.
+    # The band separates the curves everywhere, which is what lets each one
+    # wear a direct label; the doublet is what the inset is for.
+    spectra = []
+    coldest_width = 0.30 + 0.0056 * temps[0]
+    for t in temps:
+        half_width = 0.30 + 0.0056 * t
+        # Broadening at constant line strength. A Lorentzian's area is
+        # pi * peak * half-width, so a line that widens by a factor loses that
+        # factor in height. Written with the peak held instead, broadening only
+        # ADDED absorbance: the lower panel came out positive at every one of
+        # the 2400 samples, including at the two line centres where the alt
+        # text says it is negative, and the figure was arguing for physics it
+        # was not drawing.
+        peak = 0.26 * coldest_width / half_width
+        band = (0.14 + 0.0011 * t) * np.exp(-0.5 * ((nu - 1064.0) / 13.0) ** 2)
+        doublet = sum(peak * half_width ** 2
+                      / ((nu - centre) ** 2 + half_width ** 2)
+                      for centre in (1043.0, 1046.4))
+        spectra.append(band + doublet)
+
+    # Sampled off the ramp rather than out of the categorical cycle, because
+    # temperature is ordered and the six series slots are not. Ends trimmed:
+    # viridis runs to a yellow that is 1.9:1 on this page, and the darkest end
+    # is hard to tell from the ink the axis furniture is drawn in.
+    ramp = plt.get_cmap("viridis")(np.linspace(0.12, 0.80, len(temps)))
+
+    fig, (band_ax, diff_ax) = plt.subplots(
+        2, 1, sharex=True, figsize=(6.4, 4.8), height_ratios=(3, 1),
+        constrained_layout=True)
+
+    for t, y, color in zip(temps, spectra, ramp):
+        band_ax.plot(nu, y, color=color, lw=1.5, label=f"{t} K")
+
+    # Direct labels in the gap above each curve, centred ON the band's apex.
+    # Both halves of that matter. The apex is where the four are furthest
+    # apart, and it is also the only place the curve above is flat across the
+    # width of a label: set four points to the RIGHT of the same anchor
+    # instead, the box runs 54px down the descending flank, the neighbour above
+    # falls 36px across that span, and every label but the top one measured 0px
+    # from a curve it does not name. Centred, the neighbour moves 7px over the
+    # box and the clearance holds. Placed on the curves themselves at 1078 they
+    # failed readability as well: a label centred on a stroke is 0px from it.
+    at = 1064.0
+    heights = sorted(float(np.interp(at, nu, y)) for y in spectra)
+    gap = heights[1] - heights[0]
+    # In ink, not in the curve's own hue, for the reason `survival` gives: the
+    # light end of this ramp is 1.9:1 on this page and fails the readability
+    # floor wherever it is put. The curve underneath is what identifies it.
+    for t, height in zip(temps, heights):
+        band_ax.annotate(f"{t} K", (at, height + 0.26 * gap),
+                         ha="center", va="center", color=INK)
+    band_ax.set_ylabel("Absorbance")
+    band_ax.set_ylim(0, 0.72)
+
+    zoom = band_ax.inset_axes((0.07, 0.50, 0.32, 0.40))
+    # Opaque, because the inset sits over the host's own curves and a
+    # transparent one puts its tick labels on top of them: the readability row
+    # measured '1044' at 14% of its box on data ink and 2.7:1 against it.
+    zoom.set_facecolor(SURFACE)
+    zoom.patch.set_alpha(1.0)
+    for y, color in zip(spectra, ramp):
+        zoom.plot(nu, y, color=color, lw=1.5)
+    zoom.set_xlim(1038.0, 1052.0)
+    # Its own y window, not the host's. Held to the host's the doublet is
+    # 0.22 of a 0.72 scale drawn in a box two fifths of the panel's height, so
+    # the thing the inset exists to resolve came out smaller inside it than
+    # outside.
+    zoom.set_ylim(0.04, 0.41)
+    zoom.set_xticks((1040, 1045, 1050))
+    zoom.set_yticks((0.1, 0.2, 0.3, 0.4))
+    # Cased, which is the remedy the readability row names for a gridline and
+    # refuses for a curve. An inset's tick labels are the only text on this
+    # sheet that lands inside a panel: the host's own sit outside the frame on
+    # bare page, where #777570 is 4.60:1 and clears the floor by a tenth, and
+    # these sit on the host's gridlines, where the same grey measured 3.5:1.
+    #
+    # A `bbox` was tried first and passed nothing, correctly. The backdrop is
+    # sampled with the text hidden, `set_visible(False)` takes the box with it,
+    # and the gridline is back under the sample. `_halo` reads a stroke path
+    # effect and only that, so a casing the gate can see has to be one.
+    for label in (*zoom.get_xticklabels(), *zoom.get_yticklabels()):
+        label.set_path_effects([pe.withStroke(linewidth=2.4,
+                                              foreground=SURFACE)])
+    _rect, connectors = band_ax.indicate_inset_zoom(zoom, edgecolor=MUTED,
+                                                    lw=1.0)
+    # matplotlib picks which corners to join by where the inset sits, and from
+    # up and to the left it chose one connector that ran the full diagonal of
+    # the panel, through all four curves. The two upward ones say the same
+    # thing over clear ground.
+    for connector, shown in zip(connectors, (False, True, False, True)):
+        connector.set_visible(shown)
+
+    for y, color in zip(spectra[1:], ramp[1:]):
+        diff_ax.plot(nu, y - spectra[0], color=color, lw=1.3)
+    diff_ax.axhline(0.0, color=MUTED, lw=1.0, zorder=1)
+    diff_ax.set_ylabel("Minus 100 K")
+    diff_ax.set_xlabel("Wavenumber (cm$^{-1}$)")
+    diff_ax.set_xlim(nu[0], nu[-1])
+
+    return finish(fig, "gallery-broadening",
+           "Infrared absorbance against wavenumber from 1000 to 1100 inverse "
+           "centimetres, for four temperatures from 100 to 400 kelvin, drawn "
+           "in samples of a single purple-to-green ramp and labelled on the "
+           "curves where they are furthest apart. A broad band centred near "
+           "1064 grows with temperature, while a narrow doublet on its "
+           "short-wavenumber flank broadens and loses height as it broadens. "
+           "An inset over the upper left, joined to the region it magnifies, "
+           "holds wavenumbers 1038 to 1052: the doublet is two resolved lines "
+           "at the coldest temperature and a single merged peak by 300 "
+           "kelvin. The lower panel, on the same wavenumber scale, is each "
+           "spectrum minus the coldest; it is positive across the band and "
+           "dips below zero at the two line centres, which is what "
+           "broadening at constant line strength looks like.")
+
+
 BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
             encoding, uncertainty, counts, residual, density, callout,
-            secondary_scale, survival, raster, rose, parity, phase, trendmap)
+            secondary_scale, survival, raster, rose, parity, phase, trendmap,
+            broadening)
 
 
 # --- the palette these figures are drawn with --------------------------------
@@ -1429,7 +1577,7 @@ def palettes():
 
 
 def main(argv=None):
-    """Build all nineteen, audit each, and report. Returns a process exit code.
+    """Build all twenty, audit each, and report. Returns a process exit code.
 
     Under `if __name__ == "__main__"`, so that importing this file builds
     nothing, writes no PNG, reads no `sys.argv` and does not exit the

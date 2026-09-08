@@ -60,6 +60,9 @@ behind a threshold this project enforces.
   the sheet boundary for `demo` and `encoding`.
 - `check_figure.marker_extent_pt`, the width and height in points that a `plot`
   marker actually draws, which is not `markersize` for every marker.
+- A twentieth gallery figure, `gallery-broadening`: a spectrum whose inset
+  carries four curves of its own, sampled off an ordered ramp, over two panels
+  stacked on one x scale. The corpus is twenty figures.
 
 #### Fixed
 
@@ -377,6 +380,35 @@ quantities in different units whose ticks happened to coincide were told to use
 `sharey`. `Contrast stack` called `float()` on an array, raised, and the raising
 gate became a hard failure. `winter` and `Wistia` failed on quantisation
 artifacts of about 0.001 OKLab, amplified by their narrow lightness spans.
+
+**The construct ten rows were taught to look inside, the corpus had no example
+of.** `ax.inset_axes` was fixed for in this cycle and swept for with nothing to
+sweep: every inset in the twenty figures was empty, so a change that taught ten
+gates to walk child axes moved no verdict and could not have. `gallery-broadening`
+is the material that sweep needed, and it carries the two other thin
+measurements at the same time - colours sampled off a ramp by the author, which
+`check_colormap_kind`'s new reader had two panels of twenty to run against, and
+two panels stacked on one x, which `check_redundancy`'s new direction had one.
+
+Writing it found four defects, none of them in a gate. `_structural_values` in
+`tests/test_alt_text_numbers.py` walked `fig.axes`, so the two numbers the alt
+text gives for the window the inset magnifies resolved against nothing: the
+harness that reads the corpus had the same blind spot the gates were fixed for.
+The figure's own alt text claimed the doublet merges by 400 K when the drawn
+curves merge by 300, and claimed a residual negative at the line centres when
+the builder held each line's peak rather than its area, so broadening only ever
+added absorbance and the lower panel was positive at all 2400 samples. And the
+inset's tick labels are the only text this sheet puts inside a panel, where
+`#777570` measures 3.5:1 on the host's own gridlines against the 4.60:1 it has
+on bare page outside the frame; they are cased, which is the remedy the
+readability row names for a gridline. A `bbox` was tried first and passed
+nothing, correctly - the backdrop is sampled with the text hidden, which takes
+the box with it.
+
+Not a defect but worth writing down: `gallery-orbit.png` is rebuilt here with
+no pixel changed. Its embedded `Description` still carried an em dash from
+before that sentence was rewritten, so the committed PNG's alt text and the
+source's had been two different strings.
 
 **`Overplotting` could not see half the ways a cloud is drawn, and the corpus
 figure that says so in a comment was one of them.** `ax.plot(x, y, "o")` and
