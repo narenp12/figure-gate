@@ -10,7 +10,7 @@
 # `specs/2026-07-30-standardized-docs-audit.md` is the long form: what each
 # target proves, and what it deliberately does not.
 
-.PHONY: audit audit-code audit-prose audit-docs audit-api audit-spelling test coverage help
+.PHONY: audit audit-code audit-prose audit-docs audit-api audit-spelling test coverage sweep help
 
 help:
 	@echo "make audit          every check below, in the order a failure is cheapest to read"
@@ -21,6 +21,7 @@ help:
 	@echo "make audit-spelling codespell over prose and code"
 	@echo "make test           the full suite"
 	@echo "make coverage       the full suite, with line coverage over skill/scripts"
+	@echo "make sweep          every row of every corpus figure, to sweep.json"
 
 # Ordered by how long each takes and how legible its failure is. Spelling and
 # lint fail in seconds and name a line; the site build takes a minute and fails
@@ -64,3 +65,11 @@ test:
 # runs `test` on installs that have no coverage plugin at all.
 coverage:
 	uv run pytest tests/ -n auto -q --cov
+
+# Not part of `audit`, because it measures a change rather than a state: one
+# sweep on its own says nothing, and the answer is the diff between two. A gate
+# change that fires more often is adjudicated against this before it ships, and
+# reconstructing the procedure from memory each round is how a sweep ends up
+# measuring the wrong route. See the docstring for the two-commit workflow.
+sweep:
+	uv run python examples/corpus_sweep.py sweep.json

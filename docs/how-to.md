@@ -48,13 +48,19 @@ report(self_test_figure(), "self-test", suggest=True)  # (2)!
         - let a layout engine place the artists, or widen the figure
             fig.set_layout_engine("constrained")
       Mark ratio:
-        - cap the size range, so the largest mark still reads as a mark
+        - when one mark is an ornament among marks that are otherwise alike, cap the size range so the largest still reads as a mark. Read the sizes first: this clips, and clipping a size encoding destroys it
             for ax in fig.axes:
                 for c in ax.collections:
                     s = c.get_sizes()
                     if len(s):
                         c.set_sizes(s.clip(None, s.min() * 5.0))
+        - when the sizes are graded they are encoding a quantity, and the fix is the form rather than the numbers: carry it by position, on a second axis or as a dot plot
+      ...
     ```
+
+    Where a row prints two remedies, pick by what the detail names. A mark
+    that dwarfs the *next* largest is an ornament, and the clip is right;
+    graded sizes are an encoding that the clip would flatten.
 
 To work with the remedies as data rather than as printed text:
 

@@ -172,14 +172,22 @@ def numbers():
 # anything reports agreement with nothing.
 
 def _data_axes(fig):
-    return [ax for ax in fig.axes if ax.get_label() != "<colorbar>"]
+    return [ax for ax in cf._all_axes(fig) if ax.get_label() != "<colorbar>"]
 
 
 def _structural_values(fig):
-    """Quantities a figure states about itself: counts, limits, ticks."""
+    """Quantities a figure states about itself: counts, limits, ticks.
+
+    Over `cf._all_axes`, so an inset's own limits and ticks are quantities the
+    figure states. `gallery-broadening`'s alt text names the window its inset
+    magnifies, 1038 to 1052, and over `fig.axes` those are two numbers nothing
+    on the figure carries: `ax.inset_axes` goes through `add_child_axes` and
+    never reaches `fig.axes`. That is the same blind spot ten gates were fixed
+    for, in the harness that reads their corpus.
+    """
     axes = _data_axes(fig)
     values = {float(len(axes)), float(len(fig.axes))}
-    for ax in fig.axes:
+    for ax in cf._all_axes(fig):
         values |= {float(v) for v in ax.get_xlim() + ax.get_ylim()}
         values |= {float(v) for v in ax.get_xticks()}
         values |= {float(v) for v in ax.get_yticks()}
@@ -528,6 +536,66 @@ def check_parity_marks(fig):
     return float(sum(len(coll.get_offsets()) for coll in panel.collections))
 
 
+# --- gallery-broadening: the inset, and what it is a zoom of --------------
+# Read off the figure, not off the builder. The temperatures come back from the
+# direct labels the reader sees, and the peak counts from the drawn ydata, so a
+# change to the physics in the builder moves these with it.
+
+BROADENING_WINDOW = (1038.0, 1052.0)
+
+
+def _broadening_series(fig):
+    """`{temperature: (x, y)}` for the labelled curves in the upper panel."""
+    out = {}
+    for line in fig.axes[0].lines:
+        label = str(line.get_label())
+        if label.endswith(" K"):
+            out[float(label[:-2])] = (np.asarray(line.get_xdata()),
+                                      np.asarray(line.get_ydata()))
+    return out
+
+
+def _broadening_peaks(fig, temperature):
+    """Local maxima of one curve inside the window the inset magnifies."""
+    x, y = _broadening_series(fig)[temperature]
+    lo, hi = BROADENING_WINDOW
+    inside = (x >= lo) & (x <= hi)
+    y = y[inside]
+    rising, falling = y[1:-1] > y[:-2], y[1:-1] > y[2:]
+    return int((rising & falling).sum())
+
+
+def check_broadening_coldest_label(fig):
+    return min(_broadening_series(fig))
+
+
+def check_broadening_hottest_label(fig):
+    return max(_broadening_series(fig))
+
+
+def check_broadening_band_centre(fig):
+    """Where the broad band peaks, measured outside the doublet's window so
+    the sharp lines - which are taller than the band at every temperature -
+    are not what argmax finds."""
+    x, y = _broadening_series(fig)[min(_broadening_series(fig))]
+    outside = x > BROADENING_WINDOW[1]
+    return float(x[outside][int(np.argmax(y[outside]))])
+
+
+def check_broadening_cold_peak_count(fig):
+    return float(_broadening_peaks(fig, min(_broadening_series(fig))))
+
+
+def check_broadening_merge_temperature(fig):
+    """The coldest temperature at which the doublet is one peak rather than
+    two. The alt text's claim is about where the merge happens, and a count
+    that is right at 400 K says nothing about 300."""
+    merged = [t for t in sorted(_broadening_series(fig))
+              if _broadening_peaks(fig, t) == 1]
+    assert merged, "no drawn curve shows the doublet merged"
+    return float(merged[0])
+
+
 CHECKED = {
     ("gallery-raster", "Two"): check_raster_stimulus_rules,
     ("gallery-rose", "16"): check_rose_bin_count,
@@ -560,6 +628,11 @@ CHECKED = {
     ("gallery-density", "110"): check_density_scatter_points,
     ("gallery-density", "40000"): check_density_binned_points,
     ("gallery-secondary-scale", "305"): check_secondary_scale_top_limit_mm,
+    ("gallery-broadening", "100"): check_broadening_coldest_label,
+    ("gallery-broadening", "400"): check_broadening_hottest_label,
+    ("gallery-broadening", "1064"): check_broadening_band_centre,
+    ("gallery-broadening", "two"): check_broadening_cold_peak_count,
+    ("gallery-broadening", "300"): check_broadening_merge_temperature,
 }
 
 # Numbers no resolver places, each with the reason. Anything here is a claim
@@ -607,8 +680,8 @@ def test_the_sweep_reads_every_described_figure():
     """Every assertion above is parametrized over the built figures. A capture
     that came back short would not fail them, it would delete them."""
     built = figures()
-    assert len(built) == 20, (
-        f"built {sorted(built)}, expected the demo and nineteen gallery figures")
+    assert len(built) == 21, (
+        f"built {sorted(built)}, expected the demo and twenty gallery figures")
     assert all(alt for _fig, alt in built.values()), (
         "a figure was built with no description attached")
 

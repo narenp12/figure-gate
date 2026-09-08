@@ -22,6 +22,13 @@ behind a threshold this project enforces.
 - `check_figure.audit` measures under the rcParams the figure's first audit
   saw. `METRIC_RC_KEYS` names them. `Style sheet` and the Type 3 clause of
   `Fonts` still read the live rcParams.
+- `Line weight`, `Colormap kind`, `Contrast stack`, `Form`, `Mark ratio`,
+  `Series color`, `Overplotting`, `Ink coverage`, `Contour dash` and `Banking`
+  walk child axes. Content inside `ax.inset_axes` is judged where it went
+  unjudged before, so a figure carrying one can newly fail or warn.
+- `check_figure._all_axes` returns `fig.axes` first and descendants after, so
+  the `ax{i}` names in the detail strings keep their meaning for the panels
+  that were already numbered.
 
 #### Added
 
@@ -40,8 +47,39 @@ behind a threshold this project enforces.
   as it does on a figure.
 - `check_figure.MARK_RIDE_TOL_PX` and `check_figure.MARK_RIDE_FRAC_MIN`, the
   two thresholds separating a companion mark from a rival series.
+- `check_figure.RAMP_LUT_N`, `check_figure.RAMP_CHANNEL_TOL`,
+  `check_figure.RAMP_SPACING_TOL` and `check_figure.RAMP_MIN_STEPS`, the four
+  values deciding whether a panel's colours are samples of a registered ramp.
+- `check_figure.FORM_BAR_MIN_PATCHES` and
+  `check_figure.FORM_BAR_BASELINE_TOL`, the two values deciding whether a run
+  of rectangles standing on one edge is a bar chart.
+- `check_figure.MATH_SCRIPT_FLOOR_PT`, the type floor for a mathtext sub- or
+  superscript, which is lower than the floor for body text and sourced
+  separately.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
+- `check_figure.marker_extent_pt`, the width and height in points that a `plot`
+  marker actually draws, which is not `markersize` for every marker.
+- `check_figure.marker_stroke_pt` and `check_figure.collection_stroke_pt`, the
+  stroke a `plot` marker and a `scatter` each actually lay down around a mark,
+  which is zero whenever the edge is not drawn at all.
+- `check_figure.bars_rest_on_a_shared_edge`, whether a panel's bars stand on
+  one edge or each carry their own offset, which is what separates a bar chart
+  from a Gantt chart or a waterfall.
+- `check_figure.MARK_ORNAMENT_GAP`, the factor by which the largest mark has to
+  exceed the *next* largest before it reads as an ornament rather than as the
+  top of a graded run. It picks the remedy, not the verdict.
+- `check_figure.ALPHA_RAMP_MIN_STEPS`, the number of distinct non-opaque alphas
+  on overlapping fills of one colour at which the run reads as one interval
+  encoding rather than as that many separate decisions.
+- `REMEDIES` (`suggest_fixes`) gains a second `Mark ratio` entry, for the case
+  where the sizes are graded and clipping them would flatten an encoding. The
+  existing clip entry keeps its code and its position; its suggestion text now
+  says which case it is for and what it costs. A caller reading `REMEDIES` by
+  index rather than by `gate` sees the row move.
+- A twentieth gallery figure, `gallery-broadening`: a spectrum whose inset
+  carries four curves of its own, sampled off an ordered ramp, over two panels
+  stacked on one x scale. The corpus is twenty figures.
 
 #### Fixed
 
@@ -58,6 +96,32 @@ behind a threshold this project enforces.
 - `Clipping` recognises off-view ticks on a child axes, so `secondary_xaxis`
   and `secondary_yaxis` no longer report them as clipped text.
 - `Colormap kind` classifies a ramp before the 8-bit round trip.
+- `Colormap kind` recognises a colormap the author evaluated themselves. Series
+  drawn in colours sampled off `jet`, `rainbow` or another map a reader cannot
+  order now fail the row, where before no artist carried an array and nothing
+  on the figure looked at the ramp at all.
+- `Form` reads bars drawn as plain `Rectangle` patches. A truncated baseline
+  built by hand rather than by `ax.bar` now fails the row, and the two
+  spellings return the same detail string.
+- `Axis redundancy` measures the x direction. A column of panels repeating its
+  tick row now fails the row as a row of panels repeating its tick column
+  already did, under the same shared-scale requirement. Figures with stacked
+  panels on one x scale and no `sharex` can newly fail. The detail names
+  `repeated x tick row` beside the existing `repeated y tick column`.
+- `Line weight` measures patch edges and annotation arrows. A schematic drawn
+  entirely out of boxes and arrows was reported as having no strokes at all,
+  and its hairlines can newly fail. Spines and tick marks are still not
+  measured, deliberately.
+- `Type size` measures mathtext sub- and superscripts rather than reading the
+  declared size, and holds them to `MATH_SCRIPT_FLOOR_PT` rather than to
+  `TYPE_FLOOR_PT`. A figure with a script nested more than two deep can newly
+  fail. A first-level script is unaffected, which is what keeps the row off
+  matplotlib's own log-axis tick labels. `usetex` figures are exempt.
+- `Overplotting` reads a cloud drawn as `plot` markers with no connecting line,
+  not only one drawn by `scatter`. The two spellings of the same cloud now
+  report the same number. Figures using the `plot` spelling can newly warn, and
+  two in this project's own corpus do. The detail names `ax{i}.line{j}` beside
+  the existing `ax{i}.col{j}`.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -70,6 +134,14 @@ behind a threshold this project enforces.
   Censoring ticks drawn along a survival curve sit 0px from it by construction,
   so no placement of a direct label could clear them.
 - `docs/images` carries the eight figures this cycle added to the corpus.
+- `gates.md` carries the rule and not the argument, which its own intro already
+  routes to the style guide. Six `Fails when` cells and two remedy cells drop
+  the rationale they had grown; it lands on the pages that own it, where none
+  of it existed: the gridline-as-ink exemption and the white-on-white contrast
+  case under the style guide's "Text on fills", the three-alpha budget beside
+  the composition bullet it qualifies, the reverse ramp lookup under "hand the
+  ramp to a colormap", and the Gantt and waterfall baselines under
+  `choosing-a-form.md`'s baseline section. No heading moved, so no link breaks.
 - The home page's card icons render at 1.5rem. They are inline `<svg>` with a
   viewBox and no width or height, which SVG defaults to 100%, so each one had
   been taking the full width of its card.
@@ -77,8 +149,278 @@ behind a threshold this project enforces.
   the next development cycle. `exclude_bumps` on that entry; the release bump
   still refuses to run without notes.
 - `uv.lock` is a bump entry, anchored across its `name` and `version` lines.
+- `Series color` no longer reads an inset-zoom connector as a data hue.
+  `indicate_inset_zoom` builds its connectors out of `ConnectionPatch`, and
+  matplotlib gives each a facecolor off the property cycle although the shape
+  it draws is a line. `_data_colors_by_axes` excludes them.
+- `gallery-broadening` sets its connectors' width itself. `lw=` on
+  `indicate_inset_zoom` reaches the indicator rectangle and, on matplotlib
+  3.8, not the connectors.
+- `test_a_two_line_label_carrying_mathtext_parses_per_line` names the warning
+  it guards against instead of raising on every warning.
+- The macOS CI leg runs pytest at `-n 2` rather than `-n auto`.
+- `Label attribution` reads a stroke-less `Line2D` as marks rather than as a
+  polyline. `check_figure._series_px` sends one to `_marks_px`, so a cloud
+  drawn as `plot(..., linestyle="none", marker=...)` is no longer measured
+  along chords the figure never drew. A label that read as ambiguous only
+  against those chords now passes.
+- `Overplotting` answers a large cloud without scipy installed. The scipy-free
+  branch of `_contact_fraction` enumerated every pair as a dense matrix, which
+  on `gallery.orbit`'s 168000 marks is 226GB; it walks a uniform grid now, over
+  the same radius-octave grouping the scipy path uses, for the same answer.
 
 ### Why it changed
+
+**The declared floor is a different checker, and nothing on this branch had
+been run against it.** CI carries matplotlib 3.8.4 on one leg and every local
+run used the current release, so twenty-one commits went up green and came
+back with three failures the developer machine cannot produce. All three are
+worth writing down because none of them is a version guard in a gate.
+
+`indicate_inset_zoom` is the whole story for two of them. It returns a
+rectangle and four `ConnectionPatch` connectors, and on 3.8 the `lw=` given to
+it reaches the rectangle only: the connectors keep `patch.linewidth`, which
+this sheet ships at 0.7. They also carry a facecolor off the property cycle,
+`#E69F00`, although a connector draws a line and fills nothing. On the current
+release neither is visible to the gates, because the connectors are not in
+`ax.patches` at all.
+
+Those two failures needed opposite answers, which is the part worth keeping.
+`Series color` counting `#E69F00` as a fifth data hue against the four viridis
+samples the panel encodes with is a checker defect: a connector carries no
+identity, and no reader is being asked to tell it from a series. `Line weight`
+reporting a 0.70pt stroke is not a defect. The stroke is drawn, the row's own
+docstring says patch edges are data, and the author had asked for 1.0 and
+silently not got it. So the checker changed on the colour and the figure
+changed on the width, and treating them alike in either direction would have
+been wrong once.
+
+Corpus exposure, since a clean sweep proves nothing without it: 21 figures, 0
+verdict changes, and on the current release **0 of 20** gallery figures carry a
+reachable `ConnectionPatch` at all. The sweep was exposed to nothing and could
+not have moved. On 3.8.4 exactly one figure carries them, four connectors of
+which two are visible. The evidence here is the adversarial test and the full
+suite run against the floor, not the sweep.
+
+The mathtext failure was a test measuring its dependencies. It asserted a
+measurement under a blanket `warnings.simplefilter("error")`; on 3.8.4 the
+parse reaches `_fontconfig_pattern`, which calls pyparsing's deprecated
+`parseString` and `resetCache`, and `_script_min_pt` turns any exception into
+None deliberately, so the row reported no measurement and the test read
+`None == 3.773`. The parse itself is identical on both versions, glyphs at
+3.773, 5.39, 7.7 and 11.0pt. The filter now names the U+000A warning the test
+exists to catch.
+
+**The macOS leg was killed, and the reason was not the one it looked like.**
+Three processes died at once, `returncode -9` with the buffered stdout lost
+and two xdist workers reported `node down: Not properly terminated`, which
+reads like a leak. It is not. Holding the whole built corpus costs 135 MB and
+the module that caches it was the obvious suspect and the wrong one; the cost
+is in `audit`, where one pass over `gallery-orbit`'s 4000-point band takes
+530 MB for its canvases, KD-trees and pixel blocks. `test_renderer_invariance`
+is parametrised over all twenty builders, so `-n auto` on the arm64
+`macos-latest` image gives three workers a heavy figure each, at ~600 MB
+apiece, beside `test_example.py` running the entire gallery in a subprocess.
+That image carries 3 cores and 7 GB against ubuntu's 4 and 16, which is why
+this leg alone fails and why it passed until the corpus grew. Two workers is a
+cap on concurrency, not a repair: nothing here leaks, and the figures are
+closed where they are built.
+
+**Ten rows were not looking at insets, and the suite could not have told
+anyone.** `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` are added
+through `add_child_axes` and never reach `fig.axes`, so a gate that walked
+`fig.axes` audited the host and skipped the child. Moving one piece of content
+from a panel into an inset and re-reading every row is what measured it: a
+0.15pt hairline, a `jet` heatmap, six alpha levels, a pie, a size-encoded
+scatter, nine hues, a 4000-point cloud, a saturated raster, undashed contours
+and a sine banked to 85 degrees all passed inside the inset and failed outside
+it. Ten rows, one construct.
+
+The route matters and is easy to get wrong.
+`mpl_toolkits.axes_grid1.inset_locator.inset_axes` goes through `add_axes` and
+was always visible; `ax.inset_axes` is the blind one, and it is the idiom
+matplotlib has documented since 3.0. A sweep written against the first route
+finds nothing and concludes there is nothing.
+
+This adds fires rather than removing them, so it was measured against the
+corpus before it shipped: the nineteen gallery builders plus `demo.build`,
+twenty figures, swept on `main` and on the branch and diffed row by row. No
+verdict moved and no detail string moved. That is the right answer and it is
+also weak evidence, for the reason the whole defect exists: the corpus has no
+figure with a data-carrying child axes, so it had nothing to move. The thirteen
+tests are where the construct actually lives, and eleven of them fail on the
+commit before this one.
+
+**`jet` escaped the checker entirely by being evaluated one step at a time.**
+Six series drawn `color=cmap(i / 5)` off `jet` passed every row on the figure:
+no artist carries an array, so `Colormap kind` found nothing to classify, and
+six hues sit under the eight `Series color` allows. The rule was already
+written down - `_data_colors_by_axes` says in its own docstring to draw an
+ordinal ramp as `c=values, cmap=...` and "never as a pre-evaluated RGBA list" -
+and nothing enforced it.
+
+It is caught by reverse lookup rather than by classification, and the
+difference is the whole difficulty. Handing the panel's drawn hues to
+`cmap_kind_rgb` would condemn every categorical palette, Okabe-Ito included: a
+set of hues chosen to be told apart is not ordered in lightness and was never
+meant to be. So the narrow question is asked instead - are these colours evenly
+spaced samples of a *registered* map a reader cannot order - against the
+sixteen such maps matplotlib ships, each in both directions.
+
+The first draft failed Okabe-Ito. Over 256 samples `tab10`, `Set2`, `Dark2` and
+this project's own registered `okabe_ito` all classify `misc`, for the same
+reason a categorical palette should, and matching against them made drawing
+series in Okabe-Ito fail the row. Inheriting the `CMAP_QUALITATIVE_N` split the
+qualitative branch already makes is what excludes them, and the control test
+pins it.
+
+`RAMP_MIN_STEPS = 3` is measured, not chosen. Two colours make one step and one
+step is evenly spaced by definition, so at two the check asks only whether both
+hues sit somewhere on some ramp: 17 of 4000 pairs drawn from an
+Okabe-Ito/`tab10`/`Set2`/`Dark2` pool matched. At three, those same 4000 draws
+matched nothing, and neither did 4000 uniform-random sRGB palettes at any size
+from three to six. The discriminating test turns out to be the 3/255 channel
+tolerance rather than the spacing one - a ramp is a curve through a cube, and
+little lands on one by accident - which is also why the drawn order is not
+required.
+
+The corpus sweep is clean, and it is thin. Twenty figures, no verdict changes,
+no detail-string changes; but only two of the twenty panels carrying series
+colours have three or more distinct ones, so the check was exposed to two
+panels rather than twenty. The corpus draws one or two series per panel almost
+everywhere. The 8000-palette measurement above is the real over-fire evidence
+here, and the sweep only confirms nothing already published moved.
+
+**A bar chart drawn by hand carried a truncated baseline straight through.**
+`Form` read `ax.containers` for a `BarContainer` and nothing else, so the same
+chart built from `ax.add_patch(Rectangle(...))` reported `no pie, no 3D, no
+truncated bar baseline`. Both spellings now return the same detail string,
+which is the test that states the defect directly.
+
+Reading rectangles as bars is easy to get wrong in the over-firing direction,
+so the constraints are narrow: the exact `Rectangle` type, drawn in data space,
+unrotated, standing on a shared edge, and varying in length along the other
+axis. Each one closes something specific. `axvspan` and `axhspan` are
+`Rectangle`s, and a pair of shaded bands shares an edge and varies in extent,
+which is every other test here; they are drawn in a blended transform, so
+`get_data_transform()` separates them and a test pins that rather than assuming
+it. Equal length excludes a rug and a single-row heatmap, neither of which says
+anything with length.
+
+The shared edge is the modal one rather than a unanimous one, so a stacked
+chart is read by its bottom row. On its own that was too loose: a four-step
+waterfall had two segments land on the same edge by arithmetic and was read as
+a two-bar chart. So anything off the modal edge has to rest on the top of
+another rectangle in its own column, which is what stacking is and what
+floating is not. That also keeps the gate off the offset baselines that are an
+open argument in this project rather than a settled defect, since deciding that
+argument by arithmetic accident would be the wrong answer twice over.
+
+The corpus could not have found any of this. Twenty figures swept, no verdict
+changes; but only two panels carry a bar at all and both carry a
+`BarContainer`, which is matched first, so the new route was exercised by zero
+corpus panels. A fourteen-case adversarial set is what the constraints were
+measured against, and it is where the waterfall false positive was found. It
+ships as twelve tests.
+
+**Half of `Axis redundancy` was measuring nothing.** The tick-duplication test
+looped over row groups only, so a row of panels repeating a y tick column
+failed and the identical figure rotated, a column of panels repeating an x tick
+row, passed. Two stacked panels on one x scale printed the same run of numbers
+twice and the gate said the furniture was not duplicated.
+
+No documentation changed, and that is the finding rather than a convenience.
+`docs/gates.md` has said this row fires when "panels sharing limits, scale type
+and axis title repeat tick labels or axis titles", naming no direction, so the
+page has been describing the fixed behaviour the whole time and the code was
+the half that was wrong. Nothing in the suite could tell, because a claim about
+both directions is satisfied by a gate that measures one.
+
+The x direction inherits the shared-scale requirement rather than re-deciding
+it. That requirement was added in the round before this one, and reading tick
+strings alone told two panels carrying kilometres and seconds to use `sharex`,
+which would put unrelated data on one axis.
+
+It found a real fire in the suite's own fixtures. The row-spanning mosaic test
+stacks two panels on an identical x scale with no `sharex`, which is exactly
+the defect, and it had gone unnoticed because nothing looked. That fixture now
+names two distinct x quantities so the test measures the spanning panel it is
+about, and the fire it was tripping is described here rather than sanded off.
+
+Corpus: no verdict changes, and one figure of the twenty is exposed.
+`gallery-small-multiples` is the only one with a column of two or more panels,
+and it uses `sharex`, so its upper tick labels are hidden and the visible
+strings differ. That is thin, but the one exposed figure is the canonical
+correct case, which is the one worth not breaking.
+
+**`Line weight` was silent on the figure whose every stroke was the defect.**
+It read `ax.lines` and `ax.collections`, and a schematic is boxes and arrows
+and no `Line2D` at all, so one drawn wholly at 0.15pt returned `no strokes to
+measure`.
+
+What to add was decided by measuring the corpus first rather than by argument,
+because this row was expected to fire on almost everything. Counting every
+stroke the gate could reach, on twenty figures: patch edges, 20 strokes on 2
+figures, none under the floor. Annotation arrows, 5 strokes on 2 figures, none
+under. Tick marks, 377 strokes on 19 figures, none under. Spines, 57 strokes on
+**all twenty figures, every one of them under the floor**, because the sheet
+ships the axis rule at 0.72 to 0.8pt on purpose.
+
+So the item split in two on the evidence. Patch edges and arrows are data ink
+and cost nothing to start measuring. Spines are furniture, and adding them
+would fail the entire corpus, which is the data floor failing the sheet's own
+design: exactly what the row's docstring has always said it must not do. They
+stay out, and a test pins that as a decision rather than leaving it as an
+absence. Tick marks stay out too; they fire on nothing here, but they carry an
+open disagreement with `check_svg`, whose own corpus pins ten of thirteen fires
+on tick marks, and settling that by side effect would overturn a pinned
+measurement.
+
+Three detail strings moved on the corpus and no verdict did, which is the
+change working rather than noise: `gallery-rose` went from `no strokes to
+measure` to sixteen strokes, `gallery-schematic` from one to nine, and
+`gallery-callout` from one to two. Real content the gate had been blind to, all
+of it above the floor.
+
+**A 3.77pt glyph cleared a 7.5pt floor, and the obvious fix failed the corpus.**
+Mathtext draws each script level at 0.7 of the level above, so `$x_{i_{j_{k}}}$`
+set at a nominal 11pt puts a `k` on the page at 3.77pt while `get_fontsize()`
+reports 11.0 for the whole string.
+
+Measuring it is easy: matplotlib's parser returns one entry per glyph carrying
+the size that glyph is set at, so nothing here has to know the shrink factor,
+and the result is dpi-independent. Doing only that, and judging every glyph
+against `TYPE_FLOOR_PT`, sent three of the twenty corpus figures to a hard fail.
+Two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
+matplotlib's own log-axis tick label. No author wrote it, and the row's advice,
+"cut words, do not shrink type", cannot be acted on against it.
+
+That was the row being wrong rather than the corpus being wrong. Setting a
+script smaller than its base is how mathematics has been typeset for a century,
+and `TYPE_FLOOR_PT` is explicitly a *comfort* floor stricter than any journal's:
+the 7.0pt those tick labels render at is Nature's stated maximum for figure
+text, and the 6.6pt exponent on `gallery-encoding` is above Nature's, PNAS's and
+Science's minimums alike. A body floor applied to script glyphs is a category
+error.
+
+So scripts get their own floor, and 5.0 is where two independent sources land.
+The LaTeX2e kernel's `fontmath.ltx` maps every body size from 5pt to 25pt to a
+script and a scriptscript size and never sets math type below 5pt at any of
+them; Nature publishes 5pt as its minimum for any figure text. Both are recorded
+in `EXTERNAL_CLAIMS`.
+
+What that leaves the row catching is matplotlib's divergence and nothing else.
+LaTeX has three math sizes, and `\scriptscriptstyle` serves every level below
+the first, so nesting deeper than two stops shrinking; matplotlib multiplies by
+0.7 for six levels with no floor. At an 11pt base LaTeX would set that `k` at
+6pt and matplotlib sets it at 3.77. `usetex` figures are exempt on the same
+argument rather than for convenience: real LaTeX clamps, so there is nothing
+there to catch.
+
+With the sourced floor the corpus is clean, and it is not clean for want of
+exposure. Twenty figures, no verdict changes and no detail-string changes, with
+22 script-carrying strings across four figures actually measured; the smallest
+is 6.65pt against a 5.0 floor.
 
 **The release procedure runs as written, and the version moves in five files
 rather than four.** Both halves are defects that only ever ran on a release
@@ -137,6 +479,352 @@ quantities in different units whose ticks happened to coincide were told to use
 gate became a hard failure. `winter` and `Wistia` failed on quantisation
 artifacts of about 0.001 OKLab, amplified by their narrow lightness spans.
 
+**The construct ten rows were taught to look inside, the corpus had no example
+of.** `ax.inset_axes` was fixed for in this cycle and swept for with nothing to
+sweep: every inset in the twenty figures was empty, so a change that taught ten
+gates to walk child axes moved no verdict and could not have. `gallery-broadening`
+is the material that sweep needed, and it carries the two other thin
+measurements at the same time - colours sampled off a ramp by the author, which
+`check_colormap_kind`'s new reader had two panels of twenty to run against, and
+two panels stacked on one x, which `check_redundancy`'s new direction had one.
+
+Writing it found four defects, none of them in a gate. `_structural_values` in
+`tests/test_alt_text_numbers.py` walked `fig.axes`, so the two numbers the alt
+text gives for the window the inset magnifies resolved against nothing: the
+harness that reads the corpus had the same blind spot the gates were fixed for.
+The figure's own alt text claimed the doublet merges by 400 K when the drawn
+curves merge by 300, and claimed a residual negative at the line centres when
+the builder held each line's peak rather than its area, so broadening only ever
+added absorbance and the lower panel was positive at all 2400 samples. And the
+inset's tick labels are the only text this sheet puts inside a panel, where
+`#777570` measures 3.5:1 on the host's own gridlines against the 4.60:1 it has
+on bare page outside the frame; they are cased, which is the remedy the
+readability row names for a gridline. A `bbox` was tried first and passed
+nothing, correctly - the backdrop is sampled with the text hidden, which takes
+the box with it.
+
+One thing here is not a defect. `gallery-orbit.png` is rebuilt with no pixel
+changed: its embedded `Description` still carried an em dash from before that
+sentence was rewritten, so the committed PNG's alt text and the source's had
+been two different strings.
+
+**`Overplotting` could not see half the ways a cloud is drawn, and the corpus
+figure that says so in a comment was one of them.** `ax.plot(x, y, "o")` and
+`ax.scatter(x, y)` put the same marks in the same places; the row walked
+`ax.collections`, a marker-only `Line2D` has no offsets, and the answer for the
+`plot` spelling was "no scatter overplotting" every time. `gallery-orbit`
+carries a comment saying the gate warns on it and that the warning is one to
+read and accept. It did not warn. The comment had been untrue since it was
+written.
+
+The reason this took three attempts is that the obvious fix is wrong in a way
+the corpus reports as a false positive. Taking `markersize` for the drawn
+diameter moved three figures, `gallery-orbit` to a flat 100%, and a corpus
+rejection at 3 of 20 looks exactly like the overplotting negative result
+already pinned in this file. It was not one. `markersize` is a diameter for
+most markers and not for all of them: `lines.py` special-cases `","` and skips
+the scale entirely, so that marker is one device pixel however large the number
+is, and at `ms=5` and 150 dpi the naive reading gave `gallery-orbit`'s marks a
+radius seventeen times their own. `"."` carries its own `scale(0.5)`. `"|"` and
+`"_"` have no extent at all across the stroke, so nineteen censoring ticks on
+`gallery-survival` were being read as nineteen five-point discs and reported at
+63% and 83%. Measuring the marker's own path instead, `gallery-survival` drops
+out of the result, `gallery-orbit` reads 95%, and what remains is two figures
+rather than three.
+
+Both of those two were then checked against the render before the row was
+allowed to fire, by counting the connected components of each artist's ink
+alone: `gallery-forms` draws 14 marks as 7 blobs and 12 as 8, so half of the
+first strip is not separately countable, and `gallery-orbit` is a bifurcation
+diagram whose chaotic band is the finding. Neither is a false positive. This is
+not a threshold argument and there was nothing here to pin.
+
+Corpus exposure, since a clean sweep proves nothing without it: 7 marker-only
+artists on 3 of 20 figures, of which 2 figures moved. The scatter half of the
+same row is exposed at 3 artists on 2 figures. Both sides measure the marker's
+path and not the edge stroked around it, which under-reports the drawn mark by
+`markeredgewidth` on both, consistently. Counting it is more truthful and is
+left to its own commit below, where the stated cost turned out not to be real.
+
+**The edge stroked around a mark is ink, and the reason for leaving it out was
+a property of two rcParams rather than of the two APIs.** The argument for
+under-reporting together was that `scatter_diameter_pt` omits the stroke, so
+counting it on the `plot` side alone would make one row read the two spellings
+of one figure differently. Measured at 600 dpi, that symmetry holds only where
+matplotlib already draws symmetric marks. Under bare defaults
+`lines.markeredgewidth` and `patch.linewidth` are both 1.0 and one 4pt mark
+renders 5.16pt either way; under this project's own `figure.mplstyle` they are
+0.0 and 0.7, and the same mark renders 4.20pt from `plot` against 4.92pt from
+`scatter`. Omitting the stroke bought agreement in the case that already agreed
+and manufactured it in the case that does not.
+
+Where the stroke lands is measured too, because marker strokes are butt-capped
+and a segment does not grow past its own ends. Ink minus path, at 600 dpi:
+
+```text
+"o"  mew 1  +1.12 across  +1.12 down     "|"  mew 1  +1.20 across  +0.04 down
+"o"  mew 2  +2.08 across  +2.08 down     "|"  mew 2  +2.04 across  +0.16 down
+```
+
+One rule covers both, and it subsumes the older bar-marker special case rather
+than sitting beside it: the stroke widens an axis exactly when the path has
+extent in the other one.
+
+The stated cost of this change was `gallery-parity` moving from 49% to 55% and
+flipping. That number was wrong. Parity is spelled `edgecolors="none"`, which
+leaves `get_edgecolors()` an empty array while `get_linewidths()` goes on
+reporting the 0.70pt `patch.linewidth` default, so the 55% was a stroke the
+render does not contain. The naive version of this change would have shipped a
+hard false positive on the one corpus figure the question reaches. Asking
+whether an edge is drawn before asking how wide it is, the corpus holds 10
+mark-cloud artists across all 21 figures, 2 of them with a stroke actually
+drawn, both of those `gallery-survival`'s `"|"` and `"_"` where the stroke was
+already the whole measured width. **0 verdict changes.** The exposure is
+honestly near zero and the figure that would have moved is the one that proves
+the naive reading wrong.
+
+**`Form` failed a Gantt chart and a waterfall for a baseline neither of them
+has, and only when they were drawn the documented way.** `_baselined_bars`
+excluded both from the day it landed: a Gantt shares no edge at all, and a
+waterfall's segments neither share one nor rest on each other. But that
+function is the fallback for bars built by hand out of rectangles, and
+`check_form` consulted it only when there was no `BarContainer` to read. A
+container says these are bars; it does not say they stand on a baseline. So
+`ax.barh(y, width, left=...)` and `ax.bar(x, height, bottom=...)` went straight
+to the truncation verdict, and one figure passed drawn by hand and failed drawn
+with the helper matplotlib documents for it.
+
+The row's own advice is the tell. "Bar length encodes the value, so a cut
+baseline misstates every ratio" is true of a bar chart, where every length is
+measured from one edge. A Gantt bar's length is a duration and its position is
+a start date; a waterfall segment's length is a delta and its base is the
+running total. Neither is measured from the axis edge, so there is no ratio to
+misstate and "use a dot plot" is not a fix for either.
+
+Constructed rather than swept, because the corpus cannot decide this: 2 of 21
+figures carry bars, `gallery-counts` and `gallery-rose`, both on a shared
+baseline and neither moved. Six forms, drawn both ways:
+
+```text
+bar chart, truncated     fail      gantt, ax.barh(left=)       pass
+bar chart, full          pass      waterfall, ax.bar(bottom=)  pass
+stacked, truncated       fail      stacked, full               pass
+```
+
+Before the change the two offset-baseline forms failed. After it all six agree
+with their own reading, and the hand-drawn and container spellings of one Gantt
+return the same verdict.
+
+`bars_rest_on_a_shared_edge` is deliberately narrower than `_baselined_bars`
+rather than the same test with an orientation passed in. Detection carries two
+guards that are right for deciding whether a heap of rectangles is a bar chart
+at all and wrong for deciding whether bars stand on a baseline: at least
+`FORM_BAR_MIN_PATCHES` of them on the edge, and more than one distinct length.
+Reusing them would have opened a hole at exactly two points, measured: a single
+truncated bar and a row of three equal truncated bars both go from failing to
+passing, and both still misstate their values. A stacked chart is the same trap
+from the other side, since it uses `bottom=` too and its bottom row does rest
+on a real baseline, so "carries an offset" was never the discriminator.
+
+**`Mark ratio` was right to fire on a size-encoded scatter, and the fix it
+printed destroyed the encoding.** The standing complaint was that the row
+contradicts its own docstring, which ended "this gate is about marks whose size
+is not carrying the value". Nothing else in the project ever behaved as though
+that were an exemption: the how-to's worked example is a size ratio, the remedy
+clips a size array, and a test pins the row firing on a size-encoded scatter
+inside an inset. That one sentence was the only thing saying otherwise and it
+is gone.
+
+The bar exemption is about the channel, not about intent. Cleveland and McGill
+put position and length near the top of the perceptual ranking and area near
+the bottom, which `references/choosing-a-form.md` already states and cites. A
+bar thirty times another bar is read as thirty. A mark thirty times another
+mark is not read as thirty by anybody, whoever meant what by it, so a bubble
+chart is the last figure that should be exempt: it is precisely the case where
+the reader is asked to decode a number off the weak channel.
+
+What the argument was really pointing at is one line below the verdict. The row
+printed `[FIX] cap at 5.0x` unconditionally, and `suggest_fixes` offered a
+snippet that clips the size array. Run against a 60-mark bubble chart, that
+snippet collapses **52 of the 60 onto one size**, draws every value from 5.8 to
+39.9 identically, and turns the row green. It fixes the audit by destroying the
+data.
+
+That shipped because of a real gap in the round-trip harness, which is worth
+naming: `tests/test_suggest_fixes.py` executes every snippet against a figure
+that fails its gate and requires the gate to pass afterwards. Clipping passes
+that test for both cases. The harness cannot see that the figure no longer says
+what it said, and its `Mark ratio` fixture is an ornament, so the destructive
+case was never built. `test_clipping_a_size_encoding_really_does_destroy_it`
+now pins the cost directly.
+
+The advice is now branched on `MARK_ORNAMENT_GAP`, the ratio of the largest
+mark to the *next* largest, which is the stated harm ("one mark far larger than
+the rest") measured directly rather than inferred from the full range:
+
+```text
+ornamental star        33.3      bubble chart, continuous     1.02
+two `plot` markers    100.0      bubble chart, 3 categories   1.00
+                                 gallery-density              1.06
+```
+
+Above the gap, capping the range is right and the row says so. Below it the
+sizes are graded, and the row says the fix is the form rather than the numbers,
+which is the same answer `Form` gives about a truncated axis. The verdict is
+unchanged in both cases. Corpus exposure: 1 of 21 panels carries more than one
+scatter size, `gallery-density` at 110 distinct sizes and 3.8x, which passes
+and did not move.
+
+**`Contrast stack` over-fired on both of the forms where alpha is doing real
+work.** Two complaints, and both were the row asking a question the figure was
+not answering.
+
+*A fan chart was allowed two bands.* The per-point branch has always held that
+a continuous alpha encoding on one artist counts once, "because a continuous
+encoding is a single decision". A fan chart is that same encoding spelled
+across separate artists, and it was counted once per band. Worse, the opaque
+median line the row itself demands for a focal point took one of the three
+slots, so with `ALPHA_LEVELS_MAX` at 3 a **three**-band fan already failed, and
+the printed advice was to draw fewer prediction intervals. Non-opaque alphas on
+overlapping fills of one colour now collapse to one level once there are
+`ALPHA_RAMP_MIN_STEPS` of them.
+
+The collapse is scoped to fills, and that scope is the whole of it. Overlapping
+fills in one colour are one interval encoding; *lines* in one colour are
+separate series told apart by opacity, which is precisely the haze this row
+exists to catch, and
+`test_contrast_stack_counts_alpha_levels_inside_an_inset` had six of them
+pinned. An earlier draft grouped by colour alone and turned that pin green.
+
+*A single flat alpha is not a stack.* "Nothing is opaque, so the figure has no
+focal point" presupposes something to focus on among alternatives. A density
+scatter drawn wholly at `alpha=0.3` asserts no hierarchy and has no ranking to
+leave headless, and the remedy the row printed - raise the artist that carries
+the point to alpha 1 - destroys the encoding it is aimed at, the same shape of
+defect as the `Mark ratio` clip above. The opacity test now applies only where
+more than one level is present. A per-point ramp also lands at one level and is
+*not* exempt, because there the ramp is the hierarchy; two levels with nothing
+opaque still fail.
+
+That leaves "is this figure too pale to read", which belongs to `Ink coverage`
+and is measured off pixels rather than guessed from alpha. Measured: a
+3000-point scatter at `alpha=0.01` still lays 12% ink across its panel and
+reads perfectly well as a density field, while three lines at `alpha=0.02`
+reach 1% and that row warns. Alpha alone cannot tell those apart.
+
+A contrast floor was built here first and then thrown away, which is the part
+worth keeping. Compositing each artist over its panel and requiring WCAG 2.1's
+3:1 non-text ratio sounds principled and condemns the project's own palette:
+Okabe-Ito orange `#E69F00` measures **2.25:1 on white at full opacity** and can
+never clear that floor at any alpha, while the green needs 0.9 and the blue
+0.7. It is also a floor this project deliberately keeps advisory in
+`check_palette`, where a sub-3:1 hue is legal and merely obligates a second
+channel. Borrowing it as a hard gate would have been the same category error as
+judging a mathtext script against the body type floor.
+`test_the_contrast_floor_this_row_does_not_use_would_condemn_okabe_ito` pins
+the measurement so the idea does not come back unexamined.
+
+Corpus exposure: 3 of 21 figures carry more than one alpha level or any filled
+region at all, `gallery-density`, `gallery-orbit` and `gallery-uncertainty`.
+None has three bands, so the corpus is not exposed to the collapse and its
+clean sweep says nothing about it; the evidence is an eleven-case constructed
+matrix instead. 0 verdict changes.
+
+**`Series color` on a single-hue ordinal ramp: no change, and the measurement
+that decided it.** The standing complaint was that this row rejects every
+4-step single-hue ramp, leaving ordered stacks unconditionally red. The
+premise does not survive construction. On an ordered stacked bar chart,
+`#0c0c0c #595959 #a5a5a5 #f2f2f2` passes both separation rows, and so does a
+3-step blue:
+
+```text
+Greys 4, even steps      pass        ColorBrewer Blues 4    fail
+Blues 3                  pass        single hue, 5 steps    fail
+```
+
+What fails is a scheme whose steps are too close. ColorBrewer Blues 4 fails
+because `#eff3ff` and `#bdd7e7` are dE 9.5 apart under protanopia, and
+`check_palette`'s *ordinal* rows fail the same end independently for contrast
+against the surface: `#eff3ff` at 1.11:1. Two different questions, one answer,
+which is that the light end of that scheme does not hold up on a white page.
+The row's own advice, re-step the ramp, is the right one and is achievable.
+
+There is a real ceiling underneath and it is now stated rather than left to be
+rediscovered: one hue has a finite lightness range and the adjacent floors want
+about 21 dE, so a single-hue ordinal encoding runs out of room at five steps
+even in grey, the most separable hue there is.
+
+The exemption was built and thrown away, which is the part worth keeping.
+Detecting "these hues are a ramp" and swapping the categorical rows for the
+ordinal ones is the obvious fix, and at these lengths a colour-only detector is
+a coin flip. `cmap_kind` refuses to classify fewer than `CMAP_QUALITATIVE_N`
+samples; reaching past that guard to the underlying monotone-lightness test
+calls random draws from an Okabe-Ito/tab10/Set2/Dark2 pool a ramp about **2/k!**
+of the time, which is simply the chance that k arbitrary colours come out
+sorted:
+
+```text
+k=3   categorical pool 34.8%   uniform sRGB 34.0%     (2/3! = 33%)
+k=4   categorical pool  9.7%   uniform sRGB  9.2%     (2/4! =  8%)
+k=5   categorical pool  2.8%   uniform sRGB  1.9%
+k=6   categorical pool  0.4%   uniform sRGB  0.2%
+```
+
+At four steps that is roughly one panel in ten silently losing its CVD
+separation gate, which is the only reason this row exists. The 40-sample guard
+is a decision, not an oversight, and four tests now pin both halves so neither
+has to be rediscovered.
+
+The grain of truth in the complaint is real and is written down: the escape
+hatch `_data_colors_by_axes` documents, drawing an ordinal ramp as
+`c=values, cmap=...` so it is read as the value it is, is genuinely unavailable
+to a stacked bar chart, which has no colormap route. The answer there is to
+step the ramp wider, not to guess at intent from four hexes.
+
+**`Text readability` counted a gridline through an annotated heatmap cell as
+data ink, and the pixels it counted were not the gridline's.** The clutter
+clause flags a pixel that differs from a local average and then forgives it if
+its colour is furniture. `TEXT_EDGE_WINDOW` is 9, so within four pixels of a
+white rule the local average is pulled toward white, and the flat cell either
+side differs from it by more than `TEXT_EDGE_TOL` while still carrying the
+cell's own colour. An exemption that only knows about furniture can never
+forgive those. Instrumented on a 5x5 viridis heatmap with white major
+gridlines through the cell centres:
+
+```text
+450 of 646 pixels flagged as edges
+  106  actually the rule's colour, forgiven
+  344  the cell at (31, 146, 140), counted as data ink   -> 53% of the box
+```
+
+The ground the label sits on is now an anchor beside the furniture, which
+closes it exactly. `_near_any` measures distance to the segment between a pair
+of anchors, so the rule is explained by the furniture, the cell by the ground,
+and the antialiased shoulder where they meet by the segment joining them. The
+ground is the median of the *non-edge* pixels, which is the surface by
+construction.
+
+The obvious alternative would have blinded the row: dilating the furniture
+match by the blur window sounds equivalent and is not, because the page colour
+is furniture and every pixel on a white figure sits next to page. Measured
+before and after on four fixtures, only the artefact moves:
+
+```text
+curve through a label      15% -> 15%      scatter cloud behind a label   20% -> 20%
+thin curve through a label  8% ->  8%      heatmap, gridline and a curve  76% -> 28%
+```
+
+The last one moves to what the curve alone accounts for, and still fires. A
+figure that measured 0% clean gained a gridline and went to 42% before this
+and stays at 0% after, which is the pair the new tests hold.
+
+One thing the complaint blamed on the clutter clause belongs to the contrast
+clause and is correct: on a heatmap with *white* gridlines and white labels,
+the row fails for contrast, because white text lying on a white rule is 1.0:1
+wherever the two meet. That is a real defect in the figure and the test
+fixtures use a grey grid to keep the two clauses apart. Corpus sweep: 21
+figures, 0 verdict changes.
+
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside
 `plt.style.context` and hands the figure back with the context closed, so a
@@ -159,6 +847,75 @@ measurement read against a knob nobody pinned. The record is taken at the first
 audit because there is no hook at construction, so a figure whose first audit
 happens outside its sheet records the wrong baseline and is then wrong
 consistently rather than differently each time.
+
+**A fallback nobody runs is a gate nobody has.** `_contact_fraction` takes a
+tree when scipy is present and enumerated every pair when it was not. The
+enumeration was written as the obviously-correct branch, and it is correct:
+it is also quadratic in memory, and the pytest legs of CI install matplotlib
+and nothing else on purpose, so it is the branch CI actually runs. On
+`gallery.orbit`'s 168000 marks it asks for a 168000 x 168000 float64 matrix,
+**226GB**, on every audit of that figure.
+
+Only the macOS leg went red, which is what made this look like a memory
+ceiling rather than a bug. It is a difference in what the two kernels do with
+an impossible mapping: Linux refuses it and macOS accepts it and then kills
+the process, so the leg came back on SIGKILL, `returncode -9`, with two xdist
+workers down beside it and the buffered stdout that would have named the
+figure lost with them. The `-n 2` cap on that leg, and the note above it
+blaming the arm64 image's memory, were both written against this symptom. The
+cap is left in place and the note now says what was actually wrong.
+
+The replacement is a uniform grid of cell width `r_maxA + r_maxB` over the
+same octave grouping, so a mark is compared against the 3x3 block around its
+own cell and against nothing else, and the width is a pair of groups' bound
+rather than the scatter's for the reason the grouping exists: one oversized
+mark widens only the blocks it is an end of. Measured on the leg that was
+failing: the four tests it killed now pass in 19.3s with no scipy, against
+21.1s for the same tests with scipy installed.
+
+Held to brute force rather than to the other implementation. The dense
+enumeration moved into `tests/test_figure.py` as a fixture, and both real
+paths are asserted against it across graded radii, one oversized mark,
+zero-radius marks and sub-pixel marks. Corpus exposure, which the scipy sweep
+does not provide because it never reaches this branch: the 21-figure sweep run
+with scipy uninstalled is byte-identical to the sweep with it, and before this
+it could not be run at all.
+
+**A gate that invents its own geometry pays for it twice.** `_series_px` sent
+every `Line2D` to `_polyline_px` and so to `_densify_px`, including one that
+draws no stroke. `plot(..., linestyle="none", marker=",")` is the ordinary
+spelling of a dense cloud, and `gallery.orbit` draws 168,000 points that way in
+scattered order: densifying to a 2px gap returned **10,308,917 points, 157 MB,
+61x the input**. An `audit()` of that figure peaked at 426 MB, 368 MB of it
+held by a polyline nobody drew.
+
+The correctness half came first. The gate was measuring a label against chords
+joining marks the figure never connected, which is exactly what `_densify_px`'s
+docstring warns about and what `_marks_px` was written to avoid one gate over,
+in `_rides_on`. Both now use the same discriminator, `_artist_kind`, which
+already returned `marks` for this artist. Marks are read from the raw vertices
+rather than through `_drawstyle_xy`, because matplotlib draws them there:
+"Markers *must* be drawn ignoring the drawstyle", `Line2D.draw`.
+
+The memory was the second half, and it is what turned a wrong verdict into a
+red CI leg. The macOS runner has half the memory of the Linux one, and the two
+`orbit` legs of `tests/test_renderer_invariance.py` build and audit that figure
+at five authored dpi each. Measured on the two tests that crashed their xdist
+workers: **991 MB peak resident, down to 417 MB**, and 14.4s down to 4.4s. The
+two `tests/test_example.py` subprocesses that came back on SIGKILL measure 641
+MB down to 350 MB. The `-n 2` cap on the macOS leg was headroom rather than a
+repair and is left in place; it is now headroom over a figure that no longer
+needs it.
+
+Corpus exposure, since a clean sweep proves nothing without it: 21 figures, 0
+verdict changes, and **9 stroke-less `Line2D` artists across 22 builders**, of
+which eight carry 19 points or fewer. Only `orbit` is large enough for the
+difference to be visible, and `orbit` matches no direct label, so the sweep was
+exposed to the memory cost and to almost none of the correctness change. The
+evidence for that half is the adversarial figure in
+`test_a_cloud_drawn_as_plot_markers_is_not_a_rival_along_its_chords`, whose
+marks sit in two far corners while its invented chords run straight under the
+label on the curve that owns it.
 
 ### Changed
 

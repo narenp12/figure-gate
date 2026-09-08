@@ -196,7 +196,26 @@ jobs:
       # The one test that needs a real TeX runs in the `pgf` job below rather
       # than here. It skips itself on every leg of this matrix, which is what
       # that job exists to assert.
+      #
+      # Worker count is bounded on macOS and left to `auto` everywhere else.
+      # The arm64 `macos-latest` image carries about half the memory of the
+      # x86 one it replaced, and `auto` gives every core a worker that builds
+      # gallery figures of its own while `test_example.py` runs the whole
+      # corpus in a subprocess beside them, so the cap is worth keeping.
+      #
+      # It was not, however, what was killing this leg. That was a 226GB
+      # allocation: `check_figure._contact_fraction` enumerated every pair of
+      # marks when scipy was absent, which is exactly the install this job
+      # makes, and `gallery.orbit` draws 168000 of them. Linux refuses the
+      # mapping and macOS accepts it and then kills the process, which is why
+      # one leg of an eight-job matrix was red and no local run reproduced it.
+      # The fallback walks a grid now. Two workers stays as headroom over a
+      # figure that no longer needs it; the figures here are closed where they
+      # are built.
       - run: pytest -n auto -q
+        if: matrix.os != 'macos-latest'
+      - run: pytest -n 2 -q
+        if: matrix.os == 'macos-latest'
 
       - name: The checker rejects a deliberately bad figure
         run: python skill/scripts/check_figure.py

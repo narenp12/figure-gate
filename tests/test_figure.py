@@ -283,16 +283,142 @@ def test_panels_really_on_one_scale_still_fail():
 
 def test_a_row_spanning_mosaic_panel_is_not_redundant():
     """A panel spanning two rows lands in both, and its tick column then reads
-    as repeated against itself."""
+    as repeated against itself.
+
+    `a` and `b` are given distinct x quantities so that only the spanning panel
+    is under test. They sit one above the other on an identical x scale, which
+    is a real repeated tick row and was a real fire once the x direction was
+    measured at all. Leaving it in would have this test go red for something it
+    is not about.
+    """
     fig, axd = plt.subplot_mosaic([["a", "c"], ["b", "c"]],
                                   figsize=(5, 3), constrained_layout=True)
     axd["a"].plot([0, 1], [0, 1])
+    axd["a"].set_xlabel("Distance (km)")
     axd["b"].plot([0, 1], [0, 10])
+    axd["b"].set_xlabel("Duration (s)")
     axd["c"].plot([0, 1], [0, 100])
     r, _ = cf._renderer(fig)
     status, detail = cf.check_redundancy(fig, r)
     assert status is True, detail
     plt.close(fig)
+
+
+# --- the x direction of the same row ----------------------------------------
+# The tick-duplication test ran over row groups only, so a row of panels
+# repeating a y tick column failed and the same figure rotated - a column of
+# panels repeating an x tick row - passed. The x direction inherits the
+# shared-scale requirement rather than re-deciding it; see the four keys in
+# `check_redundancy`.
+
+
+def _stacked(labels=("Signal (V)", "Signal (V)"), xlabels=(None, None),
+             sharex=False):
+    fig, axes = plt.subplots(2, 1, figsize=(3.2, 4), constrained_layout=True,
+                             sharex=sharex)
+    for ax, ylab, xlab in zip(axes, labels, xlabels):
+        ax.plot([0, 5, 10], [0, 1, 0])
+        ax.set_xlim(0, 10)
+        ax.set_ylabel(ylab)
+        if xlab:
+            ax.set_xlabel(xlab)
+    return fig, axes
+
+
+def test_stacked_panels_repeating_an_x_tick_row_fail():
+    fig, _ = _stacked()
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "repeated x tick row" in detail, detail
+
+
+def test_the_two_directions_of_one_defect_reach_the_same_verdict():
+    """A row of panels repeating a y column and a column of panels repeating an
+    x row are the same duplicated ink. Only the first was measured."""
+    wide, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    for panel in (a, b):
+        panel.plot([0, 1], [0, 2])
+        panel.set_ylim(0, 2)
+        panel.set_ylabel("Signal (V)")
+    tall, _ = _stacked()
+    try:
+        rw, _ = cf._renderer(wide)
+        rt, _ = cf._renderer(tall)
+        assert cf.check_redundancy(wide, rw)[0] is cf.check_redundancy(tall, rt)[0]
+    finally:
+        plt.close(wide)
+        plt.close(tall)
+
+
+def test_stacked_panels_on_a_shared_x_axis_pass():
+    """The over-fire control, and the fix the message names. `sharex` hides the
+    upper tick labels, so the visible strings differ and nothing is repeated."""
+    fig, _ = _stacked(sharex=True)
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_stacked_panels_of_different_quantities_are_not_redundant():
+    """The shared-scale requirement, inherited rather than re-decided.
+
+    `docs/gates.md` promises this row fires on panels sharing limits, scale
+    type and axis title. Comparing tick text alone told two panels carrying
+    kilometres and seconds to use `sharex`, and taking that advice would put
+    unrelated data on one axis. Half a gate keeping that promise is the same
+    stale claim as none of it keeping it.
+    """
+    fig, _ = _stacked(xlabels=("Distance (km)", "Duration (s)"))
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_both_directions_repeated_at_once_are_both_named():
+    fig, axd = plt.subplot_mosaic([["a", "b"], ["c", "d"]],
+                                  figsize=(5, 4), constrained_layout=True)
+    for ax in axd.values():
+        ax.plot([0, 5, 10], [0, 1, 0])
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 1)
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "repeated y tick column" in detail, detail
+    assert "repeated x tick row" in detail, detail
+
+
+def test_a_column_spanning_mosaic_panel_is_not_redundant():
+    """The mirror of the row-spanning case above. A panel spanning two columns
+    must not read as repeated against itself in the x direction."""
+    fig, axd = plt.subplot_mosaic([["a", "b"], ["c", "c"]],
+                                  figsize=(5, 3), constrained_layout=True)
+    # Distinct y scales throughout, so only the x direction is under test here.
+    axd["a"].plot([0, 1], [0, 1])
+    axd["a"].set_ylabel("Volts")
+    axd["b"].plot([0, 10], [0, 10])
+    axd["b"].set_ylabel("Amps")
+    axd["c"].plot([0, 100], [0, 100])
+    axd["c"].set_ylabel("Watts")
+    r, _r2 = cf._renderer(fig)
+    try:
+        status, detail = cf.check_redundancy(fig, r)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
 
 
 def test_a_panel_title_is_not_a_direct_label():
@@ -412,13 +538,140 @@ def test_an_alpha_ramp_is_one_level_not_sixteen():
 
 
 def test_an_array_alpha_with_nothing_opaque_still_fails():
-    """The over-fire fix must not blind the row to the defect it exists for."""
+    """The over-fire fix must not blind the row to the defect it exists for.
+
+    Also the boundary of the flat-alpha exemption below. This lands at one
+    level too, and it is not exempt: the ramp itself asserts a ranking, so
+    nothing being opaque leaves that ranking headless."""
     fig, ax = plt.subplots(figsize=(3, 2))
     ax.scatter([0, 1, 2], [0, 1, 2], s=40, alpha=[0.2, 0.4, 0.6])
     status, detail = cf.check_contrast_stack(fig)
     assert status is False
     assert "nothing is opaque" in detail
     plt.close(fig)
+
+
+# --- alpha that is doing work: a fan chart, and a flat wash
+
+def _fan(ax, n, colour):
+    """`n` nested prediction bands about one median line, one colour."""
+    import numpy as np
+    x = np.linspace(0, 10, 100)
+    mid = np.sin(x)
+    for i, w in enumerate(np.linspace(2.5, 0.5, n)):
+        ax.fill_between(x, mid - w, mid + w, color=colour, alpha=0.12 * (n - i))
+    ax.plot(x, mid, color=colour, lw=1.6)
+
+
+def test_a_fan_chart_is_one_alpha_decision_not_one_per_band():
+    """The per-point branch has always held that a continuous alpha encoding
+    is a single decision. A fan chart is that encoding spelled across separate
+    artists, and it was counted once per band."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    _fan(ax, 5, OKABE[0])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail.count(",") == 1, ("the five bands should have collapsed to "
+                                    f"one level beside the median: {detail}")
+
+
+def test_a_three_band_fan_chart_was_failing_on_the_line_the_row_demands():
+    """The sharpest form of the defect. With `ALPHA_LEVELS_MAX` at 3, the
+    opaque median line this row requires for a focal point took one of the
+    three slots, so a fan chart was allowed two bands before it failed and the
+    advice was to draw fewer prediction intervals."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    _fan(ax, 3, OKABE[0])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_a_fan_chart_with_no_median_line_is_still_headless():
+    """The over-fire control for the collapse. Bands alone assert a ranking
+    with nothing at the top of it, which is the defect the opacity half is
+    for, and collapsing them must not hide it."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    x = np.linspace(0, 10, 50)
+    for i, w in enumerate([2.5, 1.7, 0.9]):
+        ax.fill_between(x, -w, w, color=OKABE[0], alpha=0.15 * (4 - i))
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False and "nothing is opaque" in detail, detail
+
+
+def test_graded_lines_of_one_colour_are_haze_and_not_a_fan():
+    """The other over-fire control, and the reason the collapse is scoped to
+    filled regions. Overlapping fills in one colour are one interval encoding;
+    lines in one colour are separate series told apart by opacity, which is
+    exactly the haze this row exists to catch."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for v in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65):
+        ax.plot([0, 1], [v, v], alpha=v, lw=2, color=OKABE[3])
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False, detail
+    assert "0.45" in detail, ("the six lines collapsed, and they are six "
+                              f"decisions: {detail}")
+
+
+def test_a_flat_single_alpha_is_not_a_stack():
+    """"Nothing is opaque, so the figure has no focal point" presupposes
+    something to focus on among alternatives. A density scatter drawn wholly
+    at one alpha asserts no hierarchy, and the remedy the row printed - raise
+    the artist that carries the point to alpha 1 - destroys the encoding."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.scatter(rng.normal(size=3000), rng.normal(size=3000), s=8,
+               color=OKABE[0], alpha=0.3)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_whether_a_pale_figure_reads_is_measured_off_pixels_not_alpha():
+    """Why the flat-alpha exemption does not open a hole. Alpha alone cannot
+    tell a readable density field from an invisible one, and `Ink coverage`
+    can: 3000 marks at alpha 0.01 still lay ink across the panel, while three
+    lines at 0.02 do not and that row warns."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.scatter(rng.normal(size=3000), rng.normal(size=3000), s=8,
+               color=OKABE[0], alpha=0.01)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] is True
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i in range(3):
+        ax.plot([0, 1], [i, i], color=OKABE[i], alpha=0.02, lw=1.6)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+
+
+def test_the_contrast_floor_this_row_does_not_use_would_condemn_okabe_ito():
+    """A rejected approach, pinned with the measurement that rejected it.
+
+    Compositing each artist over its panel and requiring WCAG 2.1's 3:1
+    non-text ratio sounds principled and fails the project's own palette.
+    Okabe-Ito orange never clears it at any alpha, including full opacity, and
+    the green needs 0.9. It is also a floor `check_palette` deliberately keeps
+    advisory, where a sub-3:1 hue is legal and merely obligates a second
+    channel."""
+    import numpy as np
+    from matplotlib.colors import to_rgb
+    page = np.array([255.0, 255.0, 255.0])
+    opaque = {name: cf._contrast_255(np.array(to_rgb(hexc)) * 255.0, page)
+              for name, hexc in (("orange", "#E69F00"), ("green", "#009E73"),
+                                 ("blue", "#0072B2"))}
+    assert opaque["orange"] < 3.0, opaque
+    assert round(opaque["orange"], 2) == 2.25, opaque
+    assert opaque["green"] > 3.0 and opaque["blue"] > 3.0, opaque
 
 
 def test_mark_ratio_catches_an_ornamental_star():
@@ -428,6 +681,54 @@ def test_mark_ratio_catches_an_ornamental_star():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Mark ratio"] is False
+
+
+def test_mark_ratio_still_judges_a_size_encoded_scatter():
+    """The answer to a standing argument, written down rather than assumed.
+
+    The docstring used to end "this gate is about marks whose size is not
+    carrying the value", which reads as an exemption for a bubble chart. It is
+    not one, and nothing else in the project ever behaved as though it were.
+    The bar exemption is about the channel: Cleveland and McGill put length
+    near the top of the perceptual ranking and area near the bottom, so a bar
+    thirty times another bar is read as thirty and a mark thirty times another
+    mark is not, whoever meant what by it."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(rng.random(60), rng.random(60), s=rng.uniform(1, 40, 60) * 20)
+    try:
+        ok, detail = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_mark_ratio_tells_an_ornament_from_an_encoding_in_its_advice():
+    """The verdict is the same for both; the advice must not be. Capping the
+    range is right for one mark stuck on top of a plot and destroys a graded
+    one, so the row says which it is looking at."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 2], s=[10, 10, 900])
+    try:
+        ok, ornament = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert f"cap at {cf.MARK_RATIO_MAX}x" in ornament, ornament
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(rng.random(60), rng.random(60), s=rng.uniform(1, 40, 60) * 20)
+    try:
+        ok, graded = cf.check_mark_ratio(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False
+    assert "the fix is the form" in graded, graded
+    assert "cap at" not in graded, graded
 
 
 def test_mark_ratio_sees_line_markers_not_only_scatter():
@@ -602,6 +903,168 @@ def test_type_floor_is_measured_on_the_page_not_in_the_figure():
         cf.CONTENT_WIDTH_PT = saved
 
 
+# --- mathtext is measured, against its own floor ----------------------------
+# `get_fontsize()` is the size the author asked for. Mathtext draws each script
+# level at 0.7 of the level above, so an 11pt label puts a glyph on the page at
+# 3.77pt and reported 11.0. Both halves of the fix are load-bearing: reading
+# the property let that glyph pass, and judging a script against the *body*
+# floor failed matplotlib's own log tick labels on three of twenty corpus
+# figures. See `cf.MATH_SCRIPT_FLOOR_PT`.
+
+
+def _labelled(label, base):
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.set_xlabel(label, fontsize=base)
+    ax.set_ylabel("y", fontsize=11)
+    ax.tick_params(labelsize=11)
+    return fig, ax
+
+
+def _type_size(label, base):
+    fig, _ax = _labelled(label, base)
+    try:
+        r, _ = cf._renderer(fig)
+        return cf.check_type_size(fig, r, scale=1.0)
+    finally:
+        plt.close(fig)
+
+
+def test_a_deeply_nested_script_is_caught_though_the_property_says_11pt():
+    """The defect. Three levels of subscript at a nominal 11pt puts a `k` on
+    the page at 3.77pt, and `get_fontsize()` returns 11.0 for all of it."""
+    fig, ax = _labelled(r"$x_{i_{j_{k}}}$", 11)
+    try:
+        assert ax.xaxis.label.get_fontsize() == 11.0
+        assert cf._script_min_pt(ax.xaxis.label) == pytest.approx(3.773, abs=1e-3)
+    finally:
+        plt.close(fig)
+    status, detail = _type_size(r"$x_{i_{j_{k}}}$", 11)
+    assert status is False, detail
+    assert "mathtext script" in detail, detail
+
+
+def test_a_first_level_script_is_not_held_to_the_body_floor():
+    """The over-fire control, and the reason this row has a second floor.
+
+    A subscript at a 10pt base renders at 7.0pt. That is under
+    `TYPE_FLOOR_PT`, and failing it is what condemned matplotlib's own
+    `$\\mathdefault{10^{-11}}$` log tick labels on three of the twenty corpus
+    figures. Setting a script smaller than its base is not a defect; it is how
+    mathematics has been typeset for a century, and 7.0pt is exactly the
+    *maximum* text size Nature publishes for figure text.
+    """
+    status, detail = _type_size(r"$x_i$", 10)
+    assert status is True, detail
+    status, detail = _type_size(r"$\mathdefault{10^{-11}}$", 10)
+    assert status is True, detail
+
+
+def test_the_script_floor_is_where_latex_and_nature_agree():
+    """5.0 is not chosen, it is where two independent sources land.
+
+    LaTeX's own table maps every body size from 5pt to 25pt to a script and a
+    scriptscript size and never goes below 5pt at any of them. Nature publishes
+    5pt as the minimum for any text in a figure. A second-level script at a
+    10pt base lands at 4.9pt, under both, and fires; at an 11pt base it lands
+    at 5.39pt and does not.
+    """
+    assert cf.MATH_SCRIPT_FLOOR_PT == 5.0
+    assert _type_size(r"$x_{i_j}$", 11)[0] is True
+    assert _type_size(r"$x_{i_j}$", 10)[0] is False
+
+
+def test_matplotlib_still_shrinks_scripts_without_a_floor():
+    """The divergence being caught is matplotlib's, and it is pinned here.
+
+    LaTeX has three math sizes and `\\scriptscriptstyle` serves every level
+    below the first, so nesting deeper than two stops shrinking. matplotlib
+    multiplies by `SHRINK_FACTOR` for `NUM_SIZE_LEVELS` levels with no floor.
+    If a release ever clamps it, this row has nothing left to catch and this
+    test is where that shows up.
+    """
+    from matplotlib import _mathtext
+    assert _mathtext.SHRINK_FACTOR == 0.7
+    assert _mathtext.NUM_SIZE_LEVELS >= 3
+    sizes = [cf._script_min_pt(_labelled(lbl, 10)[1].xaxis.label)
+             for lbl in (r"$x_i$", r"$x_{i_j}$", r"$x_{i_{j_k}}$")]
+    plt.close("all")
+    assert sizes == pytest.approx([7.0, 4.9, 3.43], abs=1e-3), sizes
+    assert sizes[2] < 5.0, (
+        "matplotlib has started clamping script sizes; the gate this pins is "
+        "no longer catching anything")
+
+
+def test_the_script_measurement_does_not_depend_on_dpi():
+    """It is compared against an on-page floor, so it must not carry the
+    measuring dpi. Pinned because nothing else in the row would notice."""
+    from matplotlib.mathtext import MathTextParser
+    import matplotlib.font_manager as fm
+    prop = fm.FontProperties(size=11.0)
+    seen = {tuple(round(g[1], 6) for g in
+                  MathTextParser("path").parse(r"$x_{i_j}$", dpi=d,
+                                               prop=prop).glyphs)
+            for d in (72, 100, cf.MEASURE_DPI)}
+    assert len(seen) == 1, seen
+
+
+def test_a_two_line_label_carrying_mathtext_parses_per_line():
+    """Handing the whole string to the parser makes it warn that it has no
+    glyph for U+000A and substitute a dummy, printed at every audit of a figure
+    whose only crime is a two-line axis label.
+
+    The filter names that warning rather than raising on every warning. Under a
+    blanket `simplefilter("error")` this test measures matplotlib's
+    dependencies instead of this file: on the declared 3.8.4 floor the parse
+    reaches `_fontconfig_pattern`, which calls pyparsing's deprecated
+    `parseString` and `resetCache`, and `_script_min_pt` turns any exception
+    into None on purpose, so the test failed with `None == 3.773` for a reason
+    that had nothing to do with per-line parsing.
+    """
+    import warnings
+    fig, ax = _labelled("first line\n" + r"$x_{i_{j_{k}}}$", 11)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            measured = cf._script_min_pt(ax.xaxis.label)
+    finally:
+        plt.close(fig)
+    newline = [w for w in caught
+               if "\\n" in str(w.message) or "0a" in str(w.message).lower()]
+    assert not newline, [str(w.message) for w in newline]
+    assert measured == pytest.approx(3.773, abs=1e-3)
+
+
+def test_an_unparsable_math_string_returns_no_measurement():
+    """A gate that raises is a hard fail, so a label with an unbalanced brace
+    must not report a defect in the checker as a defect in the figure.
+
+    Only the helper is exercised, and deliberately: matplotlib refuses to
+    render this figure at all, raising out of `_renderer` before any gate is
+    reached, so there is no audit to assert about. That makes the guard
+    belt-and-braces rather than a live path today, which is the right amount of
+    caution for a parser this file does not own and whose grammar moves between
+    releases.
+    """
+    fig, ax = _labelled(r"$\frac{1$", 11)
+    try:
+        assert cf._script_min_pt(ax.xaxis.label) is None
+    finally:
+        plt.close(fig)
+
+
+def test_a_usetex_string_is_exempt_because_latex_clamps():
+    """Exempt on the merits, not for convenience. The defect is matplotlib's
+    uncapped nesting; real LaTeX stops at scriptscript, so a string it
+    typesets has nothing to catch, and this file cannot measure it anyway."""
+    fig, ax = _labelled(r"$x_{i_{j_{k}}}$", 11)
+    try:
+        ax.xaxis.label.set_usetex(True)
+        assert cf._script_min_pt(ax.xaxis.label) is None
+    finally:
+        plt.close(fig)
+
+
 def test_placed_frac_measures_the_width_the_figure_actually_ships_at():
     """A half-width figure is half the size on the page. Measured as full
     width it is certified at twice the type it ships at, which is the wrong
@@ -745,6 +1208,115 @@ def test_series_color_catches_a_seventh_hue():
     assert gates(rows)["Series color"] is False
     assert "7 distinct data hues" in dict(
         (n, d) for n, _, d in rows)["Series color"]
+
+
+# --- single-hue ordinal ramps: a negative result, with the measurement
+#
+# Filed complaint: "Series color rejects every 4-step single-hue ramp, so
+# ordered stacks are unconditionally red." The premise is false, and the
+# exemption that would have been built for it is worse than the problem.
+# These four tests hold both halves so neither has to be rediscovered.
+
+def _ordered_stack(colors):
+    """Four categories stacked in order, one band per colour."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    base = np.zeros(4)
+    for i, c in enumerate(colors):
+        h = np.array([3.0, 4.0, 2.0, 5.0]) + i
+        ax.bar([0, 1, 2, 3], h, bottom=base, color=c, label=f"band {i}")
+        base += h
+    ax.set_ylim(0, base.max() * 1.1)
+    ax.legend()
+    return fig
+
+
+def test_a_four_step_single_hue_ordered_stack_passes_when_it_is_stepped():
+    """The premise, refuted by construction. A 4-step single-hue ramp on an
+    ordered stack is not rejected; one whose steps are too close is."""
+    fig = _ordered_stack(["#0c0c0c", "#595959", "#a5a5a5", "#f2f2f2"])
+    try:
+        status, detail = cf.check_series_color(fig)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_the_ramp_that_does_fail_fails_on_a_light_end_both_modes_flag():
+    """ColorBrewer Blues 4 is the case the complaint was really about, and the
+    row is not asking a wrong question of it. Its two lightest steps are dE 9.5
+    apart under protanopia, and `check_palette`'s *ordinal* rows independently
+    fail the same end for contrast against the surface. Two different questions,
+    one answer: the light end of that scheme does not hold up on a white page."""
+    blues = ["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"]
+    fig = _ordered_stack(blues)
+    try:
+        status, detail = cf.check_series_color(fig)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "#eff3ff" in detail and "#bdd7e7" in detail, detail
+
+    cp = pytest.importorskip("check_palette")
+    _, rows = cp.check(blues, ordinal=True)
+    ordinal = {n: s for n, s, _ in rows}
+    assert ordinal["Lightness monotone"] is True, ordinal
+    assert ordinal["Light-end contrast"] is False, ordinal
+
+
+def test_a_single_hue_ramp_runs_out_of_room_at_five_steps():
+    """The real constraint, stated rather than left to be rediscovered. One
+    hue has a finite lightness range and the adjacent floors want about 21 dE,
+    which caps a single-hue ordinal encoding at four steps even in grey, the
+    most separable hue there is."""
+    cp = pytest.importorskip("check_palette")
+    import numpy as np
+    for k, want in ((4, True), (5, False)):
+        greys = [f"#{int(v * 255):02x}{int(v * 255):02x}{int(v * 255):02x}"
+                 for v in np.linspace(0.05, 0.95, k)]
+        _, rows = cp.check(greys)
+        got = {n: s for n, s, _ in rows}["Normal-vision floor (adjacent)"]
+        assert got is want, (k, got, greys)
+
+
+def test_a_colour_only_ramp_detector_is_a_coin_flip_at_these_lengths():
+    """Why no exemption was built, pinned so the idea does not come back.
+
+    The obvious fix is to notice that a panel's hues are a ramp and swap the
+    categorical rows for the ordinal ones. `cmap_kind` refuses to classify
+    fewer than `CMAP_QUALITATIVE_N` samples for exactly this reason, and
+    reaching past it to the underlying monotone-lightness test shows why: on
+    random draws from an Okabe-Ito/tab10/Set2/Dark2 pool it calls them a ramp
+    about 2/k! of the time, which is simply the chance that k arbitrary colours
+    come out sorted. At four steps that is roughly one panel in ten silently
+    losing its CVD separation gate, which is the row's whole reason to exist."""
+    cp = pytest.importorskip("check_palette")
+    import matplotlib as mpl
+    import numpy as np
+
+    pool = list(dict.fromkeys(
+        OKABE
+        + [mpl.colors.to_hex(mpl.colormaps["tab10"](i)) for i in range(10)]
+        + [mpl.colors.to_hex(mpl.colormaps["Set2"](i)) for i in range(8)]))
+    rng = np.random.default_rng(0)
+    rate = {}
+    for k in (3, 4):
+        hits = 0
+        for _ in range(1500):
+            pick = list(rng.choice(pool, size=k, replace=False))
+            ls = [cp.linear_to_oklab(cp.hex_to_linear(h))[0] for h in pick]
+            if (cp._back_travel(ls) < cp.CMAP_BACKTRAVEL_MAX
+                    and max(ls) - min(ls) >= cp.CMAP_SPAN_MIN):
+                hits += 1
+        rate[k] = hits / 1500.0
+
+    assert 0.25 < rate[3] < 0.45, rate      # 2/3! = 0.33
+    assert 0.04 < rate[4] < 0.16, rate      # 2/4! = 0.083
+    assert rate[4] < rate[3], rate
+
+    # And the classifier this project actually ships declines to guess.
+    assert cp.cmap_kind(["#eff3ff", "#bdd7e7", "#6baed6", "#2171b5"]) \
+        == "qualitative"
 
 
 def test_series_color_catches_two_identities_sharing_a_hue():
@@ -975,6 +1547,355 @@ def test_a_dot_plot_is_the_sanctioned_alternative_and_passes():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Form"] is True
+
+
+# --- bars drawn as raw patches ----------------------------------------------
+# `ax.bar` leaves a `BarContainer`, which the gate read. The same chart built
+# from `ax.add_patch(Rectangle(...))` leaves nothing but patches and carried a
+# truncated baseline straight through. `cf._baselined_bars` is the reader; the
+# tests below are the defect, then the eleven things drawn with rectangles that
+# are not a truncated bar chart.
+
+
+def _patch_bars(vals, ylim, horizontal=False):
+    """A bar chart built the way a hand-written script builds one."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, v in enumerate(vals):
+        xy = (0, i - 0.4) if horizontal else (i - 0.4, 0)
+        wh = (v, 0.8) if horizontal else (0.8, v)
+        ax.add_patch(Rectangle(xy, *wh, color=OKABE[0]))
+    cat = (-0.5, len(vals) - 0.5)
+    ax.set_ylim(*(cat if horizontal else ylim))
+    ax.set_xlim(*(ylim if horizontal else cat))
+    return fig
+
+
+def test_form_catches_a_truncated_baseline_drawn_as_patches():
+    fig = _patch_bars([104, 108, 106, 111], (100, 115))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "truncated y axis" in detail, detail
+
+
+def test_the_two_spellings_of_a_truncated_bar_chart_read_identically():
+    """The equality that says this is one defect and not two rows.
+
+    `ax.bar` and a loop of `Rectangle`s draw the same figure, and the detail
+    string has to come out the same, not merely the verdict.
+    """
+    drawn = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    fig_c, ax = drawn
+    ax.bar(range(4), [104, 108, 106, 111], width=0.8, color=OKABE[0])
+    ax.set_xlim(-0.5, 3.5)
+    ax.set_ylim(100, 115)
+    fig_p = _patch_bars([104, 108, 106, 111], (100, 115))
+    try:
+        assert cf.check_form(fig_c) == cf.check_form(fig_p)
+    finally:
+        plt.close(fig_c)
+        plt.close(fig_p)
+
+
+def test_horizontal_patch_bars_name_the_x_axis():
+    fig = _patch_bars([104, 108, 106, 111], (100, 115), horizontal=True)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "truncated x axis" in detail, detail
+
+
+def test_stacked_patch_bars_are_read_by_their_bottom_row():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, (a, b) in enumerate([(60, 44), (70, 38), (65, 41)]):
+        ax.add_patch(Rectangle((i - 0.4, 0), 0.8, a, color=OKABE[0]))
+        ax.add_patch(Rectangle((i - 0.4, a), 0.8, b, color=OKABE[1]))
+    ax.set_xlim(-0.5, 2.5)
+    ax.set_ylim(100, 115)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_patch_bars_that_keep_their_baseline_pass():
+    """The over-fire control, and it passes on a tree without this check too."""
+    fig = _patch_bars([104, 108, 106, 111], (0, 120))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_waterfall_is_not_read_as_bars():
+    """The false positive the modal-baseline rule produced on its own.
+
+    Two of this chart's four segments land on the same edge by arithmetic, and
+    that was enough to read them as a two-bar chart. Whether an offset baseline
+    is a defect at all is an open argument in this project, so deciding it here
+    by accident is the wrong answer twice over. Segments that rest on nothing
+    are what the stacking test excludes.
+    """
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    base = 100.0
+    for i, d in enumerate([4, -2, 5, -1]):
+        ax.add_patch(Rectangle((i - 0.4, min(base, base + d)), 0.8, abs(d),
+                               color=OKABE[0]))
+        base += d
+    ax.set_xlim(-0.5, 3.5)
+    ax.set_ylim(98, 112)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_gantt_chart_is_not_read_as_bars():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, (start, width) in enumerate([(2, 3), (4, 2), (5, 4)]):
+        ax.add_patch(Rectangle((start, i - 0.4), width, 0.8, color=OKABE[0]))
+    ax.set_ylim(-0.5, 2.5)
+    ax.set_xlim(1, 10)
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+# --- an offset baseline is not a cut one
+
+def _gantt():
+    """Length is a duration, position is a start date. `ax.barh` leaves a
+    `BarContainer`, so this is the spelling that reached the verdict."""
+    fig, ax = plt.subplots(figsize=(6, 3), constrained_layout=True)
+    ax.barh([0, 1, 2], [3, 2, 4], left=[2, 4, 5], color=OKABE[0])
+    ax.set_xlim(1, 10)
+    ax.set_ylim(-0.5, 2.5)
+    return fig
+
+
+def _waterfall():
+    """Length is a delta, base is the running total."""
+    fig, ax = plt.subplots(figsize=(6, 3.4), constrained_layout=True)
+    base, bottoms, heights = 100.0, [], []
+    for d in [4, -2, 5, -1]:
+        bottoms.append(min(base, base + d))
+        heights.append(abs(d))
+        base += d
+    ax.bar([0, 1, 2, 3], heights, bottom=bottoms, color=OKABE[0])
+    ax.set_ylim(98, 112)
+    return fig
+
+
+def _stacked_bars(lim):
+    """`bottom=` as well, and the trap: the bottom row rests on a real
+    baseline and the total length IS measured from it."""
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    low = [100, 104, 102, 107]
+    ax.bar([0, 1, 2, 3], low, color=OKABE[0])
+    ax.bar([0, 1, 2, 3], [4, 4, 4, 4], bottom=low, color=OKABE[1])
+    ax.set_ylim(*lim)
+    return fig
+
+
+def test_a_gantt_drawn_with_barh_is_not_a_truncated_bar_chart():
+    """`_baselined_bars` has always excluded a Gantt chart, and the container
+    route never asked it. `ax.barh(left=...)` leaves a `BarContainer`, which
+    said "bars" and settled the verdict, so the same figure passed drawn by
+    hand and failed drawn the documented way."""
+    fig = _gantt()
+    try:
+        assert cf._baselined_bars(fig.axes[0]) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_waterfall_drawn_with_bar_bottom_is_not_a_truncated_bar_chart():
+    """The container spelling of `test_a_waterfall_is_not_read_as_bars`."""
+    fig = _waterfall()
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_stacked_bar_chart_on_a_cut_axis_still_fails():
+    """The over-fire control, and the reason "has a `bottom=` offset" is not
+    the discriminator. A stack uses `bottom=` too, its bottom row stands on a
+    real baseline, and cutting that baseline misstates every total."""
+    fig = _stacked_bars((99, 115))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False and "truncated y axis" in detail, detail
+
+    fig = _stacked_bars((0, 120))
+    try:
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_the_detection_guards_are_not_reused_for_the_baseline_question():
+    """`_baselined_bars` returns None for a single bar and for a row of equal
+    bars, and both answers are right for deciding whether a heap of rectangles
+    is a bar chart at all. Neither is right once a `BarContainer` has said so:
+    a single truncated bar and three equal truncated bars still misstate their
+    values, and routing the container through the detection guards would have
+    opened a hole exactly there."""
+    for name, heights in (("one bar", [104]), ("equal bars", [104, 104, 104])):
+        fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+        ax.bar(range(len(heights)), heights, color=OKABE[0])
+        ax.set_ylim(100, 112)
+        try:
+            assert cf._baselined_bars(ax) is None, name
+            assert cf.bars_rest_on_a_shared_edge(ax, vertical=True), name
+            ok, detail = cf.check_form(fig)
+        finally:
+            plt.close(fig)
+        assert ok is False, (name, detail)
+
+
+def test_the_two_spellings_of_one_gantt_agree():
+    """The hand-drawn route and the container route are the same figure, so
+    they answer alike. That equality is the whole defect this closes."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 3), constrained_layout=True)
+    for i, (start, width) in enumerate([(2, 3), (4, 2), (5, 4)]):
+        ax.add_patch(Rectangle((start, i - 0.4), width, 0.8, color=OKABE[0]))
+    ax.set_xlim(1, 10)
+    ax.set_ylim(-0.5, 2.5)
+    try:
+        by_hand = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+
+    fig = _gantt()
+    try:
+        by_container = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert by_hand == by_container, (by_hand, by_container)
+
+
+def test_a_shaded_span_is_not_a_bar():
+    """`axvspan` and `axhspan` are `Rectangle`s, and a pair of them shares a
+    baseline and varies in extent, which is every other test in
+    `_baselined_bars`. They are drawn in a blended transform rather than
+    `transData`, and that is the only thing separating them.
+
+    Pinned rather than assumed: if a matplotlib release ever draws a span in
+    `transData`, this goes red instead of shading turning into a gate failure
+    on every figure that highlights a region.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    vs = ax.axvspan(2, 3, color="#eeeeee")
+    hs = ax.axhspan(101, 102, color="#eeeeee")
+    ax.set_ylim(100, 115)
+    try:
+        assert vs.get_data_transform() is not ax.transData
+        assert hs.get_data_transform() is not ax.transData
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_equal_length_rectangles_on_a_baseline_encode_nothing():
+    """A rug and a single-row heatmap both stand on one edge. Neither uses
+    length to say anything, which is what a bar does and the whole reason a
+    truncated baseline lies."""
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [101, 109], color=OKABE[0])
+    for x in np.linspace(0.05, 0.95, 20):
+        ax.add_patch(Rectangle((x, 100.2), 0.004, 0.5, color="#333333"))
+    ax.set_ylim(100, 115)
+    try:
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_an_annotation_background_box_is_not_a_bar():
+    """`FancyBboxPatch` is not a `Rectangle` subclass, and `_baselined_bars`
+    requires the exact type so a future one cannot arrive as a bar."""
+    from matplotlib.patches import FancyBboxPatch, Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    for x, y, h in ((2, 102, 0.8), (7, 108, 1.4)):
+        ax.add_patch(FancyBboxPatch((x, y), 1.0, h, boxstyle="round",
+                                    color="#eeeeee"))
+    ax.set_ylim(100, 115)
+    try:
+        assert not any(isinstance(p, Rectangle) for p in ax.patches)
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_rotated_rectangle_has_no_baseline_to_stand_on():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    for i, v in enumerate([4, 8, 6, 11]):
+        ax.add_patch(Rectangle((i, 0), 0.5, v, angle=35, color=OKABE[0]))
+    ax.set_xlim(-0.5, 6)
+    ax.set_ylim(100, 115)
+    try:
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_one_highlight_rectangle_is_not_a_bar_chart():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 10], [100, 110], color=OKABE[0])
+    ax.add_patch(Rectangle((2, 102), 3, 4, fill=False, edgecolor="#333333"))
+    ax.set_ylim(100, 115)
+    try:
+        assert cf.FORM_BAR_MIN_PATCHES == 2
+        assert cf._baselined_bars(ax) is None
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_log_axis_patch_bar_chart_is_not_a_truncated_baseline():
+    """The log carve-out reaches the patch route too, or the two spellings
+    disagree on the one figure the gate deliberately says nothing about."""
+    fig = _patch_bars([10, 1000, 100000], (1, 1e6))
+    try:
+        fig.axes[0].set_yscale("log")
+        ok, detail = cf.check_form(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
 
 
 # --- identity channel -------------------------------------------------------
@@ -1376,6 +2297,23 @@ def test_eclipse_is_caught_without_scipy_too(monkeypatch):
     assert verdict[0] == "warn", verdict
 
 
+def _dense_contact_fraction(xy, radius):
+    """Every pair, enumerated, as the reference the two real paths are held to.
+
+    This used to be `_contact_fraction`'s own scipy-free branch. It is a test
+    fixture now because it is quadratic in memory as well as in time, which is
+    what took the near-bare CI leg down on a 168000-mark figure; the shipped
+    fallback walks a uniform grid instead. Keeping the enumeration here keeps
+    the differential tests below pointed at brute force rather than at the
+    other implementation.
+    """
+    import numpy as np
+    d = np.hypot(xy[:, 0][:, None] - xy[None, :, 0],
+                 xy[:, 1][:, None] - xy[None, :, 1])
+    np.fill_diagonal(d, np.inf)
+    return float((d < radius[:, None] + radius[None, :]).any(axis=1).sum()) / len(xy)
+
+
 def test_contact_fraction_fast_path_agrees_with_the_exact_one():
     """The uniform-radii shortcut rests on one identity: where `r_i + r_j` is a
     constant, some mark is within it exactly when the nearest mark is. Assert it
@@ -1388,10 +2326,12 @@ def test_contact_fraction_fast_path_agrees_with_the_exact_one():
         xy = rng.uniform(0, 400, size=(300, 2))
         radius = np.full(len(xy), spread / 2.0)
         fast = cf._contact_fraction(xy, radius, cKDTree)
-        exact = cf._contact_fraction(xy, radius, None)
+        exact = _dense_contact_fraction(xy, radius)
         assert fast == pytest.approx(exact), (
             f"at radius {spread / 2}: nearest-neighbour {fast}, all-pairs "
             f"{exact}")
+        assert cf._contact_fraction(xy, radius, None) == pytest.approx(exact), (
+            "the scipy-free grid disagrees with the enumeration")
         # And nudging one radius off constant moves it onto the pair path
         # without moving the answer.
         radius[0] += 1e-9
@@ -1399,12 +2339,12 @@ def test_contact_fraction_fast_path_agrees_with_the_exact_one():
 
 
 def test_contact_fraction_is_exact_across_radius_octaves():
-    """The mixed-radii path groups marks by radius octave and bounds each group
-    by its own largest radius rather than the scatter's. That bound is the whole
-    correctness argument, so assert it against the full pair enumeration on the
-    shapes that stress it: graded radii spanning six octaves, a single oversized
-    mark among uniform ones, and zero-radius marks, which draw nothing and can
-    still be contacted."""
+    """Both paths group marks by radius octave and bound each group by its own
+    largest radius rather than the scatter's. That bound is the whole
+    correctness argument, so assert both against the full pair enumeration on
+    the shapes that stress it: graded radii spanning six octaves, a single
+    oversized mark among uniform ones, and zero-radius marks, which draw
+    nothing and can still be contacted."""
     import numpy as np
     cKDTree = pytest.importorskip("scipy.spatial").cKDTree
     rng = np.random.default_rng(11)
@@ -1421,9 +2361,48 @@ def test_contact_fraction_is_exact_across_radius_octaves():
             radius = rng.choice([0.0, 2.0, 50.0], n)
         else:                       # everything sub-pixel
             radius = rng.uniform(0.0, 2.0, n)
-        assert (cf._contact_fraction(xy, radius, cKDTree)
-                == cf._contact_fraction(xy, radius, None)), (
+        exact = _dense_contact_fraction(xy, radius)
+        assert cf._contact_fraction(xy, radius, cKDTree) == exact, (
             f"trial {trial}: shape {shape}, n {n}")
+        assert cf._contact_fraction(xy, radius, None) == exact, (
+            f"scipy-free, trial {trial}: shape {shape}, n {n}")
+
+
+def test_the_scipy_free_contact_path_answers_a_cloud_it_cannot_enumerate():
+    """The fallback has to be near-linear, not merely correct.
+
+    `gallery.orbit` draws the logistic map's attractor as 168000 marks in a
+    stroke-less `Line2D`, and `check_overplotting` measures it on every audit.
+    The scipy-free branch answered that by enumerating every pair, which at
+    this n is a 168000 x 168000 float64 matrix: 226GB. macOS maps it and the
+    kernel kills the process, so the CI leg that installs matplotlib and
+    nothing else came back on SIGKILL, `returncode -9`, taking two xdist
+    workers with it and losing the buffered stdout that would have said why.
+    Linux refuses the mapping instead, which is why only the one leg was red.
+
+    The fixture is the real attractor rather than a uniform cloud because the
+    grid's cost is a function of how the marks pile up, and this is the pile
+    that has to be affordable. Asserted against scipy rather than against the
+    enumeration for the reason the test exists: the enumeration does not fit.
+    """
+    import numpy as np
+    cKDTree = pytest.importorskip("scipy.spatial").cKDTree
+    rs = np.linspace(2.5, 4.0, 1400)
+    keep, burn = 120, 400
+    x = np.full(rs.size, 0.4)
+    for _ in range(burn):
+        x = rs * x * (1 - x)
+    xs = np.empty((keep, rs.size))
+    for k in range(keep):
+        x = rs * x * (1 - x)
+        xs[k] = x
+    xy = np.column_stack([np.repeat(rs, keep) * 400.0, xs.T.ravel() * 400.0])
+    radius = np.full(len(xy), 0.5)
+
+    assert len(xy) * len(xy) * 8 > 200e9, (
+        "this fixture no longer reproduces the allocation it was written for")
+    assert (cf._contact_fraction(xy, radius, None)
+            == cf._contact_fraction(xy, radius, cKDTree))
 
 
 def test_contact_fraction_does_not_inflate_the_query_radius():
@@ -1512,6 +2491,191 @@ def test_overplotting_empty_sizes_is_skipped():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Overplotting"] is True
+
+
+# --- overplotting reads a cloud spelled as plot markers ----------------------
+
+def _dense_cloud(n=400, seed=0):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    return rng.normal(size=n), rng.normal(size=n)
+
+
+def test_overplotting_reads_a_cloud_drawn_with_plot_markers():
+    """`ax.plot(x, y, "o")` is a scatter spelled differently, and for seven
+    releases this row could not see it: a marker-only Line2D has no offsets."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o", ms=4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_the_two_spellings_of_one_cloud_report_the_same_number():
+    """`plot(ms=4)` and `scatter(s=16)` draw the same 4pt disc, so the row has
+    to answer identically.
+
+    Under bare matplotlib defaults they really do draw the same mark, stroke
+    included: `lines.markeredgewidth` and `patch.linewidth` are both 1.0 and
+    both spellings render 5.16pt of ink. The agreement is measured, not bought
+    by leaving the stroke off both sides."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o", ms=4)
+    from_plot = cf.check_overplotting(fig)[1]
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(x, y, s=16)
+    from_scatter = cf.check_overplotting(fig)[1]
+    plt.close(fig)
+
+    assert (from_plot.replace("line0", "MARKS")
+            == from_scatter.replace("col0", "MARKS")), (from_plot, from_scatter)
+
+
+# --- the edge stroked around a mark is ink
+
+def test_the_marker_stroke_widens_the_drawn_mark():
+    """A stroke is centred on the outline, so it puts half its width outside
+    on each side and the bounding box grows by one full `markeredgewidth`.
+    Rendered at 600 dpi, `"o"` at ms 5 measures 6.12pt against a 5pt path."""
+    fig, ax = plt.subplots()
+    line, = ax.plot([0.0], [0.0], marker="o", ms=5, mew=1.0, ls="none",
+                    mec="#333333")
+    w, h = cf.marker_extent_pt(line, 150.0)
+    plt.close(fig)
+    assert (round(w, 6), round(h, 6)) == (6.0, 6.0)
+
+
+def test_a_bar_marker_gains_the_stroke_across_and_not_along():
+    """Marker strokes are butt-capped, so a segment does not grow past its own
+    ends. Ink minus path at 600 dpi is +1.20 across and +0.04 along at mew 1,
+    and +2.04 against +0.16 at mew 2: the stroke widens an axis exactly when
+    the path has extent in the other one."""
+    fig, ax = plt.subplots()
+    line, = ax.plot([0.0], [0.0], marker="|", ms=5, mew=2.0, ls="none",
+                    mec="#333333")
+    w, h = cf.marker_extent_pt(line, 150.0)
+    plt.close(fig)
+    assert (round(w, 6), round(h, 6)) == (2.0, 5.0)
+
+
+def test_an_edge_that_is_not_drawn_widens_nothing():
+    """`figure.mplstyle` ships `lines.markeredgewidth: 0.0`, and a width of
+    zero or a transparent edge colour is the artist declining to stroke."""
+    fig, ax = plt.subplots()
+    unstroked, = ax.plot([0.0], [0.0], marker="o", ms=5, mew=0.0, ls="none")
+    colourless, = ax.plot([1.0], [1.0], marker="o", ms=5, mew=2.0, ls="none",
+                          mec="none")
+    assert cf.marker_stroke_pt(unstroked) == 0.0
+    assert cf.marker_stroke_pt(colourless) == 0.0
+    assert cf.marker_extent_pt(colourless, 150.0) == (5.0, 5.0)
+    plt.close(fig)
+
+
+def test_a_scatter_spelled_edgecolors_none_is_not_widened_by_its_linewidth():
+    """The false positive the naive version of this change would have shipped.
+    `edgecolors="none"` leaves `get_edgecolors()` an empty array while
+    `get_linewidths()` still reports the `patch.linewidth` default, so a width
+    read on its own widens the mark by a stroke that is never laid down. This
+    is how `gallery-parity` is spelled."""
+    fig, ax = plt.subplots()
+    coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, edgecolors="none")
+    plt.close(fig)
+    assert len(coll.get_edgecolors()) == 0
+    assert float(np.max(coll.get_linewidths())) > 0.0
+    assert cf.collection_stroke_pt(coll) == 0.0
+
+
+def test_a_scatter_that_does_stroke_its_edge_is_widened_by_it():
+    """The other half: an edge that is drawn is ink, and two marks whose
+    strokes meet have met."""
+    fig, ax = plt.subplots()
+    coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, facecolor="#4477aa",
+                      edgecolors="#333333", linewidths=0.7)
+    plt.close(fig)
+    assert cf.collection_stroke_pt(coll) == pytest.approx(0.7)
+
+
+def test_counting_the_stroke_does_not_fire_on_a_parity_style_scatter():
+    """The corpus figure the question reaches. Taking its reported 0.70pt as
+    drawn carries it past `OVERPLOT_THRESHOLD`; reading whether the edge is
+    drawn at all leaves it where the render puts it."""
+    rng = np.random.default_rng(19)
+    observed = rng.uniform(0.6, 9.2, 84)
+    predicted = observed + rng.normal(0.0, 0.55, observed.size) + 0.1
+    fig, ax = plt.subplots(figsize=(3.8, 3.6), constrained_layout=True)
+    ax.set_xlim(0.0, 10.0)
+    ax.set_ylim(0.0, 10.0)
+    ax.set_aspect("equal")
+    ax.scatter(observed, predicted, s=18.0, edgecolors="none")
+    verdict, detail = cf.check_overplotting(fig)
+    plt.close(fig)
+    assert verdict is True, detail
+
+
+def test_overplotting_leaves_a_marked_line_alone():
+    """Marks strung on a visible line are stops on a path, not a cloud. The
+    path carries an ordering that touching marks would otherwise lose."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o-", ms=4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_the_pixel_marker_is_not_measured_at_its_markersize():
+    """`marker=","` is the one marker matplotlib does not scale: `lines.py`
+    skips the scale for it, so the mark is one device pixel however large
+    `markersize` is. Reading the property instead of the drawn path put
+    `gallery-orbit` at a radius seventeen times its own and reported 100%.
+
+    Two marks a full markersize apart therefore do not touch, and a row that
+    took `markersize` for the diameter would say they do.
+    """
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0.0, 0.0], [0.0, 0.02], linestyle="none", marker=",", ms=20)
+    ax.set_ylim(-1, 1)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_the_pixel_markers_size_comes_from_the_dpi_not_the_property():
+    """One device pixel is a length only once a resolution is fixed, which is
+    what `MEASURE_DPI` is for."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (line,) = ax.plot([0.0], [0.0], linestyle="none", marker=",", ms=20)
+    width, height = cf.marker_extent_pt(line, 144.0)
+    plt.close(fig)
+    assert width == height == pytest.approx(0.5)
+
+
+def test_a_bar_marker_is_not_read_as_a_disc_of_its_long_axis():
+    """`"|"` has zero extent across the stroke, so what it draws across it is
+    `markeredgewidth`. Nineteen censoring ticks spread along a survival curve
+    are not nineteen five-point discs, and `gallery-survival` was reported at
+    63% and 83% while they were read that way."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (line,) = ax.plot([0.0], [0.0], linestyle="none", marker="|",
+                      markersize=5, markeredgewidth=1.0)
+    width, height = cf.marker_extent_pt(line, cf.MEASURE_DPI)
+    plt.close(fig)
+    assert (width, height) == (1.0, 5.0)
+
+
+def test_the_point_marker_draws_at_half_the_size_it_is_given():
+    """`"."` carries a `scale(0.5)` in its own transform. Measured against the
+    render, `"." at ms=6` and `"o" at ms=3` each lay down 101 pixels."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (dot,) = ax.plot([0.0], [0.0], linestyle="none", marker=".", ms=6)
+    (disc,) = ax.plot([0.0], [0.0], linestyle="none", marker="o", ms=3)
+    dpi = cf.MEASURE_DPI
+    assert cf.marker_extent_pt(dot, dpi) == cf.marker_extent_pt(disc, dpi)
+    plt.close(fig)
 
 
 # --- multi-panel attribution ------------------------------------------------
@@ -2003,6 +3167,151 @@ def test_uniform_fill_under_a_label_is_a_background_not_clutter():
     assert gates(rows)["Text readability"] is True
 
 
+def _annotated_heatmap(grid=False, crossing=False):
+    """A labelled 5x5 heatmap, optionally with major gridlines through the cell
+    centres, optionally with a curve drawn across the middle row.
+
+    Dark cells and white labels, with a mid-grey grid, so every string clears
+    the contrast floor and the clutter clause is the only one these tests are
+    reading. That matters: on a *white*-gridded heatmap the contrast clause
+    fires on its own and correctly, because white text lying on a white rule is
+    1.0:1 and unreadable at that spot."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    d = rng.uniform(0.75, 0.98, (5, 5))
+    fig, ax = plt.subplots(figsize=(4, 3.4), constrained_layout=True)
+    ax.imshow(d, cmap="Blues", vmin=0.0, vmax=1.0)
+    if grid:
+        ax.grid(True, color="#666666", lw=1.0)
+    if crossing:
+        ax.plot([-0.5, 4.5], [2, 2], color="#D55E00", lw=2.5)
+    for i in range(5):
+        for j in range(5):
+            ax.text(j, i, f"{d[i, j]:.2f}", ha="center", va="center",
+                    color="white", fontsize=7)
+    return fig
+
+
+def _clutter_without_the_ground_anchor(block, furniture, tol, mask=None):
+    """`_foreign_ink` as it stood before the ground was made an anchor, so a
+    test can show the artefact was really there rather than assert it was."""
+    import numpy as np
+    field = block.astype(float)
+    local = cf._box_blur(field, cf.TEXT_EDGE_WINDOW)
+    edge = np.linalg.norm(field - local, axis=2) > cf.TEXT_EDGE_TOL
+    if mask is not None:
+        edge = edge & mask
+        area = int(mask.sum())
+    else:
+        area = edge.size
+    if area == 0 or not edge.any():
+        return 0.0
+    pix = field[edge].reshape(-1, 3)
+    return float(edge.sum() - cf._near_any(pix, furniture, tol).sum()) / area
+
+
+def _worst_clutter(fig, measure=None):
+    """The largest clutter fraction over the figure's labels, off the backdrop
+    the row itself measures. `measure` defaults to the shipped `_foreign_ink`."""
+    import numpy as np
+    measure = measure or cf._foreign_ink
+    with cf._at_draw_rc(fig), cf._at_measure_dpi(fig):
+        r, canvas = cf._renderer(fig)
+        items = cf._texts(fig, r)
+        fig.set_layout_engine("none")
+        for t, _ in items:
+            t.set_visible(False)
+        canvas.draw()
+        backdrop = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(float)
+        for t, _ in items:
+            t.set_visible(True)
+        furniture = cf._furniture(fig)
+        H, W = backdrop.shape[:2]
+        worst = 0.0
+        for _t, bb in items:
+            xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
+            ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
+            block = backdrop[slice(H - yb, H - ya), slice(xa, xb)]
+            if block.size // 3 < cf.TEXT_FOOTPRINT_MIN_PX:
+                continue
+            worst = max(worst, measure(block, furniture, cf.TEXT_BLEND_TOL))
+    return worst
+
+
+def test_a_gridline_crossing_a_heatmap_label_is_not_data_ink():
+    """The pixels a gridline puts wrong are not the gridline's own.
+
+    `TEXT_EDGE_WINDOW` is 9, so the local average within four pixels of a white
+    rule is pulled toward white and the flat cell either side reads as an edge
+    while still carrying the cell's colour, which an exemption that only knows
+    furniture can never forgive. Measured on a viridis heatmap with white
+    rules: 450 of 646 pixels flagged, 106 of them the rule, and the other 344
+    the cell at `(31, 146, 140)`."""
+    plain = _annotated_heatmap()
+    try:
+        assert _worst_clutter(
+            plain, _clutter_without_the_ground_anchor) <= cf.TEXT_CLUTTER_MAX
+    finally:
+        plt.close(plain)
+
+    fig = _annotated_heatmap(grid=True)
+    try:
+        before = _worst_clutter(fig, _clutter_without_the_ground_anchor)
+        after = _worst_clutter(fig)
+        status, detail = cf.check_text_readability(fig, None)
+    finally:
+        plt.close(fig)
+    # The artefact shown rather than asserted: adding one gridline to a figure
+    # that measured clean used to take it to a third of the box.
+    assert before > cf.TEXT_CLUTTER_MAX * 10, f"{before:.0%}"
+    assert after <= cf.TEXT_CLUTTER_MAX, f"{after:.0%}"
+    assert "sits on data ink" not in detail, detail
+    assert status is True, detail
+
+
+def test_a_curve_across_a_heatmap_label_is_still_data_ink():
+    """The over-fire control, and the one that says the fix removed the
+    artefact rather than the clause. Same figure, same gridlines, one curve
+    drawn across the middle row."""
+    fig = _annotated_heatmap(grid=True, crossing=True)
+    try:
+        worst = _worst_clutter(fig)
+        status, detail = cf.check_text_readability(fig, None)
+    finally:
+        plt.close(fig)
+    assert worst > cf.TEXT_CLUTTER_MAX * 3, f"{worst:.0%}"
+    assert "sits on data ink" in detail, detail
+    assert status is False
+
+
+def test_the_ground_anchor_does_not_forgive_ink_on_a_plain_page():
+    """The hole the obvious fix would have opened. Dilating the furniture
+    match instead would blind this: the page colour is furniture, so on a white
+    figure every pixel sits next to page."""
+    import numpy as np
+    rng = np.random.default_rng(3)
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    x = np.linspace(0, 10, 200)
+    ax.plot(x, np.sin(x), color="#D55E00", lw=2)
+    ax.text(5.0, float(np.sin(5.0)), "crossed", ha="center", va="center",
+            fontsize=10)
+    try:
+        crossed = _worst_clutter(fig)
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    ax.scatter(rng.random(300), rng.random(300), s=30, color="#009E73")
+    ax.text(0.5, 0.5, "in the cloud", ha="center", va="center", fontsize=10)
+    try:
+        in_cloud = _worst_clutter(fig)
+    finally:
+        plt.close(fig)
+
+    assert crossed > cf.TEXT_CLUTTER_MAX, f"{crossed:.0%}"
+    assert in_cloud > cf.TEXT_CLUTTER_MAX, f"{in_cloud:.0%}"
+
+
 # --- fonts ------------------------------------------------------------------
 
 def test_fonts_warns_on_type_3_and_does_not_gate():
@@ -2280,6 +3589,61 @@ def test_polyline_does_not_bridge_a_gap_in_the_data():
         assert len(pts) > 101
         line.remove()
     plt.close(fig)
+
+
+def test_a_strokeless_line_is_read_as_marks_not_as_a_polyline():
+    """A `Line2D` that draws no stroke has no chords to measure a label against.
+
+    `plot(..., linestyle="none", marker=",")` is the ordinary spelling of a
+    dense cloud, and it is a `Line2D`, so `_series_px` sent it to `_polyline_px`
+    and densified the chords between marks the figure never joined. That is the
+    failure `_densify_px`'s docstring warns about and `_marks_px` already exists
+    to avoid in `_rides_on`; the same discriminator belongs here.
+
+    `gallery.orbit` is the figure that pays for it: 168,000 marks in scattered
+    order came back as 10,308,917 points, 157 MB, 61x the input.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    xy = np.array([(0.5, 0.5), (9.5, 9.5)] * 10)
+    cloud, = ax.plot(xy[:, 0], xy[:, 1], linestyle="none", marker=",")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    fig.canvas.draw()
+    got = cf._series_px(cloud, ax)
+    plt.close(fig)
+
+    assert got is not None
+    assert len(got) == len(xy), (
+        f"{len(got) - len(xy)} points invented along chords the figure never "
+        "drew"
+    )
+
+
+def test_a_cloud_drawn_as_plot_markers_is_not_a_rival_along_its_chords():
+    """The correctness half of the same defect, at the gate.
+
+    The cloud's marks sit in two far corners and nothing it draws comes near
+    the centre. Densified, its chords run corner to corner straight under the
+    label on the curve that owns it, so `Alpha` read as 0px from a neighbour
+    and the gate failed a figure whose ink is plainly unambiguous.
+    """
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
+    ax.plot([0, 10], [5, 5], color=OKABE[0], label="Alpha")
+    corners = np.array([(0.4, 0.4), (9.6, 9.6)] * 8)
+    ax.plot(corners[:, 0], corners[:, 1], linestyle="none", marker="o",
+            color=OKABE[1], label="Beta")
+    ax.annotate("Alpha", (5, 5), ha="center", va="center")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+
+    assert gates(rows)["Label attribution"] is True, (
+        "the cloud's marks are in the corners; only its invented chords are "
+        "anywhere near the label"
+    )
 
 
 def test_label_attribution_sees_a_scatter_as_a_series():
@@ -2671,6 +4035,105 @@ def test_line_weight_does_not_fire_on_the_grid():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Line weight"] is True
+
+
+def test_line_weight_catches_a_schematic_drawn_entirely_in_patches():
+    """The defect: a schematic is boxes and arrows and no `Line2D` at all, so
+    one drawn wholly at 0.15pt reported `no strokes to measure`. The gate was
+    silent on the figure whose every stroke was the defect."""
+    from matplotlib.patches import Circle, FancyArrowPatch, Rectangle
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    for i in range(3):
+        ax.add_patch(Rectangle((i * 3, 0), 2, 1, facecolor="none",
+                               edgecolor="#333333", linewidth=0.15))
+    ax.add_patch(Circle((8, 0.5), 0.4, facecolor="none", edgecolor="#333333",
+                        linewidth=0.15))
+    ax.add_patch(FancyArrowPatch((2, 0.5), (3, 0.5), linewidth=0.15,
+                                 color="#333333", arrowstyle="->"))
+    ax.annotate("", xy=(6, 0.5), xytext=(5, 0.5),
+                arrowprops=dict(arrowstyle="->", linewidth=0.15,
+                                color="#333333"))
+    ax.set_xlim(-0.5, 9)
+    ax.set_ylim(-0.5, 1.5)
+    ax.axis("off")
+    try:
+        assert not ax.lines and not ax.collections
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "Rectangle edge" in detail, detail
+    assert "annotation arrow" in detail, detail
+
+
+def test_a_patch_edge_at_a_legal_weight_passes():
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    ax.add_patch(Rectangle((0, 0), 2, 1, facecolor="none",
+                           edgecolor="#333333", linewidth=1.4))
+    ax.set_xlim(-0.5, 3)
+    ax.set_ylim(-0.5, 1.5)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_a_bar_with_no_edge_is_not_a_hairline():
+    """`patch.linewidth` defaults to 1.0 and `ax.bar` draws no edge, so reading
+    the width without asking whether an edge is drawn would count ink nobody
+    put on the page. Here it would have counted it at half scale."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.bar([1, 2, 3], [1, 2, 3])
+    ax.plot([1, 3], [1, 3], lw=3.0)
+    from matplotlib.colors import to_rgba
+    try:
+        assert ax.patches, "the fixture needs bars to be about anything"
+        assert all(to_rgba(p.get_edgecolor())[3] <= 0 for p in ax.patches), (
+            "matplotlib changed the default bar edge; this test is now "
+            "measuring something else")
+        assert all(p.get_linewidth() > 0 for p in ax.patches), (
+            "the width is still there to be misread, which is the point")
+        status, detail = cf.check_line_weight(fig, scale=0.5)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_still_does_not_measure_spines_or_tick_marks():
+    """A decision, pinned, not an oversight.
+
+    Measured on the corpus: all 69 spines on all twenty-one figures are under
+    the 1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
+    Tick marks, remeasured at the same time, are 444 strokes on 20 figures with
+    none under it.
+    Measuring them would fail the corpus outright, which is the data floor
+    failing the sheet's own design -- the thing the docstring says it must not
+    do.
+
+    Tick marks are the same class, and they carry a second reason that is not
+    visible from this checkout. `skill/scripts/check_svg.py` does measure them,
+    and its own corpus pins ten of thirteen fixtures as firing on line weight
+    largely because of it. Both live on the unmerged `spec-r-svg-substrate`
+    branch, so a reader looking for them here will not find them; the point is
+    that the two substrates disagree about this stroke, and settling that by
+    side effect would overturn a pinned measurement on a branch this one does
+    not touch.
+
+    If a later round decides to measure either, this test is where that
+    argument has to be made rather than absorbed.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.2)
+    ax.tick_params(width=0.2)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
 
 
 # --- banking ---------------------------------------------------------------
@@ -3477,6 +4940,149 @@ def test_the_colormap_row_is_not_advisory():
     assert "Colormap kind" not in cf.ADVISORY_GATES
 
 
+# --- a ramp the author evaluated themselves ----------------------------------
+# `jet` sampled with `cmap(i / 5)` and handed to `ax.plot` draws no array, so
+# the whole figure passed: nothing array-carrying for Colormap kind, and six
+# hues against a ceiling of eight for Series color. The reverse lookup that
+# closes it is `cf._sampled_ramp`, and the tests below are in two halves -- the
+# defect, then the legitimate figures it must not touch.
+
+
+def _ramp_lines(name, n=6, lo=0.0, hi=1.0):
+    """`n` series drawn in colours sampled off `name`, the way a person does."""
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap(name)
+    fig, ax = plt.subplots()
+    x = np.linspace(0, 1, 20)
+    for i in range(n):
+        p = lo if n == 1 else lo + (hi - lo) * i / (n - 1)
+        ax.plot(x, x + i, color=cmap(p), label=f"s{i}")
+    return fig
+
+
+def test_a_pre_evaluated_jet_is_caught_though_no_artist_carries_an_array():
+    fig = _ramp_lines("jet")
+    try:
+        assert not [a for a in fig.axes[0].lines
+                    if getattr(a, "get_array", lambda: None)() is not None]
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+    assert "jet" in detail, detail
+    assert "ax0" in detail, detail
+
+
+def test_the_sampled_ramp_and_the_colormapped_one_reach_the_same_verdict():
+    """The equality that says this is one defect and not two rows.
+
+    A `jet` image and six `jet` lines are the same encoding spelled two ways,
+    and before this the first failed and the second passed clean.
+    """
+    drawn = heat("jet")
+    sampled = _ramp_lines("jet")
+    try:
+        assert cf.check_colormap(drawn)[0] is cf.check_colormap(sampled)[0]
+    finally:
+        plt.close(drawn)
+        plt.close(sampled)
+
+
+def test_a_ramp_sampled_over_part_of_its_span_is_still_a_sampled_ramp():
+    """`cmap(np.linspace(0.2, 0.8, 5))` is the other spelling people write."""
+    fig = _ramp_lines("jet", n=5, lo=0.2, hi=0.8)
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is False, detail
+
+
+def test_okabe_ito_series_are_not_read_as_a_sampled_ramp():
+    """The false positive that killed the first draft of this check.
+
+    Every categorical ListedColormap matplotlib registers -- `tab10`, `Set2`,
+    `Dark2`, and this project's own `okabe_ito` -- classifies `misc` over 256
+    samples, because a set of hues chosen to be told apart is not ordered in
+    lightness and never was. Matching against them made drawing series in
+    Okabe-Ito, the thing the skill tells people to do, fail this row. The
+    `CMAP_QUALITATIVE_N` split in `_unorderable_ramps` is what keeps them out,
+    and this is the test that fails if it is ever removed.
+
+    An over-fire control, so it is written to pass on a tree without the check
+    as well as one with it. A control that only runs one way proves the fix
+    fires and nothing about what it spares.
+    """
+    import matplotlib.pyplot as plt
+    okabe = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
+    fig, ax = plt.subplots()
+    x = np.linspace(0, 1, 20)
+    for i, c in enumerate(okabe):
+        ax.plot(x, x + i, color=c, label=f"s{i}")
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_a_pre_evaluated_viridis_is_not_gated_by_this_row():
+    """Only ramps a reader cannot order are matched.
+
+    Pre-evaluating viridis loses the colorbar, which is a real cost, but it is
+    not this row's argument and gating it here would fire on every ordered
+    single-hue stack in the corpus.
+    """
+    fig = _ramp_lines("viridis")
+    try:
+        ok, detail = cf.check_colormap(fig)
+    finally:
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_two_colors_are_not_enough_to_call_something_a_ramp():
+    """Two colours make one step, and one step is evenly spaced by definition,
+    so k=2 asks only whether both hues sit somewhere on some ramp. Measured: 17
+    of 4000 pairs drawn from the Okabe-Ito/tab10/Set2/Dark2 pool matched. At
+    three the same 4000 draws matched nothing, and neither did 4000
+    uniform-random sRGB palettes at any size from three to six.
+    """
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap("jet")
+    from matplotlib.colors import to_hex
+    assert cf.RAMP_MIN_STEPS == 3
+    assert cf._sampled_ramp([to_hex(cmap(0.0)), to_hex(cmap(1.0))]) is None
+    assert cf._sampled_ramp(
+        [to_hex(cmap(i / 2)) for i in range(3)]) == "jet"
+
+
+def test_one_hue_repeated_is_not_a_ramp_piled_at_a_point():
+    from matplotlib.colors import to_hex
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap("jet")
+    assert cf._sampled_ramp([to_hex(cmap(0.5))] * 4) is None
+
+
+def test_the_ramps_matched_against_are_continuous_and_unorderable():
+    """Pins the candidate set rather than the count: a matplotlib release that
+    adds or drops a colormap should not turn this red, but one that lets a
+    categorical palette in should.
+    """
+    import matplotlib as mpl
+    import check_palette as cp
+    luts = cf._unorderable_ramps()
+    assert "jet" in luts and "rainbow" in luts and "hsv" in luts
+    for name in ("viridis", "Blues", "RdBu", "tab10", "Set2", "twilight"):
+        assert name not in luts, name
+    for name in luts:
+        cmap = mpl.colormaps[name]
+        assert cmap.N >= cp.CMAP_QUALITATIVE_N, name
+        floats = [tuple(cmap(i / (cp.CMAP_SAMPLES - 1))[:3])
+                  for i in range(cp.CMAP_SAMPLES)]
+        assert cp.cmap_kind_rgb(floats) == "misc", name
+
+
 # --- a gate that raises ------------------------------------------------------
 # `audit` ran its gates in a list comprehension, so one exception anywhere
 # propagated and the caller lost the twenty rows already measured. No gate is
@@ -3539,3 +5145,269 @@ def test_the_row_says_the_defect_is_not_in_the_figure(monkeypatch):
     _, rows = cf.audit(fig)
     detail = next(r for r in rows if r[0] == "Clipping")[2]
     assert "defect in the checker" in detail, detail
+
+
+# --- child axes are panels too ----------------------------------------------
+#
+# `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` go through
+# `add_child_axes` and never reach `fig.axes`, so every row that walked
+# `fig.axes` audited the host and skipped the inset. The same content moved
+# from a panel into an inset went unjudged by ten rows. These build each of
+# those defects inside `ax.inset_axes` and assert the row that owns it is the
+# one that catches it. `mpl_toolkits.axes_grid1.inset_locator.inset_axes` is a
+# different route that goes through `add_axes` and was never blind, which is
+# why the blind one is named exactly in every test below.
+
+def _inset_host(inset=True):
+    """A host whose data sits in the lower-left, so an inset in the upper-right
+    is over ground rather than over the host's own curve. Otherwise the
+    over-fire control fails Text readability on a real collision, which is a
+    fact about the test figure rather than about child axes."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    x = np.linspace(0, 1, 50)
+    ax.plot(x, 0.35 * x, lw=1.6, color=OKABE[3])
+    ax.set_xlim(0, 2.4)
+    ax.set_ylim(0, 2.4)
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Signal")
+    sub = ax.inset_axes([0.55, 0.58, 0.4, 0.38]) if inset else None
+    return fig, ax, sub
+
+
+CHILD_AXES_ROWS = [
+    "Line weight", "Colormap kind", "Contrast stack", "Form", "Mark ratio",
+    "Series color", "Overplotting", "Ink coverage", "Contour dash", "Banking",
+]
+
+
+def test_an_ordinary_inset_fires_none_of_the_rows_that_now_see_it():
+    """The over-fire control for the whole section. Teaching ten rows to walk
+    child axes is only safe if a well-made inset still passes all ten."""
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1, 2], [0, 0.6, 0.2], lw=1.6, color=OKABE[4])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    g = gates(rows)
+    assert [r for r in CHILD_AXES_ROWS if g[r] is not True] == []
+
+
+def test_line_weight_measures_a_hairline_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1], [0, 1], lw=0.15, color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_colormap_kind_sees_a_jet_heatmap_inside_an_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    sub.imshow(np.arange(64).reshape(8, 8), cmap="jet")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Colormap kind"] is False
+
+
+def test_contrast_stack_counts_alpha_levels_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    for v in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65):
+        sub.plot([0, 1], [v, v], alpha=v, lw=2, color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contrast stack"] is False
+
+
+def test_form_catches_a_pie_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    sub.pie([3, 2, 1, 1])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Form"] is False
+
+
+def test_mark_ratio_measures_a_size_encoded_scatter_inside_an_inset():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax, sub = _inset_host()
+    sub.scatter(rng.random(20), rng.random(20), s=rng.random(20) * 900 + 4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Mark ratio"] is False
+
+
+def test_series_color_counts_hues_inside_an_inset():
+    fig, ax, sub = _inset_host()
+    for i in range(9):
+        sub.plot([0, 1], [i, i], lw=2, color=plt.cm.tab20(i / 20))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Series color"] is False
+
+
+def test_an_inset_connector_is_not_a_data_hue():
+    """`indicate_inset_zoom` builds its connectors out of `ConnectionPatch`,
+    and matplotlib gives each one a facecolor off the property cycle even
+    though the shape it draws is a line. Read as a filled area, two connectors
+    put the cycle's first hue against the hues the panel actually encodes with.
+
+    Caught on the declared 3.8.4 floor, where the connectors sit in
+    `ax.patches`. The number this pins is the count, not a verdict: a hue
+    nothing in the figure means must not reach the row at all.
+    """
+    from matplotlib.patches import ConnectionPatch
+    fig, ax, sub = _inset_host()
+    for i, color in enumerate(("#472a7a", "#2f6b8e", "#1fa187")):
+        ax.plot([0, 1], [i, i], lw=2, color=color)
+    _rect, connectors = ax.indicate_inset_zoom(sub)
+    assert any(isinstance(c, ConnectionPatch) for c in connectors), (
+        "matplotlib stopped building the connectors out of ConnectionPatch; "
+        "this test is measuring nothing")
+    for connector in connectors:
+        connector.set_visible(True)
+        connector.set_facecolor("#e69f00")
+    hues = {h for entries in cf._data_colors_by_axes(fig).values()
+            for h, _, _ in entries}
+    plt.close(fig)
+    assert "#e69f00" not in hues, hues
+
+
+def test_overplotting_measures_a_blob_inside_an_inset():
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax, sub = _inset_host()
+    sub.scatter(rng.normal(size=4000), rng.normal(size=4000), s=16)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_ink_coverage_measures_a_saturated_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    sub.imshow(np.ones((8, 8)), cmap="Greys", vmin=0, vmax=1)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Ink coverage"] == "warn"
+
+
+def test_contour_dash_sees_undashed_contours_inside_an_inset():
+    import numpy as np
+    fig, ax, sub = _inset_host()
+    grid = np.linspace(-2, 2, 40)
+    X, Y = np.meshgrid(grid, grid)
+    sub.contour(X, Y, X ** 2 - Y ** 2, levels=[-2, -1, 0, 1, 2], colors="k")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Contour dash"] == "warn"
+
+
+def test_banking_measures_the_aspect_of_an_inset():
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    sub = ax.inset_axes([0.45, 0.45, 0.5, 0.5])
+    t = np.linspace(0, 40, 400)
+    sub.plot(t, np.sin(t))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    detail = next(d for r, _, d in rows if r == "Banking")
+    assert gates(rows)["Banking"] == "warn"
+    assert detail.startswith("ax1 "), detail
+
+
+def test_a_child_axes_does_not_renumber_the_panels_above_it():
+    """The `ax{i}` names in the detail strings are `_all_axes` indices, so the
+    order has to keep `fig.axes` first. A reader told 'ax1 pie' must find the
+    pie in the second panel, not behind an inset that was inserted ahead of
+    it."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(7, 3), constrained_layout=True)
+    a.plot([0, 1], [0, 1], lw=1.6, color=OKABE[3])
+    b.pie([3, 2, 1])
+    a.inset_axes([0.6, 0.6, 0.3, 0.3]).plot([0, 1], [0, 1], lw=1.6,
+                                            color=OKABE[3])
+    ok, rows = cf.audit(fig)
+    order = cf._all_axes(fig)
+    plt.close(fig)
+    assert order[:2] == [a, b]
+    assert order[2] not in (a, b)
+    detail = next(d for r, _, d in rows if r == "Form")
+    assert detail.startswith("ax1 pie"), detail
+
+
+def test_a_secondary_axis_adds_no_new_fires():
+    """A secondary axis is a child axes carrying no data of its own. Walking
+    child axes must not turn a pure unit relabel into a finding."""
+    fig, ax, _ = _inset_host(inset=False)
+    ax.secondary_yaxis("right", functions=(lambda c: c * 2, lambda f: f / 2))
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    g = gates(rows)
+    assert [r for r in CHILD_AXES_ROWS if g[r] is False] == []
+
+
+# --- contrast stack: alpha baked into the colour ----------------------------
+#
+# `get_alpha()` is None whenever opacity was written into an RGBA colour
+# rather than passed as a keyword, and the two draw the same pixels. Reading
+# None as 1.0 meant the row saw `alpha levels [1.0]` on a figure where nothing
+# was opaque.
+
+def test_contrast_stack_reads_alpha_baked_into_an_rgba_colour():
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i, a in enumerate([0.2, 0.35, 0.5, 0.65, 0.8, 0.9]):
+        ax.plot([0, 1], [i, i], color=(0.1, 0.2, 0.7, a), lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is False, detail
+    assert "0.35" in detail, detail
+
+
+def test_a_baked_alpha_and_a_keyword_alpha_agree():
+    """The two spellings draw the same pixels, so they have to read the same.
+    This is the defect stated as an equality rather than as a verdict."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color=(0.1, 0.2, 0.7, 0.4), lw=2)
+    baked = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color="#1a33b3", alpha=0.4, lw=2)
+    keyword = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert baked == keyword
+
+
+def test_a_plain_named_colour_still_counts_as_opaque():
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color="C0", lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail == "alpha levels [1.0]"
+
+
+def test_an_unfilled_patch_does_not_add_a_transparent_level():
+    """`fill=False` is the artist saying it does not draw that part, not a
+    level the reader has to resolve. Counting the face's alpha of 0 would put
+    every unfilled rectangle a step closer to the haze ceiling."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for i in range(3):
+        ax.add_patch(plt.Rectangle((i, 0), 0.8, 1, fill=False, ec="k", lw=1.2))
+    ax.set_xlim(0, 3)
+    ax.set_ylim(0, 1.2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert detail == "alpha levels [1.0]"
+
+
+def test_one_translucent_series_against_a_solid_one_still_passes():
+    """The over-fire control: a translucent band under an opaque line is the
+    ordinary way to draw an interval, and it has a focal point."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot([0, 1], [0, 1], color=(0.1, 0.2, 0.7, 0.4), lw=2)
+    ax.plot([0, 1], [1, 0], color="k", lw=2)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert "0.4" in detail and "1.0" in detail
