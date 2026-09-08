@@ -96,12 +96,22 @@ REMEDIES = (
     ),
     Remedy(
         "Mark ratio",
-        "cap the size range, so the largest mark still reads as a mark",
+        "when one mark is an ornament among marks that are otherwise alike, "
+        "cap the size range so the largest still reads as a mark. Read the "
+        "sizes first: this clips, and clipping a size encoding destroys it",
         "for ax in fig.axes:\n"
         "    for c in ax.collections:\n"
         "        s = c.get_sizes()\n"
         "        if len(s):\n"
         "            c.set_sizes(s.clip(None, s.min() * 5.0))",
+    ),
+    Remedy(
+        "Mark ratio",
+        "when the sizes are graded they are encoding a quantity, and the fix "
+        "is the form rather than the numbers: carry it by position, on a "
+        "second axis or as a dot plot. Area is among the weakest channels the "
+        "eye reads, so a wide size range is unreadable whether or not it was "
+        "meant as the encoding",
     ),
     Remedy(
         "Colormap kind",

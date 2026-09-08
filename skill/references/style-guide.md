@@ -91,6 +91,15 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
   that disappears into a filled band is not a marker.
 - Make ordinal emphasis a lightness ramp, not a transparency stack.
 
+**The three-level budget counts decisions, not artists.** Overlapping fills of
+one colour are one interval encoding drawn once, so a fan chart's bands are a
+single decision however many bands there are; counted per band, a figure that
+made one choice fails for making it legibly. Going the other way, a single flat
+alpha across everything asserts no hierarchy at all, so there is nothing there
+to judge for a focal point. Whether a figure that pale reads at all is a
+different question, and `check_ink` answers it off the rendered pixels rather
+than off the alpha values.
+
 ### Panel occupancy
 
 `check_ink` measures the fraction of each axes rectangle whose pixels differ
@@ -268,6 +277,15 @@ hues.
 A ramp drawn as standalone *lines* has no colormap to hand it to. Keep those
 tiers few and evenly stepped, and validate with `--ordinal`, since the
 composition gate measures them against the categorical floor.
+
+**Evaluating a bad map yourself does not hide it.** `color=cmap(i / 5)` off
+`jet` puts no array on any artist, so for a long time nothing on the figure was
+a colormap to classify and six hues sat comfortably under the `MAX_SERIES_HUES`
+ceiling. `check_colormap` now asks the question in reverse: are a panel's drawn
+hues `RAMP_MIN_STEPS = 3` or more evenly spaced samples of some *registered*
+map, and does that map classify `misc`. Asking it that narrowly is what keeps
+Okabe-Ito out of it, since a set of hues chosen to be told apart is not ordered
+in lightness and was never meant to be.
 
 ### Diverging: `RdBu`, as shipped
 
@@ -509,6 +527,20 @@ contrast("#471365", "#ffffff")
 because the backdrop is whatever happened to be drawn under the label, and no
 artist knows that about itself.
 
+**A rule under a label is ground for one question and ink for the other.** The
+row asks two things of every string: whether it clears the contrast floor, and
+whether data ink crosses its glyphs. The second is measured as pixels differing
+from a local average, and near a gridline through an annotated heatmap cell the
+pixels that differ are the *cell's*, not the rule's - the average is pulled
+toward the rule for a few pixels either side of it. So the exemption takes the
+ground the label sits on as an anchor beside the furniture, and the shoulder
+between them is explained by the pair rather than counted as a mark competing
+with the text.
+
+Contrast is a separate question with a separate answer. White text lying on a
+white rule measures 1.0:1 wherever the two meet, and the reader loses the glyph
+there whatever the rule was for, so that fails the row and should.
+
 ### Direct labels: the alignment is the decision
 
 A label is a box, not a point. On a curve with any slope, `ha="center"` is the
@@ -581,6 +613,33 @@ nearly always cutting words.
 
 If text does not fit, cut it. "Acquisition function ranks the candidate
 molecules" becomes "Rank every candidate."
+
+**A sub- or superscript is measured, and against a lower floor.** Mathtext does
+not render at the size you asked for: each nesting level is drawn at 0.7 of the
+level above, so `$x_{i_{j_{k}}}$` set at 11pt puts a `k` on the page at 3.77pt
+while `get_fontsize()` still reports 11.0.
+
+Holding those glyphs to 7.5pt would be wrong, and measuring it that way is what
+showed it. A first-level subscript at a 10pt base lands at 7.0pt, which is
+Nature's stated *maximum* for figure text and entirely publishable; failing it
+condemns every log axis, because `$\mathdefault{10^{-11}}$` is matplotlib's own
+tick label and no author wrote it. Setting a script smaller than its base is not
+a defect. It is how mathematics has been typeset for a century.
+
+The floor for a script is 5pt, which is where two independent sources land. The
+LaTeX2e kernel's own table, in `fontmath.ltx`, maps every body size from 5pt to
+25pt to a script and a scriptscript size, and never sets math type below 5pt at
+any of them; Nature publishes 5pt as its minimum for any text in a figure.
+
+What that catches is matplotlib's alone. LaTeX has three math sizes and
+`\scriptscriptstyle` serves every level below the first, so nesting deeper than
+two stops shrinking. matplotlib, in `matplotlib._mathtext`, keeps multiplying by
+0.7 for six levels, down to a ninth of the base. Figures rendered through
+`usetex` are exempt for the same reason: real LaTeX clamps, so there is nothing
+to catch.
+
+The fix is to cut a level of nesting or raise the base size. `$x_{i_{j_{k}}}$`
+is nearly always better written as two symbols and a definition in the caption.
 
 **Text off the canvas has two fixes that are not fixes.** The Clipping gate
 fails when a string's bounding box crosses the canvas edge, and the cause is

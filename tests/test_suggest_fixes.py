@@ -179,6 +179,52 @@ def test_the_overplotting_remedy_does_not_advise_transparency():
     assert "do not help" in text or "does not help" in text
 
 
+def test_the_mark_ratio_clip_says_what_it_costs():
+    """The snippet is right for one ornament among alike marks and wrong for a
+    size encoding, and the round trip above cannot tell the two apart: its
+    fixture is an ornament, and the assertion is that the gate goes green,
+    which clipping achieves either way. So the text has to carry the warning
+    the harness cannot."""
+    clip = next(r for r in sf.REMEDIES if r.gate == "Mark ratio" and r.code)
+    assert "clip" in clip.suggestion.lower() and "destroy" in clip.suggestion, (
+        "the clip remedy no longer says that clipping destroys a size "
+        "encoding, which is the only thing standing between a reader and a "
+        "green audit on a figure that no longer says what it said")
+    graded = [r for r in sf.REMEDIES if r.gate == "Mark ratio" and not r.code]
+    assert graded, "there is no remedy left for the graded case"
+
+
+def test_clipping_a_size_encoding_really_does_destroy_it():
+    """The measurement behind the remedy above, asserted rather than trusted.
+
+    This is the shape of defect the round-trip harness is blind to by
+    construction: the snippet moves the gate to green, so the test passes,
+    while the figure it produces no longer carries the data it was drawn to
+    carry."""
+    rng = np.random.default_rng(0)
+    value = rng.uniform(1, 40, 60)
+    fig, ax = plt.subplots()
+    try:
+        coll = ax.scatter(rng.random(60), rng.random(60), s=value * 20.0)
+        assert cf.check_mark_ratio(fig)[0] is False
+        assert len({round(float(v), 6) for v in coll.get_sizes()}) == 60
+
+        clip = next(r for r in sf.REMEDIES if r.gate == "Mark ratio" and r.code)
+        exec(clip.code, {"fig": fig, "plt": plt, "check_figure": cf})
+
+        after = coll.get_sizes()
+        assert cf.check_mark_ratio(fig)[0] is True, (
+            "the snippet no longer moves the gate, so this test proves nothing")
+        flattened = int((after == after.max()).sum())
+        assert flattened == 52, flattened
+        drawn_alike = value[after == after.max()]
+        assert drawn_alike.max() / drawn_alike.min() > 6.0, (
+            "the clipped marks no longer span a wide range of values, so the "
+            "cost this test exists to state has gone away")
+    finally:
+        plt.close(fig)
+
+
 def test_transparency_really_does_not_move_the_overplotting_gate():
     """The measurement behind the remedy above, asserted rather than trusted."""
     rng = np.random.default_rng(0)
