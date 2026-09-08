@@ -1043,6 +1043,40 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     Furniture is exempt at the second step rather than the first: a gridline IS
     an edge, and casing exists precisely so it can pass behind a label.
 
+    **The ground the label sits on is an anchor too, and leaving it out made a
+    gridline crossing an annotated heatmap cell read as 53% data ink.** The
+    exemption tests a pixel's own colour, and the pixels a gridline puts wrong
+    are not the gridline's. `TEXT_EDGE_WINDOW` is 9, so the local average
+    within four pixels of a white rule is pulled toward white, and the flat
+    cell either side of it differs from that average by more than
+    `TEXT_EDGE_TOL` while still carrying the cell's own colour. Measured on a
+    5x5 viridis heatmap with white major gridlines through the cell centres:
+    450 of 646 pixels flagged as edges, only 106 of them actually the rule's
+    colour, and the other 344 the cell at `(31, 146, 140)` - ground, flagged
+    for being near furniture, and unforgivable by a test that only knows about
+    furniture.
+
+    Adding the block's own ground closes it exactly, because `_near_any`
+    measures distance to the segment between a pair of anchors: the rule is
+    explained by the furniture, the cell by the ground, and the antialiased
+    shoulder where they meet by the segment joining the two. The ground is the
+    median of the *non-edge* pixels, which is the surface by construction.
+
+    It does not blind the row, which is the thing to check rather than assume.
+    Dilating the furniture match would have, since the page colour is furniture
+    and every pixel on a white figure sits next to page. Measured against the
+    same four fixtures before and after:
+
+    ```text
+    curve through a label          15% -> 15%    scatter cloud behind    20% -> 20%
+    thin curve through a label      8% ->  8%    heatmap, grid, curve    76% -> 28%
+    ```
+
+    Only the last moves, and it moves to the value the curve alone accounts
+    for. A label lying on a wide flat band of one colour has that band as its
+    ground and is forgiven, which is the division this row already states: a
+    flat fill is a background, a curve is not.
+
     `mask` restricts which pixels count to the ones the label actually covers,
     for an oblique box whose block is mostly empty page. It is applied after the
     blur and not before: the local average is what says whether a pixel is an
@@ -1054,6 +1088,10 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     field = block.astype(float)
     local = _box_blur(field, TEXT_EDGE_WINDOW)
     edge = np.linalg.norm(field - local, axis=2) > TEXT_EDGE_TOL
+    anchors = list(furniture)
+    ground = field[~edge].reshape(-1, 3)
+    if len(ground):
+        anchors.append(tuple(np.median(ground, axis=0)))
     if mask is not None:
         edge = edge & mask
         area = int(mask.sum())
@@ -1062,7 +1100,7 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     if area == 0 or not edge.any():
         return 0.0
     pix = field[edge].reshape(-1, 3)
-    return float(edge.sum() - _near_any(pix, furniture, tol).sum()) / area
+    return float(edge.sum() - _near_any(pix, anchors, tol).sum()) / area
 
 
 def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,

@@ -700,6 +700,50 @@ hatch `_data_colors_by_axes` documents, drawing an ordinal ramp as
 to a stacked bar chart, which has no colormap route. The answer there is to
 step the ramp wider, not to guess at intent from four hexes.
 
+**`Text readability` counted a gridline through an annotated heatmap cell as
+data ink, and the pixels it counted were not the gridline's.** The clutter
+clause flags a pixel that differs from a local average and then forgives it if
+its colour is furniture. `TEXT_EDGE_WINDOW` is 9, so within four pixels of a
+white rule the local average is pulled toward white, and the flat cell either
+side differs from it by more than `TEXT_EDGE_TOL` while still carrying the
+cell's own colour. An exemption that only knows about furniture can never
+forgive those. Instrumented on a 5x5 viridis heatmap with white major
+gridlines through the cell centres:
+
+```text
+450 of 646 pixels flagged as edges
+  106  actually the rule's colour, forgiven
+  344  the cell at (31, 146, 140), counted as data ink   -> 53% of the box
+```
+
+The ground the label sits on is now an anchor beside the furniture, which
+closes it exactly. `_near_any` measures distance to the segment between a pair
+of anchors, so the rule is explained by the furniture, the cell by the ground,
+and the antialiased shoulder where they meet by the segment joining them. The
+ground is the median of the *non-edge* pixels, which is the surface by
+construction.
+
+The obvious alternative would have blinded the row: dilating the furniture
+match by the blur window sounds equivalent and is not, because the page colour
+is furniture and every pixel on a white figure sits next to page. Measured
+before and after on four fixtures, only the artefact moves:
+
+```text
+curve through a label      15% -> 15%      scatter cloud behind a label   20% -> 20%
+thin curve through a label  8% ->  8%      heatmap, gridline and a curve  76% -> 28%
+```
+
+The last one moves to what the curve alone accounts for, and still fires. A
+figure that measured 0% clean gained a gridline and went to 42% before this
+and stays at 0% after, which is the pair the new tests hold.
+
+One thing the complaint blamed on the clutter clause belongs to the contrast
+clause and is correct: on a heatmap with *white* gridlines and white labels,
+the row fails for contrast, because white text lying on a white rule is 1.0:1
+wherever the two meet. That is a real defect in the figure and the test
+fixtures use a grey grid to keep the two clauses apart. Corpus sweep: 21
+figures, 0 verdict changes.
+
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside
 `plt.style.context` and hands the figure back with the context closed, so a

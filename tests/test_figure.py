@@ -3097,6 +3097,151 @@ def test_uniform_fill_under_a_label_is_a_background_not_clutter():
     assert gates(rows)["Text readability"] is True
 
 
+def _annotated_heatmap(grid=False, crossing=False):
+    """A labelled 5x5 heatmap, optionally with major gridlines through the cell
+    centres, optionally with a curve drawn across the middle row.
+
+    Dark cells and white labels, with a mid-grey grid, so every string clears
+    the contrast floor and the clutter clause is the only one these tests are
+    reading. That matters: on a *white*-gridded heatmap the contrast clause
+    fires on its own and correctly, because white text lying on a white rule is
+    1.0:1 and unreadable at that spot."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    d = rng.uniform(0.75, 0.98, (5, 5))
+    fig, ax = plt.subplots(figsize=(4, 3.4), constrained_layout=True)
+    ax.imshow(d, cmap="Blues", vmin=0.0, vmax=1.0)
+    if grid:
+        ax.grid(True, color="#666666", lw=1.0)
+    if crossing:
+        ax.plot([-0.5, 4.5], [2, 2], color="#D55E00", lw=2.5)
+    for i in range(5):
+        for j in range(5):
+            ax.text(j, i, f"{d[i, j]:.2f}", ha="center", va="center",
+                    color="white", fontsize=7)
+    return fig
+
+
+def _clutter_without_the_ground_anchor(block, furniture, tol, mask=None):
+    """`_foreign_ink` as it stood before the ground was made an anchor, so a
+    test can show the artefact was really there rather than assert it was."""
+    import numpy as np
+    field = block.astype(float)
+    local = cf._box_blur(field, cf.TEXT_EDGE_WINDOW)
+    edge = np.linalg.norm(field - local, axis=2) > cf.TEXT_EDGE_TOL
+    if mask is not None:
+        edge = edge & mask
+        area = int(mask.sum())
+    else:
+        area = edge.size
+    if area == 0 or not edge.any():
+        return 0.0
+    pix = field[edge].reshape(-1, 3)
+    return float(edge.sum() - cf._near_any(pix, furniture, tol).sum()) / area
+
+
+def _worst_clutter(fig, measure=None):
+    """The largest clutter fraction over the figure's labels, off the backdrop
+    the row itself measures. `measure` defaults to the shipped `_foreign_ink`."""
+    import numpy as np
+    measure = measure or cf._foreign_ink
+    with cf._at_draw_rc(fig), cf._at_measure_dpi(fig):
+        r, canvas = cf._renderer(fig)
+        items = cf._texts(fig, r)
+        fig.set_layout_engine("none")
+        for t, _ in items:
+            t.set_visible(False)
+        canvas.draw()
+        backdrop = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(float)
+        for t, _ in items:
+            t.set_visible(True)
+        furniture = cf._furniture(fig)
+        H, W = backdrop.shape[:2]
+        worst = 0.0
+        for _t, bb in items:
+            xa, xb = max(int(bb.x0) - 1, 0), min(int(bb.x1) + 2, W)
+            ya, yb = max(int(bb.y0) - 1, 0), min(int(bb.y1) + 2, H)
+            block = backdrop[slice(H - yb, H - ya), slice(xa, xb)]
+            if block.size // 3 < cf.TEXT_FOOTPRINT_MIN_PX:
+                continue
+            worst = max(worst, measure(block, furniture, cf.TEXT_BLEND_TOL))
+    return worst
+
+
+def test_a_gridline_crossing_a_heatmap_label_is_not_data_ink():
+    """The pixels a gridline puts wrong are not the gridline's own.
+
+    `TEXT_EDGE_WINDOW` is 9, so the local average within four pixels of a white
+    rule is pulled toward white and the flat cell either side reads as an edge
+    while still carrying the cell's colour, which an exemption that only knows
+    furniture can never forgive. Measured on a viridis heatmap with white
+    rules: 450 of 646 pixels flagged, 106 of them the rule, and the other 344
+    the cell at `(31, 146, 140)`."""
+    plain = _annotated_heatmap()
+    try:
+        assert _worst_clutter(
+            plain, _clutter_without_the_ground_anchor) <= cf.TEXT_CLUTTER_MAX
+    finally:
+        plt.close(plain)
+
+    fig = _annotated_heatmap(grid=True)
+    try:
+        before = _worst_clutter(fig, _clutter_without_the_ground_anchor)
+        after = _worst_clutter(fig)
+        status, detail = cf.check_text_readability(fig, None)
+    finally:
+        plt.close(fig)
+    # The artefact shown rather than asserted: adding one gridline to a figure
+    # that measured clean used to take it to a third of the box.
+    assert before > cf.TEXT_CLUTTER_MAX * 10, f"{before:.0%}"
+    assert after <= cf.TEXT_CLUTTER_MAX, f"{after:.0%}"
+    assert "sits on data ink" not in detail, detail
+    assert status is True, detail
+
+
+def test_a_curve_across_a_heatmap_label_is_still_data_ink():
+    """The over-fire control, and the one that says the fix removed the
+    artefact rather than the clause. Same figure, same gridlines, one curve
+    drawn across the middle row."""
+    fig = _annotated_heatmap(grid=True, crossing=True)
+    try:
+        worst = _worst_clutter(fig)
+        status, detail = cf.check_text_readability(fig, None)
+    finally:
+        plt.close(fig)
+    assert worst > cf.TEXT_CLUTTER_MAX * 3, f"{worst:.0%}"
+    assert "sits on data ink" in detail, detail
+    assert status is False
+
+
+def test_the_ground_anchor_does_not_forgive_ink_on_a_plain_page():
+    """The hole the obvious fix would have opened. Dilating the furniture
+    match instead would blind this: the page colour is furniture, so on a white
+    figure every pixel sits next to page."""
+    import numpy as np
+    rng = np.random.default_rng(3)
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    x = np.linspace(0, 10, 200)
+    ax.plot(x, np.sin(x), color="#D55E00", lw=2)
+    ax.text(5.0, float(np.sin(5.0)), "crossed", ha="center", va="center",
+            fontsize=10)
+    try:
+        crossed = _worst_clutter(fig)
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+    ax.scatter(rng.random(300), rng.random(300), s=30, color="#009E73")
+    ax.text(0.5, 0.5, "in the cloud", ha="center", va="center", fontsize=10)
+    try:
+        in_cloud = _worst_clutter(fig)
+    finally:
+        plt.close(fig)
+
+    assert crossed > cf.TEXT_CLUTTER_MAX, f"{crossed:.0%}"
+    assert in_cloud > cf.TEXT_CLUTTER_MAX, f"{in_cloud:.0%}"
+
+
 # --- fonts ------------------------------------------------------------------
 
 def test_fonts_warns_on_type_3_and_does_not_gate():

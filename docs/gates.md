@@ -33,7 +33,7 @@ panels first and the child axes after them.
 |---|---|---|
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
 | Text collision | oriented box overlap | two text boxes overlap, rotation included, tick labels on a shared axis exempted |
-| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
+| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs. Furniture is exempt, and so is the ground the label sits on, so a gridline through an annotated heatmap cell is not counted as ink. A rule lying under text still counts against contrast, because white text on a white rule is 1.0:1 wherever the two meet |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour are an interval encoding drawn once and count as a single level, so a fan chart's bands are one decision rather than one each. A single flat alpha asserts no hierarchy and is not judged for a focal point; whether a pale figure reads at all is the Ink coverage row, measured off pixels |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
