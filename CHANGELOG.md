@@ -58,6 +58,8 @@ behind a threshold this project enforces.
   separately.
 - `tests/test_style_context_invariance.py`, holding every row identical across
   the sheet boundary for `demo` and `encoding`.
+- `check_figure.marker_extent_pt`, the width and height in points that a `plot`
+  marker actually draws, which is not `markersize` for every marker.
 
 #### Fixed
 
@@ -95,6 +97,11 @@ behind a threshold this project enforces.
   `TYPE_FLOOR_PT`. A figure with a script nested more than two deep can newly
   fail. A first-level script is unaffected, which is what keeps the row off
   matplotlib's own log-axis tick labels. `usetex` figures are exempt.
+- `Overplotting` reads a cloud drawn as `plot` markers with no connecting line,
+  not only one drawn by `scatter`. The two spellings of the same cloud now
+  report the same number. Figures using the `plot` spelling can newly warn, and
+  two in this project's own corpus do. The detail names `ax{i}.line{j}` beside
+  the existing `ax{i}.col{j}`.
 - Auditing one figure twice returns one verdict, and a gate called on its own
   reports what `audit` reports.
 - `audit_api.py` matches a reported name with lookarounds rather than `\b`, so
@@ -370,6 +377,47 @@ quantities in different units whose ticks happened to coincide were told to use
 `sharey`. `Contrast stack` called `float()` on an array, raised, and the raising
 gate became a hard failure. `winter` and `Wistia` failed on quantisation
 artifacts of about 0.001 OKLab, amplified by their narrow lightness spans.
+
+**`Overplotting` could not see half the ways a cloud is drawn, and the corpus
+figure that says so in a comment was one of them.** `ax.plot(x, y, "o")` and
+`ax.scatter(x, y)` put the same marks in the same places; the row walked
+`ax.collections`, a marker-only `Line2D` has no offsets, and the answer for the
+`plot` spelling was "no scatter overplotting" every time. `gallery-orbit`
+carries a comment saying the gate warns on it and that the warning is one to
+read and accept. It did not warn. The comment had been untrue since it was
+written.
+
+The reason this took three attempts is that the obvious fix is wrong in a way
+the corpus reports as a false positive. Taking `markersize` for the drawn
+diameter moved three figures, `gallery-orbit` to a flat 100%, and a corpus
+rejection at 3 of 20 looks exactly like the overplotting negative result
+already pinned in this file. It was not one. `markersize` is a diameter for
+most markers and not for all of them: `lines.py` special-cases `","` and skips
+the scale entirely, so that marker is one device pixel however large the number
+is, and at `ms=5` and 150 dpi the naive reading gave `gallery-orbit`'s marks a
+radius seventeen times their own. `"."` carries its own `scale(0.5)`. `"|"` and
+`"_"` have no extent at all across the stroke, so nineteen censoring ticks on
+`gallery-survival` were being read as nineteen five-point discs and reported at
+63% and 83%. Measuring the marker's own path instead, `gallery-survival` drops
+out of the result, `gallery-orbit` reads 95%, and what remains is two figures
+rather than three.
+
+Both of those two were then checked against the render before the row was
+allowed to fire, by counting the connected components of each artist's ink
+alone: `gallery-forms` draws 14 marks as 7 blobs and 12 as 8, so half of the
+first strip is not separately countable, and `gallery-orbit` is a bifurcation
+diagram whose chaotic band is the finding. Neither is a false positive. This is
+not a threshold argument and there was nothing here to pin.
+
+Corpus exposure, since a clean sweep proves nothing without it: 7 marker-only
+artists on 3 of 20 figures, of which 2 figures moved. The scatter half of the
+same row is exposed at 3 artists on 2 figures. Both sides measure the marker's
+path and not the edge stroked around it, which under-reports the drawn mark by
+`markeredgewidth` on both, consistently. Counting it is more truthful and is
+not done here: `gallery-parity` is the only figure it reaches, it sits at 49%,
+and counting the edge carries it to 55% on marks the render shows losing 27% of
+themselves. That is a decision about where the threshold goes, and it wants its
+own commit.
 
 **Auditing one figure twice returned two verdicts, and it is the same
 measurement error one level up.** `examples/demo.py` builds and reports inside

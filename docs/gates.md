@@ -36,7 +36,7 @@ panels first and the child axes after them.
 | Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
-| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a scatter's points sit close enough to some other point for the two marks to touch on the page *(advisory)* |
+| Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
 | Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
 | Type size | `TYPE_FLOOR_PT = 7.5`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 7.5pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. Scripts are measured rather than read off the property, and held to the lower floor because a script is set smaller than its base by convention |
 | Line weight | `LINE_FLOOR_PT = 1.0` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Gridlines, spines and tick marks are furniture and are not measured |

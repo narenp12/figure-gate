@@ -2018,6 +2018,107 @@ def test_overplotting_empty_sizes_is_skipped():
     assert gates(rows)["Overplotting"] is True
 
 
+# --- overplotting reads a cloud spelled as plot markers ----------------------
+
+def _dense_cloud(n=400, seed=0):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    return rng.normal(size=n), rng.normal(size=n)
+
+
+def test_overplotting_reads_a_cloud_drawn_with_plot_markers():
+    """`ax.plot(x, y, "o")` is a scatter spelled differently, and for seven
+    releases this row could not see it: a marker-only Line2D has no offsets."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o", ms=4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_the_two_spellings_of_one_cloud_report_the_same_number():
+    """`plot(ms=4)` and `scatter(s=16)` draw the same 4pt disc, so the row has
+    to answer identically. It is the reason `marker_extent_pt` leaves the edge
+    stroke out: `scatter_diameter_pt` leaves it out too, and a row that reads
+    the two spellings differently is the defect this pair closes."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o", ms=4)
+    from_plot = cf.check_overplotting(fig)[1]
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(x, y, s=16)
+    from_scatter = cf.check_overplotting(fig)[1]
+    plt.close(fig)
+
+    assert (from_plot.replace("line0", "MARKS")
+            == from_scatter.replace("col0", "MARKS")), (from_plot, from_scatter)
+
+
+def test_overplotting_leaves_a_marked_line_alone():
+    """Marks strung on a visible line are stops on a path, not a cloud. The
+    path carries an ordering that touching marks would otherwise lose."""
+    x, y = _dense_cloud()
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, y, "o-", ms=4)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_the_pixel_marker_is_not_measured_at_its_markersize():
+    """`marker=","` is the one marker matplotlib does not scale: `lines.py`
+    skips the scale for it, so the mark is one device pixel however large
+    `markersize` is. Reading the property instead of the drawn path put
+    `gallery-orbit` at a radius seventeen times its own and reported 100%.
+
+    Two marks a full markersize apart therefore do not touch, and a row that
+    took `markersize` for the diameter would say they do.
+    """
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0.0, 0.0], [0.0, 0.02], linestyle="none", marker=",", ms=20)
+    ax.set_ylim(-1, 1)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Overplotting"] is True
+
+
+def test_the_pixel_markers_size_comes_from_the_dpi_not_the_property():
+    """One device pixel is a length only once a resolution is fixed, which is
+    what `MEASURE_DPI` is for."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (line,) = ax.plot([0.0], [0.0], linestyle="none", marker=",", ms=20)
+    width, height = cf.marker_extent_pt(line, 144.0)
+    plt.close(fig)
+    assert width == height == pytest.approx(0.5)
+
+
+def test_a_bar_marker_is_not_read_as_a_disc_of_its_long_axis():
+    """`"|"` has zero extent across the stroke, so what it draws across it is
+    `markeredgewidth`. Nineteen censoring ticks spread along a survival curve
+    are not nineteen five-point discs, and `gallery-survival` was reported at
+    63% and 83% while they were read that way."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (line,) = ax.plot([0.0], [0.0], linestyle="none", marker="|",
+                      markersize=5, markeredgewidth=1.0)
+    width, height = cf.marker_extent_pt(line, cf.MEASURE_DPI)
+    plt.close(fig)
+    assert (width, height) == (1.0, 5.0)
+
+
+def test_the_point_marker_draws_at_half_the_size_it_is_given():
+    """`"."` carries a `scale(0.5)` in its own transform. Measured against the
+    render, `"." at ms=6` and `"o" at ms=3` each lay down 101 pixels."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    (dot,) = ax.plot([0.0], [0.0], linestyle="none", marker=".", ms=6)
+    (disc,) = ax.plot([0.0], [0.0], linestyle="none", marker="o", ms=3)
+    dpi = cf.MEASURE_DPI
+    assert cf.marker_extent_pt(dot, dpi) == cf.marker_extent_pt(disc, dpi)
+    plt.close(fig)
+
+
 # --- multi-panel attribution ------------------------------------------------
 
 def test_label_attribution_is_scoped_per_panel():

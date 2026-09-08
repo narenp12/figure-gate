@@ -1420,6 +1420,72 @@ def scatter_diameter_pt(size: float | np.ndarray) -> float | np.ndarray:
     return size ** 0.5
 
 
+def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
+    """The width and height in points that a `plot` marker actually draws.
+
+    `markersize` is a diameter in points, which is the honest half of the
+    story and the half that made `scatter_diameter_pt` necessary on the other
+    side. The rest is that matplotlib does not draw every marker at that
+    diameter:
+
+    - `","` ignores `markersize` outright. `lines.py` special-cases it and
+      skips the scale, so the mark is one device pixel however large the
+      number is: measured here at ms 1, 3, 6, 12 and 24, every one laid down
+      exactly 1 pixel of ink.
+    - `"."` carries a `scale(0.5)` in its own transform, so it draws at half
+      the diameter asked for; `ms=6` and `"o"` at `ms=3` each put down 101
+      pixels.
+    - `"|"` and `"_"` are one segment. Their path has zero extent across the
+      stroke, so what they draw across it is `markeredgewidth` and nothing
+      else - 2px wide against 10px tall at ms 5, mew 1.
+
+    So the extent is the marker's own unit path, transformed the way the
+    marker will transform it, scaled by `markersize`. Checked against the
+    render for `o . s ^ D * | _ ,` across two sizes; every prediction landed
+    within a pixel of the drawn bounding box.
+
+    The edge stroke is deliberately NOT added, except to an axis the path has
+    no extent in at all. `markeredgewidth` widens the drawn mark - `"o"` at
+    `ms=4.5, mew=1` measures 11px where the path alone predicts 9 - but
+    `scatter_diameter_pt` leaves the same stroke out on the other side, and a
+    row that reads the two spellings of one figure differently is the defect
+    this pair exists to close. Both under-report by the stroke, together, and
+    `check_overplotting` says what counting it would cost. A bar marker is the
+    exception because there the stroke is the whole mark: with no fallback its
+    width is zero and it can never touch anything.
+
+    Args:
+        line: A `Line2D`.
+        dpi: The resolution the figure will be measured at, needed only for
+            `","`, whose size is a device pixel rather than a length.
+
+    Returns:
+        `(width_pt, height_pt)` of the drawn mark's bounding box.
+    """
+    from matplotlib.markers import MarkerStyle
+
+    marker = line.get_marker()
+    if _str_equal(marker, ","):
+        one_pixel = 72.0 / dpi
+        return one_pixel, one_pixel
+    style = MarkerStyle(marker)
+    box = style.get_path().transformed(style.get_transform()).get_extents()
+    size = float(line.get_markersize())
+    edge = float(line.get_markeredgewidth())
+    return (box.width * size or edge), (box.height * size or edge)
+
+
+def _str_equal(value: Any, text: str) -> bool:
+    """`value == text` for a marker, without numpy broadcasting the compare.
+
+    A marker may be an int, a string, a path or a tuple, and `np.equal` on an
+    array-valued one returns an array rather than a bool. matplotlib has
+    `cbook._str_equal` for exactly this; it is private, so this is the same
+    two lines rather than an import that can move.
+    """
+    return isinstance(value, str) and value == text
+
+
 def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     """One mark far larger than the rest stops reading as a mark and starts
     reading as an ornament stuck on top of the plot.
@@ -1583,6 +1649,46 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     Above the threshold the marks merge into a blob — thin the count, use
     hollow markers, add transparency, or switch to hexbin.
 
+    `ax.plot(x, y, "o")` draws the same cloud through a different API, and for
+    seven releases this row could not see it: a marker-only `Line2D` has no
+    offsets, so a figure spelled that way was answered "no scatter
+    overplotting" without a tree ever being built. Lines whose marker is drawn
+    with no connecting segment are now measured too, and the two spellings
+    agree exactly: `plot(x, y, "o", ms=4)` and `scatter(x, y, s=16)` are the
+    same 4pt disc and report the same number on the same points. A marked line
+    (`"o-"`) is left alone: its marks are stops on a path the eye is already
+    following along, and the path carries the ordering that touching marks
+    would otherwise lose.
+
+    The mark's size comes from `marker_extent_pt`, not from `markersize`,
+    because the two are not the same number for every marker and the
+    difference is not small. Taking `markersize` as the diameter put
+    `gallery-orbit` - 168000 points at `marker=","`, which matplotlib draws
+    one pixel wide whatever size is asked for - at a radius 17x its own, and
+    reported 100% contact off it. The narrower of the two extents is the
+    radius, so a bar marker is not read as a disc of its long axis: `"|"` at
+    `ms=5, mew=1` is a tick two pixels across, and nineteen censoring ticks
+    spread along a survival curve are not nineteen five-point discs.
+
+    Every one of the three corpus figures this newly reaches was checked
+    against the render before it was allowed to fire, by counting the
+    connected components of each artist's own ink: `gallery-forms` draws 14
+    marks as 7 blobs and 12 as 8, `gallery-survival` 19 ticks as 12, and
+    `gallery-orbit` is the case its own comment in `examples/gallery.py`
+    predicted and accepted, where the density IS the finding. The row warns
+    rather than fails for that reason.
+
+    Both sides measure the marker's path and not the edge stroked around it,
+    so both under-report the drawn mark by `markeredgewidth`. Counting it is
+    the more truthful measurement and is not made here, because it is a
+    threshold-boundary move on this corpus rather than a correctness one:
+    `gallery-parity` is the only figure it reaches and it sits at 49%, so
+    counting the edge carries it to 55% and flips the verdict on marks that
+    the render shows losing 27% of themselves, well under what 55% reads as
+    elsewhere (`gallery-forms` loses 50% at 71%). Deciding that is deciding
+    where the threshold goes, and it wants its own commit and its own
+    argument.
+
     Two separate errors used to make this roughly 1.8x too lenient, and a
     scatter of 64 discs each overlapping its neighbours by a quarter of their
     diameter rendered as one solid square while the gate returned clean. The
@@ -1646,11 +1752,38 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
 
             frac = _contact_fraction(xy, radius_px, cKDTree)
             if frac > OVERPLOT_THRESHOLD:
-                bad.append((i, j, frac))
+                bad.append((i, f"col{j}", frac))
+
+        for j, line in enumerate(ax.lines):
+            if not line.get_visible():
+                continue
+            if line.get_marker() in ("", "None", None, " "):
+                continue
+            # A line drawn through its marks is a path, not a cloud. Only the
+            # marker-only spelling is the one `scatter` has an equivalent of.
+            if str(line.get_linestyle()) not in ("", "None", "none", " "):
+                continue
+            try:
+                xy = ax.transData.transform(np.column_stack([
+                    np.asarray(line.get_xdata(), dtype=float),
+                    np.asarray(line.get_ydata(), dtype=float)]))
+            except Exception:
+                continue
+            xy = xy[np.isfinite(xy).all(axis=1)]
+            n = len(xy)
+            if n < 2:
+                continue
+            width_pt, height_pt = marker_extent_pt(line, dpi)
+            radius = min(width_pt, height_pt) / 2.0 * dpi / 72.0
+            if radius <= 0.0:
+                continue
+            frac = _contact_fraction(xy, np.full(n, radius), cKDTree)
+            if frac > OVERPLOT_THRESHOLD:
+                bad.append((i, f"line{j}", frac))
 
     if not bad:
         return True, "no scatter overplotting"
-    detail = "; ".join(f"ax{i}.col{j} {f:.0%}" for i, j, f in bad)
+    detail = "; ".join(f"ax{i}.{a} {f:.0%}" for i, a, f in bad)
     return "warn", (f"overplotting: {detail} — marks merge into blob"
                     "  [FIX] thin counts or switch to hexbin. This measures how "
                     "close the marks are, so transparency and hollow markers "

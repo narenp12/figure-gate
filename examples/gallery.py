@@ -383,6 +383,15 @@ def schematic():
 # has to tell "repeated furniture" apart from "three different measurements".
 # Each panel is a form `choosing-a-form.md` argues for against a more obvious
 # alternative, and the caption of each names the alternative it beats.
+#
+# Panel (a) warns for overplotting, at 71% of its fourteen marks in contact, and
+# the warning is right: rendered on its own the strip draws those fourteen as
+# seven blobs, so half of them are not separately countable and "every point" is
+# doing less work here than the comment below claims. It is left as it stands
+# because widening the jitter is a change to the figure and not to the gate, and
+# because it is the corpus's only worked example of a small-n cloud tripping a
+# row whose remedy ("thin counts or switch to hexbin") has nothing to offer at
+# n = 14. Measured: at +/-0.20 jitter the same fourteen marks fall to 43%.
 
 @styled
 def forms():
@@ -528,6 +537,14 @@ def convergence():
 # finding. The gate warns, correctly, and the warning is one to read and accept
 # — which is the whole reason the context-dependent checks warn instead of
 # failing. A gate everyone learns to ignore is worse than no gate.
+#
+# That paragraph was written before the row could see this figure and was untrue
+# for seven releases: `check_overplotting` read `ax.collections`, this is a
+# marker-only `plot`, and the answer here was "no scatter overplotting" every
+# time. It warns now, at 95% of 168000 marks in contact. The number is what a
+# one-pixel marker gives — `marker=","` is the one marker matplotlib does not
+# scale by `markersize`, so reading the size off the property instead of off the
+# drawn path put this at a radius seventeen times its own and reported 100%.
 
 @styled
 def orbit():
