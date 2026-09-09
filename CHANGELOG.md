@@ -11,7 +11,7 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
-## Unreleased
+## 0.9.0 — 2026-09-09
 
 ### What changed
 
