@@ -291,6 +291,20 @@ jobs:
       # third failure purely to arrive at the same `exit 1`.
       - name: Install TeX
         run: |
+          # The runner ships third-party apt sources this job never fetches
+          # from, and `apt-get update` fails as a whole when any one index
+          # fails. That is what failed here on 2026-09-09: Google's Chrome
+          # repository served a Packages.gz whose hash did not match its own
+          # Release file, and all three attempts died on it while installing a
+          # package that comes from Ubuntu's archive. A hash mismatch is not a
+          # stalled mirror, so the loop below could not help. Keeping only
+          # Ubuntu's own sources removes the whole class: `sources.list` and
+          # the deb822 `ubuntu.sources` are both left alone, and nothing else
+          # in this job needs a third-party repository.
+          if [ -d /etc/apt/sources.list.d ]; then
+            sudo find /etc/apt/sources.list.d -type f \
+                 ! -name 'ubuntu.sources' -delete
+          fi
           for attempt in 1 2 3; do
             if timeout 60 sudo apt-get update -qq \
                && timeout 240 sudo apt-get install -y --no-install-recommends texlive-xetex; then

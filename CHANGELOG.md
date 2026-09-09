@@ -11,7 +11,7 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
-## Unreleased
+## 0.9.0 — 2026-09-09
 
 ### What changed
 
@@ -29,6 +29,11 @@ behind a threshold this project enforces.
 - `check_figure._all_axes` returns `fig.axes` first and descendants after, so
   the `ax{i}` names in the detail strings keep their meaning for the panels
   that were already numbered.
+- `Line weight` measures spines and gridlines, major and minor, against
+  `FURNITURE_FLOOR_PT` (0.5pt) rather than skipping them. A floor of zero is
+  not "a lower floor". Tick marks remain unmeasured: the sheet does not author
+  their width, so judging a default reports the library rather than the
+  figure.
 
 #### Added
 
@@ -381,6 +386,42 @@ change working rather than noise: `gallery-rose` went from `no strokes to
 measure` to sixteen strokes, `gallery-schematic` from one to nine, and
 `gallery-callout` from one to two. Real content the gate had been blind to, all
 of it above the floor.
+
+**Furniture had no floor, and the docstring's claim that it had a lower one was
+false.** The old code skipped spines and gridlines entirely, which is a floor
+of zero, and a floor of zero is not "a lower floor". Measured on the corpus:
+all 982 furniture strokes on twenty-one figures are under `LINE_FLOOR_PT`, and
+every one clears 0.5pt, the thinnest at 0.63pt. The sheet ships the axis rule
+at 0.8pt and the grid at 0.7pt on purpose; measuring them against the data
+floor would have failed the corpus on the sheet's own design.
+
+Science's instructions give "a minimum of 0.5 point at the final reduced size"
+for line widths, which is both lower than SIAM's number and stated against the
+figure's placed size. `FURNITURE_FLOOR_PT = 0.5` is that number, measured
+through `page_scale` the same way `LINE_FLOOR_PT` is. The two floors are two
+sources because they cost the reader different things: a gridline that drops
+out costs a reference, and a data curve that drops out costs the finding.
+
+The headroom is thinner than the data row's. The sheet's spine is 0.8pt
+against a 0.5pt floor (ratio 1.6), the same as a 1.6pt data line against
+1.0pt, so those two fire at the same placement. The grid is the tight one:
+0.7pt against 0.5pt (ratio 1.4), so between placement scale 0.625 and 0.714
+the grid fires while the data passes. That is the gate correctly saying the
+reference will drop out before the finding does.
+
+The minor grid is read off the minor ticks rather than from the axis, which
+hands back the major gridlines alone. A minor grid is authored the same way and
+drops out at the printer the same way, so reading only the majors would have
+left half the grid at the floor of zero this entry is about. No corpus figure
+draws one, so this is a gap closed by construction rather than by measurement.
+
+The fixture collision exposed by the full suite is the concrete case.
+`test_a_bar_with_no_edge_is_not_a_hairline` audits at `scale=0.5`, and the
+sheet's default 0.8pt axis rule prints at 0.40pt there, under the furniture
+floor. That is a true fire about a different stroke, and it masked the patch
+edge the test is about. Fixed by setting that fixture's spines to 1.2pt, with
+a comment saying why the half scale has to stay. The gate was right; the
+fixture conflated two questions.
 
 **A 3.77pt glyph cleared a 7.5pt floor, and the obvious fix failed the corpus.**
 Mathtext draws each script level at 0.7 of the level above, so `$x_{i_{j_{k}}}$`

@@ -38,7 +38,7 @@ string counts the top-level panels first and the child axes after them.
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
 | Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
 | Type size | `TYPE_FLOOR_PT = 7.5`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 7.5pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. Scripts are measured rather than read off the property |
-| Line weight | `LINE_FLOOR_PT = 1.0` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Gridlines, spines and tick marks are furniture and are not measured |
+| Line weight | `LINE_FLOOR_PT = 1.0`, `FURNITURE_FLOOR_PT = 0.5` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Spines and gridlines are furniture and are held to the lower floor. Tick marks are matplotlib's defaults rather than the sheet's and are not measured |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
 | Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
@@ -149,7 +149,7 @@ mostly because the answer is to draw something else.
 | Overplotting | Thin the counts, or switch to `hexbin`. Alpha does not move this row | yes |
 | Axis redundancy | `sharex`/`sharey` at creation, or `ax.label_outer()` after | yes |
 | Type size | Cut words. Do not shrink type | |
-| Line weight | Raise `linewidth` to clear 1pt *at the placed scale* | |
+| Line weight | Raise `linewidth` to clear 1pt *at the placed scale*, or 0.5pt for the axis rule and the grid | |
 | Banking | Set the panel aspect or the figure size to the ratio the row names | |
 | Ink coverage | Look at the named panel: empty and saturated both read as a defect | |
 | Series color | Fold the tail into "Other", or facet. Both need a redraw. For a single-hue ordinal ramp, step it wider, or hand it to a colormap rather than a list of hexes | yes |
