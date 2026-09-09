@@ -2,7 +2,7 @@ schema_version: 1
 
 context:
   name: figure-gate
-  version: "0.9.0"
+  version: "0.10.0.dev0"
   python_min: "3.11"
 
 package:
@@ -11,7 +11,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/f/figure-gate/figure_gate-${{ version }}.tar.gz
-  sha256: c7d3df75081a3448b64e356c003109050cda835fa92cc45af86ba807eb8ef847
+  sha256: 595ff68ee63541d693c6fc6ceae47402df2bc68f2f5610985acc97aef7a8f4a7
 
 build:
   # Since 0.7.0 the three modules install as the `figure_gate` package, which is
