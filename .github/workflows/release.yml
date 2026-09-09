@@ -29,9 +29,25 @@ jobs:
       # `timeout` because a mirror that stalls returns no error for a retry
       # loop to catch, the loop because the next mirror usually answers, and
       # the output left visible because a silent step tells a reader nothing
-      # about where it stopped. Same command as ci.yml's, for the same test.
+      # about where it stopped. The same install as ci.yml's `pgf` job, for the
+      # same test, on a looser per-attempt budget because this job has no
+      # 18 minute bound to fit inside.
       - name: Install xelatex for PGF backend test
         run: |
+          # The runner ships third-party apt sources this job never fetches
+          # from, and `apt-get update` fails as a whole when any one index
+          # fails. That is what failed here on 2026-09-09: Google's Chrome
+          # repository served a Packages.gz whose hash did not match its own
+          # Release file, and all three attempts died on it while installing a
+          # package that comes from Ubuntu's archive. A hash mismatch is not a
+          # stalled mirror, so the loop below could not help. Keeping only
+          # Ubuntu's own sources removes the whole class: `sources.list` and
+          # the deb822 `ubuntu.sources` are both left alone, and nothing else
+          # in this job needs a third-party repository.
+          if [ -d /etc/apt/sources.list.d ]; then
+            sudo find /etc/apt/sources.list.d -type f \
+                 ! -name 'ubuntu.sources' -delete
+          fi
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq \
                && timeout 600 sudo apt-get install -y --no-install-recommends texlive-xetex; then
