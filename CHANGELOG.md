@@ -29,10 +29,11 @@ behind a threshold this project enforces.
 - `check_figure._all_axes` returns `fig.axes` first and descendants after, so
   the `ax{i}` names in the detail strings keep their meaning for the panels
   that were already numbered.
-- `Line weight` measures spines and gridlines against `FURNITURE_FLOOR_PT`
-  (0.5pt) rather than skipping them. A floor of zero is not "a lower floor".
-  Tick marks remain unmeasured: the sheet does not author their width, so
-  judging a default reports the library rather than the figure.
+- `Line weight` measures spines and gridlines, major and minor, against
+  `FURNITURE_FLOOR_PT` (0.5pt) rather than skipping them. A floor of zero is
+  not "a lower floor". Tick marks remain unmeasured: the sheet does not author
+  their width, so judging a default reports the library rather than the
+  figure.
 
 #### Added
 
@@ -407,6 +408,12 @@ against a 0.5pt floor (ratio 1.6), the same as a 1.6pt data line against
 0.7pt against 0.5pt (ratio 1.4), so between placement scale 0.625 and 0.714
 the grid fires while the data passes. That is the gate correctly saying the
 reference will drop out before the finding does.
+
+The minor grid is read off the minor ticks rather than from the axis, which
+hands back the major gridlines alone. A minor grid is authored the same way and
+drops out at the printer the same way, so reading only the majors would have
+left half the grid at the floor of zero this entry is about. No corpus figure
+draws one, so this is a gap closed by construction rather than by measurement.
 
 The fixture collision exposed by the full suite is the concrete case.
 `test_a_bar_with_no_edge_is_not_a_hairline` audits at `scale=0.5`, and the

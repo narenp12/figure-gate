@@ -3758,10 +3758,12 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     one drawn entirely at 0.15pt reported `no strokes to measure`: the gate was
     silent on the figure whose every stroke was the defect.
 
-    Spines and gridlines are the furniture this sheet authors, and they are
-    measured against the furniture floor. Both were skipped outright until now,
-    which is not what the paragraph above describes: a floor of zero is not a
-    lower floor, and an axis rule set to 0.2pt went unreported.
+    Spines and gridlines, major and minor, are the furniture this sheet
+    authors, and they are measured against the furniture floor. Both artists
+    were skipped outright until now, which is not what the paragraph above
+    describes: a floor of zero is not a lower floor, and an axis rule set to
+    0.2pt went unreported. The minor grid is read off the minor ticks, since
+    the axis hands back only the major one.
 
     Tick marks stay out, and the reason is not the one that used to be written
     here. It was that they would fail the corpus; they do not, and neither do
@@ -3870,14 +3872,21 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
         for axis_name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
-            for gridline in axis.get_gridlines():
-                if not gridline.get_visible():
-                    continue
-                if str(gridline.get_linestyle()).strip().lower() in (
-                        "none", "", " "):
-                    continue
-                measure_furniture(gridline.get_linewidth(),
-                                  f"an {axis_name} gridline")
+            # Both grids. `get_gridlines` is the major one only, and a minor
+            # grid is authored the same way and drops out the same way, so
+            # reading only the majors would leave the second half of the grid
+            # at a floor of zero.
+            for which, grid in (
+                    ("", axis.get_gridlines()),
+                    (" minor", [t.gridline for t in axis.get_minor_ticks()])):
+                for gridline in grid:
+                    if not gridline.get_visible():
+                        continue
+                    if str(gridline.get_linestyle()).strip().lower() in (
+                            "none", "", " "):
+                        continue
+                    measure_furniture(gridline.get_linewidth(),
+                                      f"an {axis_name}{which} gridline")
 
     if not widths and not furniture_widths:
         return True, "no strokes to measure"

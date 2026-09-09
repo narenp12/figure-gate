@@ -4133,6 +4133,43 @@ def test_line_weight_catches_a_hairline_gridline():
     assert gates(rows)["Line weight"] is False
 
 
+def test_line_weight_catches_a_hairline_minor_gridline():
+    """The major grid is not the whole grid.
+
+    `Axis.get_gridlines` hands back the major gridlines alone, so reading only
+    those would leave a minor grid at a floor of zero -- the same defect this
+    round set out to close, one artist further in. A minor grid is authored the
+    same way, by `ax.grid(which="minor", ...)`, and drops out at the printer
+    the same way. The majors here are legal so the fire can only be the minors.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.grid(True, which="major", lw=0.7)
+    ax.minorticks_on()
+    ax.grid(True, which="minor", lw=0.1)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False, detail
+    assert "minor gridline" in detail
+
+
+def test_line_weight_does_not_fire_on_a_figure_with_minor_ticks_and_no_grid():
+    """Reading the minor grid means asking for minor ticks, which is where a
+    false fire would come from: an invisible gridline still carries a width.
+    The visibility check is what stops it, and this is the control for it."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.minorticks_on()
+    ax.grid(True, which="major", lw=0.7)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
 def test_line_weight_does_not_fire_on_the_sheets_own_furniture():
     """The nearest legitimate figure to the two tests above.
 
