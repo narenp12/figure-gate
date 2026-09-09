@@ -1432,6 +1432,20 @@ EXTERNAL_CLAIMS = {
                  'figure is reduced (6 point minimum)" and "minimum of 0.5 '
                  'point at the final reduced size" for line widths.',
     },
+    "Science line width floor": {
+        "document": "style-guide.md",
+        "anchor": "Science states the lower number, a minimum of 0.5 point "
+                  "at the final reduced size for line widths",
+        "source": "Science instructions for preparing an initial manuscript, "
+                  "science.org",
+        "verified": "2026-08-17",
+        "quote": 'Science on line widths: "minimum of 0.5 point at the final '
+                 'reduced size". The same page is the source for the 6 point '
+                 'symbol minimum quoted under "journal type floors"; this '
+                 'entry is separate because the stroke sentence in the guide '
+                 'can be rewritten without touching the type one, and a '
+                 'rewritten sentence has to be verified again.',
+    },
     "LaTeX math script sizes": {
         "document": "style-guide.md",
         "anchor": "never sets math type below 5pt",

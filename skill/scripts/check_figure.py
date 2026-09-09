@@ -349,9 +349,32 @@ MATH_SCRIPT_FLOOR_PT = 5.0
 # third of a column is measured against a page it will not be printed on.
 PLACED_FRAC_WARN = 0.35
 
-# Stroke floor, in points ON THE PAGE. SIAM's instructions for authors: "lines
-# one point or thicker; thinner lines may break up or disappear."
+# Stroke floor for DATA ink, in points ON THE PAGE. SIAM's instructions for
+# authors: "lines one point or thicker; thinner lines may break up or
+# disappear."
 LINE_FLOOR_PT = 1.0
+
+# Stroke floor for FURNITURE, in points on the page. Science's instructions for
+# preparing a manuscript give a "minimum of 0.5 point at the final reduced size"
+# for line widths, which is both lower than SIAM's number and stated against the
+# size the figure actually prints at, so it is measured through `page_scale` in
+# the same way. Quoted and dated in `EXTERNAL_CLAIMS` under 'journal type
+# floors'.
+#
+# Two floors rather than one because the two kinds of stroke cost the reader
+# different things, which is what `check_line_weight`'s docstring has always
+# said and what the code did not do: it skipped furniture entirely, and a floor
+# of zero is not "a lower floor". A gridline that breaks up costs a reference; a
+# data curve that breaks up costs the finding.
+#
+# 0.5 is not a loosened 1.0. It is a second source, and the corpus is what says
+# the distinction is real: all 982 furniture strokes on the twenty-one figures
+# are under `LINE_FLOOR_PT`, because the sheet ships the axis rule at 0.8 and
+# the grid at 0.7 on purpose, and every one of them clears this floor with the
+# thinnest at 0.63pt. Measuring furniture against the data floor would have
+# failed the whole corpus on the sheet's own design, which is the thing the
+# docstring says this gate must not do.
+FURNITURE_FLOOR_PT = 0.5
 
 # --- banking -----------------------------------------------------------------
 # How far the typical line segment may sit from 45 degrees before the panel's
@@ -3724,23 +3747,33 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     stroke authored at 0.8pt in a 9-inch figure placed at 5.5 inches prints at
     0.49pt — so it is measured the same way, through `page_scale`.
 
-    Furniture is held to a lower floor than data. A gridline that drops out at
-    the printer costs the reader a reference; a data curve that drops out costs
-    them the finding. The sheet ships the grid at 0.7pt deliberately, and
-    failing it against the data floor would be failing the sheet's own design.
+    Furniture is held to a lower floor than data, `FURNITURE_FLOOR_PT` against
+    `LINE_FLOOR_PT`. A gridline that drops out at the printer costs the reader a
+    reference; a data curve that drops out costs them the finding. The sheet
+    ships the grid at 0.7pt and the axis rule at 0.8pt deliberately, and failing
+    those against the data floor would be failing the sheet's own design.
 
     Patch edges and annotation arrows are data, and went unmeasured until they
     were added here. A schematic is boxes and arrows and no `Line2D` at all, so
     one drawn entirely at 0.15pt reported `no strokes to measure`: the gate was
     silent on the figure whose every stroke was the defect.
 
-    Spines and tick marks are furniture and are still not measured, which is a
-    decision and not an oversight. Measured against the corpus, all 69 spines
-    on all twenty-one figures are under this floor, because the sheet ships the
-    axis rule at 0.8pt on purpose. Adding them would fail the corpus outright,
-    which is the sheet's design being failed by the data floor exactly as the
-    paragraph above says it must not be. Tick marks are the same class, and
-    they carry an open disagreement with `check_svg` besides.
+    Spines and gridlines are the furniture this sheet authors, and they are
+    measured against the furniture floor. Both were skipped outright until now,
+    which is not what the paragraph above describes: a floor of zero is not a
+    lower floor, and an axis rule set to 0.2pt went unreported.
+
+    Tick marks stay out, and the reason is not the one that used to be written
+    here. It was that they would fail the corpus; they do not, and neither do
+    spines. It is that the sheet does not author them. `axes.linewidth` and
+    `grid.linewidth` are set in `figure.mplstyle`; the tick widths are
+    matplotlib's untouched defaults, 0.8 major and 0.6 minor, which is the same
+    class as the colorbar dividers this function already skips a few lines down
+    for the same stated reason. Judging a default nobody chose reports the
+    library rather than the figure. They also carry an open disagreement with
+    `check_svg`, which does measure them, and settling that by side effect from
+    here would overturn a pinned measurement on a branch this code does not
+    touch.
     """
     from matplotlib.lines import Line2D
     from matplotlib.collections import LineCollection
@@ -3748,16 +3781,28 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     if scale is None:
         scale = page_scale(fig, placed_frac, venue)
 
-    thin, widths = [], []
+    thin: list[str] = []          # data strokes under LINE_FLOOR_PT
+    thin_furniture: list[str] = []   # furniture under FURNITURE_FLOOR_PT
+    widths: list[float] = []
+    furniture_widths: list[float] = []
 
     def measure(width: Any, name: str) -> None:
-        """Put one authored width on the page and judge it there."""
+        """Put one authored data width on the page and judge it there."""
         on_page = float(width) * scale
         if on_page <= 0:
             return
         widths.append(on_page)
         if on_page < LINE_FLOOR_PT:
             thin.append(f"{name} at {on_page:.2f}pt")
+
+    def measure_furniture(width: Any, name: str) -> None:
+        """The same, against the lower floor furniture is held to."""
+        on_page = float(width) * scale
+        if on_page <= 0:
+            return
+        furniture_widths.append(on_page)
+        if on_page < FURNITURE_FLOOR_PT:
+            thin_furniture.append(f"{name} at {on_page:.2f}pt")
 
     def stroked(artist: Any) -> bool:
         """Whether this patch actually puts an edge on the page.
@@ -3808,8 +3853,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 measure(w, name)
 
         # Patch edges and the arrow on an annotation. A schematic is drawn
-        # entirely out of these, and none of it reached the loop above. Spines
-        # and tick marks are furniture and stay out; see the docstring.
+        # entirely out of these, and none of it reached the loop above.
         for patch in ax.patches:
             if patch.get_visible() and stroked(patch):
                 measure(patch.get_linewidth(),
@@ -3819,17 +3863,47 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             if arrow is not None and arrow.get_visible() and stroked(arrow):
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
-    if not widths:
+        # Furniture: the axis rule and the grid, against the lower floor. Tick
+        # marks are furniture too and stay out; see the docstring for why that
+        # is about who authored the width rather than about the corpus.
+        for side, spine in ax.spines.items():
+            if spine.get_visible():
+                measure_furniture(spine.get_linewidth(), f"the {side} spine")
+        for axis_name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
+            for gridline in axis.get_gridlines():
+                if not gridline.get_visible():
+                    continue
+                if str(gridline.get_linestyle()).strip().lower() in (
+                        "none", "", " "):
+                    continue
+                measure_furniture(gridline.get_linewidth(),
+                                  f"an {axis_name} gridline")
+
+    if not widths and not furniture_widths:
         return True, "no strokes to measure"
-    if not thin:
-        return True, (f"{len(widths)} strokes, thinnest {min(widths):.2f}pt on "
-                      f"page (floor {LINE_FLOOR_PT})")
-    seen = list(dict.fromkeys(thin))
-    return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
-                   f"{seen[:4]}  [FIX] set linewidth to at least "
-                   f"{LINE_FLOOR_PT / scale:.2f} at this scale"
-                   "  [WHY] SIAM: lines thinner than one point break up or "
-                   "disappear in print")
+
+    if thin:
+        seen = list(dict.fromkeys(thin))
+        return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
+                       f"{seen[:4]}  [FIX] set linewidth to at least "
+                       f"{LINE_FLOOR_PT / scale:.2f} at this scale"
+                       "  [WHY] SIAM: lines thinner than one point break up or "
+                       "disappear in print")
+    if thin_furniture:
+        seen = list(dict.fromkeys(thin_furniture))
+        return False, (f"furniture under {FURNITURE_FLOOR_PT}pt on page at "
+                       f"scale {scale:.2f}: {seen[:4]}  [FIX] set linewidth to "
+                       f"at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
+                       "scale  [WHY] Science: line widths have a minimum of "
+                       "0.5 point at the final reduced size")
+
+    data = (f"{len(widths)} strokes, thinnest {min(widths):.2f}pt on page "
+            f"(floor {LINE_FLOOR_PT})" if widths else
+            "no data strokes to measure")
+    if not furniture_widths:
+        return True, data
+    return True, (f"{data}; {len(furniture_widths)} furniture, thinnest "
+                  f"{min(furniture_widths):.2f}pt (floor {FURNITURE_FLOOR_PT})")
 
 
 def _banking_slopes(ax: Axes) -> np.ndarray | None:

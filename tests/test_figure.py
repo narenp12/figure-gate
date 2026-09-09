@@ -4030,7 +4030,7 @@ def test_line_weight_does_not_fire_on_the_grid():
     """The bundled sheet ships the grid at 0.7pt on purpose. Holding furniture
     to the data floor would be failing the sheet's own design."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-    ax.grid(True, lw=0.5)
+    ax.grid(True, lw=0.7)
     ax.plot([0, 1], [0, 1], lw=1.5)
     ok, rows = cf.audit(fig)
     plt.close(fig)
@@ -4087,6 +4087,12 @@ def test_a_bar_with_no_edge_is_not_a_hairline():
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.bar([1, 2, 3], [1, 2, 3])
     ax.plot([1, 3], [1, 3], lw=3.0)
+    # The half scale is what makes a miscounted 1.0pt patch edge land under the
+    # data floor, so it has to stay. It also takes the default 0.8pt axis rule
+    # to 0.40pt, under `FURNITURE_FLOOR_PT`, which is a true fire about a
+    # different stroke and would mask the one this test is about.
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.2)
     from matplotlib.colors import to_rgba
     try:
         assert ax.patches, "the fixture needs bars to be about anything"
@@ -4101,33 +4107,123 @@ def test_a_bar_with_no_edge_is_not_a_hairline():
     assert status is True, detail
 
 
-def test_line_weight_still_does_not_measure_spines_or_tick_marks():
-    """A decision, pinned, not an oversight.
+def test_line_weight_catches_a_hairline_spine():
+    """The axis rule is furniture, but 0.2pt is under the furniture floor too.
 
-    Measured on the corpus: all 69 spines on all twenty-one figures are under
-    the 1.0pt floor, because the sheet ships the axis rule at 0.8pt on purpose.
-    Tick marks, remeasured at the same time, are 444 strokes on 20 figures with
-    none under it.
-    Measuring them would fail the corpus outright, which is the data floor
-    failing the sheet's own design -- the thing the docstring says it must not
-    do.
-
-    Tick marks are the same class, and they carry a second reason that is not
-    visible from this checkout. `skill/scripts/check_svg.py` does measure them,
-    and its own corpus pins ten of thirteen fixtures as firing on line weight
-    largely because of it. Both live on the unmerged `spec-r-svg-substrate`
-    branch, so a reader looking for them here will not find them; the point is
-    that the two substrates disagree about this stroke, and settling that by
-    side effect would overturn a pinned measurement on a branch this one does
-    not touch.
-
-    If a later round decides to measure either, this test is where that
-    argument has to be made rather than absorbed.
+    This went unreported until `FURNITURE_FLOOR_PT` existed: spines were
+    skipped outright, and the docstring's claim that furniture is "held to a
+    lower floor" described something the code did not do. A floor of zero is
+    not a lower floor.
     """
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1], lw=1.5)
     for spine in ax.spines.values():
         spine.set_linewidth(0.2)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_line_weight_catches_a_hairline_gridline():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.grid(True, lw=0.2)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is False
+
+
+def test_line_weight_does_not_fire_on_the_sheets_own_furniture():
+    """The nearest legitimate figure to the two tests above.
+
+    `figure.mplstyle` sets `axes.linewidth: 0.8` and `grid.linewidth: 0.7`, and
+    both are deliberate. Measured across the corpus, all 982 furniture strokes
+    on the twenty-one figures are under the 1.0pt data floor and every one of
+    them clears 0.5, the thinnest at 0.63pt. This is the test that stops the
+    furniture floor becoming the data floor by drift.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.8)
+    ax.grid(True, lw=0.7)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Line weight"] is True
+
+
+def test_line_weight_holds_furniture_to_a_lower_floor_than_data():
+    """The same 0.7pt, drawn as each kind, judged differently. That asymmetry
+    is the whole content of the two constants, so it is asserted directly
+    rather than inferred from two verdicts that happen to differ."""
+    assert cf.FURNITURE_FLOOR_PT < cf.LINE_FLOOR_PT
+
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=0.7)
+    try:
+        as_data, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.grid(True, lw=0.7)
+    try:
+        as_furniture, _ = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+
+    assert as_data is False, detail
+    assert as_furniture is True
+
+
+def test_line_weight_measures_furniture_at_the_placed_scale():
+    """Science's number is stated "at the final reduced size", so the furniture
+    floor goes through `page_scale` exactly as the data floor does. A 0.8pt
+    axis rule is legal as authored and 0.4pt on the page at half width."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=4.0)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.8)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=0.5)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "furniture" in detail
+
+
+def test_line_weight_still_does_not_measure_tick_marks():
+    """A decision, pinned, not an oversight -- and not the decision that used
+    to be written here.
+
+    The reason recorded until now was that measuring furniture would fail the
+    corpus outright. That turned out to be false, and measuring it is what
+    proved so: all 982 furniture strokes on the twenty-one figures clear
+    `FURNITURE_FLOOR_PT`, the thinnest at 0.63pt. Spines and gridlines are
+    measured as of this commit.
+
+    Tick marks stay out on a different argument. `figure.mplstyle` sets
+    `axes.linewidth` and `grid.linewidth`, so those two widths are the sheet's
+    own decisions and judging them reports the figure. It sets no tick width at
+    all, so 0.8 major and 0.6 minor are matplotlib's untouched defaults, which
+    is the same class as the colorbar dividers `check_line_weight` already
+    skips for the same stated reason. Judging a default nobody chose reports
+    the library.
+
+    They carry a second reason besides, not visible from this checkout.
+    `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
+    of thirteen fixtures as firing on line weight largely because of it. Both
+    live on the unmerged `spec-r-svg-substrate` branch, so a reader looking for
+    them here will not find them; the point is that the two substrates disagree
+    about this stroke, and settling that by side effect would overturn a pinned
+    measurement on a branch this one does not touch.
+
+    If a later round decides to measure them, this test is where that argument
+    has to be made rather than absorbed.
+    """
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
     ax.tick_params(width=0.2)
     try:
         status, detail = cf.check_line_weight(fig, scale=1.0)

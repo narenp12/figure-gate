@@ -666,9 +666,13 @@ followed by re-deciding the placement, since the placed fraction just changed.
 for authors call for lines one point or thicker, because thinner lines break up
 or disappear in print. A 0.8pt stroke in a 9in figure placed at 5.5in prints at
 0.49pt, so `check_line_weight` measures on the page through the same
-`page_scale`. Gridlines are held to a lower floor than data deliberately: a
+`page_scale`. Furniture is held to a lower floor than data deliberately: a
 gridline that drops out costs a reference, and a curve that drops out costs the
-finding.
+finding. Science states the lower number, a minimum of 0.5 point at the final
+reduced size for line widths, and the axis rule and the grid are measured
+against that rather than against the data floor. Tick marks are not measured at
+all, because the sheet sets no tick width and judging matplotlib's default
+reports the library rather than the figure.
 
 **Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress
 takes embedded Type 1 or TrueType and does not accept Type 3, so the upload is
