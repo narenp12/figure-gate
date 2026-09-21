@@ -23,6 +23,19 @@ CI runs the palette checker on Python 3.8, 3.9, 3.11, and 3.13 with no
 `pip install` at all. The test job runs against the current matplotlib and pins
 one row to matplotlib 3.8.4, so a break in either direction shows up.
 
+The floor moves when the code needs it to, not on a schedule. The scientific
+Python ecosystem's SPEC 0 recommends dropping a Python release about three years
+after it ships, and by that calendar 3.11 was due to go in April 2026. It has not
+gone, because nothing here uses a 3.12 feature: raising the floor would remove
+users and change no line of the checkers. What the floor is actually set by is
+`tomllib`, which arrived in 3.11 and is what the build and several tests read
+`pyproject.toml` with.
+
+Two floors rather than one, and the lower one is the one to read first. Vendoring
+`check_palette.py` is the route this project is built around, and that file is
+held to 3.8 by CI on every pull request. A distribution floor is a fact about the
+wheel; it is not a claim about where the checks run.
+
 ### Optional dependencies
 
 SciPy is optional and changes only speed. `check_overplotting` uses a KD-tree

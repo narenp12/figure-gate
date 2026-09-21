@@ -14,6 +14,16 @@ not. The exemptions are the interesting part of this file.
 Docstrings are checked too. `:::` on a function with no docstring renders a
 bare signature under a heading, which is worse than leaving it out: it looks
 like documentation and carries nothing.
+
+The same source read also gates each module's `__all__`, for a reason that is
+not documentation. `griffe` honours `__all__` when the module declares one, and
+`skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+pull request. So an incomplete `__all__` does not merely mislead a reader about
+what is public: it narrows what the API gate compares, and a break in a name
+left out of the list stops being reported at all. There is one definition of
+"public" in this project -- a module-level name without a leading underscore --
+and `test_all_is_the_whole_public_surface` is what keeps the declared list equal
+to it.
 """
 
 import ast
@@ -44,6 +54,50 @@ EXEMPT = {
     "self_test_figure": "builds the deliberately broken figure `main` checks; "
                         "not something a caller constructs",
 }
+
+
+def public_names(module):
+    """Every public module-level name, in source order.
+
+    `public_callables` is the subset the docs page has to cover. This is the
+    whole surface -- constants, the `Gate` and `Remedy` types, and the callables
+    -- because that is what `__all__` controls and what `griffe` compares.
+
+    Parsed rather than imported, for the reason `public_callables` is: reading
+    `check_palette.py` with `ast` says what is in the file, and importing it says
+    what this interpreter managed to load.
+    """
+    tree = ast.parse((SCRIPTS / f"{module}.py").read_text(encoding="utf-8"))
+    names = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            if not node.name.startswith("_"):
+                names.append(node.name)
+        elif isinstance(node, ast.Assign):
+            names += [target.id for target in node.targets
+                      if isinstance(target, ast.Name)
+                      and not target.id.startswith("_")]
+        elif isinstance(node, ast.AnnAssign):
+            if (isinstance(node.target, ast.Name)
+                    and not node.target.id.startswith("_")):
+                names.append(node.target.id)
+    return names
+
+
+def declared_all(module):
+    """The module's own `__all__`, read out of the source as a list of strings.
+
+    A list rather than a set: duplicates and order are both things the
+    assertion below has an opinion about, and a set hides the first.
+    """
+    tree = ast.parse((SCRIPTS / f"{module}.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if (isinstance(node, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "__all__"
+                        for t in node.targets)):
+            return [element.value for element in node.value.elts]
+    return None
 
 
 def public_callables(module):
@@ -142,3 +196,57 @@ def test_the_handler_is_pointed_at_the_scripts():
     path mkdocstrings resolves nothing and every block on the page is a build
     error."""
     assert 'paths = ["skill/scripts"]' in CONFIG.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_all_is_the_whole_public_surface(module):
+    """`__all__` equals the module's public top level, name for name and in
+    order.
+
+    Equality rather than containment, in both directions and both for a reason.
+
+    A name missing from `__all__` is the dangerous direction: `griffe` reads
+    `__all__` when it is there, so the name drops out of what
+    `skill/scripts/audit_api.py` compares against the last tag, and a break in it
+    is no longer reported. The gate goes quiet without failing, which is the
+    failure mode this project keeps finding in itself.
+
+    A name in `__all__` that the module does not define is the loud direction:
+    `from check_figure import *` raises `AttributeError` on it. That is a typo or
+    a rename that half-landed, and it should fail here rather than in a reader's
+    shell.
+
+    Order is asserted too, so the list stays in source order and the message
+    below is something to paste rather than a diff to reconcile by hand.
+    """
+    declared = declared_all(module)
+    assert declared is not None, (
+        f"{module}.py declares no `__all__`. It had one; a module that drops it "
+        "hands griffe a different public surface than the one this file gates")
+
+    expected = public_names(module)
+    assert declared == expected, (
+        f"{module}.__all__ disagrees with the module's public top level.\n"
+        f"  missing from __all__: {sorted(set(expected) - set(declared))}\n"
+        f"  not defined here:     {sorted(set(declared) - set(expected))}\n"
+        f"  duplicated:           "
+        f"{sorted({n for n in declared if declared.count(n) > 1})}\n\n"
+        "In source order, the list should read:\n"
+        + "\n".join(f"    {name!r}," for name in expected))
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_every_documented_name_is_in_all(module):
+    """The docs page and `__all__` describe the same surface from two sides.
+
+    A name on the page but not in `__all__` is the combination that reads worst:
+    the reference documents it, so a caller uses it, and the API gate is not
+    watching it. Nothing else here would notice, because
+    `test_every_public_callable_is_documented_or_exempt` runs the other way
+    round.
+    """
+    declared = set(declared_all(module) or ())
+    on_page = {name for owner, name in documented() if owner == module}
+    assert on_page <= declared, (
+        f"docs/api.md documents {sorted(on_page - declared)} from {module}, and "
+        "`__all__` does not list them, so griffe is not comparing them")

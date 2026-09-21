@@ -208,6 +208,126 @@ def test_cli_exit_codes(tmp_path):
     assert bad.returncode == 1
 
 
+def test_cli_json_exits_the_same_way_the_table_does(tmp_path):
+    """`--json` changes what is printed, not what is decided.
+
+    The flag exists so a build can read the rows. A build that already branches
+    on `$?` must keep working, and a flag that quietly made a failing palette
+    exit 0 would turn every such build green at once.
+    """
+    import json
+    import subprocess
+    import sys
+    script = str(__import__("pathlib").Path(cp.__file__))
+    for colors, expected in ((",".join(SERIES[:2]), 0), ("#808080,#0072B2", 1)):
+        run = subprocess.run([sys.executable, script, colors, "--json"],
+                             capture_output=True, text=True)
+        assert run.returncode == expected, colors
+        document = json.loads(run.stdout)
+        assert document["ok"] is (expected == 0)
+
+
+def test_cli_json_prints_the_document_and_nothing_else():
+    """stdout is the document, parseable without stripping a table off it.
+
+    `json.loads` on the whole of stdout is the assertion: a stray heading, a
+    trailing verdict line, or the table printed alongside would all raise here.
+    The table is for a person and this is for a machine, and a stream carrying
+    both is neither.
+    """
+    import json
+    import subprocess
+    import sys
+    script = str(__import__("pathlib").Path(cp.__file__))
+    run = subprocess.run([sys.executable, script, ",".join(SERIES), "--json"],
+                         capture_output=True, text=True)
+    document = json.loads(run.stdout)
+    assert "PASS" not in run.stdout and "->" not in run.stdout
+    assert document["tool"] == "check_palette"
+
+
+# --- the JSON document ------------------------------------------------------
+
+def test_check_json_reports_the_verdict_check_reported():
+    """The serialiser serialises. It does not re-gate.
+
+    Every row `check` returned, in order, with the same verdict. A document that
+    disagreed with the tuple API would make the two routes two answers, which is
+    the defect `check` and `audit` were made to return the same shape to avoid.
+    """
+    import json
+    ok, rows = cp.check(SERIES, all_pairs=True)
+    document = json.loads(cp.check_json(SERIES, all_pairs=True))
+    assert document["ok"] is ok
+    assert [row["name"] for row in document["rows"]] == [n for n, _, _ in rows]
+    assert [row["detail"] for row in document["rows"]] == [d for _, _, d in rows]
+
+
+def test_check_json_spells_the_three_statuses_out():
+    """`pass`, `fail` and `warn`, never `True` or `False`.
+
+    A JSON consumer should not have to know that one field holds a bool for two
+    of the three cases and a string for the third. The mapping is asserted
+    against a palette chosen to produce all three at once: gray fails the chroma
+    floor, and the Okabe-Ito oranges warn on contrast against white.
+    """
+    import json
+    colors = ["#808080", "#E69F00", "#56B4E9"]
+    ok, rows = cp.check(colors)
+    document = json.loads(cp.check_json(colors))
+    assert {row["status"] for row in document["rows"]} == {"pass", "fail", "warn"}
+    for row, (_, status, _) in zip(document["rows"], rows):
+        assert row["status"] == {True: "pass", False: "fail", "warn": "warn"}[status]
+
+
+def test_check_json_records_the_inputs_that_produced_the_verdict():
+    """A verdict without its surface and its mode cannot be read back.
+
+    The same hexes pass on white and fail on a tinted page, and are gated by
+    different rows as a ramp than as a categorical set. An artifact that stored
+    only `ok` would be a number nobody can reproduce, which is the whole reason
+    the inputs are in the document rather than in the caller's memory.
+    """
+    import json
+    document = json.loads(cp.check_json(
+        SERIES, surface="#eeeeee", all_pairs=True, ordinal=False,
+        ink=["#52514e", "#000000"]))
+    assert document["inputs"] == {
+        "colors": list(SERIES),
+        "surface": "#eeeeee",
+        "pairs": "all",
+        "ordinal": False,
+        # Sorted, so two runs that passed the same set in two orders produce the
+        # same bytes.
+        "ink": ["#000000", "#52514e"],
+    }
+
+
+def test_check_json_is_stable_across_ink_ordering():
+    """Two callers passing the same ink in two orders get identical bytes.
+
+    `ink` is a set in the signature, so the order it arrived in is not
+    information. Left unsorted it would land in the document anyway, and two
+    identical runs would produce two files that diff.
+    """
+    first = cp.check_json(SERIES, ink=["#000000", "#52514e"])
+    second = cp.check_json(SERIES, ink=["#52514e", "#000000"])
+    assert first == second
+
+
+def test_the_two_checkers_agree_on_the_schema():
+    """`AUDIT_SCHEMA` is written out in both modules, and must be one string.
+
+    Not imported from one into the other: `check_palette.py` is vendored on its
+    own and imports nothing outside the standard library, so the constant is
+    duplicated on purpose. A duplicated constant is one that can drift, and a
+    consumer pinning the schema would then accept one checker's document and
+    reject the other's.
+    """
+    cf = pytest.importorskip("check_figure")
+    assert cp.AUDIT_SCHEMA == cf.AUDIT_SCHEMA
+
+
 # --- colormap kind -----------------------------------------------------------
 
 CMAP_KINDS = {
@@ -411,8 +531,14 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
     # 3.8 floor holds, and the second is where `Sequence` comes from. Both are
     # standard library, which is what this test is about. A name that is not
     # belongs nowhere on this list.
+    #
+    # `json` arrived with `check_json` and `--json`, and is the reason the flag
+    # could be added here at all: a wire format needing a third-party serialiser
+    # would have cost this file the claim it exists to keep. The walk is over
+    # every `Import` node, so the function-local `import json` is on this list
+    # rather than hidden by being deferred.
     assert imported <= {"__future__", "argparse", "collections", "itertools",
-                        "math"}, imported
+                        "json", "math"}, imported
 
 
 # --- anomalous trichromacy ---------------------------------------------------

@@ -143,11 +143,11 @@ no install step in it to make sure the claim stays true.
 
 ## Cutting a release
 
-The version is written in five files and a tag. Do not edit any of them by
+The version is written in six files and a tag. Do not edit any of them by
 hand: `bump-my-version` writes `CHANGELOG.md`, `pyproject.toml`,
-`skill/.claude-plugin/plugin.json`, `conda/recipe.yaml` and `uv.lock` together,
-and 0.5.0 is what a hand-run bump costs: the recipe was left at 0.4.0 and all
-three pytest jobs failed on the release PR.
+`skill/.claude-plugin/plugin.json`, `conda/recipe.yaml`, `uv.lock` and
+`CITATION.cff` together, and 0.5.0 is what a hand-run bump costs: the recipe was
+left at 0.4.0 and all three pytest jobs failed on the release PR.
 
 `uv.lock` joined that list after 0.8.0 shipped with it still reading 0.7.0. It
 matters more than a stale number in a generated file: any command that syncs the
@@ -170,7 +170,7 @@ so a release with nothing written about it stops before the tag rather than in
 the workflow after it.
 
 Only the release bump touches `CHANGELOG.md`. The cycle-opening bump rewrites
-the three version sites and leaves the changelog alone, because it runs in the
+the five version sites and leaves the changelog alone, because it runs in the
 window where the last heading has been consumed and the next one is unwritten.
 It required the heading until 0.8.0, which made it fail every time it was run:
 0.7.0 left the tree carrying the version it had just shipped instead of opening

@@ -14,7 +14,7 @@ Gates a list of hex colors. Imports nothing outside the standard library.
 
 ```text
 usage: check_palette.py [-h] [--surface SURFACE] [--pairs {adjacent,all}]
-                        [--ordinal] [--ink INK]
+                        [--ordinal] [--ink INK] [--json]
                         colors
 ```
 
@@ -42,6 +42,10 @@ usage: check_palette.py [-h] [--surface SURFACE] [--pairs {adjacent,all}]
 :   Comma-separated hex values for neutrals. These are exempt from the chroma
     and lightness rules.
 
+`--json`
+:   Print the verdict as a JSON object instead of the table. The exit code does
+    not change, so a build that already branches on it keeps working.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -53,6 +57,27 @@ usage: check_palette.py [-h] [--surface SURFACE] [--pairs {adjacent,all}]
 python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
 echo $?
 ```
+
+### JSON output
+
+`--json` prints one object: `schema`, `tool`, `ok`, the `inputs` that produced
+the verdict, and a `rows` array of `name`, `status`, `detail`. `status` is
+`pass`, `fail` or `warn`, spelled out rather than the Python API's `True`,
+`False` and `"warn"`.
+
+```bash
+python check_palette.py "#E69F00,#56B4E9,#009E73" --json | jq '.rows[] | select(.status != "pass")'
+```
+
+The `inputs` are there because a palette verdict is a verdict about a palette on
+a surface, gated as categorical or as a ramp. The same hexes pass on white and
+fail on a tinted page, and a stored artifact that recorded only `ok` cannot be
+read back a month later.
+
+`check_figure.py` has no matching flag, because it audits no figure of yours from
+a shell. The equivalent is `audit_json` in the API, which emits the same `schema`
+so a CI step can collect both and read `ok` and `rows` out of either. See
+[the API reference](api.md).
 
 ## check_figure.py
 

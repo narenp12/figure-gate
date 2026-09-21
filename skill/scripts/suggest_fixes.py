@@ -30,6 +30,20 @@ from collections.abc import Sequence
 from typing import NamedTuple
 
 
+# The public surface, in source order. `tests/test_api_reference.py` regenerates
+# this list from the module's own top level and fails on any disagreement, so it
+# cannot quietly fall behind a name that was added or removed.
+#
+# Exhaustive on purpose. `griffe` reads `__all__` when one is present, and
+# `skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+# pull request: a name left out of this list is a name the API gate stops
+# comparing, which turns a break into a silent one. That is the opposite of what
+# the list is for, so completeness here is load-bearing rather than tidy.
+__all__ = [
+    "Remedy", "REMEDIES", "suggest", "format_suggestions",
+]
+
+
 class Remedy(NamedTuple):
     """One thing a reader could do about a gate that fired.
 

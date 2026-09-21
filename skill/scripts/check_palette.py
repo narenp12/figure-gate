@@ -27,6 +27,28 @@ import itertools
 import math
 from collections.abc import Collection, Sequence
 
+
+# The public surface, in source order. `tests/test_api_reference.py` regenerates
+# this list from the module's own top level and fails on any disagreement, so it
+# cannot quietly fall behind a name that was added or removed.
+#
+# Exhaustive on purpose. `griffe` reads `__all__` when one is present, and
+# `skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+# pull request: a name left out of this list is a name the API gate stops
+# comparing, which turns a break into a silent one. That is the opposite of what
+# the list is for, so completeness here is load-bearing rather than tidy.
+__all__ = [
+    "hex_to_linear", "linear_to_oklab", "linear_to_cam02ucs",
+    "relative_luminance", "contrast", "CVD", "simulate", "MACHADO",
+    "ANOMALOUS_SEVERITIES", "simulate_anomalous", "delta_e", "oklab_distance",
+    "CMAP_SAMPLES", "CMAP_QUALITATIVE_N", "CMAP_SPAN_MIN",
+    "CMAP_BACKTRAVEL_MAX", "CMAP_WRAP_DE_MAX", "cmap_back_travel", "cmap_kind",
+    "cmap_back_travel_rgb", "cmap_kind_rgb", "CHROMA_MIN", "CVD_TARGET",
+    "NORMAL_FLOOR", "CONTRAST_MIN", "ORDINAL_DL_MIN",
+    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX", "check",
+    "AUDIT_SCHEMA", "check_json", "main",
+]
+
 # --- color conversion -------------------------------------------------------
 
 
@@ -821,6 +843,71 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     return ok, rows
 
 
+# The one wire format both checkers emit, and the same string
+# `check_figure.AUDIT_SCHEMA` carries. Written out rather than imported: this file
+# is vendored on its own and must import nothing outside the standard library, so
+# a shared constant would be a dependency the vendoring claim does not allow.
+# `tests/test_palette.py::test_the_two_checkers_agree_on_the_schema` is what keeps
+# the two copies equal.
+AUDIT_SCHEMA = "figure-gate/audit/1"
+
+# `status` is True, False or "warn" in the tuples, and a JSON consumer should not
+# have to know that a bool and a string share a field.
+_STATUS_JSON = {True: "pass", False: "fail", "warn": "warn"}
+
+
+def check_json(colors: Sequence[str], surface: str = "#ffffff",
+               all_pairs: bool = False, ordinal: bool = False,
+               ink: Collection[str] = frozenset()) -> str:
+    """`check()`, as a JSON document. Returns the text, and prints nothing.
+
+    What `--json` prints, and what to call from a build that has to decide
+    something rather than show someone a table. The arguments are `check`'s, and
+    the verdict is the object `check` computed: this function serialises, it does
+    not re-gate.
+
+    The document carries the inputs as well as the rows. A palette verdict is a
+    verdict about a palette *on a surface*, gated as categorical or as a ramp,
+    and one that records only `ok` cannot be read a month later: the same eight
+    hexes pass on white and fail on a tinted page, and both answers are true.
+
+    `status` is `"pass"`, `"fail"` or `"warn"`, not the tuple API's
+    `True`/`False`/`"warn"`, and `schema` is the one
+    `check_figure.audit_json` emits, so a CI step collecting both reads `ok` and
+    `rows` out of either without asking which checker wrote it.
+
+    Args:
+        colors: Hex strings, the palette to gate.
+        surface: The page colour they are drawn on.
+        all_pairs: Gate every pair rather than adjacent ones.
+        ordinal: Swap the categorical rows for the ramp rows.
+        ink: Colours to treat as furniture rather than data.
+
+    Returns:
+        A JSON object as text, with `schema`, `tool`, `ok`, `inputs` and `rows`.
+    """
+    import json
+
+    ok, rows = check(colors, surface, all_pairs, ordinal, ink)
+    return json.dumps({
+        "schema": AUDIT_SCHEMA,
+        "tool": "check_palette",
+        "ok": ok,
+        "inputs": {
+            "colors": list(colors),
+            "surface": surface,
+            "pairs": "all" if all_pairs else "adjacent",
+            "ordinal": ordinal,
+            # Sorted, not insertion-ordered: `ink` is a set in the signature, so
+            # the order a caller happened to pass is not information, and an
+            # unsorted dump makes two identical runs produce two different files.
+            "ink": sorted(ink),
+        },
+        "rows": [{"name": name, "status": _STATUS_JSON[status],
+                  "detail": detail} for name, status, detail in rows],
+    }, indent=2)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Validate a figure palette.")
     ap.add_argument("colors", help="comma-separated hex colors")
@@ -835,10 +922,28 @@ def main() -> None:
     ap.add_argument(
         "--ink", default="",
         help="comma-separated ink/neutral hexes (exempt from chroma and lightness rules)")
+    # Exit code unchanged: a build that already branches on `$?` keeps working,
+    # and a build that wants the rows gets them on stdout instead of a table
+    # nobody should be parsing. The table is for a person; this is for a machine,
+    # and printing both would make stdout neither.
+    ap.add_argument("--json", action="store_true",
+                    help="print the verdict as JSON instead of a table")
     a = ap.parse_args()
 
     colors = [c.strip() for c in a.colors.split(",") if c.strip()]
     ink_set = frozenset(c.strip() for c in a.ink.split(",") if c.strip())
+
+    if a.json:
+        import json
+
+        # One gating run, and the exit code read back out of the document that
+        # gets printed. Calling `check` a second time for the bool would make the
+        # code and the document two answers that are only usually the same.
+        document = check_json(colors, a.surface, a.pairs == "all", a.ordinal,
+                              ink_set)
+        print(document)
+        raise SystemExit(0 if json.loads(document)["ok"] else 1)
+
     ok, rows = check(colors, a.surface, a.pairs == "all", a.ordinal, ink_set)
 
     kind = "ordinal ramp" if a.ordinal else "categorical"

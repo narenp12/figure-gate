@@ -11,6 +11,88 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
+## Unreleased
+
+### What changed
+
+#### Added
+
+- `check_figure.audit_json` and `check_palette.check_json`, which return
+  `audit`'s and `check`'s verdict as a JSON document rather than a printed
+  table. `check_figure.AUDIT_SCHEMA` and `check_palette.AUDIT_SCHEMA` name the
+  wire format, and both are `figure-gate/audit/1`.
+- `check_palette.py --json` prints `check_json`'s document instead of the table.
+  The exit code is unchanged.
+- `__all__` in `check_figure.py`, `check_palette.py` and `suggest_fixes.py`,
+  listing every public module-level name.
+- `CITATION.cff`, carrying the Zenodo concept DOI `10.5281/zenodo.21784217`. Its
+  `version` is the sixth site the release bump rewrites.
+
+#### Changed
+
+- Nothing a caller could do at 0.9.0 has stopped working. `griffe check` against
+  the tag reports no break in any of the three modules.
+
+### Why it changed
+
+#### A verdict a build can read
+
+`report` prints a table for a person and `audit` returns tuples for Python. A CI
+step that wanted the rows had neither: parsing the table means depending on a
+layout that is there to be read, and calling `audit` means the build is a Python
+program. `audit_json` and `check_json` are the third route, and they serialise
+the object the checker already computed rather than re-measuring, so the three
+cannot disagree about one figure.
+
+Both documents carry the inputs, not only the verdict. A figure that passes at
+`venue="neurips"` and fails at `icml-column` is one figure and two true answers,
+and the same eight hexes pass on white and fail on a tinted page. A stored
+artifact recording only `ok` is one nobody can reproduce a month later, which is
+the failure a CI artifact exists to prevent.
+
+`status` is spelled `pass`, `fail` or `warn` rather than carrying the tuple API's
+`True`, `False` and `"warn"`. One JSON field holding a bool for two cases and a
+string for the third is a shape every consumer would have to learn, and `ok` is
+already the bool worth branching on.
+
+`check_palette.py` gained one import to do this, `json`, which is in the standard
+library. The file's claim to import nothing else is what makes it vendorable into
+a non-Python toolchain, and `--json` did not cost it.
+
+There is no `--json` on `check_figure.py`, because that command audits no figure
+of yours: run with no arguments it self-tests on a deliberately broken figure.
+The equivalent is `audit_json` in the API.
+
+#### One definition of public
+
+`griffe` reads `__all__` when a module declares one, and
+`skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+pull request. So an `__all__` that omitted a name would not merely mislead a
+reader about the public surface: it would narrow what the API gate compares, and
+a break in the omitted name would stop being reported at all. The lists are
+therefore exhaustive, and
+`tests/test_api_reference.py::test_all_is_the_whole_public_surface` regenerates
+each one from the module's own top level and fails on any disagreement. The gate
+was run against v0.9.0 with the lists in place and reports the same surface it
+reported without them, which is the evidence that nothing went quiet.
+
+#### A citation, and the floor it does not move
+
+`CITATION.cff` carries the concept DOI rather than a per-version one. Zenodo
+mints a fresh number on each deposit, so a per-version DOI cannot be derived from
+the version and cannot be a bump site; a citation carrying one sends every future
+reader to whichever release was current when the line was written. `date-released`
+is absent for the same reason, and
+`tests/test_version_sites.py::test_the_citation_carries_no_date_released` is what
+keeps that a decision rather than an oversight.
+
+The Python floor stays at 3.11. SPEC 0 recommends dropping a release about three
+years after it ships, and by that calendar 3.11 was due to go in April 2026.
+Nothing here uses a 3.12 feature, so raising the floor would remove users and
+change no line of the checkers; what the floor is actually set by is `tomllib`,
+which arrived in 3.11. `docs/compatibility.md` now says so, because a floor that
+looks overdue and is not is a question a reader should not have to ask twice.
+
 ## 0.9.0 — 2026-09-09
 
 ### What changed

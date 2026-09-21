@@ -133,7 +133,7 @@ include = [
 ]
 exclude = [".DS_Store"]
 
-# The version is written in five files and a tag, and nothing wrote them
+# The version is written in six files and a tag, and nothing wrote them
 # together. 0.5.0 is what that costs: the bump moved pyproject.toml and
 # plugin.json, and all three pytest jobs failed on the release PR because
 # conda/recipe.yaml still said 0.4.0.
@@ -145,14 +145,14 @@ exclude = [".DS_Store"]
 #
 #     uv run bump-my-version bump dev
 #
-# rewrites all five, commits, and tags v<new>. Pushing the tag is still what
+# rewrites all six, commits, and tags v<new>. Pushing the tag is still what
 # publishes; release.yml has not moved.
 #
 # `dev` rather than `minor`, because the version between releases now carries a
 # `.devN` suffix -- see the `parse`/`serialize` block below for why. Cutting a
 # release drops the suffix; `bump minor` (or `patch`, or `major`) is what opens
-# the next development cycle afterwards. The release bump rewrites five files;
-# the cycle-opening bump rewrites four, for the reason under `exclude_bumps`
+# the next development cycle afterwards. The release bump rewrites six files;
+# the cycle-opening bump rewrites five, for the reason under `exclude_bumps`
 # below.
 #
 # Three things it deliberately does not do. `sha256` in the recipe is unknowable
@@ -170,7 +170,7 @@ exclude = [".DS_Store"]
 # The entries below are in write order, and CHANGELOG.md is first for that
 # reason. bump-my-version writes each file as it reaches it rather than
 # validating the set up front: with the changelog last, a missing
-# `## Unreleased` leaves the other three bumped on disk before it errors. It
+# `## Unreleased` leaves the other five bumped on disk before it errors. It
 # stops short of the commit and the tag either way, so `git checkout .` is the
 # whole recovery, but a failure that touches nothing is a failure nobody has to
 # read a diff to trust.
@@ -302,6 +302,21 @@ filename = "uv.lock"
 regex = true
 search = 'name = "figure-gate"\nversion = "{current_version}"'
 replace = 'name = "figure-gate"\nversion = "{new_version}"'
+
+# CITATION.cff names the version a citation resolves to, so a stale one sends a
+# reader to a release that does not describe the code they ran. It is the sixth
+# site for the same reason uv.lock is the fifth: a version written anywhere the
+# bump does not reach is a version that disagrees with the others within one
+# release.
+#
+# Anchored to the key, because the file's `cff-version: 1.2.0` is a version line
+# too and an unanchored `{current_version}` would be looking for the project's
+# number in a field that holds the format's.
+[[tool.bumpversion.files]]
+filename = "CITATION.cff"
+regex = true
+search = '^version: {current_version}$'
+replace = 'version: {new_version}'
 
 [tool.uv]
 package = false

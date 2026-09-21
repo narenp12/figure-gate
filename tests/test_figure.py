@@ -5544,3 +5544,97 @@ def test_one_translucent_series_against_a_solid_one_still_passes():
     plt.close(fig)
     assert status is True, detail
     assert "0.4" in detail and "1.0" in detail
+
+
+# --- the JSON document ------------------------------------------------------
+
+def test_audit_json_reports_the_verdict_audit_reported(clean):
+    """The serialiser serialises. It does not re-measure.
+
+    Every row `audit` returned, in order, with the same verdict and the same
+    detail string. A document that disagreed with the tuple API would make the
+    two routes two answers about one figure, and the printed table a third.
+    """
+    import json
+    ok, rows = cf.audit(clean)
+    document = json.loads(cf.audit_json(clean))
+    assert document["ok"] is ok
+    assert [row["name"] for row in document["rows"]] == [n for n, _, _ in rows]
+    assert [row["detail"] for row in document["rows"]] == [d for _, _, d in rows]
+
+
+def test_audit_json_spells_the_statuses_out(clean):
+    """`pass`, `fail` and `warn`, never `True` or `False`.
+
+    Asserted against the self-test figure as well as a clean one, because that
+    figure exists to fail several gates and is the only input that puts a `fail`
+    in the document without building a defect here to do it.
+    """
+    import json
+    for fig in (clean, cf.self_test_figure()):
+        document = json.loads(cf.audit_json(fig))
+        statuses = {row["status"] for row in document["rows"]}
+        assert statuses <= {"pass", "fail", "warn"}, statuses
+        assert document["ok"] == (not any(
+            row["status"] == "fail" for row in document["rows"]))
+    plt.close("all")
+
+
+def test_audit_json_records_the_scale_the_gates_ran_at(clean):
+    """A verdict without the width it was measured against cannot be read back.
+
+    One figure passes at one venue and fails at another, and both answers are
+    true. `scale` is resolved rather than echoed, so it is filled in even when
+    the caller passed neither `scale` nor `venue`, and it is `page_scale`'s
+    number: a ratio of placed size to authored size, not a length.
+    """
+    import json
+    document = json.loads(cf.audit_json(clean, venue="neurips", name="fig1"))
+    inputs = document["inputs"]
+    assert inputs["name"] == "fig1"
+    assert inputs["venue"] == "neurips"
+    assert inputs["content_width_pt"] == cf.VENUE_WIDTH_PT["neurips"]
+    assert inputs["scale"] == cf.page_scale(clean, 1.0, "neurips")
+    assert inputs["figsize_in"] == list(clean.get_size_inches())
+
+
+def test_audit_json_records_an_explicit_scale_as_given(clean):
+    """`scale` overrides `page_scale` outright, so the document must report the
+    override rather than recomputing a number the gates did not use."""
+    import json
+    document = json.loads(cf.audit_json(clean, scale=2.5))
+    assert document["inputs"]["scale"] == 2.5
+
+
+def test_audit_json_counts_the_context_axes_rather_than_naming_them(clean):
+    """Axes are not serialisable and their ids mean nothing to a later reader.
+
+    The count is the part that explains a verdict: whether the run treated any
+    panel's fill as a context surface rather than as data ink.
+    """
+    import json
+    bare = json.loads(cf.audit_json(clean))
+    assert bare["inputs"]["context_axes"] == 0
+    with_context = json.loads(cf.audit_json(clean, context_axes=clean.axes))
+    assert with_context["inputs"]["context_axes"] == len(clean.axes)
+
+
+def test_audit_json_names_the_shared_schema(clean):
+    """One `schema` string across both checkers, so a CI step collecting figure
+    and palette verdicts reads `ok` and `rows` out of either without asking
+    which one wrote the file."""
+    import json
+    document = json.loads(cf.audit_json(clean))
+    assert document["schema"] == cf.AUDIT_SCHEMA
+    assert document["tool"] == "check_figure"
+
+
+def test_audit_json_leaves_the_figure_on_its_authored_dpi(clean):
+    """`audit` measures through an Agg canvas at `MEASURE_DPI` and hands the
+    figure back as authored. `audit_json` goes through `audit`, so it inherits
+    that; this asserts it rather than assuming, because a serialiser that left a
+    figure on the measurement dpi would silently change what a later `savefig`
+    produced."""
+    authored = clean.get_dpi()
+    cf.audit_json(clean)
+    assert clean.get_dpi() == authored

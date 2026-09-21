@@ -36,6 +36,12 @@ Everything else is here, including the 21 gate functions, at the bottom.
 canvas and scale arguments they take. Call one directly and that is yours to
 reproduce, which [the how-to](how-to.md#read-one-row-or-call-one-gate) covers.
 
+Three ways to take the same verdict out: `audit` returns the rows, `report`
+prints them for a person, and `audit_json` serialises them for a build.
+`check_palette.check` and `check_palette.check_json` are the same pair on the
+colour side, and both JSON documents carry the same `schema` string, so a CI step
+collecting figure and palette verdicts reads `ok` and `rows` out of either.
+
 ## check_figure
 
 Composition. Takes a built figure, measures what it renders at print size.
@@ -43,6 +49,8 @@ Composition. Takes a built figure, measures what it renders at print size.
 ::: check_figure.audit
 
 ::: check_figure.report
+
+::: check_figure.audit_json
 
 ::: check_figure.describe
 
@@ -68,6 +76,8 @@ Colour. Standard library only, so these are also the functions to port when
 the checks are reimplemented elsewhere.
 
 ::: check_palette.check
+
+::: check_palette.check_json
 
 ::: check_palette.cmap_kind
 

@@ -62,6 +62,47 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 
+# The public surface, in source order. `tests/test_api_reference.py` regenerates
+# this list from the module's own top level and fails on any disagreement, so it
+# cannot quietly fall behind a name that was added or removed.
+#
+# Exhaustive on purpose. `griffe` reads `__all__` when one is present, and
+# `skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+# pull request: a name left out of this list is a name the API gate stops
+# comparing, which turns a break into a silent one. That is the opposite of what
+# the list is for, so completeness here is load-bearing rather than tidy.
+__all__ = [
+    "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
+    "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
+    "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
+    "MAX_SERIES_HUES", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
+    "MARK_RIDE_TOL_PX", "MARK_RIDE_FRAC_MIN", "SERIES_ENCLOSED_FRAC",
+    "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
+    "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
+    "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
+    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "MATH_SCRIPT_FLOOR_PT",
+    "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
+    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
+    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
+    "page_scale", "check_clipping", "check_collisions",
+    "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
+    "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
+    "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
+    "check_redundancy", "check_type_size", "check_ink", "check_series_color",
+    "check_dual_axis", "FORM_BAR_MIN_PATCHES", "FORM_BAR_BASELINE_TOL",
+    "bars_rest_on_a_shared_edge", "check_form", "check_identity_channel",
+    "check_label_attribution", "check_contour_dash", "check_line_weight",
+    "check_banking", "ANONYMOUS_CMAP_NAMES", "RAMP_LUT_N", "RAMP_CHANNEL_TOL",
+    "RAMP_SPACING_TOL", "RAMP_MIN_STEPS", "check_colormap", "check_fonts",
+    "ALT_TEXT_ATTR", "ALT_TEXT_MIN_CHARS", "describe",
+    "ALT_TEXT_KEY_BY_SUFFIX", "ALT_TEXT_KEY_DEFAULT",
+    "ALT_TEXT_UNSUPPORTED_SUFFIXES", "alt_metadata", "check_alt_text",
+    "check_style_sheet", "GATE_INPUTS", "Gate", "GATES", "ADVISORY_GATES",
+    "audit", "report", "AUDIT_SCHEMA", "audit_json", "self_test_figure",
+    "main",
+]
+
+
 def _sibling(name: str) -> Any:
     """A sibling checker module, or None when it was not copied along.
 
@@ -4793,6 +4834,93 @@ def _print_suggestions(rows: Sequence[tuple[str, bool | str, str]]) -> None:
     for line in lines:
         print(line)
     print()
+
+
+# The one wire format both checkers emit. Bumped when a consumer that reads the
+# current one would read the next one wrong; adding a key does not bump it,
+# because a reader that indexes by name ignores keys it does not know.
+AUDIT_SCHEMA = "figure-gate/audit/1"
+
+# `status` is True, False or "warn" in the tuples, and a JSON consumer should not
+# have to know that a bool and a string share a field. Three names, so a filter
+# reads `row["status"] == "fail"` rather than `row["status"] is False`.
+_STATUS_JSON = {True: "pass", False: "fail", "warn": "warn"}
+
+
+def _rows_json(rows: list[tuple[str, bool | str, str]]) -> list[dict[str, str]]:
+    """`(label, status, detail)` triples as JSON objects, in report order."""
+    return [{"name": label, "status": _STATUS_JSON[status], "detail": detail}
+            for label, status, detail in rows]
+
+
+def audit_json(fig: Figure, scale: float | None = None,
+               placed_frac: float = 1.0,
+               *,
+               name: str = "",
+               context_axes: Sequence[Axes] | None = None,
+               venue: str | None = None) -> str:
+    """`audit()`, as a JSON document. Returns the text, and prints nothing.
+
+    `report` is for a person reading a terminal; this is for a build that has to
+    decide something. The arguments are `audit`'s, plus `name`, and the verdict
+    is the same object `audit` computed: this function serialises, it does not
+    re-measure.
+
+    The document carries the measurement context as well as the rows, because a
+    verdict without the width it was measured against cannot be read later. A
+    figure that passes at `venue="neurips"` and fails at `icml-column` is one
+    figure and two true answers, and a stored artifact that records only the
+    answer is the one that gets quoted at the wrong width. `scale` is the one the
+    gates actually ran at, resolved from `placed_frac` and `venue` rather than
+    echoed from the argument, so it is filled in even when the caller passed
+    neither.
+
+    `scale` is `page_scale`'s number, which is a ratio and not a length: placed
+    size over authored size, `1.0` for a figure measured as authored. The field
+    is named for the argument rather than for a unit, because there is no unit to
+    name.
+
+    `status` is `"pass"`, `"fail"` or `"warn"`, not the tuple API's
+    `True`/`False`/`"warn"`. A JSON consumer should not have to know that one
+    field holds a bool for two of the three cases, and `ok` is already the bool
+    worth branching on.
+
+    `schema` is `AUDIT_SCHEMA`, and `check_palette.check_json` emits the same
+    one. The two documents differ only in `tool` and `inputs`, so a CI step that
+    collects both can read `ok` and `rows` out of either without asking which
+    checker produced it.
+
+    Args:
+        fig: The built figure, measured exactly as `audit` measures it.
+        scale: Points per authored inch, overriding `page_scale` outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        name: Recorded as `inputs.name`, for telling stored artifacts apart.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+
+    Returns:
+        A JSON object as text, with `schema`, `tool`, `ok`, `inputs` and `rows`.
+    """
+    import json
+
+    ok, rows = audit(fig, scale, placed_frac,
+                     context_axes=context_axes, venue=venue)
+    return json.dumps({
+        "schema": AUDIT_SCHEMA,
+        "tool": "check_figure",
+        "ok": ok,
+        "inputs": {
+            "name": name,
+            "placed_frac": placed_frac,
+            "venue": venue,
+            "content_width_pt": content_width_pt(venue),
+            "scale": (scale if scale is not None
+                      else page_scale(fig, placed_frac, venue)),
+            "figsize_in": list(fig.get_size_inches()),
+            "context_axes": 0 if context_axes is None else len(context_axes),
+        },
+        "rows": _rows_json(rows),
+    }, indent=2)
 
 
 def self_test_figure() -> Figure:

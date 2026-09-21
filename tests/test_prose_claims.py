@@ -33,9 +33,11 @@ import contextlib
 import doctest
 import inspect
 import io
+import json
 import pathlib
 import re
 import subprocess
+import sys
 import textwrap
 
 import numpy
@@ -334,8 +336,12 @@ MPL_NAMES = _matplotlib_names()
 # Words the prose uses as vocabulary in a code span rather than as a reference
 # to a symbol: gate verdicts, colormap kind names, Python literals. They are
 # spans because they are terms of art, not because they name code.
+# `"warn"` stays, with the quotes: it is the Python string the tuple API's
+# `status` holds. Bare `warn` came out when `check_json` shipped, because the
+# JSON spelling of that status is a real value the serialiser writes and
+# `JSON_KEYS` resolves it against the document rather than excusing it.
 VOCABULARY = {"misc", "sequential", "diverging", "cyclic", "qualitative",
-              "warn", '"warn"', "True", "False", "None", "ggplot2",
+              '"warn"', "True", "False", "None", "ggplot2",
               "facet_wrap", "n"}
 
 
@@ -419,6 +425,37 @@ NAMESPACES = {"plt": plt, "matplotlib": matplotlib, "mpl": matplotlib,
 # against the mapping that puts them there.
 METADATA_KEYS = set(cf.ALT_TEXT_KEY_BY_SUFFIX.values()) | {
     cf.ALT_TEXT_KEY_DEFAULT}
+
+
+def _json_document_keys():
+    """Every key of the audit document, read off a document the code emitted.
+
+    `schema`, `tool`, `inputs`, `rows` and the row fields are the wire format a
+    build reads, so prose naming one is a claim the serialiser settles. Settled
+    by calling it rather than by listing the keys here: a second list would be
+    the thing that goes stale, and the CI-facing contract is what the function
+    actually writes.
+
+    The palette document, because it costs nothing -- `check_palette` imports
+    only the standard library and needs no figure. `check_figure.audit_json`
+    emits the same top level and the same row fields; the keys it has and this
+    one does not are all under `inputs`, and none of them is written in prose. A
+    document-level key that appeared in only one of the two would fail here,
+    which is the right outcome: it would mean the two checkers had stopped
+    agreeing on the format the docs describe as one.
+    """
+    document = json.loads(cp.check_json(["#E69F00", "#56B4E9", "#009E73"]))
+    keys = set(document) | set(document["inputs"])
+    for row in document["rows"]:
+        keys |= set(row)
+    return keys
+
+
+# The wire format's own vocabulary: its keys, and the three words `status` takes.
+# `pass` and `fail` are spelled out in JSON where the tuple API carries `True`
+# and `False`, so they are not the report's `PASS`/`FAIL` and do not resolve
+# through `STATUS_WORDS`.
+JSON_KEYS = _json_document_keys() | set(cp._STATUS_JSON.values())
 
 
 def _appendix_definitions():
@@ -701,6 +738,15 @@ def resolve(span):
         return "latex"                        # a control sequence, not a symbol
     if span in METADATA_KEYS:
         return "metadata-key"
+    if span in JSON_KEYS:
+        return "json-key"
+    # A bare standard-library module name. `sys.stdlib_module_names` rather than
+    # `find_spec`, which would also resolve anything installed in the test
+    # environment and quietly turn this branch into "importable here" -- a much
+    # weaker claim than the prose makes, and one that would pass on a developer's
+    # machine and fail on a bare runner.
+    if span in sys.stdlib_module_names:
+        return "stdlib-module"
     if span in CONSOLE_SCRIPTS:
         return "console-script"
     if span in PROCESS_HEADINGS:
@@ -750,9 +796,12 @@ def resolve(span):
     # name nothing, one shipped for PEP 561 and one the fifth version site the
     # bump rewrites. Both resolve against the tree like every other file span,
     # by full name because ".typed" and ".lock" are not kinds with a second.
+    # `.cff` is in the tuple rather than here: it names the Citation File
+    # Format, so the suffix is the kind, and a second one would resolve the same
+    # way this one does.
     if span in {"py.typed", "uv.lock"} or span.endswith(
             (".py", ".mplstyle", ".md", ".toml",
-             ".yml", ".yaml", ".css", ".json")):
+             ".yml", ".yaml", ".css", ".json", ".cff")):
         if span in TRACKED_FILES:
             return "file"
         for base in ("", "scripts", "assets", "references"):

@@ -1,7 +1,7 @@
 """The `[tool.bumpversion]` config against the files it claims to rewrite.
 
 `uv run bump-my-version bump <part>` is the only supported way to move the
-version, because the version is written in five files and the release before
+version, because the version is written in six files and the release before
 this config existed moved two of them. The tool makes that one command, and
 this file makes the command's own configuration checkable.
 
@@ -168,8 +168,8 @@ def test_the_lock_pattern_is_anchored_to_the_project_and_matches_once():
 
 
 def test_only_the_changelog_is_excluded_from_any_bump():
-    """The other three sites are the version itself. A bump that skipped one
-    would leave the four copies disagreeing, which is the failure this whole
+    """The other five sites are the version itself. A bump that skipped one
+    would leave the six copies disagreeing, which is the failure this whole
     config exists to prevent and the one that cost 0.5.0."""
     excluded = {e["filename"] for e in bumpversion()["files"]
                 if e.get("exclude_bumps") or e.get("include_bumps")}
@@ -204,3 +204,89 @@ def test_no_section_names_its_own_heading_inside_a_sentence():
     assert not buried, (
         "a bump rewrote `## Unreleased` inside these sentences:\n"
         + "\n".join(buried))
+
+
+# --- CITATION.cff -----------------------------------------------------------
+#
+# The version in this file is a bump site like any other, and
+# `test_each_configured_pattern_is_in_the_file_it_points_at` covers it by
+# parametrising over the config. What that test cannot see is whether the file is
+# still a valid citation: a `version:` line in the right shape inside a document
+# that no longer parses, or that lost its author, is a site the bump maintains
+# and nobody can cite.
+CITATION = ROOT / "CITATION.cff"
+
+
+def citation():
+    yaml = pytest.importorskip("yaml")           # not a declared dependency
+    return yaml.safe_load(CITATION.read_text(encoding="utf-8"))
+
+
+def test_the_citation_file_parses_as_yaml():
+    """GitHub renders the "Cite this repository" button from this file and says
+    nothing useful when it cannot read it. A stray tab or an unquoted colon
+    fails here instead, where the message names the line."""
+    assert citation() is not None, "CITATION.cff is empty"
+
+
+def test_the_citation_carries_the_fields_the_format_requires():
+    """CFF 1.2.0 requires these four. A file missing one is not a citation that
+    `cffconvert` or GitHub will turn into BibTeX, and the failure is silent at
+    both ends."""
+    data = citation()
+    for key in ("cff-version", "message", "title", "authors"):
+        assert key in data, f"CITATION.cff has no `{key}`"
+    assert data["cff-version"] == "1.2.0"
+    assert data["authors"], "CITATION.cff names no author"
+
+
+def test_the_citation_version_is_the_project_version():
+    """The point of listing it in `[tool.bumpversion.files]`.
+
+    The parametrised test above proves the bump's pattern matches something in
+    this file. This proves the thing it matched is the current version, which is
+    what a reader resolving the citation gets. A citation is the one version site
+    where being stale is not an inconvenience: it is a claim in someone else's
+    published paper about which code they ran.
+    """
+    assert str(citation()["version"]) == pyproject()["project"]["version"]
+
+
+def test_the_citation_doi_is_the_concept_doi():
+    """Zenodo mints two kinds, and only one of them belongs here.
+
+    The concept DOI resolves to whichever version is newest. A per-version DOI is
+    a fresh number on every deposit, so it cannot be a bump site -- nothing can
+    derive it -- and a citation carrying one sends every future reader to the
+    release that happened to be current when the line was written.
+
+    Pinned by value rather than checked for shape: a DOI that changed is either a
+    new deposition or a typo, and both are things to notice in a diff.
+    """
+    assert citation()["doi"] == "10.5281/zenodo.21784217"
+
+
+def test_the_citation_agrees_with_the_project_metadata():
+    """Two places name the licence, the repository and the title. They are the
+    same project, and a reader who compares them and finds two answers has no
+    reason to trust either."""
+    project = pyproject()["project"]
+    data = citation()
+    assert data["title"] == project["name"]
+    assert data["license"] == project["license"]
+    assert data["repository-code"] == project["urls"]["Source"]
+
+
+def test_the_citation_carries_no_date_released():
+    """Deliberately absent, and asserted so it stays a decision.
+
+    A date here would be a second thing the release bump has to rewrite, and
+    nothing derives it from the version. Added without a bump entry it goes stale
+    on the next release and says the wrong thing with total confidence, which is
+    worse than saying nothing: the tag and CHANGELOG.md both carry the real date
+    and both are gated. If a date is ever wanted here, the entry in
+    `[tool.bumpversion.files]` comes first and this test is what says so.
+    """
+    assert "date-released" not in citation(), (
+        "CITATION.cff gained a `date-released`. Add a `[[tool.bumpversion.files]]`"
+        " entry that rewrites it on the release bump, then delete this test")
