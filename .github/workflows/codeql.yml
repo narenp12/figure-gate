@@ -58,7 +58,7 @@ jobs:
       # green alone, and merging either would have broken CodeQL on main until
       # the other landed. The group in dependabot.yml now keeps them in one
       # pull request.
-      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
           # Beyond the default pack: this repository is small enough that the
@@ -67,6 +67,6 @@ jobs:
 
       # No build step. Everything here is interpreted, and CodeQL's extractors
       # read the tree directly.
-      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{ matrix.language }}"
