@@ -1,4 +1,5 @@
 ---
+title: "API"
 description: "Signatures and docstrings for the three modules, read out of the scripts when this page builds."
 ---
 

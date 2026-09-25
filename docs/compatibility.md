@@ -1,4 +1,5 @@
 ---
+title: "Compatibility"
 description: "Python and matplotlib floors, optional dependencies, import lines by version, and what the version policy promises."
 ---
 

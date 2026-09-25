@@ -169,6 +169,53 @@ def test_no_page_has_become_a_copy():
         "single copy, or added to AUTHORED if they are genuinely site-only")
 
 
+# --- a page's name in a browser tab is the page's name ------------------------
+# Zensical titles a page from its filename. Not from its `# heading`, and not
+# from the nav label: `cli.md` shipped as "Cli - figure-gate" with `# Commands`
+# at the top of it and "Commands" in the nav. That string is the browser tab,
+# the search result and the link card, so it is the one place a page's own name
+# has to be written down rather than derived from a slug.
+#
+# `title:` front matter is what the theme reads, and only the authored pages can
+# carry it: the rest are symlinks, and front matter in their targets would show
+# up in the README on PyPI and in the style guide a reader vendors. So the gate
+# is scoped to `AUTHORED`.
+
+FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
+DECLARED_TITLE = re.compile(r'^title:\s*"([^"]+)"\s*$', re.M)
+
+
+def authored_nav_pages():
+    return sorted(set(nav_targets()) & AUTHORED)
+
+
+def declared_title(page):
+    block = FRONT_MATTER.match((DOCS / page).read_text(encoding="utf-8"))
+    if not block:
+        return None
+    found = DECLARED_TITLE.search(block.group(1))
+    return found.group(1) if found else None
+
+
+def test_the_authored_pages_are_reachable_from_the_nav():
+    """The parametrize below is derived, so an empty list would delete the
+    gate rather than fail it. Nine of the ten names in `AUTHORED` are nav
+    entries; `abbreviations.md` is the glossary `snippets` appends and is not
+    a page."""
+    assert len(authored_nav_pages()) == 9, (
+        f"{authored_nav_pages()} is what the nav and AUTHORED have in common, "
+        "expected 9 - one of the two lists moved and this number goes with it")
+
+
+@pytest.mark.parametrize("page", authored_nav_pages())
+def test_an_authored_page_writes_down_its_own_title(page):
+    title = declared_title(page)
+    assert title, (
+        f"docs/{page} declares no `title:` in its front matter, so the site "
+        f"will title it from its filename: {page[:-3].capitalize()!r}. Write "
+        "the name the page should be known by")
+
+
 # --- a `#` in column one is a heading, whatever it was meant to be ------------
 # Python-Markdown splits blocks before it parses inline spans, so a line that
 # begins with `#` becomes an ATX heading even when it is plainly the middle of a

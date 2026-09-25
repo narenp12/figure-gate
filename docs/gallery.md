@@ -1,4 +1,5 @@
 ---
+title: "Gallery"
 description: "Twenty audited figures covering the forms that are hard to check, and the defects that writing them found."
 ---
 

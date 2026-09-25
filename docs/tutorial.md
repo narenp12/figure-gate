@@ -1,4 +1,5 @@
 ---
+title: "Gate your first figure"
 description: "Build a figure that fails the checks, read the report, and fix it until every row passes at the size it prints."
 ---
 

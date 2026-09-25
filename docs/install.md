@@ -1,4 +1,5 @@
 ---
+title: "Install"
 description: "Vendor the checkers, install the package, or install from conda-forge, then point them at your own document."
 ---
 

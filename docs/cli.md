@@ -1,4 +1,5 @@
 ---
+title: "Commands"
 description: "check_palette.py and check_figure.py from a shell: their arguments, flags, exit codes, and the twelve venue widths."
 ---
 

@@ -42,7 +42,8 @@ from conftest import SKILL
 import check_palette as cp
 
 from test_docs_match_code import swatch_pairs
-from test_docs_site import CONFIG, CSS, SLATES, nav_targets, scheme_link_colors
+from test_docs_site import (CONFIG, CSS, SLATES, authored_nav_pages, declared_title,
+                            nav_targets, scheme_link_colors)
 
 ROOT = SKILL.parent
 SITE = ROOT / "site"
@@ -1052,6 +1053,22 @@ TILE_ICONS = {
     "shapes": "choosing-a-form",
     "image": "gallery",
 }
+
+
+@pytest.mark.parametrize("page", authored_nav_pages())
+def test_the_built_page_is_titled_what_it_says_it_is(page, built_site):
+    """The other half of `test_an_authored_page_writes_down_its_own_title`.
+    That one asserts the name is written down. This one asserts the theme reads
+    it, which front matter on its own says nothing about. The suffix is
+    `site_name`, and the whole string is what a browser tab shows.
+    """
+    built = built_site / page[:-3] / "index.html"
+    found = re.search(r"<title>(.*?)</title>",
+                      built.read_text(encoding="utf-8"), re.S)
+    assert found, f"{page} built without a <title>"
+    assert found.group(1).strip() == f"{declared_title(page)} - figure-gate", (
+        f"{page} declares the title {declared_title(page)!r} and the site "
+        f"serves {found.group(1).strip()!r}")
 
 
 def home_article(built_site):

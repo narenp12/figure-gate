@@ -38,6 +38,10 @@ behind a threshold this project enforces.
 - The `scale` argument of `audit`, `report` and `audit_json`, and the return of
   `page_scale` itself, are documented as the ratio they are rather than as a
   length. Documentation only: no number a gate measures has moved.
+- The nine authored documentation pages declare a `title:`, so the site serves
+  each page's own name instead of its filename: "Commands" rather than "Cli",
+  "How the checkers decide" rather than "Design". The home page and the seven
+  symlinked pages are unchanged.
 
 ### Why it changed
 
@@ -68,6 +72,20 @@ a non-Python toolchain, and `--json` did not cost it.
 There is no `--json` on `check_figure.py`, because that command audits no figure
 of yours: run with no arguments it self-tests on a deliberately broken figure.
 The equivalent is `audit_json` in the API.
+
+#### The title a reader sees before the page
+
+Zensical titles a page from its filename. Not from its `# heading`, and not
+from the nav label: `cli.md` served as "Cli - figure-gate" with `# Commands` in
+the file and "Commands" in the nav, `design.md` as "Design" against "How the
+checkers decide". Every page on the site was serving a slug, in the browser tab,
+the search result and the link preview.
+
+`title:` front matter is what the theme reads, and only the nine authored pages
+can carry it. The other seven are symlinks; front matter in their targets would
+surface in the README on PyPI and in the style guide a reader vendors. The home
+page keeps its filename's title for that reason. Two tests hold one half each:
+that a page writes its name down, and that the site serves it under that name.
 
 #### A scale that was documented as a length
 

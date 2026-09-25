@@ -1,4 +1,5 @@
 ---
+title: "How-to guides"
 description: "Task recipes: fix a failing row, gate a test suite, place a figure at a venue's width, attach alt text, move a threshold."
 ---
 
