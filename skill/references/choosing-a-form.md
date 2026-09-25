@@ -298,16 +298,18 @@ banked.
 
 - Cleveland, W. S. & McGill, R. (1984). Graphical perception: theory,
   experimentation, and application to the development of graphical methods.
-  *JASA* 79(387), 531-554. The perceptual ordering above.
+  *JASA* 79(387), 531-554. doi:10.1080/01621459.1984.10478080. The perceptual
+  ordering above.
 - Cleveland, W. S., McGill, M. E. & McGill, R. (1988). The shape parameter of a
-  two-variable graph. *JASA* 83(402), 289-300. The median-absolute-slope
-  criterion and the experiments behind banking to 45°.
+  two-variable graph. *JASA* 83(402), 289-300.
+  doi:10.1080/01621459.1988.10478598. The median-absolute-slope criterion and
+  the experiments behind banking to 45°.
 - Cleveland, W. S. (1993). *Visualizing Data.* Dot plots, Trellis display,
   banking.
 - Heer, J. & Agrawala, M. (2006). Multi-scale banking to 45 degrees. *IEEE
-  Transactions on Visualization and Computer Graphics* 12(4), 701-708. The
-  "slopeless lines" culling the gate applies, and the survey of banking
-  criteria.
+  Transactions on Visualization and Computer Graphics* 12(5), 701-708.
+  doi:10.1109/TVCG.2006.163. The "slopeless lines" culling the gate applies,
+  and the survey of banking criteria.
 - Tukey, J. W. (1977). *Exploratory Data Analysis.* The box plot, and what it
   was for.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* The decomposition `ggplot2`

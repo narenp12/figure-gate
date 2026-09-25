@@ -87,7 +87,7 @@ __all__ = [
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
-    "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
+    "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
     "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
     "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
@@ -159,8 +159,8 @@ DID_NOT_RUN = "did not run: "
 # 300, and the same figure gets two verdicts for a number nobody thought they
 # were setting.
 #
-# Measured on the eleven gallery figures across 100/150/200/300/600 dpi, before
-# this constant existed: thirty-four rows moved and one flipped -- `orbit`'s ink
+# Measured on the twenty gallery figures across 100/150/200/300/600 dpi, before
+# this constant existed: seventy-six rows moved and one flipped -- `orbit`'s ink
 # fraction ran 0.13 at 100 dpi down to 0.04 at 300 and out the bottom of the band
 # at 600, because a marker's antialiased fringe is a fixed number of pixels wide
 # and so a shrinking share of a mark that grows with the resolution. The figure
@@ -607,7 +607,8 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
 #
 # Settable: numeric constants, plus `CONTENT_WIDTH_PT`, `STYLE_SHEET` and
 # `venue`. `AUDIT_SCHEMA` is a wire format and `DRAW_RC_ATTR` is an attribute
-# name, so neither is reachable from a file.
+# name, so neither is reachable from a file. `NOT_CONFIGURABLE` names the rest
+# of what a numeric constant can be besides a threshold.
 
 CONFIG_FILENAMES = ("figure-gate.toml", "pyproject.toml")
 
@@ -619,12 +620,44 @@ CONFIG_TABLE = ("tool", "figure-gate")
 # the constant it sets.
 CONFIG_ALIASES = ("venue",)
 
+# Uppercase numbers that are not thresholds, and the reason each one is not.
+# `_config_targets` selects by shape, which is what keeps it from falling behind
+# a threshold added tomorrow, and shape cannot tell a floor from the frame the
+# floors are measured in. A file setting `MEASURE_DPI` would move every pixel
+# threshold in this module at once while every threshold's value stayed where a
+# reader could see it, which is the failure `MEASURE_DPI` was added to close.
+#
+# Not a silent skip: `load_config` raises and prints the reason, because a
+# threshold quietly ignored leaves a project believing it raised a floor. The
+# constants are still module globals, so assigning one by hand does what it
+# always did. What a file cannot do is make that one person's choice everyone's.
+#
+# A reason rather than a bare set. An entry with no reason is indistinguishable
+# from an entry somebody added to make a test pass.
+NOT_CONFIGURABLE = {
+    "MEASURE_DPI":
+        "the resolution every pixel threshold here was calibrated at. Half of "
+        "them are pixel counts, so moving it rescales their calibration "
+        "without moving any value a reader can see",
+    "BOLD_WEIGHT_MIN":
+        "CSS's definition of a bold face, which matplotlib follows. Not this "
+        "project's number to set",
+    "GRID_PAIR_CAP":
+        "the memory bound on check_overplotting's fallback, about 100MB of "
+        "working set. It moves no verdict",
+    "RAMP_LUT_N":
+        "the sample count a registered ramp is compared over, not a boundary "
+        "any verdict falls on",
+}
+
 
 def _config_targets() -> dict[str, Any]:
     """`{key: module}` for every constant a configuration file may set.
 
     Computed rather than listed, so a threshold added to either module is
-    settable the day it lands and a list cannot fall behind.
+    settable the day it lands and a list cannot fall behind. Each module's own
+    `NOT_CONFIGURABLE` is what the shape rule cannot see: which of its numbers
+    are the frame the thresholds are measured in rather than thresholds.
     """
     targets: dict[str, Any] = {}
     modules = [sys.modules[__name__]]
@@ -632,16 +665,34 @@ def _config_targets() -> dict[str, Any]:
     if palette is not None:
         modules.append(palette)
     for module in modules:
+        pinned = getattr(module, "NOT_CONFIGURABLE", {})
         for name, value in vars(module).items():
             if name.startswith("_") or not name.isupper():
                 continue
             if isinstance(value, bool):          # a flag, not a floor
+                continue
+            if name in pinned:
                 continue
             if isinstance(value, (int, float)):
                 targets.setdefault(name, module)
     for name in ("CONTENT_WIDTH_PT", "STYLE_SHEET"):
         targets[name] = sys.modules[__name__]
     return targets
+
+
+def _pinned_reason(key: str) -> Any:
+    """Why `key` is not settable from a file, or `None` when it is not pinned.
+
+    Both modules, for the same reason `_config_targets` reads both: a palette
+    constant is named in the same file as a figure one.
+    """
+    for module in (sys.modules[__name__], _sibling("check_palette")):
+        if module is None:
+            continue
+        reason = getattr(module, "NOT_CONFIGURABLE", {}).get(key)
+        if reason is not None:
+            return reason
+    return None
 
 
 def config_keys() -> list[str]:
@@ -755,6 +806,11 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
             planned["CONTENT_WIDTH_PT"] = content_width_pt(value)
             continue
         if key not in targets:
+            pinned = _pinned_reason(key)
+            if pinned is not None:
+                raise ValueError(
+                    f"{path} sets {key!r}, which is not a threshold: {pinned}. "
+                    f"Assign the global before calling audit if you mean it")
             raise ValueError(
                 f"{path} sets {key!r}, which names no threshold. "
                 f"`python check_figure.py --config` lists every key this "

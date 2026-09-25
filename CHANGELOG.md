@@ -41,6 +41,21 @@ behind a threshold this project enforces.
   307.29 and `beamer-169` 398.34.
 - `check_figure.DID_NOT_RUN` and `suggest_fixes.DID_NOT_RUN`, the prefix a detail
   carries when the gate could not run. `suggest` skips a row that carries it.
+- `NOT_CONFIGURABLE` in `check_figure.py` and `check_palette.py`, naming the
+  uppercase numbers a configuration file may not set and the reason each is not
+  a threshold: `MEASURE_DPI`, `BOLD_WEIGHT_MIN`, `GRID_PAIR_CAP`, `RAMP_LUT_N`
+  and `CMAP_SAMPLES`. `config_keys()` drops from 60 keys to 55, and
+  `load_config` raises with the reason rather than the "names no threshold"
+  message.
+- A `doi` or a `no_doi` field on every entry of `EXTERNAL_CLAIMS` in
+  `tests/test_prose_claims.py`, and three tests over them:
+  `test_every_external_claim_carries_a_doi_or_says_why_it_cannot`,
+  `test_a_cited_doi_is_printed_where_the_reader_is` and
+  `test_no_two_claims_cite_the_same_doi`.
+- `doi:` lines on five references that had none: Cleveland & McGill 1984,
+  Cleveland, McGill & McGill 1988 and Heer & Agrawala 2006 in
+  `choosing-a-form.md`; Nuñez et al. 2018 and Stone, Szafir & Setlur 2014 in
+  `style-guide.md`.
 
 #### Changed
 
@@ -68,8 +83,67 @@ behind a threshold this project enforces.
   file. Both sent a reader to `CONTENT_WIDTH_PT` at the top of a vendored copy
   and stopped there, which is the one-copy route the file exists to replace, and
   the skill is what an agent reads. The build snippet calls `load_config`.
+- Heer & Agrawala 2006 **changed** IEEE TVCG `12(4)` → **`12(5)`**, in
+  `choosing-a-form.md` and in the `EXTERNAL_CLAIMS` entry. The pages, 701-708,
+  were right.
+- Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
+  `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
+  resolves to. The pages, 253-258, were right.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2247`**.
+- `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
+  was a hardcoded eleven under a comment saying it was read off the module; it is
+  parsed from `BUILDERS` now, and the nine figures added since the sweep was
+  written are in it. All twenty hold every row identical across the range.
+- The dpi sweep's measured cost **changed** `34` rows over eleven figures →
+  **`76`** over twenty, in `check_figure.py`, `docs/design.md` and the sweep's
+  own docstring. The one status flip is still `orbit`'s ink coverage at 600 dpi.
+- `check_palette.oklab_distance`, `cmap_back_travel` and `hex_to_linear`'s raise
+  are exercised. Coverage of `check_palette.py` 86% → 88%.
 
 ### Why it changed
+
+#### A number in capitals is not always a threshold
+
+`_config_targets` selects by shape, which is what keeps it from falling behind a
+threshold added tomorrow. Shape cannot tell a floor from the frame the floors
+are measured in. `MEASURE_DPI` is a float named in capitals like every
+threshold, and a file setting it would rescale every pixel threshold in
+`check_figure` at once while each threshold's value stayed where a reader could
+see it, which is the failure `MEASURE_DPI` was added to close.
+`tests/test_thresholds_are_constants.py` already drew this distinction in its
+`NOT_A_THRESHOLD` ledger. The config surface did not read it.
+
+Five constants, each with the reason in the module beside it. A raise rather
+than a silent skip, for the reason an unknown key already raises: a threshold
+quietly ignored leaves a project believing it raised a floor. A different
+message, because "names no threshold" sends a reader to check their spelling and
+the spelling is right.
+
+`check_palette.py` carries its own list. These files are vendored one at a time,
+so a contract between two of them cannot live in an import either may lack, and
+that file reads no TOML anyway: `tomllib` arrived in 3.11 and CI holds it to 3.8.
+
+#### A citation the prose gates could not check
+
+`EXTERNAL_CLAIMS` held every external claim to a source, a dated verification
+and a quote, and three tests over it. None of them could see a wrong citation.
+`test_an_external_source_is_named_in_the_references` asserts the first surname
+appears in the document, so "Heer" satisfied it whatever the volume said, and
+`choosing-a-form.md` gave Heer & Agrawala as IEEE TVCG 12(4) for as long as the
+entry existed. The paper is 12(5). It was the one reference in either section
+carrying no DOI.
+
+So a deposited work is now cited by identifier, and the identifier is printed
+where the reader is. Resolving it catches a wrong volume, issue, page or year,
+which no string comparison in this file can. The lookup is the reader's: nothing
+in the suite reaches the network, and a claim whose source has no DOI, such as a
+publisher's instructions-for-authors page or a file in the LaTeX2e kernel, says
+so in `no_doi` rather than leaving the field empty. An absent identifier is
+otherwise indistinguishable from an oversight, which is how this one survived.
+
+The third test rejects two entries sharing one DOI. The wrong issue number came
+from a neighbouring entry; copying the identifier too is the same slip, one
+field further along.
 
 #### One set of thresholds a group can agree on
 

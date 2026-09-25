@@ -1502,6 +1502,8 @@ EXTERNAL_CLAIMS = {
         "document": "style-guide.md",
         "anchor": "lines one point or thicker",
         "source": "SIAM instructions for authors, epubs.siam.org",
+        "no_doi": "a publisher's instructions-for-authors page, which is not a "
+                  "deposited work",
         "verified": "2026-07-29",
         "quote": "Illustrations must use lines one point or thicker; thinner "
                  "lines may break up or disappear when printed.",
@@ -1514,6 +1516,7 @@ EXTERNAL_CLAIMS = {
                   "figure panels; PNAS, pnas.org/author-center/"
                   "submitting-your-manuscript; Science instructions for "
                   "preparing an initial manuscript, science.org",
+        "no_doi": "three publishers' author-guidance pages, none deposited",
         "verified": "2026-08-17",
         "quote": 'Nature: "Maximum text size: 7pt", "Minimum text size: 5pt". '
                  'PNAS: "Ensure that all numbers, letters, and symbols are no '
@@ -1529,6 +1532,7 @@ EXTERNAL_CLAIMS = {
                   "at the final reduced size for line widths",
         "source": "Science instructions for preparing an initial manuscript, "
                   "science.org",
+        "no_doi": "the same author-guidance page as 'journal type floors'",
         "verified": "2026-08-17",
         "quote": 'Science on line widths: "minimum of 0.5 point at the final '
                  'reduced size". The same page is the source for the 6 point '
@@ -1543,6 +1547,8 @@ EXTERNAL_CLAIMS = {
         "source": "LaTeX2e kernel, fontmath.ltx, the DeclareMathSizes table, "
                   "read at texmf-dist/tex/latex/base/fontmath.ltx; LaTeX2e "
                   "font selection guide on math styles",
+        "no_doi": "a source file in the LaTeX2e kernel, read from the local "
+                  "texmf tree",
         "verified": "2026-09-07",
         "quote": 'fontmath.ltx declares {text}{text}{script}{scriptscript} as '
                  '5->{5}{5}, 6->{5}{5}, 7->{5}{5}, 8->{6}{5}, 9->{6}{5}, '
@@ -1559,6 +1565,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "0.7 of the level above",
         "source": "matplotlib._mathtext, SHRINK_FACTOR and NUM_SIZE_LEVELS, "
                   "read from the installed package",
+        "no_doi": "a module in an installed dependency, not a published work",
         "verified": "2026-09-07",
         "quote": "SHRINK_FACTOR = 0.7 and NUM_SIZE_LEVELS = 6 in "
                  "matplotlib/_mathtext.py, applied per nesting level with no "
@@ -1573,6 +1580,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "does not accept Type 3",
         "source": "IEEE PDF eXpress author requirements; ACM TAPS LaTeX best "
                   "practices",
+        "no_doi": "two publishers' author-requirement pages, neither deposited",
         "verified": "2026-07-29",
         "quote": "Embedded Type 1 or TrueType fonts are required as subset "
                  "fonts. Type 3 fonts (bitmaps) will not be accepted.",
@@ -1582,6 +1590,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "99.81% of programmatically",
         "source": "Potluri, Singanamalla, Tieanklin & Mankoff, ASSETS '23, "
                   "arXiv:2308.03241",
+        "doi": "10.1145/3597638.3608417",
         "verified": "2026-07-29",
         "quote": "The vast majority of the programmatically generated images "
                  "(N=342102 (99.81%)) do not have associated alternative text.",
@@ -1591,6 +1600,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "not the data-ink ratio",
         "source": "Bateman, Mandryk, Gutwin, Genest, McDine & Brooks, CHI '10, "
                   "2573-2582",
+        "doi": "10.1145/1753326.1753716",
         "verified": "2026-07-29",
         "quote": "We found that people's accuracy in describing the "
                  "embellished charts was no worse than for plain charts, and "
@@ -1601,7 +1611,8 @@ EXTERNAL_CLAIMS = {
         "document": "style-guide.md",
         "anchor": "Why there is still no size-weighted gate",
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
-                  "2014(1), 253-258",
+                  "22(1), 253-258",
+        "doi": "10.2352/CIC.2014.22.1.art00045",
         "verified": "2026-07-31",
         "quote": "In the paper, we describe a way to model discriminability as "
                  "a function of size for target sizes ranging from 6 degrees "
@@ -1618,6 +1629,7 @@ EXTERNAL_CLAIMS = {
         "source": "Machado, Oliveira & Fernandes, IEEE TVCG 15(6), 2009, "
                   "Table 1; coefficients read from the authors' page at "
                   "inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/",
+        "doi": "10.1109/TVCG.2009.113",
         "verified": "2026-07-31",
         # What was checked is the table, cell by cell, not a sentence about it:
         # four matrices were read off the authors' page and asserted against the
@@ -1631,6 +1643,7 @@ EXTERNAL_CLAIMS = {
         "document": "choosing-a-form.md",
         "anchor": "six ranks and not",
         "source": "Cleveland & McGill, JASA 79(387), 1984",
+        "doi": "10.1080/01621459.1984.10478080",
         "verified": "2026-07-29",
         "quote": "The ordering is position along a common scale; position "
                  "along non-aligned scales; length, direction, angle; area; "
@@ -1642,6 +1655,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "Cleveland's banking to 45 degrees",
         "source": "Cleveland, McGill & McGill, JASA 83(402), 1988, as "
                   "surveyed by Heer & Agrawala 2006",
+        "doi": "10.1080/01621459.1988.10478598",
         "verified": "2026-08-01",
         "quote": "Cleveland et al. conducted human-subject experiments showing "
                  "that viewers judge the ratio of the slopes of two adjacent "
@@ -1653,7 +1667,8 @@ EXTERNAL_CLAIMS = {
     "slopeless lines culling": {
         "document": "choosing-a-form.md",
         "anchor": "after Heer and Agrawala's \"slopeless lines\"",
-        "source": "Heer & Agrawala, IEEE TVCG 12(4), 2006, section 2.7",
+        "source": "Heer & Agrawala, IEEE TVCG 12(5), 2006, section 2.7",
+        "doi": "10.1109/TVCG.2006.163",
         "verified": "2026-08-01",
         "quote": "an additional modification is to cull \"slopeless\" lines -- "
                  "those with either zero or infinite slope. Horizontal and "
@@ -1735,6 +1750,62 @@ def test_an_external_source_is_named_in_the_references(claim):
     assert surname in text or surname.lower() in text.lower(), (
         f"{claim} cites {entry['source']}, and {surname} appears nowhere in "
         f"{entry['document']}. A source the reader cannot see is not a source")
+
+
+# A surname in the document proves a citation exists. It does not prove the
+# citation is right, and the gap has a shipped example: `choosing-a-form.md`
+# gave Heer & Agrawala as IEEE TVCG 12(4) for as long as the entry existed. The
+# paper is 12(5), and "Heer" was in the document either way, so every gate above
+# passed. It was the one reference in either section carrying no DOI.
+#
+# So a deposited work is cited by identifier, and the identifier is printed
+# where the reader is. Resolving it is what catches a wrong volume, issue, page
+# or year, and it is the reader's lookup rather than the suite's: nothing here
+# reaches the network.
+DOI = re.compile(r"10\.\d{4,9}/\S+")
+
+
+@pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
+def test_every_external_claim_carries_a_doi_or_says_why_it_cannot(claim):
+    """An absent identifier is a decision or an oversight, and a ledger that
+    cannot tell them apart is how the oversight survives."""
+    entry = EXTERNAL_CLAIMS[claim]
+    doi, why = entry.get("doi"), entry.get("no_doi")
+    assert bool(doi) != bool(why), (
+        f"{claim} records doi={doi!r} and no_doi={why!r}. Exactly one of them: "
+        "the identifier, or the reason the source has none")
+    if doi:
+        assert DOI.fullmatch(doi), f"{claim} records {doi!r} as a DOI"
+    else:
+        assert len(why) > 20, (
+            f"{claim} excuses its missing DOI with {why!r}, which does not say "
+            "what kind of source it is")
+
+
+@pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
+def test_a_cited_doi_is_printed_where_the_reader_is(claim):
+    """The identifier only settles anything if the reader has it."""
+    entry = EXTERNAL_CLAIMS[claim]
+    if not entry.get("doi"):
+        return
+    text = document(entry["document"]).read_text(encoding="utf-8").lower()
+    assert entry["doi"].lower() in text, (
+        f"{claim} cites {entry['doi']}, which appears nowhere in "
+        f"{entry['document']}. Case-insensitively, because a DOI is")
+
+
+def test_no_two_claims_cite_the_same_doi():
+    """The wrong-volume defect came from copying a neighbouring entry. Copying
+    the identifier too is the same slip, one field further along."""
+    seen: dict[str, str] = {}
+    for claim in sorted(EXTERNAL_CLAIMS):
+        doi = EXTERNAL_CLAIMS[claim].get("doi")
+        if not doi:
+            continue
+        assert doi.lower() not in seen, (
+            f"{claim} and {seen[doi.lower()]} both cite {doi}. Two claims "
+            "about one paper belong in one entry")
+        seen[doi.lower()] = claim
 
 
 # --- gate behaviour the prose describes, executed --------------------------

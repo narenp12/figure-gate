@@ -270,3 +270,67 @@ def test_nothing_is_read_on_import():
     file the caller never named is worse than one they had to type."""
     assert cf.TYPE_FLOOR_PT == 7.5
     assert cf.CONTENT_WIDTH_PT is None
+
+
+# --- what it refuses to make everyone's -------------------------------------
+# `_config_targets` selects by shape, and shape cannot tell a floor from the
+# frame the floors are measured in. `MEASURE_DPI` is the case that motivated
+# the split: it is a float named in capitals like every threshold, and a file
+# setting it would rescale every pixel threshold in `check_figure` at once
+# while each threshold's value stayed where a reader could see it.
+
+def test_a_pinned_constant_is_not_a_key():
+    for name in cf.NOT_CONFIGURABLE:
+        assert name not in cf.config_keys(), name
+    for name in cp.NOT_CONFIGURABLE:
+        assert name not in cf.config_keys(), name
+
+
+def test_setting_a_pinned_constant_raises_with_the_reason(tmp_path):
+    """Not "names no threshold": that message sends a reader to check their
+    spelling, and the spelling is right."""
+    path = write(tmp_path, body="MEASURE_DPI = 300.0\n")
+    with pytest.raises(ValueError, match="which is not a threshold: the "
+                                         "resolution every pixel threshold"):
+        cf.load_config(path)
+    assert cf.MEASURE_DPI == 150.0
+
+
+def test_a_pinned_palette_constant_raises_through_the_sibling(tmp_path):
+    """`check_palette` reads no TOML, so its own pinned list only bites if
+    `check_figure` reads it across the sibling import."""
+    path = write(tmp_path, body="CMAP_SAMPLES = 64\n")
+    with pytest.raises(ValueError, match="not a threshold: the sample count"):
+        cf.load_config(path)
+    assert cp.CMAP_SAMPLES == 256
+
+
+def test_a_pinned_key_leaves_the_rest_of_the_file_unapplied(tmp_path):
+    """Every key is checked before any is assigned, and a pinned one is a bad
+    key like any other."""
+    path = write(tmp_path, body="TYPE_FLOOR_PT = 9.0\nMEASURE_DPI = 300.0\n")
+    with pytest.raises(ValueError, match="not a threshold"):
+        cf.load_config(path)
+    assert cf.TYPE_FLOOR_PT == 7.5
+
+
+def test_every_pinned_constant_exists_and_records_why():
+    """A name that has been renamed away pins nothing, and an entry with no
+    reason is indistinguishable from one added to make a test pass."""
+    for module, pinned in ((cf, cf.NOT_CONFIGURABLE), (cp, cp.NOT_CONFIGURABLE)):
+        for name, reason in pinned.items():
+            value = getattr(module, name, None)
+            assert isinstance(value, (int, float)), (
+                f"{name} is pinned in {module.__name__} and is {value!r}. Only "
+                "a number can reach the config surface, so pinning anything "
+                "else excuses nothing")
+            assert len(reason) > 30, f"{name} is pinned with {reason!r}"
+
+
+def test_the_pinned_constants_are_the_ones_the_shape_rule_would_have_taken():
+    """The list only means something against the rule it narrows: each name has
+    to be one `_config_targets` would otherwise have accepted."""
+    for module, pinned in ((cf, cf.NOT_CONFIGURABLE), (cp, cp.NOT_CONFIGURABLE)):
+        for name in pinned:
+            assert name.isupper() and not name.startswith("_"), name
+            assert not isinstance(getattr(module, name), bool), name

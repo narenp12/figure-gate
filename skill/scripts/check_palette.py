@@ -42,7 +42,8 @@ __all__ = [
     "relative_luminance", "contrast", "CVD", "simulate", "MACHADO",
     "ANOMALOUS_SEVERITIES", "simulate_anomalous", "delta_e", "oklab_distance",
     "CMAP_SAMPLES", "CMAP_QUALITATIVE_N", "CMAP_SPAN_MIN",
-    "CMAP_BACKTRAVEL_MAX", "CMAP_WRAP_DE_MAX", "cmap_back_travel", "cmap_kind",
+    "CMAP_BACKTRAVEL_MAX", "CMAP_WRAP_DE_MAX", "NOT_CONFIGURABLE",
+    "cmap_back_travel", "cmap_kind",
     "cmap_back_travel_rgb", "cmap_kind_rgb", "CHROMA_MIN", "CVD_TARGET",
     "NORMAL_FLOOR", "CONTRAST_MIN", "ORDINAL_DL_MIN",
     "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX", "check",
@@ -522,6 +523,18 @@ CMAP_BACKTRAVEL_MAX = 0.02
 # diverging map, BrBG, wraps at 27.963. The threshold has two orders of
 # magnitude of clearance on either side, so it is a definition rather than a fit.
 CMAP_WRAP_DE_MAX = 1.0
+
+# Uppercase numbers here that are not thresholds, and the reason each is not.
+# `check_figure.load_config` reads this through the sibling import and refuses a
+# configuration file that names one; this module reads no TOML itself, because
+# `tomllib` arrived in 3.11 and CI holds this file to 3.8. Its own copy rather
+# than a list in `check_figure`, because these files are vendored one at a time
+# and a contract between two of them cannot live in an import either may lack.
+NOT_CONFIGURABLE = {
+    "CMAP_SAMPLES":
+        "the sample count a colormap is read at, not a boundary any verdict "
+        "falls on",
+}
 
 
 def _back_travel(ls: Sequence[float]) -> float:

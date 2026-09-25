@@ -787,16 +787,16 @@ kinds, and the reason `misc` fails, comes from this literature.
   prevalent, and what they cost a reader.
 - Nuñez, J. R., Anderton, C. R. & Renslow, R. S. (2018). Optimizing colormaps
   with consideration for color vision deficiency to enable accurate
-  interpretation of scientific data. *PLoS ONE* 13(7), e0199239. The CVD-safe
-  side of the same question, and the argument the Okabe-Ito section above rests
-  on.
+  interpretation of scientific data. *PLoS ONE* 13(7), e0199239.
+  doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question, and
+  the argument the Okabe-Ito section above rests on.
 - Moreland, K. (2009). Diverging Color Maps for Scientific Visualization. In
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. The midpoint rule: never a hue at the centre,
   and why a diverging map needs a meaningful zero to diverge around.
 - Stone, M., Szafir, D. A. & Setlur, V. (2014). An Engineering Model for Color
-  Difference as a Function of Size. In *Color and Imaging Conference* 2014(1),
-  253-258. The size model. They fit the noticeable difference for 50% of
+  Difference as a Function of Size. In *Color and Imaging Conference* 22(1),
+  253-258. doi:10.2352/CIC.2014.22.1.art00045. The size model. They fit the noticeable difference for 50% of
   observers as a linear function of inverse size over 11 target sizes from
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
   about 11 at a third of a degree. The section above is why the numbers here

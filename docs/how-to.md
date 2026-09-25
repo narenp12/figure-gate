@@ -263,6 +263,12 @@ cf.load_config()          # searches upward from the current directory
 Nothing reads the file on import. `load_config` returns what it assigned, so a
 build can log it. A key that names no threshold raises rather than being skipped.
 
+Not every number in capitals is a threshold. `MEASURE_DPI` is the resolution the
+pixel thresholds were calibrated at, and `NOT_CONFIGURABLE` in each module names
+it and the others like it. A file setting one raises and says why. They are
+still module globals, so assigning one by hand does what it always did: what a
+file cannot do is make that choice everyone's.
+
 To see which file a build picks up:
 
 ```bash

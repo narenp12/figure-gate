@@ -811,3 +811,85 @@ def test_no_size_weighting_leaked_into_the_validator():
     the shape of a thing that gets wired back in without the measurement."""
     assert not hasattr(cp, "size_factor")
     assert not hasattr(cp, "ND_SIZE_C")
+
+
+# --- the public surface no gate happens to call -----------------------------
+# `oklab_distance` and `cmap_back_travel` are in `__all__`, are rendered on
+# `docs/api.md`, and are held against the last tag by `audit_api.py`. Coverage
+# reported both bodies as never executed: the separation gates moved to
+# CAM02-UCS and `check_colormap` reads the float-sRGB `cmap_back_travel_rgb`,
+# so nothing in the suite reached either one. The API gate protects a signature.
+# It does not run a line, and a documented function nothing runs is a claim.
+
+def test_oklab_distance_is_the_oklab_metric_it_documents():
+    """Zero on a colour against itself, symmetric, and x100 the euclidean
+    distance in the space `linear_to_oklab` returns."""
+    blue = cp.hex_to_linear("#0072b2")
+    orange = cp.hex_to_linear("#d55e00")
+    assert cp.oklab_distance(blue, blue) == 0.0
+    assert cp.oklab_distance(blue, orange) == cp.oklab_distance(orange, blue)
+    a, b = cp.linear_to_oklab(blue), cp.linear_to_oklab(orange)
+    expected = 100 * math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+    assert cp.oklab_distance(blue, orange) == pytest.approx(expected)
+
+
+def test_oklab_distance_is_not_delta_e():
+    """The two are different metrics on the same pair, which is why the
+    migration to CAM02-UCS was a migration and not a rename."""
+    blue, orange = cp.hex_to_linear("#0072b2"), cp.hex_to_linear("#d55e00")
+    assert cp.oklab_distance(blue, orange) != pytest.approx(
+        cp.delta_e(blue, orange), abs=0.5)
+
+
+@pytest.mark.parametrize("name", ("viridis", "Greys"))
+def test_cmap_back_travel_agrees_with_the_float_srgb_route(name):
+    """`cmap_back_travel_rgb` is the covered one. The hex route is the same
+    measurement through an 8-bit round trip, so it has to land within it."""
+    import matplotlib.pyplot as plt
+
+    cmap = plt.get_cmap(name)
+    rgb = [cmap(i / (cp.CMAP_SAMPLES - 1))[:3] for i in range(cp.CMAP_SAMPLES)]
+    hexes = ["#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in channel))
+             for channel in rgb]
+    assert cp.cmap_back_travel(hexes) == pytest.approx(
+        cp.cmap_back_travel_rgb(rgb), abs=0.01)
+
+
+def test_cmap_back_travel_reads_zero_on_a_monotone_ramp():
+    """0.0 is the documented reading for a ramp that never runs backwards."""
+    grey = [f"#{v:02x}{v:02x}{v:02x}" for v in range(0, 256, 8)]
+    assert cp.cmap_back_travel(grey) == 0.0
+
+
+def test_cmap_back_travel_sees_a_ramp_that_turns_around():
+    """The other side of the same line: out and back reads as travel."""
+    out = list(range(0, 256, 8))
+    there_and_back = [f"#{v:02x}{v:02x}{v:02x}" for v in out + out[::-1]]
+    assert cp.cmap_back_travel(there_and_back) > cp.CMAP_BACKTRAVEL_MAX
+
+
+@pytest.mark.parametrize("bad", ("#fff", "0072b2ff", "", "#0072b"))
+def test_hex_to_linear_refuses_anything_that_is_not_six_digits(bad):
+    """The only raise in the module's entry point, and it was unexercised. A
+    three-digit hex is the shorthand a reader is likeliest to try."""
+    with pytest.raises(ValueError, match="expected 6-digit hex"):
+        cp.hex_to_linear(bad)
+
+
+def test_cmap_back_travel_has_no_travel_to_report_on_one_sample():
+    """`_back_travel`'s emptiness guard, reached through the public name. One
+    colour has no steps between colours."""
+    assert cp.cmap_back_travel(["#0072b2"]) == 0.0
+
+
+def test_cmap_back_travel_has_no_span_to_divide_by_on_a_flat_ramp():
+    """The other guard. Travel is reported as a fraction of the span, and a
+    ramp of one lightness has none."""
+    assert cp.cmap_back_travel(["#777570"] * 8) == 0.0
+
+
+def test_cmap_kind_rgb_calls_a_flat_ramp_misc():
+    """`misc` is the verdict the guide's colour rules exist to produce, and the
+    float-sRGB route reached it nowhere in the suite."""
+    flat = [(0.47, 0.46, 0.44)] * cp.CMAP_QUALITATIVE_N
+    assert cp.cmap_kind_rgb(flat) == "misc"

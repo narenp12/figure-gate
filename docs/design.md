@@ -173,7 +173,7 @@ For the version table, see [Compatibility](compatibility.md).
     was authored at, and hands the figure back on the dpi it arrived on.
 
     The cost of not doing this was measured before the constant existed. Across
-    100, 150, 200, 300, and 600 dpi, the eleven gallery figures moved 34 rows
+    100, 150, 200, 300, and 600 dpi, the twenty gallery figures moved 76 rows
     and flipped one. The same figure, five verdicts, from a knob that has
     nothing to do with whether it reads. `savefig.dpi` is unaffected, so what
     you write out is still yours to choose.
@@ -205,7 +205,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2190 tests, and each check has one asserting it catches a
+    The suite is 2247 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
