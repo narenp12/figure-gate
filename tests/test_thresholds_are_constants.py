@@ -13,16 +13,28 @@ comment saying so -- `OVERPLOT_THRESHOLD` and `ADVISORY_GATES` both cite the
 README. Promoting them one at a time as somebody notices is what this file
 replaces.
 
-The sweep: every comparison in either module against a numeric literal. Most are
+The sweep runs both ways.
+
+Outward: every comparison in either module against a numeric literal. Most are
 structural -- `len(x) < 2`, `size == 0`, `> 0` -- and say nothing about where a
 verdict falls, so they are recognised by shape rather than listed. What is left
 is a number somebody chose, and it either names a constant or it appears below
 with the reason it is not one.
+
+Inward: every module-level constant has to be read by something. That direction
+was missing until `SURFACE_MIN_FRAC` turned up in the SVG substrate, declared in
+the commit that created its module under four lines of comment about telling a
+panel background from a filled mark, and consulted by no gate, ever. That
+substrate is archived at `archive/r-svg-substrate` rather than merged, so the
+constant itself never reached these two modules. The missing direction is what
+carried over: 52 constants here, and nothing asserted that any of them moved a
+verdict.
 """
 
 import ast
 import inspect
 import pathlib
+import re
 
 import pytest
 
@@ -194,3 +206,90 @@ def test_the_readme_still_makes_the_claim_this_file_gates():
         "the README no longer makes the claim this file exists to hold it to. "
         "If the sentence went, this file should go with it rather than "
         "gating a promise nobody made")
+
+
+def _declared(module):
+    """Module-level `NAME = <number>` assignments, in source order."""
+    path = pathlib.Path(inspect.getfile(module))
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    out = []
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Constant):
+            continue
+        if isinstance(value.value, bool) or not isinstance(value.value,
+                                                           (int, float)):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id.isupper():
+                out.append((path.name, target.id, node.lineno))
+    return out
+
+
+def declarations():
+    return sorted(row for module in MODULES.values()
+                  for row in _declared(module))
+
+
+@pytest.mark.parametrize("module,name,line", declarations(), ids=str)
+def test_a_declared_threshold_is_read_somewhere(module, name, line):
+    """The other half of the README's sentence, which nothing asserted.
+
+    `test_a_threshold_is_a_named_constant` runs one way: a number that decides a
+    verdict has to carry a name. It says nothing about a name that decides
+    nothing. A reader who lowered such a constant would change no verdict and
+    have no way to find that out.
+
+    Documentation is not a use. Neither is a test: a constant only the suite
+    mentions still moves nothing on a figure.
+    """
+    sources = {path.name: path.read_text(encoding="utf-8")
+               for path in (pathlib.Path(inspect.getfile(m))
+                            for m in MODULES.values())}
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    own = len(word.findall(sources[module])) - 1        # minus the declaration
+    elsewhere = sum(len(word.findall(text))
+                    for other, text in sources.items() if other != module)
+    assert own + elsewhere > 0, (
+        f"{module}:{line} declares {name} and nothing in "
+        f"{', '.join(sorted(sources))} reads it. A threshold no gate consults "
+        "is a number a reader can change with no effect, which is worse than "
+        "an unnamed one. Either wire it into the check its comment describes, "
+        "or delete it along with the comment")
+
+
+def test_the_declaration_sweep_reads_every_module():
+    """Same guard as `test_the_sweep_still_sees_the_comparisons_it_reads`: a
+    parametrized assertion over an empty sweep is a deleted assertion."""
+    found = declarations()
+    modules = {module for module, _, _ in found}
+    assert modules == set(MODULES), (
+        f"the declaration sweep read {sorted(modules)} of {sorted(MODULES)}")
+    assert len(found) > 40, (
+        f"the sweep found {len(found)} module-level numeric constants across "
+        "two modules that held 52 at the measurement this floor was set from")
+
+
+def test_the_declaration_sweep_would_catch_an_unread_constant():
+    """`SURFACE_MIN_FRAC = 0.20`, in the shape it sat in for the whole life of
+    the archived SVG substrate, written back so the sweep has to see it."""
+    source = ("# Below this share of the canvas an element is furniture.\n"
+              "SURFACE_MIN_FRAC = 0.20\n"
+              "OUTLINE_MIN_ELEMENTS = 20\n"
+              "def check(doc):\n"
+              "    return doc.elements > OUTLINE_MIN_ELEMENTS\n")
+    tree = ast.parse(source)
+    names = [t.id for node in tree.body if isinstance(node, ast.Assign)
+             for t in node.targets
+             if isinstance(t, ast.Name) and t.id.isupper()
+             and isinstance(node.value, ast.Constant)]
+    assert names == ["SURFACE_MIN_FRAC", "OUTLINE_MIN_ELEMENTS"], names
+    reads = {name: len(re.findall(rf"\b{name}\b", source)) - 1
+             for name in names}
+    assert reads["SURFACE_MIN_FRAC"] == 0, (
+        "the sweep no longer reads the exact defect it was written for")
+    assert reads["OUTLINE_MIN_ELEMENTS"] == 1, (
+        "the sweep calls a constant unread when a gate does consult it, so it "
+        "would fail on correct source")
