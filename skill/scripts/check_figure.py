@@ -519,7 +519,7 @@ def content_width_pt(venue: str | None = None) -> float | None:
 
 def page_scale(fig: Figure, placed_frac: float = 1.0,
                venue: str | None = None) -> float:
-    """Scale from authored inches to points on the page.
+    """Scale from the authored figure to the one placed on the page.
 
     `placed_frac` is the fraction of the content width the figure is placed at,
     so it reads like the call site: `\\includegraphics[width=0.48\\textwidth]`
@@ -538,8 +538,9 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
     Returns:
-        Points on the page per authored inch. `1.0` when no content width is
-        set, which measures the figure at the size it was authored.
+        Placed size over authored size: a ratio, not a length. `1.0` when no
+        content width is set, which measures the figure at the size it was
+        authored.
 
     Raises:
         ValueError: `placed_frac` is not 1.0 and no content width is set.
@@ -4693,7 +4694,8 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
             and handed back on its authored dpi, so the verdict depends on
             neither the backend it was made on nor the resolution it was set to.
-        scale: Points per authored inch, overriding `page_scale` outright.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
         placed_frac: Fraction of the content width the figure is placed at.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
         context_axes: Axes whose fill is a context surface, not data ink.
@@ -4789,7 +4791,8 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     Args:
         fig: The built figure.
         name: A heading for the table.
-        scale: Points per authored inch, overriding `page_scale` outright.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
         placed_frac: Fraction of the content width the figure is placed at.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
         context_axes: Axes whose fill is a context surface, not data ink.
@@ -4892,7 +4895,8 @@ def audit_json(fig: Figure, scale: float | None = None,
 
     Args:
         fig: The built figure, measured exactly as `audit` measures it.
-        scale: Points per authored inch, overriding `page_scale` outright.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
         placed_frac: Fraction of the content width the figure is placed at.
         name: Recorded as `inputs.name`, for telling stored artifacts apart.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.

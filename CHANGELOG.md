@@ -33,6 +33,12 @@ behind a threshold this project enforces.
 - Nothing a caller could do at 0.9.0 has stopped working. `griffe check` against
   the tag reports no break in any of the three modules.
 
+#### Fixed
+
+- The `scale` argument of `audit`, `report` and `audit_json`, and the return of
+  `page_scale` itself, are documented as the ratio they are rather than as a
+  length. Documentation only: no number a gate measures has moved.
+
 ### Why it changed
 
 #### A verdict a build can read
@@ -62,6 +68,19 @@ a non-Python toolchain, and `--json` did not cost it.
 There is no `--json` on `check_figure.py`, because that command audits no figure
 of yours: run with no arguments it self-tests on a deliberately broken figure.
 The equivalent is `audit_json` in the API.
+
+#### A scale that was documented as a length
+
+`page_scale` returns `width * placed_frac / (fig.get_size_inches()[0] * 72)`,
+which divides points by points. Four docstrings named a unit for it anyway,
+larger than the real number by 72. A reader who passed `scale=` as that unit
+would certify every figure at 72 times the size it prints at.
+
+The correction is in the wording alone. `docs/design.md` had it right, and so
+did `audit_json`'s own paragraph two lines above the `Args:` entry that
+contradicted it. The retired sentence is now an entry in
+`tests/test_prose_claims.py`'s retraction ledger, which sweeps the documents and
+both modules, so it cannot be copied back.
 
 #### One definition of public
 

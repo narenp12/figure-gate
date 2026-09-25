@@ -1390,6 +1390,21 @@ RETRACTED_CLAIMS = {
                "EXTERNAL_CLAIMS under 'journal type floors'",
         "retracted": "2026-08-17",
     },
+    "page_scale returning a length per authored inch": {
+        "pattern": r"points?[^.]{0,40}per authored inch",
+        "instead": "page_scale returns placed size over authored size: a "
+                   "ratio, not a length, and 1.0 for a figure measured as "
+                   "authored",
+        "why": "page_scale divides a width in points by a width in points, "
+               "`width * placed_frac / (fig.get_size_inches()[0] * 72)`, so "
+               "the number is dimensionless. Naming a length overstates it "
+               "by 72, and a reader who set `scale=` from that sentence "
+               "would certify every figure at 72x the size it prints at. "
+               "The sentence reached three `Args:` lines and the `Returns:` "
+               "of page_scale itself, while audit_json's own paragraph two "
+               "lines above said the opposite",
+        "retracted": "2026-09-24",
+    },
     "PNAS requiring 2mm on top of its point floor": {
         "pattern": r"PNAS[^.]{0,60}(2\s*mm[^.]{0,30}(and|plus)|"
                    r"(and|with)[^.]{0,30}2\s*mm)",
@@ -1447,6 +1462,26 @@ def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
     assert not re.search(pattern, " ".join(
         (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8").split()), re.I), (
         "the pattern matches the corrected sentence too, so it forbids the "
+        "replacement as well as the claim")
+
+
+def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
+    """Same check for the second retraction, whose surviving copies were in
+    `check_figure.py` rather than in a document. This is the `Args:` line as
+    0.9.0 shipped it, and the `Returns:` sentence it was copied from."""
+    shipped = ("scale: Points per authored inch, overriding `page_scale` "
+               "outright.",
+               "Points on the page per authored inch. `1.0` when no content "
+               "width is set")
+    pattern = RETRACTED_CLAIMS[
+        "page_scale returning a length per authored inch"]["pattern"]
+    for sentence in shipped:
+        assert re.search(pattern, sentence, re.I), (
+            f"the pattern no longer matches {sentence!r}, which is what it "
+            "was written to retire")
+    corrected = " ".join(inspect.getdoc(cf.page_scale).split())
+    assert not re.search(pattern, corrected, re.I), (
+        "the pattern matches the corrected docstring too, so it forbids the "
         "replacement as well as the claim")
 
 

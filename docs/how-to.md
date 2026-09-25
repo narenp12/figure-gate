@@ -142,7 +142,7 @@ know how far the figure is scaled on the way there. Three arguments carry that:
 ```python
 audit(fig, venue="neurips")                       # full content width
 audit(fig, venue="neurips", placed_frac=0.48)     # \includegraphics[width=0.48\textwidth]
-audit(fig, scale=0.74)                            # points per authored inch, set outright
+audit(fig, scale=0.74)                            # placed over authored size, set outright
 ```
 
 To see what a placement does to the scale, call `page_scale` on a 4-inch-wide
