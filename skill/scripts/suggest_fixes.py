@@ -40,8 +40,16 @@ from typing import NamedTuple
 # comparing, which turns a break into a silent one. That is the opposite of what
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
-    "Remedy", "REMEDIES", "suggest", "format_suggestions",
+    "DID_NOT_RUN", "Remedy", "REMEDIES", "suggest", "format_suggestions",
 ]
+
+
+# `check_figure.DID_NOT_RUN`, written out rather than imported: these files are
+# vendored one at a time, and this one is the optional third, so it cannot
+# require the module it describes. `tests/test_suggest_fixes.py` asserts the two
+# copies are the same string, the way `AUDIT_SCHEMA` is gated across the two
+# checkers.
+DID_NOT_RUN = "did not run: "
 
 
 class Remedy(NamedTuple):
@@ -167,6 +175,13 @@ def suggest(rows: Sequence[tuple[str, bool | str, str]],
     skips gates with nothing to offer rather than padding them with a
     restatement of the failure.
 
+    A row whose detail opens with `DID_NOT_RUN` is skipped as well. The remedies
+    here answer the question a gate asks when it runs, and three rows can report
+    that they did not: no style sheet to compare against, and no `check_palette`
+    to classify a colour with. "Apply the sheet inside the same rc_context" is
+    the wrong answer to "there is no sheet", and each of those rows already
+    carries the right one in its own `[FIX]` clause.
+
     Args:
         rows: `(label, status, detail)` triples, as `audit` or `check`
             returned them. Passing rows are ignored.
@@ -175,7 +190,8 @@ def suggest(rows: Sequence[tuple[str, bool | str, str]],
         `[(gate_name, [Remedy, ...]), ...]`, in the order the gates reported.
         Empty when nothing fired that this file has an answer for.
     """
-    marked = [name for name, status, _ in rows if status is not True]
+    marked = [name for name, status, detail in rows
+              if status is not True and not detail.startswith(DID_NOT_RUN)]
     out = []
     for name in marked:
         found = [r for r in REMEDIES if r.gate == name]

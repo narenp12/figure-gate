@@ -9,12 +9,21 @@ figure-gate reads a matplotlib figure you have already built and tells you which
 publication requirements it fails. It checks colorblind-safe color, composition,
 and whether your type is still legible at the size the figure actually prints.
 
-`audit(fig)` returns `(ok, rows)`, 21 rows, one per check. Each row is a
-`(name, status, detail)` triple:
+`report(fig)` prints one line per check:
 
-```python
-ok, rows = audit(fig)     # (False, [("Clipping", False, "clipped: [...]"), ...])
+```text
+Composition audit
+  [FAIL] Clipping           clipped: ['x', 'y']  [FIX] add constrained_layout or widen the figure
+  [PASS] Type size          smallest 10.0pt on page (floor 7.5)
+  [WARN] Alt text           no description attached  [FIX] describe(fig, "...") ...
+  ...
+  -> FIX THE MARKED CHECKS
 ```
+
+Thirteen rows can fail a build. The other eight are advisory: they report WARN
+and never FAIL. For a program rather than a person, `audit(fig)` returns
+`(ok, rows)`, 21 rows, one per check, each a `(name, status, detail)` triple, and
+`audit_json(fig)` serialises the same verdict.
 
 figure-gate verifies figures. It does not draw them, restyle them, or judge
 whether a figure is good. Each check forbids one named defect, so a figure that
@@ -25,13 +34,18 @@ Every threshold is a module-level constant you can read and change.
 ## Try it
 
 ```bash
-git clone https://github.com/narenp12/figure-gate && cd figure-gate
-python skill/scripts/check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
-python skill/scripts/check_figure.py     # self-test on a deliberately broken figure
+pip install figure-gate                  # or: uv add figure-gate
+check-palette "#E69F00,#56B4E9,#009E73" --pairs all
+check-figure                             # self-test on a deliberately broken figure
 ```
 
 The second command prints a failing report and exits 0, because a checker that
 cannot fail is not a checker.
+
+Copying the scripts in works too, and is the route if you want the thresholds
+beside the figures they gate. The
+[install page](https://narenp12.github.io/figure-gate/install/) covers all three
+routes.
 
 ![Validation loss against training epoch for three optimisers over 12 epochs.
 All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12,

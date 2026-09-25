@@ -47,7 +47,7 @@ string counts the top-level panels first and the child axes after them.
 | Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
-| Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
+| Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle`, or no sheet was found to compare against *(advisory)* |
 | Contour dash | none | a signed contour set dashes its negative levels *(advisory)* |
 | Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation, and when a panel's series colours are `RAMP_MIN_STEPS = 3` or more evenly spaced samples of such a map, sampled in code rather than handed to an artist |
 | Fonts | Type 42 | PDF or PS export would embed Type 3, or no named typeface resolves *(advisory)* |
@@ -70,8 +70,10 @@ list:
 - Fonts
 - Alt text
 
-Type size is the one row that does both. It fails under the floor, and warns on
-a figure placed under `PLACED_FRAC_WARN = 0.35` of the content width.
+Three rows do both. Type size fails under the floor and warns on a figure placed
+under `PLACED_FRAC_WARN = 0.35` of the content width. Series color and Colormap
+kind fail on what they measure and warn when `check_palette.py` is not importable
+beside `check_figure.py`.
 
 ### Detail strings
 
@@ -95,6 +97,13 @@ under 1.0pt on page at scale 0.50: ['a stroke at 0.40pt']
 Every gate except `check_collisions` names a fix. That gate names the two
 colliding strings and stops, because which of the pair is free to move is a fact
 about the layout it cannot see.
+
+Three details open with `did not run:` instead: the style-sheet row with no sheet
+to compare against, and the two colour rows with no `check_palette.py` to
+classify with.
+
+That prefix is `DID_NOT_RUN`. A row carrying it gets no remedy from `suggest`,
+because a remedy answers the question a gate asks when it runs.
 
 ## Palette gates
 

@@ -61,6 +61,12 @@ Composition. Takes a built figure, measures what it renders at print size.
 
 ::: check_figure.content_width_pt
 
+::: check_figure.load_config
+
+::: check_figure.find_config
+
+::: check_figure.config_keys
+
 ::: check_figure.scatter_diameter_pt
 
 ::: check_figure.marker_extent_pt

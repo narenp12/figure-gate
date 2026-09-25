@@ -27,11 +27,33 @@ behind a threshold this project enforces.
   listing every public module-level name.
 - `CITATION.cff`, carrying the Zenodo concept DOI `10.5281/zenodo.21784217`. Its
   `version` is the sixth site the release bump rewrites.
+- `check_figure.load_config`, `find_config` and `config_keys`. `load_config`
+  assigns the `check_figure` and `check_palette` constants named in a
+  `figure-gate.toml`, or in a `[tool.figure-gate]` table in `pyproject.toml`.
+  An integer constant takes a whole number, stored as an int; `STYLE_SHEET`
+  takes a string and `CONTENT_WIDTH_PT` a number. `CONFIG_FILENAMES`, `CONFIG_TABLE` and `CONFIG_ALIASES` hold the two filenames,
+  the table path and the one key that is not a constant, `venue`.
+- `check_figure.py --config`, which prints the file found at or above the current
+  directory, the values it sets, and every key this version accepts. Read before
+  the matplotlib import, as `--venues` is.
+- Six rows in `VENUE_WIDTH_PT`, taking it from twelve to eighteen: `amsart`
+  360.0, `siam` 370.38, `revtex` 510.0, `revtex-column` 246.0, `beamer-43`
+  307.29 and `beamer-169` 398.34.
+- `check_figure.DID_NOT_RUN` and `suggest_fixes.DID_NOT_RUN`, the prefix a detail
+  carries when the gate could not run. `suggest` skips a row that carries it.
 
 #### Changed
 
+- `check_style_sheet` returns `"warn"` rather than `True` when no
+  `figure.mplstyle` is found. Advisory, so `ok` is unchanged.
+- `check_series_color` and `check_colormap` return `"warn"` rather than `True`
+  when `check_palette.py` is not importable beside `check_figure.py`. Advisory,
+  so `ok` is unchanged.
+- All three of those details now open with `DID_NOT_RUN`, and `suggest` returns
+  no remedy for a row that carries it.
 - Nothing a caller could do at 0.9.0 has stopped working. `griffe check` against
-  the tag reports no break in any of the three modules.
+  the tag reports one change, `VENUE_WIDTH_PT`'s value, which is the six rows
+  above, and no break in `check_palette` or `suggest_fixes`.
 
 #### Fixed
 
@@ -42,8 +64,93 @@ behind a threshold this project enforces.
   each page's own name instead of its filename: "Commands" rather than "Cli",
   "How the checkers decide" rather than "Design". The home page and the seven
   symlinked pages are unchanged.
+- `skill/SKILL.md` and `skill/references/style-guide.md` name the configuration
+  file. Both sent a reader to `CONTENT_WIDTH_PT` at the top of a vendored copy
+  and stopped there, which is the one-copy route the file exists to replace, and
+  the skill is what an agent reads. The build snippet calls `load_config`.
 
 ### Why it changed
+
+#### One set of thresholds a group can agree on
+
+The two documented ways to move a threshold are to edit a vendored copy and to
+assign the global before calling `audit`. Both are one person's copy, and
+`docs/how-to.md` names what the second costs: a threshold moved in one test file
+is a figure that passes locally and fails in CI. More than one author on one
+document had nowhere to write the floor down once.
+
+A file is read only when something calls `load_config`. Reading one on import
+would move a threshold the caller never named, in a project that keeps every
+threshold visible as a constant.
+
+A key naming no constant raises, and the message lists what is accepted. A
+misspelled threshold that is quietly skipped leaves a project believing it raised
+a floor. Every key is checked before any is assigned, so a file with one bad key
+changes nothing.
+
+Settable keys are computed from the modules, so a threshold added to either one
+is settable the day it lands. Numeric constants only, plus `CONTENT_WIDTH_PT`,
+`STYLE_SHEET` and `venue`. `AUDIT_SCHEMA` is a wire format and `DRAW_RC_ATTR` is
+an attribute name: a file that could reach those could rename the JSON contract
+from TOML.
+
+`check_palette.py` reads no TOML. `tomllib` arrived in 3.11 and CI runs that file
+on 3.8, so `check_figure` reads the file and sets the palette constants through
+the sibling import it already has.
+
+#### Six venues measured, not copied
+
+Six of the twelve rows were machine-learning conference styles; the rest were
+IEEE, Nature and bare `article`. A mathematician had no row. `amsart` and SIAM's
+class carry most of that work, `revtex4-2` is what APS asks for, and
+`skill/SKILL.md` claims slides and lecture decks as targets against no slide
+width at all. `docs/how-to.md` used SIAM as its worked example of raising a
+threshold while the table did not know SIAM's width.
+
+The six were measured, not looked up: on TeX Live 2026, by typesetting an empty
+document in each class and reading `\the\textwidth` out of the log. That is the
+procedure the table's comment demands of a reader. Each row names the class
+version the log reported, because a width is a property of that version and
+style files get revised between years. `siamart220329.cls` is not in TeX Live; it
+came from SIAM's own macro distribution.
+
+`amsart` and `siam` are one-column classes, so their `\columnwidth` equals their
+`\textwidth` and is not listed twice. `revtex` carries its column because APS
+reprint is two-column.
+
+#### A row that could not run is not a row that passed
+
+Three gates reported a pass for having checked nothing. `check_style_sheet`
+passed when it found no `figure.mplstyle`, which is exactly the figure it exists
+to catch: one drawn with `plt.style.use` forgotten. The inconsistency was
+visible in the suite, where a `STYLE_SHEET` pointing at a missing file has
+warned since 0.1.4 and no sheet at all passed. `check_series_color` and
+`check_colormap` passed when `check_palette.py` was not importable beside them,
+which is the vendored copy that took one file and ignored the install page's
+warning: the only colour checks in the file, switched off, reported green.
+
+All three are warns rather than hard failures. A copy that deliberately left the
+palette module out is doing correct work, and a missing style sheet is not a
+defect in the figure. What was wrong was the status, not the severity: `ok` turns
+on hard `False` only, so no build that passed before fails now, and the row says
+which check did not run.
+
+`check_series_color` and `check_colormap` are not advisory and still fail on what
+they measure, so the count in `ADVISORY_GATES` is unchanged at eight. Three rows
+can now both fail and warn where Type size was the only one.
+
+Turning three passes into warns routed them somewhere they had never been.
+`suggest` offers a remedy for every row that is not passing, and all three gates
+have one: a row that did not run was answered with "apply the sheet where the
+figure is drawn, inside the same rc_context" when there is no sheet, and "use a
+ramp whose lightness runs one way" when nothing was classified. Gate name cannot
+tell the cases apart, because the style-sheet gate's other warn does want that
+remedy. So the detail says which it is. `DID_NOT_RUN` is a prefix, `suggest`
+skips a row that opens with it, and each of those rows already carries the right
+action in its own `[FIX]` clause. Both files spell the string out rather than
+share it through an import: `suggest_fixes.py` is the optional third file and
+cannot require the module it describes, so a test asserts the two copies agree,
+as one does for `AUDIT_SCHEMA` across the two checkers.
 
 #### A verdict a build can read
 

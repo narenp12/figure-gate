@@ -896,6 +896,13 @@ UNRESOLVED_SPANS = {
                                "the runtime the skill ships into",
     "loss.py": "the file the tutorial tells the reader to create; it exists "
                "in the reader's working directory, not in this repository",
+    "figure-gate.toml": "a file in the reader's project, named by the string "
+                        "CONFIG_FILENAMES holds; the resolvers read names in "
+                        "these modules, not the literals inside them",
+    "did not run:": "the prefix DID_NOT_RUN holds, quoted so the page shows "
+                    "what a detail actually reads; a string, not a name",
+    "[tool.figure-gate]": "the TOML table the same keys live under in a "
+                          "pyproject.toml; a table header, not a Python name",
     "geometry": "a LaTeX package, named where the guide explains how to read a "
                 "text width out of a document",
     "fontmath.ltx": "the LaTeX2e kernel file carrying the DeclareMathSizes "

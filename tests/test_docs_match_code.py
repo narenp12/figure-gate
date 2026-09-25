@@ -340,6 +340,25 @@ def test_the_page_states_the_advisory_count_it_marks():
     assert WORD_NUMBERS[word] == len(cf.ADVISORY_GATES)
 
 
+def test_the_readme_states_the_split_it_promises():
+    """The landing page's own count of what can fail, in words.
+
+    `docs/design.md` states the advisory count; the README states both halves,
+    which is two numbers derived from one list and no machinery under either.
+    A gate added as advisory moves both.
+    """
+    import check_figure as cf
+
+    claimed = re.search(r"(\w+) rows can fail a build\. The other (\w+) are "
+                        r"advisory", " ".join(README.read_text(encoding="utf-8").split()))
+    assert claimed, ("the README no longer states the fail/advisory split in "
+                     "the form this test reads")
+    fails, advisory = (WORD_NUMBERS[w.lower()] for w in claimed.groups())
+    assert advisory == len(cf.ADVISORY_GATES)
+    assert fails == len(cf.GATES) - len(cf.ADVISORY_GATES)
+    assert fails + advisory == len(audit_gate_names())
+
+
 def test_every_advisory_gate_is_a_gate_that_exists():
     import check_figure as cf
 

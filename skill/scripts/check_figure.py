@@ -48,6 +48,7 @@ import copy
 import importlib
 import itertools
 import math
+import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
 # comparing, which turns a break into a silent one. That is the opposite of what
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
+    "DID_NOT_RUN",
     "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
     "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
     "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
@@ -84,7 +86,8 @@ __all__ = [
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
-    "page_scale", "check_clipping", "check_collisions",
+    "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
+    "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
     "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
     "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
@@ -114,10 +117,12 @@ def _sibling(name: str) -> Any:
 
     One helper, rather than the two-step written out at each call site. It was
     written out, and when the package layout arrived one of the three sites was
-    missed -- `check_colormap`, whose fallback returns True. So on the install
+    missed -- `check_colormap`, whose fallback returned True. So on the install
     path that gate reported a pass and the words "not importable beside this
     file", and stopped classifying colormaps entirely. A guarded import whose
-    failure is a pass is exactly the kind that has to exist once.
+    failure is a pass is exactly the kind that has to exist once, which is why
+    both callers now warn instead: a row that could not run is not a row that
+    passed.
     """
     if __package__:
         try:
@@ -128,6 +133,19 @@ def _sibling(name: str) -> Any:
         return importlib.import_module(name)
     except ImportError:
         return None
+
+
+# What a detail says when the gate could not run at all: no style sheet to
+# compare against, or no `check_palette` to classify a colour with. The three
+# rows that can say it warn, and the warn is why the mark has to be legible to a
+# program as well as a reader: `suggest_fixes.suggest` offers a remedy for every
+# row that is not passing, and every remedy it holds answers the question the
+# gate asks when it does run. "Apply the sheet inside the same rc_context" is
+# the wrong answer to "there is no sheet". So the mark is a prefix rather than
+# prose anywhere in the string, and `suggest_fixes.py` carries its own copy:
+# these files are vendored one at a time, and a contract between two of them
+# cannot live in an import either one may not have.
+DID_NOT_RUN = "did not run: "
 
 # The resolution every pixel measurement in this file is taken at, regardless of
 # what the figure was authored at.
@@ -473,6 +491,17 @@ CONTENT_WIDTH_PT = None
 # general answer and it is also the step people skip, so the common cases are
 # here already. Pass one as `venue=` rather than editing CONTENT_WIDTH_PT.
 #
+# The six rows tagged TL2026 were measured rather than copied, on TeX Live 2026
+# (pdfTeX 3.141592653-2.6-1.40.29), by typesetting an empty document in the
+# class and reading the log:
+#
+#     \documentclass{amsart}
+#     \begin{document}\typeout{W=\the\textwidth C=\the\columnwidth}\end{document}
+#
+# Each row names the class version the log reported, because the number is a
+# property of that version. `siamart220329.cls` is not in TeX Live; it came from
+# epubs.siam.org/pb-assets/macros/standard/.
+#
 # VERIFY BEFORE TRUSTING for anything that matters: put `\the\textwidth` in your
 # own document and read the log. Style files get revised between years, a
 # `geometry` package call in the preamble silently overrides all of this, and a
@@ -490,6 +519,14 @@ VENUE_WIDTH_PT = {
     "nature-column": 252.28,       # single column, 89mm
     "article-letter": 345.0,       # \textwidth, article 10pt letterpaper
     "article-a4": 418.25,          # \textwidth, article 10pt a4paper
+    # TL2026, measured. amsart and siam are one-column classes, so their
+    # \columnwidth is the same number and is not listed twice.
+    "amsart": 360.0,               # \textwidth, amsart 2020/05/29 v2.20.6
+    "siam": 370.38,                # \textwidth, siamart220329 2022/03/29 v1.4.4
+    "revtex": 510.0,               # \textwidth, revtex4-2 2022/06/05 4.2f [reprint]
+    "revtex-column": 246.0,        # \columnwidth, same run: APS reprint is two-column
+    "beamer-43": 307.29,           # \textwidth, beamer 2026/01/22 v3.77 (128x96mm)
+    "beamer-169": 398.34,          # \textwidth, same class [aspectratio=169]
 }
 
 
@@ -557,6 +594,198 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
                 "and drop placed_frac.")
         return 1.0
     return width * placed_frac / (fig.get_size_inches()[0] * 72)
+
+
+# --- configuration -----------------------------------------------------------
+# Every threshold is a module-level constant, so the two ways to move one are to
+# edit a vendored copy and to assign the global before calling `audit`. Both are
+# one person's copy, and `docs/how-to.md` names what the second costs: one floor
+# in a test file and another in the build.
+#
+# Nothing here runs on import. A threshold that moved because of a file the
+# caller never named is not a threshold anyone can read off the source.
+#
+# Settable: numeric constants, plus `CONTENT_WIDTH_PT`, `STYLE_SHEET` and
+# `venue`. `AUDIT_SCHEMA` is a wire format and `DRAW_RC_ATTR` is an attribute
+# name, so neither is reachable from a file.
+
+CONFIG_FILENAMES = ("figure-gate.toml", "pyproject.toml")
+
+# Where `pyproject.toml` keeps the keys. A `figure-gate.toml` holds them at its
+# top level: a file named after one tool needs no table to say so.
+CONFIG_TABLE = ("tool", "figure-gate")
+
+# The keys that name no constant. `venue` is a width, and `CONTENT_WIDTH_PT` is
+# the constant it sets.
+CONFIG_ALIASES = ("venue",)
+
+
+def _config_targets() -> dict[str, Any]:
+    """`{key: module}` for every constant a configuration file may set.
+
+    Computed rather than listed, so a threshold added to either module is
+    settable the day it lands and a list cannot fall behind.
+    """
+    targets: dict[str, Any] = {}
+    modules = [sys.modules[__name__]]
+    palette = _sibling("check_palette")
+    if palette is not None:
+        modules.append(palette)
+    for module in modules:
+        for name, value in vars(module).items():
+            if name.startswith("_") or not name.isupper():
+                continue
+            if isinstance(value, bool):          # a flag, not a floor
+                continue
+            if isinstance(value, (int, float)):
+                targets.setdefault(name, module)
+    for name in ("CONTENT_WIDTH_PT", "STYLE_SHEET"):
+        targets[name] = sys.modules[__name__]
+    return targets
+
+
+def config_keys() -> list[str]:
+    """Every key a configuration file may set, sorted.
+
+    `venue` is in the list and is not a constant: it sets `CONTENT_WIDTH_PT`
+    from `VENUE_WIDTH_PT`.
+
+    A palette key is only here when `check_palette.py` is importable. Naming one
+    without it raises rather than being ignored.
+    """
+    return sorted(set(_config_targets()) | set(CONFIG_ALIASES))
+
+
+def find_config(start: Any = None) -> Any:
+    """The nearest configuration file at or above `start`, or `None`.
+
+    Walks up from `start` (the current directory when it is `None`) to the
+    filesystem root, and at each level takes `figure-gate.toml` before
+    `pyproject.toml`. A `pyproject.toml` with no `[tool.figure-gate]` table is
+    not a configuration file and the walk continues past it: a project that
+    keeps its figures in a subdirectory with its own file is the ordinary case,
+    and stopping at the first `pyproject.toml` would find the wrong one.
+
+    Args:
+        start: Directory to search from. `None` means the current directory.
+
+    Returns:
+        A `pathlib.Path`, or `None` when no file above `start` carries the keys.
+    """
+    here = Path(start if start is not None else ".").resolve()
+    for folder in (here, *here.parents):
+        for name in CONFIG_FILENAMES:
+            candidate = folder / name
+            if candidate.is_file() and _config_table(candidate) is not None:
+                return candidate
+    return None
+
+
+def _config_table(path: Any) -> Any:
+    """The keys `path` sets, or `None` when it sets none.
+
+    `tomllib` rather than a hand parser: it is in the standard library from 3.11,
+    which is this file's floor already. `check_palette.py` stays clear of it
+    because CI runs that file on 3.8, where it does not exist.
+    """
+    import tomllib
+    with open(path, "rb") as handle:
+        try:
+            document = tomllib.load(handle)
+        except tomllib.TOMLDecodeError as exc:
+            raise ValueError(f"{path} is not readable as TOML: {exc}") from None
+    if Path(path).name == "pyproject.toml":
+        for key in CONFIG_TABLE:
+            if not isinstance(document, dict) or key not in document:
+                return None
+            document = document[key]
+    return document if isinstance(document, dict) else None
+
+
+def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
+    """Apply a configuration file to the threshold constants.
+
+    Assigns the module-level constants the file names, in `check_palette` as well
+    as here. That is what `cf.TYPE_FLOOR_PT = 9.0` does by hand: the gates read
+    the global when they run. Call it once, before `audit`.
+
+    Every key is checked before any is assigned, so a file with one bad key
+    changes nothing. A key that names no constant raises rather than being
+    skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
+    `KeyError` `content_width_pt` raises, which lists the rows it knows.
+
+    Args:
+        path: The file to read. `None` searches with `find_config`.
+        start: Directory to search from when `path` is `None`.
+
+    Returns:
+        `{name: value}` for every constant assigned, `CONTENT_WIDTH_PT`
+        included when the file set it through `venue`. Empty when there is no
+        file to read.
+
+    Raises:
+        ValueError: A key names no settable constant, a value has the wrong
+            type, a value for an integer constant is not a whole number, or
+            the file sets both `venue` and `CONTENT_WIDTH_PT`.
+    """
+    if path is None:
+        path = find_config(start)
+        if path is None:
+            return {}
+    table = _config_table(path)
+    if table is None:
+        raise ValueError(
+            f"{path} carries no keys for this tool. A figure-gate.toml holds "
+            "them at its top level; a pyproject.toml holds them under "
+            "[tool.figure-gate]")
+
+    targets = _config_targets()
+    if "venue" in table and "CONTENT_WIDTH_PT" in table:
+        raise ValueError(
+            f"{path} sets both venue and CONTENT_WIDTH_PT, which are the same "
+            "width written twice. Keep one")
+
+    planned: dict[str, Any] = {}
+    for key, value in table.items():
+        if key == "venue":
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{path}: venue is {type(value).__name__}, expected a "
+                    "string naming a row of VENUE_WIDTH_PT")
+            planned["CONTENT_WIDTH_PT"] = content_width_pt(value)
+            continue
+        if key not in targets:
+            raise ValueError(
+                f"{path} sets {key!r}, which names no threshold. "
+                f"`python check_figure.py --config` lists every key this "
+                f"version accepts. Known: {', '.join(config_keys())}")
+        if key == "STYLE_SHEET":
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{path}: STYLE_SHEET is {type(value).__name__}, expected "
+                    "a string naming a .mplstyle file")
+            planned[key] = value
+            continue
+        # Typed by name, not by the current value, which is None until set.
+        current = (0.0 if key == "CONTENT_WIDTH_PT"
+                   else getattr(targets[key], key))
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(
+                f"{path}: {key} is {type(value).__name__}, expected a "
+                f"number ({key} is {getattr(targets[key], key)!r})")
+        # An int constant is a count or a window size, and TOML writes `9.0`
+        # as a float, which `range` and slicing refuse.
+        if isinstance(current, int):
+            if not float(value).is_integer():
+                raise ValueError(
+                    f"{path}: {key} is {value!r}, expected a whole number "
+                    f"({key} is {current!r})")
+            value = int(value)
+        planned[key] = value
+
+    for key, value in planned.items():
+        setattr(targets.get(key, sys.modules[__name__]), key, value)
+    return planned
 
 
 def _authored_dpi(fig: Figure) -> float:
@@ -2909,6 +3138,12 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     head = f"up to {max_per_panel} data hues per panel"
     if fails:
         return False, f"{head}: " + "; ".join(fails)
+    if cp is None:
+        # The hue-count and identity-collision checks above ran; separation,
+        # the reason this row exists, did not. A pass would say otherwise.
+        return "warn", (DID_NOT_RUN + f"{head}: " + "; ".join(notes)
+                        + "  [FIX] copy check_palette.py in beside it, or "
+                        "install the package")
     return True, f"{head}: " + ("; ".join(notes) if notes else "nothing to compare")
 
 
@@ -4227,18 +4462,24 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     every row on the figure passes. See `_sampled_ramp` for how a sampled ramp
     is told from a categorical palette, which is the whole difficulty.
 
-    Two ways this row passes without having judged anything, both deliberate.
-    A colormap matplotlib built from colours the author set on an artist is
-    skipped, since `contour(colors=[...])` is three levels of one hue rather
-    than three categories, and classifying it qualitative would fail it. And the
-    row needs `check_palette.py` importable beside this file: without it there
-    is nothing to classify with, so it says so in the detail and passes. A pass
-    here is worth reading, not just counting.
+    One way this row passes without having judged anything, and it is
+    deliberate: a colormap matplotlib built from colours the author set on an
+    artist is skipped, since `contour(colors=[...])` is three levels of one hue
+    rather than three categories, and classifying it qualitative would fail it.
+
+    The other way was not. The row needs `check_palette.py` importable beside
+    this file, and without it there is nothing to classify with. That used to
+    report a pass carrying its own explanation, which is a green row for a gate
+    that never ran. It warns now. The warn cannot fail a build -- `ok` turns on
+    hard `False` only -- so a vendored copy that deliberately left the palette
+    module out still audits, and now says which rows went unjudged.
     """
     cp = _sibling("check_palette")
     if cp is None:
-        return True, ("check_palette.py is not importable beside this file, "
-                      "so no colormap was classified")
+        return "warn", (DID_NOT_RUN + "check_palette.py is not importable "
+                        "beside this file, so no colormap was classified  "
+                        "[FIX] copy check_palette.py in beside it, or install "
+                        "the package")
 
     import matplotlib as mpl
     from matplotlib.colors import to_hex
@@ -4566,12 +4807,21 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     rcParams rather than what the figure was drawn under, so a figure built
     inside an `rc_context` that has since exited reads as drift when it is not.
     Both make a hard failure the wrong instrument. The row names the keys.
+
+    Finding no sheet at all warns too, and used to pass. The two cases were
+    inconsistent: a `STYLE_SHEET` pointing at a file that is not there has
+    warned since 0.1.4, while no sheet anywhere passed, and the second is the
+    one that ships stock matplotlib for the figure this gate was written for.
+    Installed, the sheet is inside the package and is always found; the pass
+    was reachable only from a vendored copy that took the script without it.
     """
     import matplotlib as mpl
     path = _style_sheet()
     if path is None:
-        return True, ("no figure.mplstyle beside this script or in assets/, "
-                      "nothing to compare")
+        return "warn", (DID_NOT_RUN + "no figure.mplstyle beside this script "
+                        "or in assets/, so nothing was compared and a "
+                        "forgotten plt.style.use would read clean  [FIX] copy "
+                        "figure.mplstyle in beside it, or set STYLE_SHEET")
     if not path.is_file():
         return "warn", (f"STYLE_SHEET is set to {path}, which is not a file: "
                         "nothing was compared, and the sheet you meant is not "
@@ -4958,6 +5208,30 @@ def main() -> None:
               "trusting one for anything that matters.\n")
         for name, pt in sorted(VENUE_WIDTH_PT.items()):
             print(f"  {name:<16} {pt:>7.2f} pt   ({pt / 72:.2f} in)")
+        print()
+        return
+
+    # Same reason as `--venues`: reading a TOML file and listing the keys it may
+    # set needs tomllib and nothing else. A project checking which file its build
+    # picks up should not have to have matplotlib to find out.
+    if "--config" in sys.argv:
+        found = find_config()
+        if found is None:
+            print("\nNo configuration file found at or above this directory.")
+            print("Write a figure-gate.toml, or a [tool.figure-gate] table in "
+                  "pyproject.toml.\n")
+        else:
+            applied = load_config(found)
+            print(f"\n{found}")
+            if applied:
+                for name, value in sorted(applied.items()):
+                    print(f"  {name:<32} {value!r}")
+            else:
+                print("  sets nothing")
+            print()
+        print("Keys this version accepts:")
+        for name in config_keys():
+            print(f"  {name}")
         print()
         return
 

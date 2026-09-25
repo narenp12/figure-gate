@@ -594,8 +594,10 @@ regardless of what the script says. `check_figure.py` warns when `placed_frac <
 shrink the type further.
 
 Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of
-the twelve the table already knows (`python check_figure.py --venues`). The
-script derives the scale per figure and fails any string under 7.5pt on the
+the eighteen the table already knows (`python check_figure.py --venues`). A
+project with more than one author writes either one in a `figure-gate.toml` and
+calls `load_config` instead, so the build and every author read the same number.
+The script derives the scale per figure and fails any string under 7.5pt on the
 page.
 
 The scale is per figure because the shrink differs. A 14in figure on a 750pt

@@ -185,8 +185,11 @@ For the version table, see [Compatibility](compatibility.md).
     heatmap panel legitimately measures 0.98 ink coverage. Failing those would
     train people to ignore the row.
 
-    Type size is the one row that does both. It fails under the floor, and warns
-    on a figure placed under 35% of the content width.
+    Three rows do both. Type size fails under the floor and warns on a figure
+    placed under 35% of the content width. Series color and Colormap kind fail
+    on what they measure and warn when `check_palette.py` is not importable
+    beside `check_figure.py`: a row that could not run is not a row that
+    passed.
 
 ???+ note "A detail string carries two marks, and they mean different things"
 
@@ -202,7 +205,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2077 tests, and each check has one asserting it catches a
+    The suite is 2136 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

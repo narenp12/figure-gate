@@ -30,8 +30,10 @@ For the version each route needs, see [Compatibility](compatibility.md).
     !!! warning "Copy `check_palette.py` even if you only want to check figures"
 
         `check_figure.py` imports it, and that import is what the series-color
-        and colormap rows travel on. Without it, neither row raises: both
-        report that nothing was checked, and both pass.
+        and colormap rows travel on. Without it, neither row can judge a color:
+        both warn, naming the missing file. A warn cannot fail a build, so a
+        copy that leaves it out audits with the only color checks in the file
+        switched off.
 
     `suggest_fixes.py` is optional. `check_figure.py` imports it lazily, so a
     copy without it audits identically. You lose only `report(fig, suggest=True)`
@@ -120,15 +122,22 @@ If your style sheet lives somewhere other than beside `check_figure.py`, set
 `STYLE_SHEET` at the top of that file to the path. Left as `None`, the checker
 looks beside the script, then in an `assets/` directory next to it.
 
+Both, and every other threshold, can be written in a file instead:
+`figure-gate.toml` at the project root, or a `[tool.figure-gate]` table in
+`pyproject.toml`. That is the route to take when more than one person authors
+the figures. See
+[Agree on thresholds across a project](how-to.md#agree-on-thresholds-across-a-project).
+
 If you install the package rather than vendoring it, `figure.mplstyle` ships
 inside it, beside the module that reads it. That is where the style-sheet gate
 looks.
 
-!!! warning "The style-sheet gate passes when it finds no sheet"
+!!! warning "The style-sheet gate warns when it finds no sheet"
 
-    Without a sheet to compare against, the gate reports a pass, including for
-    the figure it exists to catch: one drawn with `plt.style.use` forgotten
-    entirely.
+    Without a sheet to compare against, the gate cannot judge the figure it
+    exists to catch: one drawn with `plt.style.use` forgotten entirely. It
+    warns rather than passing, and the warn is advisory, so it names the
+    problem without failing a build.
 
 ## Install it as a Claude Code skill
 

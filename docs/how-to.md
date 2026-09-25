@@ -164,7 +164,7 @@ call, different page.
 a REPL prints as `np.float64(1.38...)` on numpy 2. It compares and computes like
 a float everywhere it matters.
 
-For all twelve venue widths, see [Venue widths](cli.md#venue-widths). Verify one
+For all eighteen venue widths, see [Venue widths](cli.md#venue-widths). Verify one
 against `\the\textwidth` in your own document before you trust it.
 
 ## Attach alt text
@@ -239,3 +239,34 @@ Every threshold is a module-level constant for this reason.
 [The gates](gates.md) names each one, and
 [the figure style guide](style-guide.md) records what was measured to land on
 it.
+
+## Agree on thresholds across a project
+
+Write them in a file, so the build and every author read one set. A
+`figure-gate.toml` at the project root, or a `[tool.figure-gate]` table in
+`pyproject.toml`:
+
+```toml
+venue = "amsart"          # sets CONTENT_WIDTH_PT from VENUE_WIDTH_PT
+TYPE_FLOOR_PT = 9.0
+CVD_TARGET = 12.0         # a check_palette threshold, same file
+```
+
+Read it once, where your project starts:
+
+```python
+import check_figure as cf
+
+cf.load_config()          # searches upward from the current directory
+```
+
+Nothing reads the file on import. `load_config` returns what it assigned, so a
+build can log it. A key that names no threshold raises rather than being skipped.
+
+To see which file a build picks up:
+
+```bash
+python check_figure.py --config
+```
+
+It prints the file, the values it sets, and every key this version accepts.

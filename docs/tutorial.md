@@ -39,6 +39,12 @@ figure.mplstyle
 suggest_fixes.py
 ```
 
+!!! note "If you installed the package instead"
+
+    `pip install figure-gate` ships the same four files, and every step below
+    works against them. Only the import line differs, and
+    [Choose your import line](install.md#choose-your-import-line) gives it.
+
 ## Step 2: Build a figure and audit it
 
 Save this as `loss.py` in the same directory:

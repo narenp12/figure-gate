@@ -63,6 +63,21 @@ Then set two things and nothing else:
    full-width figure, and measure. Within about 5% is fine, because it only sets
    the type floor.
 
+The second of those is one copy's setting. When more than one person authors the
+figures, or a build has to agree with them, write the thresholds in a
+`figure-gate.toml` at the project root instead, or in a `[tool.figure-gate]`
+table in `pyproject.toml`:
+
+```toml
+venue = "amsart"          # sets CONTENT_WIDTH_PT from VENUE_WIDTH_PT
+TYPE_FLOOR_PT = 9.0
+```
+
+Call `load_config` once where the project starts. Nothing reads the file on
+import, and a key that names no threshold raises rather than being skipped.
+`python check_figure.py --config` prints the file a build picks up, the values it
+sets, and every key it accepts.
+
 If the project already has brand colors, use them and re-run `check_palette.py`.
 The method survives the swap. The specific hex values do not.
 
@@ -385,7 +400,9 @@ always know what you wrote in the document.
 
 **Skip the measuring when the venue is a known one.** `audit(fig,
 venue="neurips")` measures against that class file's `\textwidth`, and
-`python check_figure.py --venues` lists what it knows. Verify against
+`python check_figure.py --venues` lists what it knows, eighteen of them. A
+project that wrote its venue in a configuration file need not pass it per call.
+Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
@@ -419,7 +436,9 @@ lecture-hall screen while looking fine on your monitor.
 
 ```python
 import pytest
-from check_figure import audit
+from check_figure import audit, load_config
+
+load_config()                    # the project's thresholds, where it wrote them
 
 @pytest.mark.parametrize("name", sorted(DIAGRAMS))
 def test_figure_is_composed(name):
