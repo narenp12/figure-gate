@@ -80,7 +80,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Counts of 812 deposited structures by resolution bin, as bars from a zero baseline. The distribution peaks at 268 structures in the 2.0 to 2.4 angstrom bin and falls away on both sides; the right-hand axis relabels the same bars as a share of the 812.](images/gallery-counts.png)
-  <figcaption>The only bar chart in the corpus. Counts from zero is the one comparison <a href="choosing-a-form/">choosing a form</a> sends to a bar rather than to a dot plot. The right-hand axis is a pure relabel of the same bars, which is the case <code>check_dual_axis</code> exists to permit: <code>secondary_yaxis</code> derives its ticks from the left scale, so the two cannot drift apart the way a <code>twinx</code> with hand-set limits silently can.</figcaption>
+  <figcaption>The only bar chart on Cartesian axes in the corpus. Counts from zero is the one comparison <a href="choosing-a-form/">choosing a form</a> sends to a bar rather than to a dot plot. The right-hand axis is a pure relabel of the same bars, which is the case <code>check_dual_axis</code> exists to permit: <code>secondary_yaxis</code> derives its ticks from the left scale, so the two cannot drift apart the way a <code>twinx</code> with hand-set limits silently can.</figcaption>
 </figure>
 
 ## A signed field
@@ -223,11 +223,11 @@ module from 74% to 82% on the same measurement.
 All four were obvious in the PNG and invisible to every check. They are why the
 procedure has a step that says to render the figure and look at it.
 
-## The figure the checker is supposed to fail
+## The self-test, and the demo
 
 `python skill/scripts/check_figure.py` with no arguments builds a deliberately
 broken figure and audits it, so the self-test proves the gates can fail rather
-than only that they can pass.
+than only that they can pass. The demo below is the figure that passes.
 
 <figure markdown="span">
   ![Validation loss against training epoch for three optimisers over 12 epochs. All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12, while the baseline is still at 0.25 at epoch 12.](images/demo.png)

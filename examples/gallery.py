@@ -774,8 +774,8 @@ def uncertainty():
 
 
 # --- 9. counts, and a second unit for them -----------------------------------
-# The only bar chart in the corpus, and the reason it exists is that `check_form`
-# had no figure to read: it forbids a bar on a truncated baseline, and for seven
+# The only Cartesian bar chart in the corpus, and the reason it exists is that
+# `check_form` had no figure to read: it forbids a bar on a truncated baseline, and for seven
 # figures there was no `BarContainer` anywhere for it to measure. Counts from
 # zero is the one comparison `choosing-a-form.md` sends to a bar rather than to
 # a dot plot, so this is the passing case that proves the row looks.

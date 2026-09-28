@@ -49,8 +49,8 @@ flowchart TD
 
 The two checkers stay separate files because their contracts differ.
 `check_palette.py` takes hex strings and imports nothing outside the standard
-library, so a non-Python toolchain can gate a palette without a Python
-interpreter on PATH. `check_figure.py` renders a matplotlib figure, which is a
+library, so a non-Python toolchain can gate a palette with a bare Python
+interpreter and nothing installed. `check_figure.py` renders a matplotlib figure, which is a
 Python object by definition. The figure checker imports the palette checker,
 never the other way around.
 
@@ -99,11 +99,10 @@ No gate is known to raise. Twenty adversarial figures, including 3D, polar,
 all-NaN, infinite, and zero-sized ones, found none. The handler is there anyway,
 because these gates read matplotlib internals that are free to move.
 
-**Two blind spots remain, because a passing row looks the same as an absent
+**One blind spot remains, because a passing row looks the same as an absent
 one.** The colormap gate reads a `Colormap`'s name to tell an encoding from a
 hand-set list of colors, so a map matplotlib left unnamed is skipped rather than
-judged. It also needs `check_palette.py` importable beside it; without that, the
-row reports that it classified nothing, and passes. Both are deliberate.
+judged. This is deliberate.
 
 **The rules do not transfer to interactive web charts**, where hover, responsive
 reflow, and dark mode change most of the constraints.
@@ -174,8 +173,7 @@ For the version table, see [Compatibility](compatibility.md).
 
     The cost of not doing this was measured before the constant existed. Across
     100, 150, 200, 300, and 600 dpi, the twenty gallery figures moved 76 rows
-    and flipped one. The same figure, five verdicts, from a knob that has
-    nothing to do with whether it reads. `savefig.dpi` is unaffected, so what
+    and flipped one. `savefig.dpi` is unaffected, so what
     you write out is still yours to choose.
 
 ???+ note "WARN is not FAIL"
@@ -205,7 +203,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2254 tests, and each check has one asserting it catches a
+    The suite is 2249 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -236,7 +234,7 @@ The bug never reached CI. Every test and every example pins Agg, so nothing in
 the suite could construct the failing condition, and it stayed green across a
 release.
 
-One consequence is unchanged and still worth knowing: an audited figure is no
+One consequence remains: an audited figure is no
 longer attached to its GUI canvas and will not show in a window. Audit last, or
 audit a figure you rebuild for the purpose.
 

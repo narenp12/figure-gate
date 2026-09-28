@@ -2726,12 +2726,12 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     if small or scripts:
         bits = []
         if small:
-            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: "
+            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
         if scripts:
             bits.append(
                 f"mathtext script under {MATH_SCRIPT_FLOOR_PT}pt on page at "
-                f"scale {scale}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
+                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
                 "of nesting, or raise the base size  [WHY] matplotlib shrinks "
                 "0.7 per script level with no floor. LaTeX stops at "
                 "scriptscript and never sets math type under 5pt")

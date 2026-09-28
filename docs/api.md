@@ -16,8 +16,8 @@ from figure_gate import check_palette as cp    # standard library only
 from figure_gate import suggest_fixes as sf
 ```
 
-Vendoring, the default route, copies the files into your own project. They are
-then whatever you named them, imported flat:
+Vendoring copies the files into your own project. They are then whatever you
+named them, imported flat:
 
 ```python
 import check_figure as cf
@@ -25,8 +25,7 @@ import check_palette as cp
 import suggest_fixes as sf
 ```
 
-Same modules, same signatures; only the import line differs. Everything below
-applies to both.
+Same modules, same signatures; only the import line differs.
 
 Not on this page: **the thresholds**. They are module-level constants, one
 table per module on [the gates](gates.md), with the measurement behind each on

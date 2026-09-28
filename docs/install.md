@@ -10,8 +10,7 @@ Three routes put the checkers on your machine. They all get you the same code.
 Choose a route:
 
 - **Vendored** if you want to read and edit the rules beside the figures they
-  gate. This is the route the documentation teaches, because the thresholds are
-  meant to be edited.
+  gate. The tutorial and the how-to guides use this route.
 - **Installed** if you want to pin a version.
 - **conda-forge** if your environment is managed by conda.
 
@@ -35,10 +34,6 @@ For the version each route needs, see [Compatibility](compatibility.md).
         copy that leaves it out audits with the only color checks in the file
         switched off.
 
-    `suggest_fixes.py` is optional. `check_figure.py` imports it lazily, so a
-    copy without it audits identically. You lose only `report(fig, suggest=True)`
-    and `suggest(rows)`.
-
 === "Installed"
 
     ```bash
@@ -47,12 +42,8 @@ For the version each route needs, see [Compatibility](compatibility.md).
     ```
 
     Installing puts the two checkers on your PATH as `check-palette` and
-    `check-figure`.
-
-    `py.typed` ships with the package, so your type checker sees the
-    annotations. It does not see them on the vendored route: those files are
-    loose modules with no package for the marker to attach to, and PEP 561 reads
-    every annotation in them as `Any`.
+    `check-figure`. Only this route gives your type checker the annotations; see
+    [Type annotations](compatibility.md#type-annotations).
 
 === "conda-forge"
 
@@ -75,8 +66,7 @@ uv pip show figure-gate      # or: conda list figure-gate
 ## Choose your import line
 
 The import line depends on your route and, if you installed, on your version.
-Version 0.7.0 moved the modules into the `figure_gate` package. Through 0.6.0
-the wheel put them at the top level of site-packages.
+[Import lines by version](compatibility.md#import-lines-by-version) says why.
 
 === "0.7+ installed"
 
@@ -122,7 +112,8 @@ If your style sheet lives somewhere other than beside `check_figure.py`, set
 `STYLE_SHEET` at the top of that file to the path. Left as `None`, the checker
 looks beside the script, then in an `assets/` directory next to it.
 
-Both, and every other threshold, can be written in a file instead:
+`CONTENT_WIDTH_PT`, `STYLE_SHEET` and the thresholds can be written in a file
+instead:
 `figure-gate.toml` at the project root, or a `[tool.figure-gate]` table in
 `pyproject.toml`. That is the route to take when more than one person authors
 the figures. See

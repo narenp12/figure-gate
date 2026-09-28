@@ -89,7 +89,7 @@ behind a threshold this project enforces.
 - Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
   `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
   resolves to. The pages, 253-258, were right.
-- `docs/design.md` **changed** the stated suite size `2190` → **`2254`**.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2249`**.
 - `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
   was a hardcoded eleven under a comment saying it was read off the module; it is
   parsed from `BUILDERS` now, and the nine figures added since the sweep was
@@ -104,8 +104,32 @@ behind a threshold this project enforces.
 - `test_the_readme_names_the_one_command_that_fails` and
   `test_every_source_states_the_real_defect_count` **added** in
   `tests/test_docs_match_code.py`.
+- `check_type_size` **changed** its scale in the detail string from the unrounded
+  float to two decimals, the format `check_line_weight` already used.
+- `docs/design.md` **removed** the claim that the colormap row passes when
+  `check_palette.py` is not importable, and the "five verdicts" sentence.
+- `docs/design.md` **changed** "without a Python interpreter on PATH" → **"with a
+  bare Python interpreter and nothing installed"**.
+- `docs/gallery.md` **changed** the heading "The figure the checker is supposed to
+  fail" → **"The self-test, and the demo"**, and "The only bar chart" → **"The only
+  bar chart on Cartesian axes"**.
+- `docs/compatibility.md` **changed** what sets the 3.11 floor to name
+  `load_config`, and **removed** the paragraph repeating the two floors.
+- `docs/install.md`, `docs/how-to.md` and `docs/api.md` **removed** copies of the
+  import-line history, the `py.typed` note, the `suggest_fixes.py` note and the
+  "default route" claim, and link to the one copy that stays.
 
 ### Why it changed
+
+#### A docs pass for claims the code no longer backs
+
+`check_colormap` warns without `check_palette.py` (`check_figure.py:4523`), so
+the design page contradicted its own "WARN is not FAIL" note. One status flip
+over five resolutions is two verdicts, not five. `check_palette.py` runs under
+Python, so it cannot run without an interpreter. The wind rose at
+`examples/gallery.py:1172` is also a bar chart, and the image under the old
+heading is the demo, which passes. The tutorial printed
+`scale 0.44164444444444445` beside a Line weight row reading `scale 0.44`.
 
 #### The README's first claim was about the wrong command
 

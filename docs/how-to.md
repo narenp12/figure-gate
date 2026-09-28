@@ -157,8 +157,7 @@ figure with 10pt labels:
 ```
 
 At full width the labels arrive at 13.8pt and pass. At `placed_frac=0.48` they
-arrive at 6.6pt, under the 7.5pt floor, and the row fails. Same figure, same
-call, different page.
+arrive at 6.6pt, under the 7.5pt floor, and the row fails.
 
 `float()` appears here because the scale comes back as a `numpy.float64`, which
 a REPL prints as `np.float64(1.38...)` on numpy 2. It compares and computes like
@@ -218,11 +217,9 @@ Gates that take no renderer argument and use no pixel threshold, such as
 
 ## Change a threshold
 
-If you vendored the checkers, edit the constant at the top of the file. That is
-the reason the default route is a copy.
-
-If you installed the package, assign to the constant. The gates read the module
-global when they run:
+If you vendored the checkers, edit the constant at the top of the file. If you
+installed the package, assign to the constant. The gates read the module global
+when they run:
 
 ```python
 import check_figure as cf
@@ -233,10 +230,10 @@ ok, rows = cf.audit(fig)
 
 Assign before you call `audit`, not inside a gate, and put the assignment
 somewhere your reader will find it. A threshold moved in one test file is a
-figure that passes locally and fails in CI.
+figure that passes locally and fails in CI. To move it for every author at once,
+see [Agree on thresholds across a project](#agree-on-thresholds-across-a-project).
 
-Every threshold is a module-level constant for this reason.
-[The gates](gates.md) names each one, and
+[The gates](gates.md) names each threshold, and
 [the figure style guide](style-guide.md) records what was measured to land on
 it.
 

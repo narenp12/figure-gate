@@ -28,14 +28,9 @@ The floor moves when the code needs it to, not on a schedule. The scientific
 Python ecosystem's SPEC 0 recommends dropping a Python release about three years
 after it ships, and by that calendar 3.11 was due to go in April 2026. It has not
 gone, because nothing here uses a 3.12 feature: raising the floor would remove
-users and change no line of the checkers. What the floor is actually set by is
-`tomllib`, which arrived in 3.11 and is what the build and several tests read
-`pyproject.toml` with.
-
-Two floors rather than one, and the lower one is the one to read first. Vendoring
-`check_palette.py` is the route this project is built around, and that file is
-held to 3.8 by CI on every pull request. A distribution floor is a fact about the
-wheel; it is not a claim about where the checks run.
+users and change no line of the checkers. What sets the floor is `tomllib`,
+which arrived in 3.11: `load_config` reads a configuration file with it, and the
+build reads `pyproject.toml` with it.
 
 ### Optional dependencies
 
