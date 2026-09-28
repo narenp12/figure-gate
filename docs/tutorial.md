@@ -253,7 +253,7 @@ Composition audit: loss
   -> COMPOSED
 ```
 
-The figure passes at the size it will actually print.
+The figure passes at the size it will print.
 
 ## What you did
 

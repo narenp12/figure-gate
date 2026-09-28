@@ -26,7 +26,7 @@ release is cheap and a backport branch would not be maintained.
 
 This is not a service and holds no data. It is three scripts that run inside
 someone else's test suite or build, usually on figures that project wrote
-itself. That narrows what a vulnerability actually looks like:
+itself. That narrows what a vulnerability looks like:
 
 **In scope**
 

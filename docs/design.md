@@ -99,8 +99,7 @@ No gate is known to raise. Twenty adversarial figures, including 3D, polar,
 all-NaN, infinite, and zero-sized ones, found none. The handler is there anyway,
 because these gates read matplotlib internals that are free to move.
 
-**One blind spot remains, because a passing row looks the same as an absent
-one.** The colormap gate reads a `Colormap`'s name to tell an encoding from a
+**A passing row looks the same as an absent one.** The colormap gate reads a `Colormap`'s name to tell an encoding from a
 hand-set list of colors, so a map matplotlib left unnamed is skipped rather than
 judged. This is deliberate.
 
@@ -123,7 +122,7 @@ of them. Four of those styles are published by their authors as accessible under
 colour vision deficiency. The colour gate rejects none of those four, and
 rejects 21 of the 24 that make no such claim.
 
-The same sweep names what does *not* discriminate, which is the more useful half.
+The same sweep names what does *not* discriminate.
 `check_style_sheet` and `check_fonts` fire on 28 styles out of 28. The first asks
 whether this project's sheet is in effect, and the second asks for Type 42
 embedding; on anyone else's sheet both answers are known in advance. Both rows
@@ -203,7 +202,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2277 tests, and each check has one asserting it catches a
+    The suite is 2282 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -211,8 +210,8 @@ For the version table, see [Compatibility](compatibility.md).
 
 ## History: the backend used to change the answer
 
-You do not have to set the backend for the numbers to come out right. The
-checker normalises for this itself. It did not always.
+You do not have to set the backend for the numbers to come out right: since
+0.1.2 the checker normalises for it.
 
 A HiDPI GUI backend, macosx on a Retina display or Qt on a scaled desktop, sets
 `fig.dpi` to the authored dpi times the display's device pixel ratio at the
@@ -225,14 +224,14 @@ calibrated for. The same figure passed under Agg and failed under macosx.
 
 Since 0.1.2 the checker measures on Agg regardless of what the figure was built
 under, so the verdict is a property of the figure rather than of the display.
-0.8.0 finished the job: the display's pixel ratio was only ever the loud case of
-a pixel threshold read against a resolution nobody had pinned, so the canvas is
-now drawn at `MEASURE_DPI = 150`. Setting `figure.dpi` yourself no longer moves a
-verdict either.
+The display's pixel ratio was one case of a pixel threshold read against a
+resolution nobody had pinned. Since 0.8.0 the canvas is drawn at
+`MEASURE_DPI = 150`, so setting `figure.dpi` yourself no longer moves a verdict
+either.
 
-The bug never reached CI. Every test and every example pins Agg, so nothing in
-the suite could construct the failing condition, and it stayed green across a
-release.
+CI could not have caught the bug. Every test and every example pins Agg, so
+nothing in the suite could construct the failing condition, and it stayed green
+across a release.
 
 One consequence remains: an audited figure is no
 longer attached to its GUI canvas and will not show in a window. Audit last, or

@@ -13,7 +13,7 @@ and held to `pyproject.toml` by `tests/test_conda_recipe.py`.
 [staged]: https://github.com/conda-forge/staged-recipes
 [feedstock]: https://github.com/conda-forge/figure-gate-feedstock
 
-## Where the package actually comes from
+## Where the package comes from
 
 [`conda-forge/figure-gate-feedstock`][feedstock], created 2026-07-30 from the
 0.4.0 recipe. **That repository's `recipe/recipe.yaml` is what gets built**, not
@@ -62,8 +62,8 @@ It downloads the sdist, hashes it, and checks the result against PyPI's
 declared digest before writing anything. It exits non-zero if the version in
 `pyproject.toml` is not on PyPI yet.
 
-Now that the feedstock exists, this keeps the in-repo copy honest rather than
-feeding a submission -- the bot writes the feedstock's own hash. `version` in
+Now that the feedstock exists, this keeps the in-repo copy's hash current
+rather than feeding a submission; the bot writes the feedstock's own hash. `version` in
 this file moves with the release, because `bump-my-version` lists it (see
 "Cutting a release" in `CONTRIBUTING.md`); `sha256` is the one field left to
 this script.
@@ -91,7 +91,7 @@ recipe was stamped with `update_recipe.py` and committed, then:
    build also `rm -rf`s every recipe already in their `main` to isolate yours,
    so `git checkout -- .ci_support recipes` afterwards.
 3. Open the PR, titled `Add figure-gate`. Post a comment confirming you are
-   willing to be listed as a maintainer -- their checklist requires it and
+   willing to be listed as a maintainer. Their checklist requires it, and
    nobody else can post it for you. A first-time contributor cannot ping the
    review team directly, so ask the bot:
    `@conda-forge-admin, please ping conda-forge/help-python`.

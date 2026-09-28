@@ -2,13 +2,12 @@
 
 ## Reporting a defect
 
-Open defects live in the issue tracker, and nowhere else. Not a "known issues"
-heading in the README, not a caveat in the style guide. Prose in this repo is
-gated — `tests/test_prose_claims.py` sweeps the reference material and pins
-every number and every backticked name against the code — and a bug description
-is the one kind of sentence that cannot be gated, so a known-issues list
-cannot be kept current in the very file whose discipline is that everything in
-it is checked. The 0.4.0 note
+Open defects live in the issue tracker, and nowhere else: not under a "known
+issues" heading in the README, and not as a caveat in the style guide. Prose in
+this repo is gated: `tests/test_prose_claims.py` pins every number and every
+backticked name in the reference material against the code. A bug description
+is the one kind of sentence that cannot be gated, so a known-issues list cannot
+be kept current in a file where everything else is checked. The 0.4.0 note
 in the CHANGELOG names the general version of this: documentation standing in
 for a fix. The CHANGELOG records what shipped; the tracker records what has not.
 
@@ -30,11 +29,11 @@ This project is a pile of elimination gates, and the failure mode it guards
 against hardest is a gate that sounds sensible and never fires. So a new check
 ships with three things:
 
-1. **A named failure.** Not "figures should have good contrast" — a real figure
-   that was really broken, and how. The style guide is written this way
-   throughout, and it's the reason the thresholds are arguable rather than
+1. **A named failure.** Not "figures should have good contrast", but a real
+   figure that was broken, and how. The style guide is written this way
+   throughout, and it is the reason the thresholds are arguable rather than
    arbitrary.
-2. **A test proving it fails.** Build a figure with exactly that defect and
+2. **A test showing it fails.** Build a figure with exactly that defect and
    assert *that* gate is the one that catches it. Asserting only that `audit`
    returned `False` would pass even if every other check had silently broken.
 3. **A test proving it doesn't over-fire.** Whatever legitimate case sits
@@ -132,7 +131,7 @@ the audit deliberately does not cover.
 Ruff runs at the project floor of 3.11 with one exception, set through
 `per-file-target-version`: `check_palette.py` is read against the 3.8 grammar,
 because that file is claimed to run on 3.8 when vendored. The `stdlib-only` CI
-job proves the two invocations it makes still work on 3.8; ruff reads the whole
+job checks that the two invocations it makes still work on 3.8; ruff reads the whole
 file, and does it before the commit rather than after the push.
 
 mypy runs with the strict flags off. Every function in `skill/scripts` is
@@ -142,7 +141,7 @@ contradiction a reader would also catch: an attribute that cannot exist, a
 return that cannot happen.
 
 `check_palette.py` must keep importing nothing outside the standard library.
-That's what makes it usable from a non-Python toolchain, and CI has a job with
+That is what makes it usable from a non-Python toolchain, and CI has a job with
 no install step in it to make sure the claim stays true.
 
 ## Cutting a release
@@ -176,10 +175,10 @@ the workflow after it.
 Only the release bump touches `CHANGELOG.md`. The cycle-opening bump rewrites
 the five version sites and leaves the changelog alone, because it runs in the
 window where the last heading has been consumed and the next one is unwritten.
-It required the heading until 0.8.0, which made it fail every time it was run:
-0.7.0 left the tree carrying the version it had just shipped instead of opening
-0.8.0.dev0, and 0.8.0 had to be cut by naming the new version outright, because
-the dev bump has nothing to drop from a version with no suffix.
+Until 0.8.0 it required the heading, so it failed every time it ran. 0.7.0 left
+the tree carrying the version it had just shipped instead of opening 0.8.0.dev0.
+0.8.0 then had to be cut by naming the new version outright, because the dev
+bump has nothing to drop from a version with no suffix.
 
 Then, on a branch, because `main` takes no direct pushes:
 
@@ -210,11 +209,11 @@ Then, on a branch, because `main` takes no direct pushes:
    on a branch and through a pull request in the same way.
 
 **Any tag matching `v*` is a publish, including a development one.**
-`release.yml` triggers on the pattern, and the guard in it compares the tag
-against the project version rather than judging the shape of either, so a
-pushed v0.9.0.dev0 tag would agree with itself, upload to PyPI, and only then
-fail on the missing changelog section, after the release is public and the
-version number is spent. Both bumps tag; only the tag from the release bump is
+`release.yml` triggers on the pattern, and its guard compares the tag with the
+project version without judging the shape of either. A pushed v0.9.0.dev0 tag
+would agree with itself and upload to PyPI. It would fail on the missing
+changelog section only after the release is public and the version number is
+spent. Both bumps tag; only the tag from the release bump is
 ever pushed.
 
 Rehearse anything that changes packaging on TestPyPI first. `testpypi.yml` is

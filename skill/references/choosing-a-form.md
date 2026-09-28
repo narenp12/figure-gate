@@ -11,7 +11,7 @@ which is why it is prose.
 
 The lineage is statistical graphics rather than general information design:
 Cleveland and McGill's perceptual experiments, Tukey's exploratory work, and
-Wilkinson's grammar as it reached most people through `ggplot2`. Each rule below
+Wilkinson's grammar as `ggplot2` implements it. Each rule below
 names the perceptual or inferential result it rests on, so you can argue with it
 on those terms.
 
@@ -69,15 +69,16 @@ reader who sees it differently.
 ## Distributions: show the points while you can
 
 **At n below about 30, draw every observation** as a strip or jittered dot plot.
-A box plot is a five-number summary, and Tukey designed it for batches too large
-to draw by hand. At n = 8 it hides the two things a reader needs: how many
+A box plot is a five-number summary (Tukey, in the references). At n = 8 it
+hides the two things a reader needs: how many
 observations there are, and whether they are bimodal. Two groups with identical
 quartiles and completely different shapes draw the same box. In teaching
 material this matters more, not less, because readers take the summary as the
 data.
 
-Above roughly 30 the summary starts earning its ink. Above a few hundred, a
-violin or a box beats a cloud of overlapping points.
+The 30 is a working threshold, not a published result: above it the summary
+starts earning its ink, and once points overlap, a violin or a box beats the
+cloud.
 
 **State n either way**, in the axis label or the caption. A distribution figure
 without n is not interpretable.
@@ -162,7 +163,7 @@ any of these:
 - **Use a consistent marker grammar.** A circle is an observation, a triangle is
   a prediction, a cross is an extremum, and the mapping holds across every panel
   that shares that kind of mark.
-- **Check each panel's distinctive mark is actually present.** If three panels
+- **Check each panel's distinctive mark is present.** If three panels
   carry a credible band, the fourth carries one too, or the caption says why it
   cannot. A missing band beside three that have one reads as an oversight rather
   than as a statement about the model. Draw it, label the panel "not
@@ -242,8 +243,7 @@ When the reader's job is to judge **rates of change**, the aspect ratio is a
 data choice rather than a layout choice. Cleveland's banking to 45 degrees, which
 chooses the height-to-width ratio so the typical line segment sits near 45
 degrees, is where slope discrimination is most accurate. A cycle that is obvious
-in one aspect ratio disappears in another, and the wrong one is usually the one
-the default produced.
+in one aspect ratio disappears in another.
 
 **The failure is a resolution failure.** Take a saw wave whose decay limbs
 alternate between two rates, one exactly twice the other. At 2.4 x 5.2 inches the
@@ -284,7 +284,7 @@ banked.
 
 - **Pie and donut.** Angle and area rank third and fourth of the six, for a job
   a sorted dot plot does at rank one. Two categories do not need a figure.
-- **3D bars, and 3D surfaces for 2D data.** Perspective makes identical values
+- **3D bars and surfaces.** Perspective makes identical values
   plot at different sizes, and near marks occlude far ones. A third variable
   belongs in a facet, a color scale, or a contour.
 - **Radar and spider.** Area scales as the square of the values, the shape

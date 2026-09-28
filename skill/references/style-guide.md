@@ -90,9 +90,9 @@ redundancy. The rest no script decides.
   A noisy SGD walk near a minimum is an Ornstein-Uhlenbeck process, whose
   stationary distribution is the Gaussian being drawn. A self-intersecting
   scribble drowns out every other mark.
-- Put a 1-3px white stroke behind marks that cross a textured or variable-value
+- Put a 1-3pt white stroke behind marks that cross a textured or variable-value
   context surface, using `pe.withStroke(foreground="white")` in matplotlib. That
-  knockout halo guarantees separation regardless of the local background value.
+  knockout halo separates the mark from whatever value lies under it.
   A line that vanishes where it crosses a contour is not a line, and a marker
   that disappears into a filled band is not a marker.
 - Make ordinal emphasis a lightness ramp, not a transparency stack.
@@ -438,12 +438,14 @@ python check_palette.py "#471365,#2c718e,#44bf70" --ordinal   # ramps
 
 The gates are lightness band, chroma floor, CVD separation ≥ 10.5,
 normal-vision ≥ 21, and contrast ≥ 3:1. Separations are CAM02-UCS ΔE. CVD gating
-covers protanopia and deuteranopia, together about 8% of males; tritan is
-reported but not gated, at about 0.01%. Surface defaults to white, and
-`--surface` sets a tinted page.
+covers protanopia and deuteranopia, the red-green forms, which reach about 8% of
+European men and 4-6.5% of Chinese and Japanese men (Birch, in the references).
+Tritan is reported but not gated, because the Viénot simulation is validated for
+the red-green forms only. Surface defaults to white, and `--surface` sets a
+tinted page.
 
 **Dichromacy is not the worst case, so the separation row is swept over
-severity.** Most colour vision deficiency is anomalous trichromacy, meaning a
+severity.** Colour vision deficiency includes anomalous trichromacy, meaning a
 cone whose peak sensitivity is shifted rather than one that is missing.
 Simulating only the endpoint would be sound if the endpoint were the hardest
 view.
@@ -529,16 +531,16 @@ from check_palette import contrast
 contrast("#471365", "#ffffff")
 ```
 
-`check_text_readability` enforces this against the backdrop each string
-*actually* got, measured off the rendered pixels. That is the only way to know,
-because the backdrop is whatever happened to be drawn under the label, and no
-artist knows that about itself.
+`check_text_readability` enforces this against the backdrop each string got,
+measured off the rendered pixels. It has to be measured, because the backdrop is
+whatever happened to be drawn under the label, and no artist knows that about
+itself.
 
 **A rule under a label is ground for one question and ink for the other.** The
 row asks two things of every string: whether it clears the contrast floor, and
 whether data ink crosses its glyphs. The second is measured as pixels differing
 from a local average, and near a gridline through an annotated heatmap cell the
-pixels that differ are the *cell's*, not the rule's - the average is pulled
+pixels that differ are the *cell's*, not the rule's: the average is pulled
 toward the rule for a few pixels either side of it. So the exemption takes the
 ground the label sits on as an anchor beside the furniture, and the shoulder
 between them is explained by the pair rather than counted as a mark competing
@@ -555,7 +557,7 @@ one alignment that puts both ends of the box back down on the line. It clears
 the curve at the anchor and nowhere else, because across the label's own width
 the curve has moved further than the offset holding the text up.
 
-This shipped in `examples/demo.py` for months. Every check passed, all three
+This shipped in `examples/demo.py`. Every check passed, all three
 labels sat on their own curves, and their casing punched visible white gaps
 through the data.
 
@@ -563,8 +565,7 @@ through the data.
   it, clear ground runs right, so use `ha="left"`; below it, clear ground runs
   left, so use `ha="right"`.
 - Anchor on the extreme of the data across the label's own span, not on its
-  value at one point. Sampled noise routinely spikes further than any sane
-  offset.
+  value at one point. Sampled noise spikes further than a label offset.
 - Use casing (`pe.withStroke`) to rescue a 0.7pt gridline behind a label. It
   does not rescue a 1.6pt curve, where it only hides the collision by deleting
   the data underneath. That is why the gate measures the backdrop rather than
@@ -631,7 +632,7 @@ showed it. A first-level subscript at a 10pt base lands at 7.0pt, which is
 Nature's stated *maximum* for figure text and entirely publishable; failing it
 condemns every log axis, because `$\mathdefault{10^{-11}}$` is matplotlib's own
 tick label and no author wrote it. Setting a script smaller than its base is not
-a defect. It is how mathematics has been typeset for a century.
+a defect. LaTeX does it, as below.
 
 The floor for a script is 5pt, which is where two independent sources land. The
 LaTeX2e kernel's own table, in `fontmath.ltx`, maps every body size from 5pt to
@@ -655,7 +656,7 @@ type until it fits pays for canvas space out of the legibility budget, and a
 string driven under 7.5pt on the page has bought a Clipping pass with a Type
 size failure.
 
-`bbox_inches="tight"` is the one to actually watch, because it fails nothing. It
+`bbox_inches="tight"` is the one to watch, because it fails nothing. It
 trims the canvas to the drawn content, so the saved file is no longer the width
 you authored
 ([matplotlib#11681](https://github.com/matplotlib/matplotlib/issues/11681)).
@@ -685,8 +686,8 @@ reports the library rather than the figure.
 takes embedded Type 1 or TrueType and does not accept Type 3, so the upload is
 refused before a reviewer sees it. ACM and Elsevier check embedding in
 production instead, which is the same problem surfacing after acceptance rather
-than a milder one. The figure renders identically either way, so nothing tells
-you until the latest and most expensive possible moment. `figure.mplstyle` sets
+than a milder one. The figure renders identically either way, so nothing on screen
+tells you before the upload or the production check does. `figure.mplstyle` sets
 `pdf.fonttype: 42` and `ps.fonttype: 42`.
 
 **Describe the figure.** Across 100,000 public notebooks, 99.81% of
@@ -818,6 +819,10 @@ kinds, and the reason `misc` fails, comes from this literature.
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
   about 11 at a third of a degree. The section above derives the floors from
   it, and says why it is not a gate.
+- Birch, J. (2012). Worldwide prevalence of red-green color deficiency.
+  *Journal of the Optical Society of America A* 29(3), 313-320.
+  doi:10.1364/JOSAA.29.000313. The prevalence figures the CVD gate is scoped
+  by.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.

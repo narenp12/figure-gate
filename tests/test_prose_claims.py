@@ -1639,6 +1639,17 @@ EXTERNAL_CLAIMS = {
         "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
                  "-0.038205.",
     },
+    "red-green prevalence": {
+        "document": "style-guide.md",
+        "anchor": "European men and 4-6.5% of Chinese and Japanese men",
+        "source": "Birch, JOSA A 29(3), 313-320, 2012",
+        "doi": "10.1364/JOSAA.29.000313",
+        "verified": "2026-09-28",
+        "quote": "Large random population surveys show that the prevalence of "
+                 "deficiency in European Caucasians is about 8% in men and "
+                 "about 0.4% in women and between 4% and 6.5% in men of "
+                 "Chinese and Japanese ethnicity.",
+    },
     "graphical perception ordering": {
         "document": "choosing-a-form.md",
         "anchor": "six ranks and not",

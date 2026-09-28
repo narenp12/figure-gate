@@ -33,7 +33,7 @@ string counts the top-level panels first and the child axes after them.
 |---|---|---|
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
 | Text collision | oriented box overlap | two text boxes overlap, rotation included, tick labels on a shared axis exempted |
-| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs. Furniture, and the ground the label sits on, do not count as ink; a rule lying under the text still counts against contrast |
+| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it got, or data ink crosses its glyphs. Furniture, and the ground the label sits on, do not count as ink; a rule lying under the text still counts against contrast |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour count as a single level. A single flat alpha is not judged for a focal point |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
@@ -42,7 +42,7 @@ string counts the top-level panels first and the child axes after them.
 | Line weight | `LINE_FLOOR_PT = 1.0`, `FURNITURE_FLOOR_PT = 0.5` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Spines and gridlines are furniture and are held to the lower floor. Tick marks are matplotlib's defaults rather than the sheet's and are not measured |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
-| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
+| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
 | Dual axis | none | a `twinx` second scale carries data of its own |
 | Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |

@@ -10,7 +10,7 @@ The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
 They exist because `demo.py`, one panel and three curves, is easy for a gate to
-pass, and passing an easy case is the wrong thing for a gate to be good at.
+pass, so passing it says little about the gate.
 These are the compositions where a check has somewhere to hide. Writing them
 exposed defects of two kinds: in the checks themselves, and in figures no check
 flagged. Both are listed at the end of this page, except the six rows the
@@ -89,7 +89,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Observed minus fitted yield across a grid of flow rate against temperature, as a diverging red-blue field centred on zero with solid isolines. The residual is not noise: it alternates in a checkerboard of positive and negative cells across both factors, so the fitted model is missing an interaction term.](images/gallery-residual.png)
-  <figcaption>A residual has a meaningful zero and two directions away from it, which is what a diverging scale is for. The isolines are drawn solid on purpose: <code>contour.negative_linestyle</code> defaults to dashed, so a monochrome contour over signed data ships its negative half dashed with nobody having chosen it, and dashing here means unobserved or projected.</figcaption>
+  <figcaption>A residual has a meaningful zero and two directions away from it, which is what a diverging scale is for. The isolines are drawn solid on purpose: <code>contour.negative_linestyle</code> defaults to dashed, so a monochrome contour over signed data ships its negative half dashed with nobody having chosen it, and dashing here means unobserved, projected, or a threshold.</figcaption>
 </figure>
 
 ## Marks, then bins
@@ -117,7 +117,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Surviving fraction against months since randomisation, as two Kaplan-Meier staircases over 24 months. Both arms start at 1.0 and step down only at an observed event; the treated arm stays above the control throughout, and short vertical ticks on each curve mark the times where follow-up ended without an event.](images/gallery-survival.png)
-  <figcaption>The first staircase in the corpus. <code>ax.step</code> keeps the points it was handed and draws risers between them, so the drawstyle has to be expanded before any geometry is harvested; read raw, the label and banking rows measure the diagonal chord of each riser instead of the two segments actually drawn.</figcaption>
+  <figcaption>The first staircase in the corpus. <code>ax.step</code> keeps the points it was handed and draws risers between them, so the drawstyle has to be expanded before any geometry is harvested; read raw, the label and banking rows measure the diagonal chord of each riser instead of the two segments drawn.</figcaption>
 </figure>
 
 ## A spike raster
@@ -159,7 +159,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Infrared absorbance against wavenumber from 1000 to 1100 inverse centimetres, for four temperatures from 100 to 400 kelvin, drawn in samples of a single purple-to-green ramp and labelled on the curves where they are furthest apart. A broad band centred near 1064 grows with temperature, while a narrow doublet on its short-wavenumber flank broadens and loses height as it broadens. An inset over the upper left, joined to the region it magnifies, holds wavenumbers 1038 to 1052: the doublet is two resolved lines at the coldest temperature and a single merged peak by 300 kelvin. The lower panel, on the same wavenumber scale, is each spectrum minus the coldest; it is positive across the band and dips below zero at the two line centres, which is what broadening at constant line strength looks like.](images/gallery-broadening.png)
-  <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale - the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
+  <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale: the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
 </figure>
 
 ---
@@ -184,8 +184,8 @@ the thirteen figures above never reached a rotated label's oriented box, a
 array, or the equal-radii path in the overplotting gate: 281 statements of
 `check_figure.py` that no figure here could speak for.
 
-Each of the six is a form a reader would recognise before it is a branch, which
-is the order that matters. A figure drawn to reach a line of code is not
+Each of the six is a form a reader would recognise before it is a branch. A
+figure drawn to reach a line of code is not
 evidence about anything. They took the 281 down to 239, and two of them found
 defects in the checker on the way in. `main` also audits the sheet's own
 palette with `check_palette`, which no figure exercises: that took the second
@@ -228,7 +228,7 @@ procedure has a step that says to render the figure and look at it.
 ## The self-test, and the demo
 
 `python skill/scripts/check_figure.py` with no arguments builds a deliberately
-broken figure and audits it, so the self-test proves the gates can fail rather
+broken figure and audits it, so the self-test shows the gates can fail rather
 than only that they can pass. The demo below is the figure that passes.
 
 <figure markdown="span">
