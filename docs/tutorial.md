@@ -186,8 +186,8 @@ from check_figure import describe, report
 
 ```python
 describe(fig, "Validation loss against training epoch for a baseline and a "
-              "tuned run over 12 epochs. Both fall; the tuned run reaches 0.02 "
-              "by epoch 12, while the baseline is still at 0.25.")
+              "tuned run over 12 epochs. Both fall; the tuned run reaches 0.03 "
+              "by epoch 12, while the baseline is still at 0.66.")
 
 report(fig, "loss")
 ```

@@ -153,10 +153,10 @@ For the version table, see [Compatibility](compatibility.md).
 ???+ note "Use what matplotlib ships"
 
     viridis for sequential, `RdBu` for diverging, `okabe_ito` for categorical,
-    style sheets for defaults, `constrained_layout` for layout. Earlier versions
-    hand-rolled all four and each was worse: `RdBu`'s poles clear every gate in
-    `check_palette.py` unmodified, and a windowed custom ramp discarded 35% of
-    viridis for no measured gain.
+    style sheets for defaults, `constrained_layout` for layout. Where earlier
+    versions hand-rolled these, the two measured cases came out worse: `RdBu`'s
+    poles clear every gate in `check_palette.py` unmodified, and a windowed
+    custom ramp discarded 35% of viridis for no measured gain.
 
 ???+ note "Pixels are measured at one resolution, `MEASURE_DPI = 150`"
 
@@ -203,7 +203,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2256 tests, and each check has one asserting it catches a
+    The suite is 2277 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

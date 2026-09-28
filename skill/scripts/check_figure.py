@@ -4406,7 +4406,7 @@ ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 #
 # The candidate set inherits the `CMAP_QUALITATIVE_N` split the classifier
 # branch below makes, and that filter is load-bearing rather than tidy: without
-# it `tab10`, `Set2`, `Dark2` and this project's own registered `okabe_ito` all
+# it `tab10`, `Set2`, `Dark2` and matplotlib's registered `okabe_ito` all
 # classify `misc` over 256 samples, and using Okabe-Ito as a series palette -
 # the thing the skill tells people to do - would have failed this row.
 RAMP_LUT_N = 256

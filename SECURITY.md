@@ -16,8 +16,8 @@ one within 30. You will be credited in the advisory unless you ask not to be.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | yes |
-| < 0.1   | no |
+| latest release | yes |
+| anything older | no |
 
 Only the latest release gets fixes. The project is small enough that a patch
 release is cheap and a backport branch would not be maintained.
@@ -58,4 +58,5 @@ itself. That narrows what a vulnerability actually looks like:
 - Release workflows pin their actions by commit, not by tag, and publish through
   PyPI trusted publishing with attestations.
 - CodeQL runs on every change to `main` and weekly.
-- Dependabot proposes action and dev-dependency updates weekly.
+- Dependabot proposes GitHub Actions updates weekly. Python dependencies are
+  left out on purpose; `.github/dependabot.yml` says why.

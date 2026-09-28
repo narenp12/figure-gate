@@ -19,8 +19,9 @@ and statistical argument for what to draw, before any question of how it looks.
 | `figure.mplstyle` | `assets/` | matplotlib | visual defaults as a style sheet |
 | `check_palette.py` | `scripts/` | Python 3.8+, stdlib only | color gates, any toolchain |
 | `check_figure.py` | `scripts/` | Python 3.11+, matplotlib 3.8+ | composition + type-size gates |
+| `suggest_fixes.py` | `scripts/` | stdlib only | remedies for `report(fig, suggest=True)`, optional |
 
-Copy all three into your project, conventionally into `diagrams/`, where they
+Copy all four into your project, conventionally into `diagrams/`, where they
 sit beside each other as this guide assumes.
 
 Only `check_figure.py` is coupled to matplotlib. The composition rules it
@@ -68,7 +69,11 @@ VALIDATE:    check_palette.py "<hexes>"  &&  report(fig)  &&  open PNG
 5. **Validate the palette with `check_palette.py`.** Do not eyeball color.
 6. **Render the finished document and look at that.**
 
-### Composition rules the checker cannot decide for you
+### Composition rules
+
+The checker gates three of these at their limits: the alpha budget as
+Contrast stack, mark area as Mark ratio, and repeated axis furniture as Axis
+redundancy. The rest no script decides.
 
 - Keep one thing opaque, and use at most three alpha levels. Context gets the
   alpha; data does not.
@@ -164,8 +169,8 @@ at the wrong thing, or that the reading order runs backwards.
 ### Categorical: Okabe-Ito
 
 Okabe-Ito is an established colorblind-safe categorical set with a published
-order. Adopting it as-is beats inventing a private set: it carries a decade of
-use, and readers who know it recognise it.
+order. Adopting it as-is beats inventing a private set: it has been in use since
+Okabe and Ito published it in 2002, and readers who know it recognise it.
 
 | Slot | Hue | Hex | Contrast `#ffffff` | Role |
 |---|---|---|---|---|
@@ -460,8 +465,9 @@ target does need more colour difference than a large one.
 
 Stone, Szafir and Setlur (2014) measured how much. The noticeable difference for
 half of observers rises as C + K/s, with s the target's visual angle in degrees,
-fitted from 0.333° to 6°. That comes to 6.1 CIELAB ΔE at a two-degree patch and
-10.4 at a third of a degree.
+fitted from 0.333° to 6°. Averaged over the three axes of their Table 3, that
+comes to 6.1 CIELAB ΔE at a two-degree patch and 10.4 at a third of a degree,
+which the paper rounds to "closer to 6" and "closer to 11".
 
 Before 0.8.0 that model could only sit beside the floors and be compared against
 them, because the floors were OKLab distances and OKLab has no calibrated
@@ -603,8 +609,8 @@ The scale is per figure because the shrink differs. A 14in figure on a 750pt
 slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
 one and illegible in the other.
 
-**7.5pt is stricter than any journal that publishes a number.** Nature sets a
-5pt minimum and a 7pt maximum for text in figures. PNAS requires numbers,
+**7.5pt is stricter than the Nature, PNAS and Science figure guides.** Nature
+sets a 5pt minimum and a 7pt maximum for text in figures. PNAS requires numbers,
 letters and symbols no smaller than 6pt after reduction, which is the same
 requirement its guidelines also state as 2mm. Science publishes no text floor at
 all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold
@@ -789,6 +795,18 @@ kinds, and the reason `misc` fails, comes from this literature.
   interpretation of scientific data. *PLoS ONE* 13(7), e0199239.
   doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question, and
   the argument the Okabe-Ito section above rests on.
+- Okabe, M. & Ito, K. (2002, revised 2008). Color Universal Design (CUD): How
+  to make figures and presentations that are friendly to colorblind people.
+  jfly.uni-koeln.de/color/. The eight-colour set and its published order.
+- Viénot, F., Brettel, H. & Mollon, J. D. (1999). Digital video colourmaps for
+  checking the legibility of displays by dichromats. *Color Research &
+  Application* 24(4), 243-252.
+  https://doi.org/10.1002/(SICI)1520-6378(199908)24:4%3C243::AID-COL5%3E3.0.CO;2-3.
+  The dichromacy simulation `simulate` applies.
+- Luo, M. R., Cui, G. & Li, C. (2006). Uniform colour spaces based on CIECAM02
+  colour appearance model. *Color Research & Application* 31(4), 320-330.
+  doi:10.1002/col.20227. CAM02-UCS, the space the separation floors are
+  measured in.
 - Moreland, K. (2009). Diverging Color Maps for Scientific Visualization. In
   *Advances in Visual Computing* (ISVC 2009), 92-103.
   doi:10.1007/978-3-642-10520-3_9. The midpoint rule: never a hue at the centre,
@@ -798,8 +816,8 @@ kinds, and the reason `misc` fails, comes from this literature.
   253-258. doi:10.2352/CIC.2014.22.1.art00045. The size model. They fit the noticeable difference for 50% of
   observers as a linear function of inverse size over 11 target sizes from
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
-  about 11 at a third of a degree. The section above is why the numbers here
-  already clear that and there is no gate.
+  about 11 at a third of a degree. The section above derives the floors from
+  it, and says why it is not a gate.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
@@ -808,7 +826,10 @@ kinds, and the reason `misc` fails, comes from this literature.
   is calibrated against the same dichromacy model `simulate` uses, which is what
   lets the two be read side by side.
 
-Two more, for claims the sections above make outside colour.
+Three more, for claims the sections above make outside colour.
+
+- Tufte, E. R. (1983). *The Visual Display of Quantitative Information.*
+  Graphics Press. The data-ink ratio that `check_ink` is not.
 
 - Potluri, V., Singanamalla, S., Tieanklin, N. & Mankoff, J. (2023). Notably
   Inaccessible: Data Driven Understanding of Data Science Notebook

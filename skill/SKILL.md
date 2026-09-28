@@ -154,7 +154,9 @@ because "this is a cycle" is not a hedge.
 Each one forbids a single enumerated failure, and none of them ever looks at the
 figure as a whole. A figure can pass all of them and still be a gray smudge.
 
-These are the composition rules no script can infer for you:
+These are the composition rules. The checker gates the first two and shared
+axis furniture at their limits, as Contrast stack, Mark ratio and Axis
+redundancy; the rest are yours to judge:
 
 - Keep one thing opaque, and use at most 3 alpha levels. Context layers get the
   transparency; the data does not. Everything semi-transparent reads as haze
@@ -230,10 +232,10 @@ choice between them is yours. Every remedy that ships a code snippet is executed
 by the test suite against a figure that fails its gate, and the gate has to pass
 afterwards.
 
-**Describe the figure for a reader who cannot see it.** Across 100,000 public
-notebooks, 99.81% of generated images shipped with no alt text, and matplotlib
-was the most-imported charting library among them. Say what the reader would have taken from looking, meaning the
-numbers and the direction, rather than what the figure is made of:
+**Describe the figure for a reader who cannot see it.** Almost no notebook
+figure carries alt text; `references/style-guide.md` cites the measurement. Say
+what the reader would have taken from looking, meaning the numbers and the
+direction, rather than what the figure is made of:
 
 ```python
 describe(fig, "Validation loss against epoch for three optimisers. All three "
@@ -407,12 +409,9 @@ Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-7.5pt is stricter than every journal that publishes a number. Nature sets a 5pt
-minimum and a 7pt maximum, and PNAS requires nothing smaller than 6pt (2mm)
-after reduction. Those are the sizes at which a string is still *possible* to
-read. 7.5 is where it is
-comfortable, and it is cheap to hold, because the fix is nearly always cutting
-words.
+7.5pt is stricter than the Nature, PNAS and Science figure guides, which
+`references/style-guide.md` quotes. It is cheap to hold, because the fix is
+nearly always cutting words.
 
 **Strokes have a floor too, and it is 1pt on the page.** SIAM states it in its
 instructions for authors: lines thinner than one point break up or disappear in
@@ -422,11 +421,10 @@ through the same `page_scale`. Gridlines are held to a lower floor than data: a
 gridline that drops out costs the reader a reference, and a curve that drops out
 costs them the finding.
 
-**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3. IEEE PDF
-eXpress does not accept Type 3 and refuses the upload, while ACM and Elsevier
-check embedding in production, so there it surfaces after acceptance instead.
-`figure.mplstyle` sets it. Nothing else warns you, because the figure renders
-identically and the paper bounces at the latest possible moment.
+**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3, which
+some publishers refuse at upload; `references/style-guide.md` names them.
+`figure.mplstyle` sets it, and the Fonts row warns when it is not in effect. The
+figure renders identically either way, so nothing on screen shows it.
 
 **If text does not fit, cut the text.** "Acquisition function ranks the
 candidate molecules" becomes "Rank every candidate." The caption carries the

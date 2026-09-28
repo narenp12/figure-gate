@@ -135,6 +135,9 @@ This command takes no figure of your own. To audit a figure, import `audit` or
 | revtex-column | 246.00 | 3.42 | `\columnwidth`, same run |
 | siam | 370.38 | 5.14 | `\textwidth`, siamart220329 2022/03/29 v1.4.4 |
 
+The widths are TeX points, 72.27 to the inch. The inch column divides by 72, as
+`page_scale` does, so it reads 0.4% wide: neurips's 5.5in is 5.52 here.
+
 !!! warning "Verify before trusting"
 
     Put `\the\textwidth` in your own document and read the log. Style files get

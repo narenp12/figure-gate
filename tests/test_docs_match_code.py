@@ -804,13 +804,13 @@ def test_validator_default_surface_is_what_the_style_sheet_renders():
 GALLERY = ROOT / "examples" / "gallery.py"
 DOCS_GALLERY = ROOT / "docs" / "gallery.md"
 
-DEFECT_COUNT = re.compile(r"found (\w+) defects? in")
+DEFECT_COUNT = re.compile(r"(\w+) are named below")
 
 
 def defect_claims():
     """Every file that states how many defects writing the gallery found."""
     return {path.name: DEFECT_COUNT.search(path.read_text(encoding="utf-8"))
-            for path in (GALLERY, README, DOCS_GALLERY)}
+            for path in (GALLERY,)}
 
 
 def test_every_source_still_states_a_defect_count():
@@ -1374,7 +1374,7 @@ GALLERY_PY = ROOT / "examples" / "gallery.py"
 GALLERY_COUNT_CLAIMS = {
     "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
     "the gallery page": (DOCS_GALLERY, r"builds these (\w+) figures and audits"),
-    "the README": (README, r"Writing those (\w+) found"),
+    "the README": (README, r"Writing those (\w+) exposed"),
 }
 
 
@@ -1410,14 +1410,12 @@ def test_every_source_states_the_real_gallery_count(label):
 
 
 # --- how many defects the gallery found ---------------------------------------
-# Four copies of one number. `docs/gallery.md` numbers the list, so the list is
+# Two copies of one number; the README and the page's lead stopped stating it. `docs/gallery.md` numbers the list, so the list is
 # the count and every sentence is read against it.
 
 GALLERY_DEFECT_CLAIMS = {
     "the gallery page's heading": (DOCS_GALLERY, r"## The (\w+) defects in the checks"),
-    "the gallery page's lead": (DOCS_GALLERY, r"found (\w+) defects in the checks themselves"),
-    "gallery.py's docstring": (GALLERY_PY, r"found (\w+) defects in the checks themselves"),
-    "the README": (README, r"found (\w+) defects in the checks themselves"),
+    "gallery.py's docstring": (GALLERY_PY, r"(\w+) are named below"),
 }
 
 
@@ -1600,3 +1598,107 @@ def test_the_over_fire_form_quotes_real_gate_names():
     assert quoted <= roster, (
         f"{sorted(quoted - roster)} are offered as example gate names and "
         "`audit` returns no row by those names")
+
+
+# --- SECURITY.md --------------------------------------------------------------
+# Both claims below were false for months before anything read them: the table
+# offered fixes for `0.1.x` while the tree was on 0.10, and the policy credited
+# Dependabot with dev-dependency updates `dependabot.yml` deliberately omits.
+SECURITY = ROOT / "SECURITY.md"
+
+
+def test_the_supported_versions_table_names_no_series_that_can_go_stale():
+    """A pinned series is wrong the release after it is written: the table
+    said `0.1.x` while the tree was on 0.10. The policy is the latest
+    release, so the table says that."""
+    rows = re.findall(r"^\| ([^|]+?) +\| (yes|no) \|$",
+                      SECURITY.read_text(encoding="utf-8"), re.M)
+    assert rows == [("latest release", "yes"), ("anything older", "no")], rows
+
+
+def test_the_dependabot_sentence_names_only_configured_ecosystems():
+    config = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+    ecosystems = re.findall(r'package-ecosystem: "([^"]+)"', config)
+    line = next(l for l in SECURITY.read_text(encoding="utf-8").splitlines()
+                if "Dependabot" in l)
+    assert ecosystems == ["github-actions"], (
+        "dependabot.yml changed; say what it updates in SECURITY.md")
+    assert "GitHub Actions" in line and "dev-dependency" not in line, (
+        "SECURITY.md credits Dependabot with updates dependabot.yml does not "
+        "configure")
+
+
+# --- gallery defect counts ----------------------------------------------------
+# "Writing those twenty found nine defects" stayed in the README and on the
+# gallery page after 0.9.0's callout and secondary-axis figures exposed six more
+# rows. A total goes stale with every figure that finds one, so the count now
+# lives beside the list it counts: the heading, and gallery.py's docstring.
+GALLERY_PAGE = ROOT / "docs" / "gallery.md"
+
+
+def test_no_page_totals_the_checker_defects_the_gallery_found():
+    for path in (README, GALLERY_PAGE):
+        prose = " ".join(path.read_text(encoding="utf-8").split())
+        assert not re.search(r"found \w+ defects in the checks", prose), (
+            f"{path.name} states a total; the lists and the changelog carry it")
+
+
+# --- the pie's ranks, read against the page's own ordering --------------------
+# "Angle and area are the two weakest quantitative tasks" sat forty lines below
+# a numbered list putting them third and fourth of six.
+FORM = SKILL / "references" / "choosing-a-form.md"
+ORDINALS = {"one": 1, "first": 1, "second": 2, "third": 3, "fourth": 4,
+            "fifth": 5, "sixth": 6}
+
+
+def test_the_pie_bullet_quotes_the_ranks_the_ordering_gives():
+    text = FORM.read_text(encoding="utf-8")
+    ranks = {int(n): task for n, task in re.findall(r"^(\d)\. (.+)$", text, re.M)}
+    assert len(ranks) == 6, "the ordering is no longer six numbered ranks"
+    bullet = " ".join(re.search(r"\*\*Pie and donut\.\*\*(.*?)\n- ", text,
+                                re.S).group(1).split())
+    stated = re.search(r"Angle and area rank (\w+) and (\w+) of the six", bullet)
+    assert stated, "the pie bullet no longer states the two ranks"
+    angle, area = (ORDINALS[w] for w in stated.groups())
+    assert "angle" in ranks[angle].lower() and "area" in ranks[area].lower()
+
+
+# --- rows the composition rules hand to the checker ---------------------------
+# Both lists were headed as rules no script decides while listing two the
+# checker gates. The leads now name those rows, and the names have to be rows.
+@pytest.mark.parametrize("path", [SKILL_MD, GUIDE], ids=lambda p: p.name)
+def test_the_composition_rules_name_rows_audit_returns(path):
+    pytest.importorskip("matplotlib")
+    text = " ".join(path.read_text(encoding="utf-8").split())
+    lead = re.search(r"The checker gates (.*?)[;.] (?:the|The) rest", text)
+    assert lead, f"{path.name} no longer says which composition rules are gated"
+    named = [r for r in ("Contrast stack", "Mark ratio", "Axis redundancy")
+             if r in lead.group(1)]
+    assert len(named) == 3, f"{path.name}'s lead names {named}"
+    assert set(named) <= set(audit_gate_names())
+
+
+# --- which publishers set a type minimum --------------------------------------
+# The gates page credited Science with a type minimum; the ledger's own quote
+# for "journal type floors" says Science publishes none, only a 6pt floor on
+# symbols and 0.5pt on lines.
+def test_the_gates_page_names_only_publishers_with_a_type_minimum():
+    text = " ".join(GATES.read_text(encoding="utf-8").split())
+    claim = re.search(r"and the ([\w, ]+?) type minima", text)
+    assert claim, "the gates page no longer names the type minima it cites"
+    assert set(re.split(r", | and ", claim.group(1))) == {"Nature", "PNAS"}
+
+
+# --- sources the style guide cites in its body --------------------------------
+# Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
+# from the References, which `CONTRIBUTING.md` says a cited work may not be.
+GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
+               "Potluri", "Bateman", "Tufte")
+
+
+@pytest.mark.parametrize("surname", GUIDE_CITED)
+def test_a_source_the_style_guide_names_is_in_its_references(surname):
+    body, refs = GUIDE.read_text(encoding="utf-8").split("\n## References\n")
+    assert surname in body, f"{surname} is no longer cited; drop it here"
+    assert re.search(rf"^- {surname}, ", refs, re.M), (
+        f"the style guide cites {surname} and its References do not list them")

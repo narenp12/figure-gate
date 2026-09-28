@@ -92,8 +92,9 @@ fails a build whose changelog does not name what moved.
 The checks in `check_figure.py` are matplotlib-specific, because they read a
 matplotlib `Figure`. The rules they enforce are not.
 [The figure style guide](style-guide.md) writes up each rule independently of
-any library, so you can apply them by hand or port the checks. Each one reads
-geometry that any plotting library can report.
+any library, so you can apply them by hand or port the checks. The composition
+checks read geometry that any plotting library can report. Style sheet and Fonts
+read matplotlib's rcParams, and a port needs its own equivalent.
 
 `check_palette.py` has no such limit. It takes hex strings, so any toolchain can
 call it.

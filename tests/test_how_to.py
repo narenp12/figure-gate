@@ -29,7 +29,7 @@ GATES_TEXT = (DOCS / "gates.md").read_text(encoding="utf-8")
 CLI_TEXT = (DOCS / "cli.md").read_text(encoding="utf-8")
 
 # Counts the pages write in words. A `KeyError` is one that moved.
-WORDS = {8: "eight", 10: "ten", 11: "Eleven", 12: "twelve",
+WORDS = {8: "eight", 9: "nine", 10: "ten", 11: "Eleven", 12: "twelve",
          18: "eighteen"}
 
 
@@ -61,8 +61,13 @@ def test_the_prose_counts_the_remedies_it_marks():
     assert (f"{WORDS[with_remedy]} rows carry a remedy" in GATES_TEXT
             and f"{WORDS[sum(1 for r in sf.REMEDIES if r.code)]} of those"
             in GATES_TEXT)
-    assert (f"The other {WORDS[len(cf.GATES) - with_remedy]} name their fix"
-            in GATES_TEXT)
+    # One of the rest, `check_collisions`, names the two strings and no fix;
+    # the page said all of them named one, fifty lines below saying otherwise.
+    other = len(cf.GATES) - with_remedy
+    assert (f"{WORDS[other - 1].capitalize()} of the other {WORDS[other]} "
+            "name their fix" in " ".join(GATES_TEXT.split()))
+    assert "Text collision names the two strings and no fix" in \
+        " ".join(GATES_TEXT.split())
 
 
 def quoted_from_code():

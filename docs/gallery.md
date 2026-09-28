@@ -12,8 +12,10 @@ pictures attached rather than decoration.
 They exist because `demo.py`, one panel and three curves, is easy for a gate to
 pass, and passing an easy case is the wrong thing for a gate to be good at.
 These are the compositions where a check has somewhere to hide. Writing them
-found nine defects in the checks themselves, and four in the figures that no
-check caught. Both kinds are listed at the end of this page.
+exposed defects of two kinds: in the checks themselves, and in figures no check
+flagged. Both are listed at the end of this page, except the six rows the
+callout and secondary-axis figures exposed, which
+[the 0.9.0 changelog](changelog.md) lists.
 
 Every alt text here is the string the figure itself carries, passed to
 `describe(fig, ...)` before the audit runs, so the alt-text gate reads it.
@@ -162,7 +164,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 ---
 
-## Why figures ten to thirteen exist
+## Why figures eight to eleven exist
 
 The first seven figures were audited against every gate, and the detail strings
 showed which rows had never measured anything. Five had not. No figure drew a
@@ -174,7 +176,7 @@ A row that passes by having seen nothing looks exactly like a row that passed.
 That is the blind spot [how the checkers decide](design.md#what-a-passing-run-does-not-mean)
 names, and this page had been an example of it.
 
-## Why the last six exist
+## Why figures fourteen to nineteen exist
 
 The same question, asked mechanically rather than by eye. Run under coverage,
 the thirteen figures above never reached a rotated label's oriented box, a

@@ -5,7 +5,8 @@ description: "Vendor the checkers, install the package, or install from conda-fo
 
 # Install figure-gate
 
-Three routes put the checkers on your machine. They all get you the same code.
+Three routes put the checkers on your machine. The two package routes carry a
+release; a clone of `main` carries the development version.
 
 Choose a route:
 

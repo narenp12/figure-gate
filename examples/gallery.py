@@ -28,7 +28,7 @@ compositions where the checks have somewhere to hide:
     gallery-trendmap.png          a field with its own significance faded out
     gallery-broadening.png        an inset carrying its own four curves
 
-Figures ten to thirteen exist because measuring the first seven against every
+Figures eight to eleven exist because measuring the first seven against every
 gate found rows that had never seen anything: no figure drew a band, a bar, a
 diverging map, a signed contour set or a `scatter`, so five checks had returned
 a passing row seven times over without once running the code that decides. A
@@ -38,10 +38,10 @@ The twentieth is there for a construct rather than a form. Ten rows were taught
 to look inside `ax.inset_axes` and the corpus had no figure with one carrying
 data, so the sweep that shipped that fix had nothing it could move.
 
-The last six answer the same question asked mechanically rather than by eye.
-Run under coverage, the thirteen never reached a rotated label's oriented box,
-a `LineCollection`'s widths, a step drawstyle, a polar axes, a per-point alpha
-array, or the equal-radii path in the overplotting gate: 281 statements of
+Figures fourteen to nineteen answer the same question asked mechanically
+rather than by eye. Run under coverage, the thirteen never reached a rotated
+label's oriented box, a `LineCollection`'s widths, a step drawstyle, a polar
+axes, a per-point alpha array, or the equal-radii path in the overplotting gate: 281 statements of
 `check_figure.py` the corpus could not speak for. Each of the six is a form a
 reader would recognise before it is a branch, which is the order that matters,
 and together they took that 281 down to 239. The palette audit below took
@@ -66,7 +66,9 @@ hard. Importing it ran every builder, overwrote every committed PNG, read
 process for good, and then called `sys.exit`.
 
 Writing them
-found nine defects in the checks themselves, and the comments below say which:
+found defects in the checks themselves. Nine are named below, and the comments
+say which; 0.9.0's changelog names the rows the callout and secondary-axis
+figures exposed:
 the readability gate reported a schematic's invisible tick labels, `check_ink`
 called every colorbar a saturated panel, the line-weight gate measured a
 colorbar's own dividers, a path and its start marker in one hue read as a
@@ -76,7 +78,7 @@ was passing nearly everything it was given, and `_encloses` tested a band's
 outline through the affine part of the transform only, so on a log axis a
 confidence band stopped being its own curve's band and became its rival.
 
-The last two came in with the last six figures, and both were in code no figure
+The last two came in with those six figures, and both were in code no figure
 had ever run: `check_line_weight` raised TypeError on an `EventCollection`,
 because a collection reports one width where every other reports a sequence;
 and `check_label_attribution` counted a curve's own censoring ticks as a rival

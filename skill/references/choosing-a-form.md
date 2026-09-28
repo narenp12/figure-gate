@@ -38,8 +38,8 @@ can be read off it.
 Almost every rule below is a corollary of one instruction: **move the reader's
 judgement up the list.** A dot plot beats a bar because position beats length.
 Small multiples beat grouped bars because identical non-aligned scales beat
-comparing lengths across a gap. A pie loses because angle and area are both near
-the bottom.
+comparing lengths across a gap. A pie loses because angle and area both rank
+below position.
 
 Color saturation sits at the bottom, and hue is off the list. Color identifies
 series, and `check_palette.py` exists because that channel has to survive a
@@ -282,8 +282,8 @@ banked.
 
 ## The forms with no research-figure use
 
-- **Pie and donut.** Angle and area are the two weakest quantitative tasks, for
-  a job a sorted dot plot does better. Two categories do not need a figure.
+- **Pie and donut.** Angle and area rank third and fourth of the six, for a job
+  a sorted dot plot does at rank one. Two categories do not need a figure.
 - **3D bars, and 3D surfaces for 2D data.** Perspective makes identical values
   plot at different sizes, and near marks occlude far ones. A third variable
   belongs in a facet, a color scale, or a contour.

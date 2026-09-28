@@ -54,7 +54,7 @@ while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.
 
 *`python examples/demo.py` builds that figure and audits it.
 `python examples/gallery.py` builds the harder forms. Writing those twenty
-found nine defects in the checks themselves, listed on the
+exposed defects in the checks themselves, listed on the
 [gallery page](https://narenp12.github.io/figure-gate/gallery/).*
 
 ## Documentation

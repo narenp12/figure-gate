@@ -31,8 +31,8 @@ FIGSIZE_PLACED = (2.65, 1.9)
 VENUE = "neurips"
 PLACED_FRAC = 0.48
 ALT_TEXT = ("Validation loss against training epoch for a baseline and a "
-            "tuned run over 12 epochs. Both fall; the tuned run reaches 0.02 "
-            "by epoch 12, while the baseline is still at 0.25.")
+            "tuned run over 12 epochs. Both fall; the tuned run reaches 0.03 "
+            "by epoch 12, while the baseline is still at 0.66.")
 
 
 def curves():
@@ -126,6 +126,24 @@ def test_step_7_passes_at_the_size_it_is_placed_at():
     ok, rows = audited(styled=True, figsize=FIGSIZE_PLACED, ticks=True,
                        described=True, venue=VENUE, placed_frac=PLACED_FRAC)
     assert ok, [(n, d) for n, s, d in rows if s is not True]
+
+
+def test_the_alt_text_quotes_the_curves_it_describes():
+    """Step 5's description was copied from the demo, whose curves are not
+    these: it said the tuned run reaches 0.02 and the baseline sits at 0.25,
+    where these reach 0.034 and 0.658 at epoch 12."""
+    _, baseline, tuned = curves()
+    assert "tuned run reaches 0.03 by epoch 12" in ALT_TEXT
+    assert "baseline is still at 0.66" in ALT_TEXT
+    assert tuned[-1] == pytest.approx(0.03, abs=0.005)
+    assert baseline[-1] == pytest.approx(0.66, abs=0.005)
+
+
+def test_the_page_prints_this_alt_text_and_its_length():
+    text = " ".join(TUTORIAL.read_text(encoding="utf-8").split())
+    page = text.replace('" "', "")
+    assert ALT_TEXT in page, "docs/tutorial.md passes a different description"
+    assert f"described in {len(ALT_TEXT)} characters" in text
 
 
 @pytest.mark.parametrize("quoted", [

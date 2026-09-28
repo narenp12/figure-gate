@@ -146,8 +146,9 @@ ramp:
 ## What each row tells you to do
 
 Eleven rows carry a remedy in `suggest_fixes.py`, and eight of those come with a
-runnable snippet. The other ten name their fix in the detail string and stop,
-mostly because the answer is to draw something else.
+runnable snippet. Nine of the other ten name their fix in the detail string and
+stop, mostly because the answer is to draw something else. Text collision names
+the two strings and no fix.
 
 | Row | First move | `suggest()` |
 |---|---|---|
@@ -178,7 +179,10 @@ mostly because the answer is to draw something else.
 Every threshold is a module-level constant. To change one, see
 [Change a threshold](how-to.md#change-a-threshold).
 
-Thresholds cite a published floor where one exists: SIAM's one point, WCAG's
-4.5:1, and the Nature, Science, and PNAS type minima. The rest were measured.
+Thresholds cite a published floor where one exists: SIAM's one point for data
+strokes, Science's half point for furniture, WCAG's 4.5:1, and the Nature and
+PNAS type minima. The rest were measured or set by judgement.
+`ALT_TEXT_MIN_CHARS = 60` is judgement: the length below which a description
+names the figure rather than describing it.
 [The figure style guide](style-guide.md) records the measurement and the figure
 that motivated each one.
