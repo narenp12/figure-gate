@@ -1958,6 +1958,11 @@ def test_the_two_entry_points_return_the_same_shape():
     assert all(len(row) == 3 for row in audit_rows + check_rows), (
         "the (label, status, detail) triple is the other half of the shape "
         "both entry points promise")
+    # `docs/compatibility.md` names the three statuses as part of the public
+    # API; a fourth, or a truthy string other than "warn", is a break.
+    statuses = [row[1] for row in audit_rows + check_rows]
+    assert all(s is True or s is False or s == "warn" for s in statuses), (
+        f"a row status outside True, False, 'warn': {set(map(repr, statuses))}")
 
 
 def test_both_entry_points_are_documented():

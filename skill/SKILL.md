@@ -41,8 +41,8 @@ replaces a builtin that was designed by people who measured it:
 | Defaults: type, ink, spines, grid | `assets/figure.mplstyle` | an rcParams dict in the plotting file |
 | Layout | `constrained_layout=True` | manual `subplots_adjust` |
 
-Three things remain genuinely project-specific: which figure to draw, how large
-the type must end up **on the page**, and whether the composition works.
+Three things remain project-specific: which figure to draw, how large the type
+must end up **on the page**, and whether the composition works.
 
 ## Setup
 
@@ -318,8 +318,7 @@ a **visible direct label**, and **a legend entry does not count as one.** The
 obligation exists because the mark is faint against the page, and a legend
 leaves the reader matching a small faint swatch to a small faint curve, which is
 the step a direct label removes. Put the text at the mark. Yellow at 1.32:1
-genuinely vanishes as a hairline, so use it as a fill with a dark edge, or not at
-all.
+vanishes as a hairline, so use it as a fill with a dark edge, or not at all.
 
 **Grayscale is a separate question, and Okabe-Ito does not solve it.** The
 canonical first two, orange and sky blue, separate by relative luminance 0.011

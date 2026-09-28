@@ -40,7 +40,7 @@ itself. That narrows what a vulnerability looks like:
 - A path traversal or unexpected write in the report and figure-saving helpers.
 - Denial of service that is disproportionate to the input: a palette of a dozen
   colors or a normal figure that hangs or exhausts memory. The `O(n^2)` fallback
-  in `check_overplotting` on a genuinely enormous scatter is a documented
+  in `check_overplotting` on an enormous scatter is a documented
   trade-off, not a vulnerability.
 
 **Out of scope**

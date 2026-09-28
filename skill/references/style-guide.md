@@ -208,11 +208,11 @@ renders and what the page under it is. They were previously quoted against
 `#fcfcfb`, a surface no figure in this project ever had. The numbers were all
 slightly wrong, and reddish purple was listed as needing a direct label when on
 white it clears 3:1 at 3.06. `tests/test_docs_match_code.py` now reads this
-table and checks every number against `contrast()`, so it cannot drift again. On
-a genuinely tinted page, pass `--surface`.
+table and checks every number against `contrast()`, so it cannot drift again.
+On a page that is not white, pass `--surface`.
 
-Two slots are held out. Yellow at 1.32:1 genuinely vanishes as a hairline, so it
-is for fills only. Black is a preference rather than a measurement, because it
+Two slots are held out. Yellow at 1.32:1 vanishes as a hairline, so it is
+for fills only. Black is a preference rather than a measurement, because it
 keeps "ink" unambiguous; take it as a series color if you want.
 
 The remaining six, in canonical order: `#E69F00 #56B4E9 #009E73 #0072B2 #D55E00 #CC79A7`
@@ -389,9 +389,9 @@ that ships with the repository, at
 The theory is Kovesi; see the references at the end.
 
 Passing the kind gate is not a quality verdict. `turbo` passes as diverging
-because its lightness profile genuinely is diverging-shaped. Its problem is hue
-banding, which a lightness-only measure cannot see. The row is named "Colormap
-kind" for that reason.
+because its lightness profile is diverging-shaped. Its problem is hue banding,
+which a lightness-only measure cannot see. The row is named "Colormap kind" for
+that reason.
 
 ### Ink, status, backdrop
 

@@ -111,7 +111,7 @@ for name, status, detail in rows:
 ## Gate a palette from a toolchain that is not Python
 
 `check_palette.py` imports nothing outside the standard library and exits 1 on a
-failing row. That exit code is the contract for a non-Python build:
+failing row. A non-Python build can gate on that exit code:
 
 ```bash
 python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all

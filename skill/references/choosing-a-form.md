@@ -220,9 +220,8 @@ trades one unreadable picture for a fainter one.
 Use a hexbin or a 2-D density estimate, and say which one you used.
 Transparency within the three-alpha-level budget makes density visible, but it
 does not clear the Overplotting row, which reads mark positions and sizes, not
-alpha. If the individual points genuinely matter,
-the honest answer is that the sample is too large for a scatter and the figure
-needs to change question.
+alpha. If the individual points matter, the sample is too large for a scatter,
+and the figure needs to change question.
 
 ## Encode only what exists
 

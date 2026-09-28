@@ -75,13 +75,13 @@ Below 1.0, a minor release may break that API. Version 0.7.0 broke the install
 path's import line. Every break is named in
 [the changelog](changelog.md) under its release heading.
 
-Two things about the contract:
+A row's shape is part of that API. `audit` returns `(ok, rows)`, each row a
+`(name, status, detail)` triple whose `status` is `True`, `False`, or `"warn"`,
+and `check` returns the same shape. A change to that shape is a break, named in
+the changelog like any other.
 
-- The number of rows is not part of it. Gates get added: `check_banking`
-  arrived after 0.6.0 and moved the count.
-- The shape is part of it. `audit` returns `(ok, rows)`, each row a
-  `(name, status, detail)` triple whose `status` is `True`, `False`, or
-  `"warn"`. `check` returns the same shape.
+The number of rows is not part of it. Gates get added: `check_banking` arrived
+after 0.6.0 and moved the count.
 
 On every pull request, CI compares the public API against the last tag and
 fails a build whose changelog does not name what moved.

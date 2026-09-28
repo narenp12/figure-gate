@@ -47,7 +47,8 @@ flowchart TD
     verdict -- "flagged" --> fail["the row names the defect"]
 ```
 
-The two checkers stay separate files because their contracts differ.
+The two checkers stay separate files because their inputs and import rules
+differ.
 `check_palette.py` takes hex strings and imports nothing outside the standard
 library, so a non-Python toolchain can gate a palette with a bare Python
 interpreter and nothing installed. `check_figure.py` renders a matplotlib figure, which is a

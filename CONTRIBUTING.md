@@ -16,7 +16,7 @@ of rather than by severity:
 
 - **A gate fired on a figure that is fine.** The report needs the case for the
   figure at the size it will print, because that is what decides whether the
-  threshold moves or the figure is genuinely broken.
+  threshold moves or the figure is broken.
 - **A broken figure passed.** The most valuable report here, since a gate that
   never fires is the failure mode this project guards against hardest.
 - **Something else is broken.** Crashes, wrong numbers, and documents that
@@ -42,8 +42,8 @@ ships with three things:
    gate runs on, and three of the existing checks fired on things that never
    render before they were tuned.
 
-If the right density or spacing genuinely depends on the form, make it a `WARN`
-rather than a `FAIL`. A gate people learn to skip stops gating.
+If the right density or spacing depends on the form, make it a `WARN` rather
+than a `FAIL`. A gate people learn to skip stops gating.
 
 ## Changing a threshold
 
@@ -62,8 +62,8 @@ sentence.
 
 **Anything in backticks has to exist.** Constants, functions, files, flags,
 rcParam keys, colormap names. A name that resolves nowhere fails, and the fix is
-usually that the name is wrong. If it genuinely cannot resolve — a LaTeX
-package, an error string quoted so a reader recognises it — add it to
+usually that the name is wrong. If it cannot resolve, such as a LaTeX package
+or an error string quoted so a reader recognises it, add it to
 `UNRESOLVED_SPANS` with the reason. That set is meant to stay small.
 
 **A constant belongs to the module the paragraph names.** A paragraph about

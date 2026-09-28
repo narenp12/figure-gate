@@ -136,9 +136,9 @@ may break it. Every break is named in
 under its release heading, and CI fails a pull request whose `## Unreleased`
 section does not name a symbol that moved.
 
-The number of rows is not part of the contract. The shape is. For the full
-statement, see
-[how the checkers decide](https://narenp12.github.io/figure-gate/design/#what-the-api-promises).
+A row's shape is part of the public API, so a change to it is named in the
+changelog. The number of rows is not. For the full statement, see
+[the version policy](https://narenp12.github.io/figure-gate/compatibility/#version-policy).
 
 ## Contributing
 
