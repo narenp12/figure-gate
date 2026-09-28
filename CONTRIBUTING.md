@@ -36,23 +36,23 @@ ships with three things:
 2. **A test showing it fails.** Build a figure with exactly that defect and
    assert *that* gate is the one that catches it. Asserting only that `audit`
    returned `False` would pass even if every other check had silently broken.
-3. **A test proving it doesn't over-fire.** Whatever legitimate case sits
-   nearest the line — side-by-side panels each needing their own x label, a
-   heatmap at 0.98 ink coverage. Every false positive spends the credibility the
-   gate runs on, and three of the existing checks fired on things that never
+3. **A test showing it does not over-fire.** Use whatever legitimate case sits
+   nearest the line, such as side-by-side panels each needing their own x
+   label, or a heatmap at 0.98 ink coverage. A false positive teaches people to
+   skip the row, and three of the existing checks fired on things that never
    render before they were tuned.
 
 If the right density or spacing depends on the form, make it a `WARN` rather
-than a `FAIL`. A gate people learn to skip stops gating.
+than a `FAIL`, so the row reports without failing a build.
 
 ## Changing a threshold
 
-Thresholds are measured. Their values are pinned in
+Thresholds are measured, except the ones `docs/gates.md` marks as judgement.
+Their values are pinned in
 `tests/test_thresholds_are_constants.py`, several palette ones again in
 `tests/test_palette.py`, and many are quoted in `docs/gates.md` and the style
-guide. If you change one, update all of them — a reader who catches
-the docs quoting a number the code doesn't produce has no reason to trust
-anything else in them.
+guide. If you change one, update all of them. A reader who catches the docs
+quoting a number the code does not produce stops trusting the rest.
 
 ## Writing prose
 

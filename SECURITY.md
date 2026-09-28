@@ -33,20 +33,20 @@ itself. That narrows what a vulnerability looks like:
 - Code execution, file writes or network access triggered by a palette string,
   a figure, or a command-line argument. Nothing here should reach outside the
   process, and `check_palette.py` imports nothing outside the standard library
-  precisely so that claim stays checkable.
-- Anything that makes an installed artifact differ from the tagged source — a
-  compromised release workflow, a wheel whose contents do not match the tag, a
-  broken PEP 740 attestation.
+  so that claim stays checkable.
+- Anything that makes an installed artifact differ from the tagged source: a
+  compromised release workflow, a wheel whose contents do not match the tag, or
+  a broken PEP 740 attestation.
 - A path traversal or unexpected write in the report and figure-saving helpers.
 - Denial of service that is disproportionate to the input: a palette of a dozen
   colors or a normal figure that hangs or exhausts memory. The `O(n^2)` fallback
-  in `check_overplotting` on an enormous scatter is a documented
-  trade-off, not a vulnerability.
+  in `check_overplotting` on an enormous scatter is a documented trade-off, not
+  a vulnerability.
 
 **Out of scope**
 
 - A gate that passes a figure it should fail, or fails one it should pass. That
-  is a correctness bug and belongs in a public issue — it is the kind of report
+  is a correctness bug and belongs in a public issue. It is the kind of report
   the project most wants, just not through this channel.
 - Vulnerabilities in matplotlib, NumPy or SciPy. Report those upstream; if one
   needs a version floor raised here, open an issue and say so.
