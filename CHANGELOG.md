@@ -89,7 +89,7 @@ behind a threshold this project enforces.
 - Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
   `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
   resolves to. The pages, 253-258, were right.
-- `docs/design.md` **changed** the stated suite size `2190` → **`2253`**.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2256`**.
 - `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
   was a hardcoded eleven under a comment saying it was read off the module; it is
   parsed from `BUILDERS` now, and the nine figures added since the sweep was
@@ -130,8 +130,26 @@ behind a threshold this project enforces.
   and 31.7 at the worst severity the gate reports`**, and the sub-35% placement
   sentence → **"prints a 10pt label under 3.5pt"**. **Removed** "the one figure
   in this repository that uses a legend".
+- `SKILL.md` Setup **added** `suggest_fixes.py` to the copy step, **changed** "it
+  only sets the type floor" → **"the error moves the measured type and stroke
+  sizes by the same 5%"**, and "nearly all of them matplotlib" → **"matplotlib
+  was the most-imported charting library among them"**.
+- `CONTRIBUTING.md` **changed** "mypy runs unannotated" → **"mypy runs with the
+  strict flags off"**, and "Changing a threshold" → names
+  `tests/test_thresholds_are_constants.py` and `docs/gates.md` beside
+  `tests/test_palette.py`.
 
 ### Why it changed
+
+#### SKILL.md and CONTRIBUTING.md against the code
+
+`SKILL.md` step 6 uses `report(fig, suggest=True)`, which prints nothing extra
+without the file its Setup never copied. `CONTENT_WIDTH_PT` scales the line-weight
+gate through the same `page_scale` as the type gate. Potluri et al. report
+matplotlib as the most-imported charting library, not as the source of nearly
+every image. `pyproject.toml`'s own mypy comment says every function in
+`skill/scripts` is annotated. The value of every threshold is pinned in
+`tests/test_thresholds_are_constants.py`, which the old sentence did not name.
 
 #### The two references against the code
 

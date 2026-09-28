@@ -53,6 +53,7 @@ Copy the bundled files into the project, once:
 mkdir -p diagrams
 cp <skill>/assets/figure.mplstyle diagrams/
 cp <skill>/scripts/check_palette.py <skill>/scripts/check_figure.py diagrams/
+cp <skill>/scripts/suggest_fixes.py diagrams/    # optional: report(fig, suggest=True)
 ```
 
 Then set two things and nothing else:
@@ -60,8 +61,8 @@ Then set two things and nothing else:
 1. Set `font.serif` in `figure.mplstyle` to the surrounding document's body face.
 2. Set `CONTENT_WIDTH_PT` at the top of `check_figure.py` to the usable width,
    in points, of the page the figure lands in. Render one page, place a
-   full-width figure, and measure. Within about 5% is fine, because it only sets
-   the type floor.
+   full-width figure, and measure. Within about 5% is fine: the error moves the
+   measured type and stroke sizes by the same 5%.
 
 The second of those is one copy's setting. When more than one person authors the
 figures, or a build has to agree with them, write the thresholds in a
@@ -230,8 +231,8 @@ by the test suite against a figure that fails its gate, and the gate has to pass
 afterwards.
 
 **Describe the figure for a reader who cannot see it.** Across 100,000 public
-notebooks, 99.81% of generated images shipped with no alt text, nearly all of
-them matplotlib. Say what the reader would have taken from looking, meaning the
+notebooks, 99.81% of generated images shipped with no alt text, and matplotlib
+was the most-imported charting library among them. Say what the reader would have taken from looking, meaning the
 numbers and the direction, rather than what the figure is made of:
 
 ```python

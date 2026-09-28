@@ -48,8 +48,10 @@ rather than a `FAIL`. A gate people learn to skip stops gating.
 
 ## Changing a threshold
 
-Thresholds are measured, and several are quoted in the guide and pinned in
-`tests/test_palette.py`. If you change one, update both — a reader who catches
+Thresholds are measured. Their values are pinned in
+`tests/test_thresholds_are_constants.py`, several palette ones again in
+`tests/test_palette.py`, and many are quoted in `docs/gates.md` and the style
+guide. If you change one, update all of them — a reader who catches
 the docs quoting a number the code doesn't produce has no reason to trust
 anything else in them.
 
@@ -133,9 +135,11 @@ because that file is claimed to run on 3.8 when vendored. The `stdlib-only` CI
 job proves the two invocations it makes still work on 3.8; ruff reads the whole
 file, and does it before the commit rather than after the push.
 
-mypy runs unannotated. The code is written without type annotations on purpose,
-so the strict flags are off and what is left is the contradiction a reader would
-also catch: an attribute that cannot exist, a return that cannot happen.
+mypy runs with the strict flags off. Every function in `skill/scripts` is
+annotated, but matplotlib and scipy ship incomplete stubs, so the strict flags
+would report the ecosystem rather than this project. What is left is the
+contradiction a reader would also catch: an attribute that cannot exist, a
+return that cannot happen.
 
 `check_palette.py` must keep importing nothing outside the standard library.
 That's what makes it usable from a non-Python toolchain, and CI has a job with
