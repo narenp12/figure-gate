@@ -29,7 +29,8 @@ figure-gate verifies figures. It does not draw them, restyle them, or judge
 whether a figure is good. Each check forbids one named defect, so a figure that
 passes every row has avoided 21 named defects and nothing more.
 
-Every threshold is a module-level constant you can read and change.
+Every threshold is a module-level constant you can read, change, or set from a
+`figure-gate.toml`.
 
 ## Try it
 
@@ -39,8 +40,8 @@ check-palette "#E69F00,#56B4E9,#009E73" --pairs all
 check-figure                             # self-test on a deliberately broken figure
 ```
 
-The second command prints a failing report and exits 0, because a checker that
-cannot fail is not a checker.
+`check-figure` prints a failing report and exits 0: its self-test passes only
+when the checker rejects the broken figure.
 
 Copying the scripts in works too, and is the route if you want the thresholds
 beside the figures they gate. The
@@ -51,9 +52,10 @@ routes.
 All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12,
 while the baseline is still at 0.25 at epoch 12.](https://raw.githubusercontent.com/narenp12/figure-gate/main/examples/demo.png)
 
-*`python examples/demo.py` builds that figure and audits it, and
-`python examples/gallery.py` covers the harder forms. Writing those twenty
-found nine defects in the checks themselves.*
+*`python examples/demo.py` builds that figure and audits it.
+`python examples/gallery.py` builds the harder forms. Writing those twenty
+found nine defects in the checks themselves, listed on the
+[gallery page](https://narenp12.github.io/figure-gate/gallery/).*
 
 ## Documentation
 
@@ -122,8 +124,7 @@ for exact conference sizing. Accessibility tooling exists too:
 reporters check colors in isolation.
 
 Each of those acts before or beside the figure. None of them reads the built
-result and reports what it fails, which is the only thing figure-gate does. A
-style sheet and figure-gate are complementary: set your defaults with one,
+result and reports what it fails. A style sheet and figure-gate are complementary: set your defaults with one,
 verify them with the other.
 
 ## Stability

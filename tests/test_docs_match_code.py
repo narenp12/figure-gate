@@ -13,7 +13,9 @@ measurement that drifts from the code is now a test failure rather than a thing
 someone notices in a year.
 """
 
+import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -357,6 +359,49 @@ def test_the_readme_states_the_split_it_promises():
     assert advisory == len(cf.ADVISORY_GATES)
     assert fails == len(cf.GATES) - len(cf.ADVISORY_GATES)
     assert fails + advisory == len(audit_gate_names())
+
+
+# --- the commands a reader runs first -----------------------------------------
+# `## Try it` said "The second command prints a failing report". The second was
+# `check-palette`, which passes on the three hexes it is given; the one that
+# fails is `check-figure`, the third. Counting commands is how that went wrong,
+# so the sentence names one and the test below runs every one.
+
+SCRIPT_MODULES = dict(re.findall(
+    r'^([a-z-]+) = "figure_gate\.(\w+):main"',
+    (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M))
+
+
+def try_it_commands():
+    """The console-script lines of the README's `## Try it` block, as argv."""
+    block = re.search(r"## Try it\s+```bash\n(.*?)```",
+                      README.read_text(encoding="utf-8"), re.S)
+    assert block, "the README no longer opens `## Try it` with a bash block"
+    argvs = [shlex.split(line, comments=True)
+             for line in block.group(1).splitlines()]
+    return [argv for argv in argvs if argv and argv[0] in SCRIPT_MODULES]
+
+
+def test_the_readme_names_the_one_command_that_fails():
+    claimed = re.search(r"`([a-z-]+)` prints a failing report and exits 0",
+                        " ".join(README.read_text(encoding="utf-8").split()))
+    assert claimed, ("the README no longer names the failing command in the "
+                     "form this test reads")
+    commands = try_it_commands()
+    assert len(commands) > 1, f"read {commands} out of `## Try it`"
+    failing = []
+    for argv in commands:
+        script = SKILL / "scripts" / f"{SCRIPT_MODULES[argv[0]]}.py"
+        result = subprocess.run(
+            [sys.executable, str(script), *argv[1:]], capture_output=True,
+            text=True, timeout=300, env={**os.environ, "MPLBACKEND": "Agg"})
+        assert result.returncode == 0, (
+            f"`{shlex.join(argv)}` exited {result.returncode}:\n{result.stderr}")
+        if "[FAIL]" in result.stdout:
+            failing.append(argv[0])
+    assert failing == [claimed.group(1)], (
+        f"the README says `{claimed.group(1)}` prints a failing report; the "
+        f"commands that printed one were {failing}")
 
 
 def test_every_advisory_gate_is_a_gate_that_exists():
@@ -1362,6 +1407,39 @@ def test_every_source_states_the_real_gallery_count(label):
     assert WORD_NUMBERS[word] == gallery_figure_count(), (
         f"{label} says {word} figures; gallery.py builds "
         f"{gallery_figure_count()}")
+
+
+# --- how many defects the gallery found ---------------------------------------
+# Four copies of one number. `docs/gallery.md` numbers the list, so the list is
+# the count and every sentence is read against it.
+
+GALLERY_DEFECT_CLAIMS = {
+    "the gallery page's heading": (DOCS_GALLERY, r"## The (\w+) defects in the checks"),
+    "the gallery page's lead": (DOCS_GALLERY, r"found (\w+) defects in the checks themselves"),
+    "gallery.py's docstring": (GALLERY_PY, r"found (\w+) defects in the checks themselves"),
+    "the README": (README, r"found (\w+) defects in the checks themselves"),
+}
+
+
+def gallery_defect_count():
+    """Numbered items under the gallery page's defect heading."""
+    section = re.search(r"^## The \w+ defects in the checks\n(.*?)^## ",
+                        DOCS_GALLERY.read_text(encoding="utf-8"), re.S | re.M)
+    assert section, "docs/gallery.md no longer has the defect heading this reads"
+    return len(re.findall(r"^\d+\. ", section.group(1), re.M))
+
+
+@pytest.mark.parametrize("label", sorted(GALLERY_DEFECT_CLAIMS))
+def test_every_source_states_the_real_defect_count(label):
+    path, pattern = GALLERY_DEFECT_CLAIMS[label]
+    claimed = re.search(pattern, " ".join(path.read_text(encoding="utf-8").split()))
+    assert claimed, f"{label} no longer states the defect count in the form this test reads"
+    word = claimed.group(1).lower()
+    assert word in WORD_NUMBERS, f"{label} states an unreadable count {word!r}"
+    assert gallery_defect_count() > 1
+    assert WORD_NUMBERS[word] == gallery_defect_count(), (
+        f"{label} says {word} defects; docs/gallery.md lists "
+        f"{gallery_defect_count()}")
 
 
 # --- every gate has somewhere to send a reader --------------------------------

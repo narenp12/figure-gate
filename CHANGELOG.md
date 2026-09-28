@@ -89,7 +89,7 @@ behind a threshold this project enforces.
 - Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
   `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
   resolves to. The pages, 253-258, were right.
-- `docs/design.md` **changed** the stated suite size `2190` → **`2247`**.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2254`**.
 - `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
   was a hardcoded eleven under a comment saying it was read off the module; it is
   parsed from `BUILDERS` now, and the nine figures added since the sweep was
@@ -99,8 +99,19 @@ behind a threshold this project enforces.
   own docstring. The one status flip is still `orbit`'s ink coverage at 600 dpi.
 - `check_palette.oklab_distance`, `cmap_back_travel` and `hex_to_linear`'s raise
   are exercised. Coverage of `check_palette.py` 86% → 88%.
+- README `## Try it` **changed** "The second command prints a failing report" →
+  **"`check-figure` prints a failing report"**.
+- `test_the_readme_names_the_one_command_that_fails` and
+  `test_every_source_states_the_real_defect_count` **added** in
+  `tests/test_docs_match_code.py`.
 
 ### Why it changed
+
+#### The README's first claim was about the wrong command
+
+The second command in `## Try it` is `check-palette`, which passes on the three
+hexes the README gives it. The test runs every command in that block and
+requires the one that prints `[FAIL]` to be the one the sentence names.
 
 #### A number in capitals is not always a threshold
 
