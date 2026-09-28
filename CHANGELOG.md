@@ -89,7 +89,7 @@ behind a threshold this project enforces.
 - Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
   `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
   resolves to. The pages, 253-258, were right.
-- `docs/design.md` **changed** the stated suite size `2190` → **`2249`**.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2253`**.
 - `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
   was a hardcoded eleven under a comment saying it was read off the module; it is
   parsed from `BUILDERS` now, and the nine figures added since the sweep was
@@ -118,8 +118,33 @@ behind a threshold this project enforces.
 - `docs/install.md`, `docs/how-to.md` and `docs/api.md` **removed** copies of the
   import-line history, the `py.typed` note, the `suggest_fixes.py` note and the
   "default route" claim, and link to the one copy that stays.
+- `choosing-a-form.md` **changed** "a sevenfold difference" → **"one bar eight
+  times the length of the other, for values 7% apart"**, "the one
+  `check_figure.py` fails" → **"one of the three"**, "task 2/3" → **"rank 2/3"**,
+  and "Color sits at the bottom" → **"Color saturation sits at the bottom, and
+  hue is off the list"**.
+- `choosing-a-form.md` and `style-guide.md` **removed** transparency as a fix for
+  overplotting; `test_transparency_does_not_move_the_overplotting_row` **added**.
+- `style-guide.md` **changed** the Fast path's and Procedure's `check_figure.py`
+  step → **`report(fig)`**, the adjacent CVD figure `32.0` → **`32.0 at dichromacy
+  and 31.7 at the worst severity the gate reports`**, and the sub-35% placement
+  sentence → **"prints a 10pt label under 3.5pt"**. **Removed** "the one figure
+  in this repository that uses a legend".
 
 ### Why it changed
+
+#### The two references against the code
+
+`check_overplotting` reads offsets and sizes, and
+`test_the_overplotting_remedy_does_not_advise_transparency` already held the
+remedy to that, while both references still offered transparency first. Bars
+101 and 108 on a baseline of 100 are 1 and 8 long. `check_figure.py` with no
+arguments runs the self-test, so the Fast path's validate step never audited the
+reader's figure. The gate prints 31.7 for the shipped cycle, so a reader
+checking the guide's 32.0 against it found a mismatch. `examples/gallery.py`
+calls `legend` at four sites. A figure's label size under a small placement
+depends on the size it was authored at, which "every label at or below 6pt" left
+out.
 
 #### A docs pass for claims the code no longer backs
 

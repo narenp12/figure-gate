@@ -30,7 +30,7 @@ ranks and not seven:
 5. Volume, curvature
 6. Shading, color saturation
 
-Colour **hue** is not ranked there. Lists that append it are extending the paper
+Color **hue** is not ranked there. Lists that append it are extending the paper
 rather than quoting it. This guide gives hue no magnitude job at all. Hue
 carries identity, which is a different question from how accurately a magnitude
 can be read off it.
@@ -41,9 +41,9 @@ Small multiples beat grouped bars because identical non-aligned scales beat
 comparing lengths across a gap. A pie loses because angle and area are both near
 the bottom.
 
-Color sits at the bottom. That is why it identifies series rather than carrying
-their magnitudes, and it is why `check_palette.py` exists at all: the weakest
-channel is the one that has to survive a reader who sees it differently.
+Color saturation sits at the bottom, and hue is off the list. Color identifies
+series, and `check_palette.py` exists because that channel has to survive a
+reader who sees it differently.
 
 ---
 
@@ -93,9 +93,8 @@ interval.
 
 **A bar encodes its value as length, so its baseline must be zero.** Cut the
 axis and every ratio on the chart is misstated. Bars at 101 and 108 drawn from a
-baseline of 100 look like a sevenfold difference. This is the one form error
-that reliably changes a reader's conclusion, and it is the one `check_figure.py`
-fails.
+baseline of 100 draw one bar eight times the length of the other, for values
+7% apart. It is one of the three form errors `check_figure.py` fails.
 
 **When the baseline is not meaningful, change the form.** A Cleveland dot plot
 encodes the value as position, which carries no zero obligation, so the axis can
@@ -133,11 +132,11 @@ comparison is the point, make the comparison the thing on the axis.
 
 Beyond about three series in three groups, a grouped bar chart asks the reader
 to compare lengths that are not adjacent and do not share a baseline position.
-That is task 3 crossed with task 2, done repeatedly.
+That is rank 3 crossed with rank 2, done repeatedly.
 
 Trellis display (Cleveland, 1993, and `facet_wrap` to everyone who met it
 through `ggplot2`) splits the same comparison into panels on identical scales,
-which is task 2 done once per panel.
+which is rank 2 done once per panel.
 
 Panels share their axis furniture: one tick column, one axis label.
 `check_figure.py` gates that separately as Axis redundancy.
@@ -217,8 +216,10 @@ At large n, marks stop being individually visible and the figure reports
 density rather than observations. Shrinking the marker does not fix it. It
 trades one unreadable picture for a fainter one.
 
-Use transparency within the three-alpha-level budget, a hexbin, or a 2-D density
-estimate, and say which one you used. If the individual points genuinely matter,
+Use a hexbin or a 2-D density estimate, and say which one you used.
+Transparency within the three-alpha-level budget makes density visible, but it
+does not clear the Overplotting row, which reads mark positions and sizes, not
+alpha. If the individual points genuinely matter,
 the honest answer is that the sample is too large for a scatter and the figure
 needs to change question.
 

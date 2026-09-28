@@ -2157,6 +2157,23 @@ def test_overplotting_warns_on_dense_scatter():
     assert gates(rows)["Overplotting"] == "warn"
 
 
+def test_transparency_does_not_move_the_overplotting_row():
+    """`choosing-a-form.md` says transparency does not clear this row, because
+    the gate reads positions and sizes. The same cloud at two alphas, measured."""
+    import numpy as np
+    rng = np.random.default_rng(42)
+    x = rng.normal(0.5, 0.015, 70)
+    y = rng.normal(0.5, 0.015, 70)
+    rows_at = {}
+    for alpha in (1.0, 0.1):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.scatter(x, y, s=160, alpha=alpha)
+        rows_at[alpha] = cf.check_overplotting(fig)
+        plt.close(fig)
+    assert rows_at[1.0] == rows_at[0.1]
+    assert rows_at[0.1][0] == "warn"
+
+
 def test_overplotting_clean_on_spread_scatter():
     """Well-separated points should not trigger the overplotting WARN."""
     fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)

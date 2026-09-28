@@ -52,7 +52,7 @@ SIZE:        author at placed width → scale = 1.0, points are points
              otherwise check_figure.py derives scale from CONTENT_WIDTH_PT
              type floor 7.5pt on page; cut words before shrinking
 
-VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
+VALIDATE:    check_palette.py "<hexes>"  &&  report(fig)  &&  open PNG
 ```
 
 ---
@@ -64,7 +64,7 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 2. **Choose the form.** See [choosing a form](choosing-a-form.md). Nothing
    downstream fixes a wrong one.
 3. **Build** on `figure.mplstyle`.
-4. **Compose, run `check_figure.py`, render a PNG, and look at it.**
+4. **Compose, audit with `report(fig)`, render a PNG, and look at it.**
 5. **Validate the palette with `check_palette.py`.** Do not eyeball color.
 6. **Render the finished document and look at that.**
 
@@ -72,8 +72,9 @@ VALIDATE:    check_palette.py "<hexes>"  &&  check_figure.py  &&  open PNG
 
 - Keep one thing opaque, and use at most three alpha levels. Context gets the
   alpha; data does not.
-- Keep marks within about 4x the area of each other. Emphasis is shape or a
-  label, not 5x the area.
+- Keep marks within about 4x the area of each other, which leaves room under
+  the Mark ratio row's `MARK_RATIO_MAX = 5.0`. Emphasis is shape or a label, not
+  size.
 - Give context surfaces structure, such as bands or isolines, rather than a
   plain neutral fill.
 - Give panels on a shared scale shared axis furniture.
@@ -135,9 +136,8 @@ range, and a blank half of a 6x3in pair reads 0.01, under it. Only the first is
 caught by the range.
 
 **At the ceiling, the panel is reporting density rather than observations.**
-That is the overplotting case in [choosing a form](choosing-a-form.md):
-transparency within the three-alpha-level budget, a hexbin, or a 2-D density
-estimate.
+That is the overplotting case in [choosing a form](choosing-a-form.md): a hexbin
+or a 2-D density estimate.
 
 **When the fill is context, say so.** A `contourf` landscape under a few marks
 reads as saturated, because the surface is what fills the rectangle. Pass those
@@ -212,7 +212,8 @@ keeps "ink" unambiguous; take it as a series color if you want.
 
 The remaining six, in canonical order: `#E69F00 #56B4E9 #009E73 #0072B2 #D55E00 #CC79A7`
 
-Adjacent CVD ΔE 32.0, adjacent normal-vision ΔE 31.5, all-pairs ΔE 12.8/21.6.
+Adjacent CVD ΔE 32.0 at dichromacy and 31.7 at the worst severity the gate
+reports, adjacent normal-vision ΔE 31.5, all-pairs ΔE 12.8/21.6.
 
 **Take slots in order.** One series takes orange. Three take orange, sky blue,
 and bluish green. Never cherry-pick by meaning. There is one limit rather than
@@ -563,9 +564,8 @@ through the data.
   the data underneath. That is why the gate measures the backdrop rather than
   the finished render.
 - When a panel has no clear ground anywhere, take the labels off the field
-  entirely. A filled field crossed by isolines is the usual case.
-  `examples/gallery.py` has the one figure in this repository that uses a
-  legend, and that is the reason.
+  entirely and key the series in a legend. A filled field crossed by isolines
+  is the usual case.
 
 ### Standing rules
 
@@ -587,11 +587,10 @@ until you know what width the document gives it: a full page, a text block, or
 two columns. Author it at that width, and the scale is 1.0, the type gate is
 exact, and there is nothing to compute.
 
-A figure placed below roughly 35% of the content width, which is two-column
-width for a landscape figure, puts every label at or below 6pt on the page
-regardless of what the script says. `check_figure.py` warns when `placed_frac <
-0.35`, but the right move is to change the placement or the figure, not to
-shrink the type further.
+A figure authored at the full content width and placed below 35% of it prints
+a 10pt label under 3.5pt. `check_figure.py` warns when `placed_frac < 0.35`, but
+the right move is to change the placement or the figure, not to shrink the type
+further.
 
 Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of
 the eighteen the table already knows (`python check_figure.py --venues`). A
