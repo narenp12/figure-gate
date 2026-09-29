@@ -1071,6 +1071,38 @@ def test_the_built_page_is_titled_what_it_says_it_is(page, built_site):
         f"serves {found.group(1).strip()!r}")
 
 
+# Each of these emits markup. The two view-time features are further down this
+# file, and `navigation.indexes` is not set: it measured as a no-op, because no
+# section in the nav points at a file.
+NAVIGATION_MARKUP = {
+    "navigation.tabs": "md-tabs",
+    "navigation.sections": "md-nav__item--section",
+    "navigation.path": "md-path",
+    "navigation.footer": "md-footer__link",
+}
+
+
+@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
+def test_a_configured_navigation_feature_reaches_the_built_page(
+        feature, marker, built_site):
+    """The silent-typo guard, as an assertion.
+
+    In this file because it reads `site/`, and `built_site` is what says a build
+    finished. It lived in `test_docs_site.py` with a `pytest.skip` when the page
+    was missing, and took the fixture from nothing: under `-n auto` another
+    worker's `built_site` cleans `site/` while this runs, so about half of runs
+    reported four skips for a site that existed before and after. The fixture is
+    the coordination, and a test that reads a directory another test rewrites has
+    to take it.
+    """
+    built = built_site / "gates" / "index.html"
+    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
+        f"{feature} left the features list; drop this row with it")
+    assert marker in built.read_text(encoding="utf-8"), (
+        f"{feature} is configured and `{marker}` is absent from the built "
+        "page, so the name is doing nothing - check it against the theme's")
+
+
 def home_article(built_site):
     """The home page's article, and nothing around it.
 

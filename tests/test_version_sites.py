@@ -218,7 +218,10 @@ CITATION = ROOT / "CITATION.cff"
 
 
 def citation():
-    yaml = pytest.importorskip("yaml")           # not a declared dependency
+    # Per test, not at import: the `test` matrix installs no PyYAML except on
+    # the cmasher leg, and a failed module import drops these tests from the
+    # count `docs/design.md` states.
+    yaml = pytest.importorskip("yaml")
     return yaml.safe_load(CITATION.read_text(encoding="utf-8"))
 
 

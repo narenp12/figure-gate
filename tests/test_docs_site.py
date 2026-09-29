@@ -533,25 +533,12 @@ def test_every_configured_extension_is_used_by_a_page():
                         "site serves uses their syntax. Drop them.")
 
 
-# Each of these emits markup. The two view-time features are in
-# test_docs_render.py, and `navigation.indexes` is not set: it measured as a
-# no-op, because no section in the nav points at a file.
-NAVIGATION_MARKUP = {
-    "navigation.tabs": "md-tabs",
-    "navigation.sections": "md-nav__item--section",
-    "navigation.path": "md-path",
-    "navigation.footer": "md-footer__link",
-}
-
-
-@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
-def test_a_configured_navigation_feature_reaches_the_built_page(feature, marker):
-    """The silent-typo guard, as an assertion."""
-    built = ROOT / "site" / "gates" / "index.html"
-    if not built.is_file():
-        pytest.skip("no built site - run `zensical build` first")
-    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
-        f"{feature} left the features list; drop this row with it")
-    assert marker in built.read_text(encoding="utf-8"), (
-        f"{feature} is configured and `{marker}` is absent from the built "
-        "page, so the name is doing nothing - check it against the theme's")
+# `NAVIGATION_MARKUP` and the test that reads it are in test_docs_render.py,
+# with the other features whose evidence is markup rather than a file. This file
+# reads `docs/` and `zensical.toml`, which are inputs and are always there; that
+# one reads `site/`, which exists only after a build. Keeping the two apart is
+# what stops a test from opening a directory another test is rewriting: `site/`
+# has one copy per checkout and `built_site` cleans it, so a reader that does not
+# take that fixture is racing it. Here it did, and skipped about half of
+# `-n auto` runs on "no built site" while the build it was waiting for was
+# already finished.

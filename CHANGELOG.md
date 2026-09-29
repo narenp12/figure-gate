@@ -104,6 +104,13 @@ behind a threshold this project enforces.
 - `test_the_readme_names_the_one_command_that_fails` and
   `test_every_source_states_the_real_defect_count` **added** in
   `tests/test_docs_match_code.py`.
+- `pyyaml` **added** to the `dev` dependency group, and to the `ci.yml` `test`
+  leg that installs cmasher. On a clean `uv sync --group dev`
+  `tests/test_version_sites.py` goes from 13 passed and 6 skipped to 19 passed.
+- `test_a_configured_navigation_feature_reaches_the_built_page` and
+  `NAVIGATION_MARKUP` **moved** from `tests/test_docs_site.py` to
+  `tests/test_docs_render.py`, and the four cases now depend on `built_site`.
+  They skipped in every CI job, and in about half of local `-n auto` runs.
 - `check_type_size` **changed** its scale in the detail string from the unrounded
   float to two decimals, the format `check_line_weight` already used.
 - `docs/design.md` **removed** the claim that the colormap row passes when
@@ -381,6 +388,39 @@ reader to whichever release was current when the line was written. `date-release
 is absent for the same reason, and
 `tests/test_version_sites.py::test_the_citation_carries_no_date_released` is what
 keeps that a decision rather than an oversight.
+
+Those six tests ran nowhere but a contributor's machine. `yaml` was in no
+declared group; it reached the local environment as a transitive dependency of
+the `docs` group's MkDocs tree, and `pytest.importorskip` turned its absence into
+a skip rather than an error. A clean `uv sync --group dev` gave 13 passed and 6
+skipped, and `ci.yml`'s `test` matrix installs only pytest, xdist and matplotlib,
+so it skipped them too. So the newest version site had the parametrised pattern
+test watching its shape and nothing at all checking it was still a citation: not
+the DOI, not the author, not the version a reader resolves. `pyyaml` is named in
+`dev` now, for the same reason `api` names griffe outright instead of taking it
+from `docs`: a group that gets its tool by accident from another group's tree
+stops working the day that tree changes.
+
+The `importorskip` in `citation()` stays. A plain `import yaml` fails collection
+on every `test` leg, and the count `docs/design.md` states with it. One `test`
+leg installs PyYAML, so the six run in CI.
+
+Looking for the same shape elsewhere found four more.
+`test_a_configured_navigation_feature_reaches_the_built_page` reads
+`site/gates/index.html` and skipped when it was absent, which was every CI job:
+the only one that builds a site is the docs workflow's and it ran
+`tests/test_docs_render.py` alone, while `ci.yml` syncs `--group dev` and carries
+no zensical. So a navigation feature could stop reaching the theme's markup and
+the four cases watching for it would report nothing.
+
+Locally it was worse than absent. `built_site` cleans and rewrites the one
+`site/` a checkout has, and this test read that directory without taking the
+fixture, so under `-n auto` it opened a path another worker was replacing: two
+isolated runs back to back gave 53 skips and then 57, for a site that existed
+before and after both. The test and `NAVIGATION_MARKUP` are in
+`test_docs_render.py` now and depend on `built_site`, which is the coordination
+and also why the docs workflow already runs them. A test that reads a directory
+another test rewrites has to take the fixture that owns it.
 
 The Python floor stays at 3.11. SPEC 0 recommends dropping a release about three
 years after it ships, and by that calendar 3.11 was due to go in April 2026.

@@ -193,6 +193,11 @@ jobs:
       - name: Install the differential oracle (this job only)
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: uv pip install --system cmasher
+      # `test_version_sites.py`'s six CITATION.cff tests skip without PyYAML,
+      # and read one file, so one leg is enough.
+      - name: Install PyYAML for the CITATION.cff tests (this job only)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        run: uv pip install --system pyyaml
       # The one test that needs a real TeX runs in the `pgf` job below rather
       # than here. It skips itself on every leg of this matrix, which is what
       # that job exists to assert.

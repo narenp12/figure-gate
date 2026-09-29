@@ -504,6 +504,13 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
+    # No tool in this group needs it; `tests/test_version_sites.py` does, to
+    # read CITATION.cff. Declared rather than left to arrive with the `docs`
+    # group's MkDocs tree, which is where it came from until now: the six
+    # citation tests were behind a `pytest.importorskip` and skipped on every
+    # CI job, so the file the release bump rewrites had nothing checking it was
+    # still a citation. Same reason `api` names griffe outright.
+    "pyyaml>=6.0.3",
     "ruff>=0.16",
     "scipy>=1.6",
 ]
