@@ -1463,6 +1463,17 @@ def test_dual_axis_catches_twinx_carrying_its_own_data():
     assert gates(rows)["Dual axis"] is False
 
 
+def test_dual_axis_catches_twiny_carrying_its_own_data():
+    """`check_dual_axis` says `twiny` lands in the same place as `twinx`."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([1, 2, 3], [0, 1, 2], color=OKABE[0])
+    tw = ax.twiny()
+    tw.plot([300, 200, 100], [0, 1, 2], color=OKABE[1])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Dual axis"] is False
+
+
 def test_a_bare_unit_relabel_axis_is_not_a_dual_axis():
     """The one legitimate second scale: a pure unit relabel, where the twin is
     furniture and carries no data of its own. Failing this would ban degrees

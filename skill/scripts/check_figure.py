@@ -24,13 +24,13 @@ Checks, in the order `audit` runs them
     4. Contrast stack    - something is at full opacity; alpha levels are few
     5. Mark ratio        - largest / smallest mark area within MARK_RATIO_MAX
     6. Overplotting      - scatter marks do not merge into an unreadable mass
-    7. Axis redundancy   - shared-axis panels do not repeat a tick label column
+    7. Axis redundancy   - panels on one scale do not repeat ticks or labels
     8. Type size         - every rendered string clears the floor once scaled
     9. Line weight       - every stroke clears LINE_FLOOR_PT once scaled
    10. Banking           - the panel's aspect keeps segments near 45 degrees
    11. Ink coverage      - the data region is neither empty nor packed
    12. Series color      - the hues in each panel separate under color blindness
-   13. Dual axis         - no second y scale carrying data of its own
+   13. Dual axis         - no two data-carrying axes share one frame
    14. Form              - no pie, no 3D, no truncated bar baseline
    15. Identity channel  - series are not told apart by color alone
    16. Label attribution - each label is nearest the curve it names
@@ -2521,8 +2521,12 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
 
 
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
-    """Side-by-side panels on the same scale should share their axis furniture.
-    Two identical tick columns and two identical axis labels is duplicated ink."""
+    """Panels on the same scale should share their axis furniture.
+
+    Same-row panels are compared on their y axis and same-column panels on
+    their x axis. A repeated axis label, or a repeated run of tick labels on
+    the same limits, scale and label, is duplicated ink.
+    """
     # Only same-row panels can share a y axis, and only same-column panels can
     # share an x axis. Two panels side by side each legitimately need their own
     # x label; repeating the y label between them is the duplication.
@@ -3181,8 +3185,8 @@ def _has_data(ax: Axes) -> bool:
 
 
 def check_dual_axis(fig: Figure) -> tuple[bool | str, str]:
-    """Two y scales in one frame, which nothing in this project banned and a
-    `twinx` figure sailed straight through.
+    """Two data scales in one frame: axes at the same position, both drawing
+    data. `twinx` and `twiny` both land here.
 
     Both scales are set by the author, so the crossing point of the two curves
     is an artifact of the limits chosen rather than anything in the data. Move
