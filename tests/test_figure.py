@@ -1403,14 +1403,19 @@ def test_series_color_scopes_the_comparison_to_a_panel():
 
 
 def test_a_scatter_in_one_panel_does_not_force_all_pairs_on_another():
-    """`_axes_all_pairs` returned True if *any* axes held a scatter, which
-    flipped line-only panels into the stricter regime too. The six theme slots
-    clear adjacent separation (what lines need) but not all-pairs; a scatter two
-    panels over must not be what fails them."""
+    """The mode is decided per panel: a scatter two panels over must not
+    flip line-only panels into the stricter regime. Blue, orange and violet
+    clear adjacent separation (what lines need) and fail all-pairs, blue and
+    violet dE 8.9 apart under deuteranopia, so only the per-panel mode passes
+    them. `test_pairs_mode_is_inferred_from_the_marks` uses the same three."""
+    import check_palette as cp
+    blue_violet = cp.delta_e(cp.simulate(cp.hex_to_linear("#0072b2"), "deutan"),
+                             cp.simulate(cp.hex_to_linear("#87019f"), "deutan"))
+    assert round(blue_violet, 1) == 8.9 < cp.CVD_TARGET
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
-    for i, c in enumerate(OKABE):
-        a.plot([0, 1], [i, i + 1], color=c)          # six lines: adjacent-legal
-    b.scatter([0, 1], [0, 1], color=OKABE[0])        # one scatter, one hue
+    for i, c in enumerate(["#0072b2", "#d55e00", "#87019f"]):
+        a.plot([0, 1], [i, i + 1], color=c)          # three lines: adjacent-legal
+    b.scatter([0, 1], [0, 1], color="#0072b2")       # one scatter, one hue
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Series color"] is True
