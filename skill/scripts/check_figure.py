@@ -1216,8 +1216,8 @@ def check_clipping(fig: Figure, r: Any) -> tuple[bool | str, str]:
     Reads the axis-aligned box and is correct to: an AABB is the bounding box
     of the oriented box's own corners, so its extremes are attained by real
     corners of the label and a min/max test against the canvas gives the same
-    answer either way. Rotation costs this gate nothing, and only
-    `check_collisions` had to change, because two AABBs can overlap where the
+    answer either way. Rotation costs this gate nothing. `check_collisions`
+    cannot take the same shortcut, because two AABBs can overlap where the
     boxes inside them do not.
     """
     w, h = fig.canvas.get_width_height()
@@ -1826,15 +1826,13 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             elif np.ndim(al) == 0:
                 alphas.append(round(float(al), 2))
             else:
-                # matplotlib has taken a per-point alpha array since 3.4, and
-                # `float()` raises on one. A raising non-advisory gate is turned
-                # into a hard `False` by `_rows`, so a legal figure failed on a
-                # defect in the checker rather than on anything in the figure.
+                # matplotlib has taken a per-point alpha array since 3.4, so
+                # `al` may be an array, and `float()` raises on one.
                 #
                 # A ramp across one artist is ONE level, not one per value: the
                 # question this row asks is how many separate alpha decisions
                 # the reader has to resolve, and a continuous encoding is a
-                # single decision. Counting each value instead made an ordinary
+                # single decision. Counting each value would make an ordinary
                 # `pcolormesh` report sixteen levels of haze.
                 #
                 # Opacity is the exception and is read per value, because
@@ -2536,10 +2534,8 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
         ss = ax.get_subplotspec()
         if ss is None:
             continue
-        # A panel at `axis("off")` shows no furniture to duplicate. Its tick
-        # Text objects still exist and still carry their strings, which is how
-        # three image panels with no visible axis at all came to be told to
-        # "use sharex/sharey" — advice with nothing to act on.
+        # A panel at `axis("off")` shows no furniture to duplicate, though its
+        # tick Text objects still exist and still carry their strings.
         if not ax.axison:
             continue
         r_, c_ = ss.rowspan.start, ss.colspan.start
@@ -2558,20 +2554,13 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
 
     # Both directions, on the same terms. A column of panels repeating its x
     # tick row is the same duplicated ink as a row of panels repeating its y
-    # tick column, and only the second was measured: two stacked panels on one
-    # x scale printed the identical run of numbers twice and passed. The
-    # grouping mirrors the label check above, `rows` for y and `cols` for x,
-    # because only same-row panels can share a y axis and only same-column
-    # panels can share an x one.
+    # tick column. The grouping mirrors the label check above, `rows` for y and
+    # `cols` for x.
     #
-    # Grouped by the scale as well as the tick strings. `docs/gates.md`
-    # promises this row fires on "panels on a shared scale", and comparing
-    # tick text alone broke that promise: two panels carrying different
-    # quantities in different units, whose tick strings happen to coincide,
-    # were told to use `sharey`. Taking that advice would put unrelated
-    # data on one axis, so the row was not merely noisy, it was wrong. The x
-    # direction inherits that requirement rather than re-deciding it, or the
-    # promise goes stale for half the gate.
+    # Grouped by the scale as well as the tick strings, because `docs/gates.md`
+    # promises this row fires on "panels on a shared scale". Two panels in
+    # different units whose tick strings happen to coincide do not share one,
+    # and telling them to use `sharey` would put unrelated data on one axis.
     #
     # The axis label is part of the key because limits and scale type alone
     # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
@@ -3407,8 +3396,7 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         # baseline. `ax.barh(left=...)` draws a Gantt chart and
         # `ax.bar(bottom=...)` draws a waterfall, and each bar there carries
         # its own offset, so there is no shared edge for a truncated axis to
-        # cut. The hand-drawn route has always excluded both. The container
-        # route reached the verdict without ever asking.
+        # cut. `_baselined_bars` excludes both on the hand-drawn route.
         elif not bars_rest_on_a_shared_edge(ax, orientation == "vertical"):
             orientation = None
         if orientation is None:
@@ -3708,15 +3696,10 @@ def _encloses(artist: Any, pts: np.ndarray) -> bool:
         inside = np.zeros(len(pts), dtype=bool)
         for path in artist.get_paths():
             # `path.transformed(t)`, not `contains_points(pts, transform=t)`.
-            # The keyword form freezes the transform and hands it to the C
-            # containment test, which applies its AFFINE part only, so on a log
-            # axis the band's outline was tested at the wrong coordinates and
-            # every point read as outside. Nothing raised: `_encloses` returned
-            # False, the band went back to being a rival for the curve it
-            # covers, and every direct label under a band on a log scale failed
-            # `check_label_attribution` with the band sitting at 0px. Only the
-            # log case was ever wrong, which is why the linear fixtures beside
-            # it stayed green. `Path.transformed` applies the whole transform.
+            # The keyword form hands the C containment test only the
+            # transform's AFFINE part, so on a log axis the outline is tested
+            # at the wrong coordinates and every point reads as outside, with
+            # nothing raised. `Path.transformed` applies the whole transform.
             inside |= path.transformed(transform).contains_points(pts)
         return bool(inside.mean() >= SERIES_ENCLOSED_FRAC)
     except Exception:
@@ -3875,13 +3858,11 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
             d_own = max(_series_distance(own_line, bb, px[own_line]), 0.5)
-            # The minimum over every OTHER curve, box-to-polyline. A KD-tree
-            # over the pooled points was tried here for speed and was wrong:
-            # it returns the nearest *points*, so for a label sitting close to
-            # its own dense curve all the near points belong to that curve, no
-            # other curve is ever reached, and `d_other` stays infinite. Which
-            # is to say it passed every label it was closest to — the common
-            # case, and the one the gate exists for.
+            # The minimum over every OTHER curve, box-to-polyline, taken per
+            # curve. A KD-tree over the pooled points is the wrong tool: it
+            # returns the nearest *points*, and beside a dense own curve every
+            # near point is the label's own, so `d_other` never leaves
+            # infinity and the label passes.
             # Rivals only. A band that encloses this series, or a series this
             # one encloses, is the same thing on the page and cannot be the
             # neighbour a reader confuses it with.
@@ -4333,24 +4314,18 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
 #
 # The name is version-dependent and that is why this is a list rather than one
 # string. matplotlib 3.8.4, 3.9.4 and 3.10.0 call it "from_list"; 3.11.1 calls
-# it "unnamed". Shipping only the 3.11 spelling is what put every contour
-# figure - including `gallery-field.png` - into a hard FAIL on the two CI jobs
-# that run older matplotlib, while every local run on 3.11 stayed green.
-# `test_matplotlib_still_names_an_author_built_colormap_something_we_skip`
+# it "unnamed". A missing spelling fails every contour figure on the versions
+# that use it. `test_matplotlib_still_names_an_author_built_colormap_something_we_skip`
 # fails loudly if a future version invents a fourth spelling.
 ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
 # A ramp the author evaluated themselves and handed over as plain colours draws
-# no array, so the loop below sees no colormap at all. Six `jet` steps built
-# with `cmap(i / 5)` and passed to `ax.plot` cleared every row on the figure:
-# nothing array-carrying for this one, and six hues against a ceiling of
-# `MAX_SERIES_HUES` for `check_series_color`. `jet` escaping the checker
-# outright is what these constants close.
-#
-# `_data_colors_by_axes` already names the rule in its own docstring - draw an
-# ordinal ramp `c=values, cmap=...`, "never as a pre-evaluated RGBA list" - and
-# until this ran, nothing enforced it.
+# no array, so the loop below sees no colormap at all, and `check_series_color`
+# sees only hues: six `jet` steps built with `cmap(i / 5)` and passed to
+# `ax.plot` sit within `MAX_SERIES_HUES`. These constants catch that ramp. The
+# rule is the one `_data_colors_by_axes` states: draw an ordinal ramp
+# `c=values, cmap=...`, "never as a pre-evaluated RGBA list".
 #
 # Recognised by reverse lookup, not by classifying the drawn colours. Handing
 # the panel's hues to `cmap_kind_rgb` would condemn every categorical palette,
@@ -4364,7 +4339,7 @@ ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 # branch below makes, and that filter is load-bearing rather than tidy: without
 # it `tab10`, `Set2`, `Dark2` and matplotlib's registered `okabe_ito` all
 # classify `misc` over 256 samples, and using Okabe-Ito as a series palette -
-# the thing the skill tells people to do - would have failed this row.
+# the thing the skill tells people to do - would fail this row.
 RAMP_LUT_N = 256
 RAMP_CHANNEL_TOL = 3.0 / 255.0
 RAMP_SPACING_TOL = 0.02
@@ -4983,8 +4958,6 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     """
     with _at_draw_rc(fig), _at_measure_dpi(fig):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
-    # "warn" rows are advisory: they report something worth a look without
-    # failing the build. Only a hard False gates.
     return all(s is not False for _, s, _ in rows), rows
 
 

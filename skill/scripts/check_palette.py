@@ -715,9 +715,7 @@ CVD_TARGET = 10.5         # 2x Stone et al.; below this, secondary encoding is m
 NORMAL_FLOOR = 21.0       # 4x Stone et al.; hard floor, no secondary encoding excuses it
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
-# The three ordinal rows. `--ordinal` swaps the categorical gates for these, and
-# all three ran on literals inside `check` while every categorical threshold sat
-# up here, so half the validator was tunable and half was not.
+# The three ordinal rows. `--ordinal` swaps the categorical gates for these.
 ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
 ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
