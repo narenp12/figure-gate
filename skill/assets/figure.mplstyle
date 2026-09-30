@@ -9,8 +9,8 @@
 #
 # TRAP: `#` starts a comment in this format, so colors are written BARE -
 # `grid.color: e1e0d9`, never `#e1e0d9`. With the hash, matplotlib logs "does
-# not look like a color arg" and silently keeps its defaults. Nothing gates
-# color on the figure side, so every other check still passes.
+# not look like a color arg" and silently keeps its defaults. The Style sheet
+# row warns on the dropped key; every other check still passes.
 #
 # TRAP: do not save with `bbox_inches="tight"`. It trims to the drawn content,
 # so the saved width is no longer the width you authored - and `page_scale()`

@@ -4806,9 +4806,14 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     """Every key in the sheet against the rcParams that are actually in effect.
 
     Three separate silent failures land here at once: a color written with a
-    leading `#` (which is a comment in this format, so matplotlib keeps its own
-    default), a forgotten `plt.style.use`, and an rcParams override applied
+    leading `#`, a forgotten `plt.style.use`, and an rcParams override applied
     later. All three ship stock matplotlib while every other check passes.
+
+    The first cannot be seen by comparing values. `#` starts a comment in this
+    format, so `grid.color: #e1e0d9` parses to no value and matplotlib drops
+    the key: the sheet and the live rcParams agree on its absence. So the keys
+    the file names are read off its text as well, and any that matplotlib
+    knows but did not parse are reported as dropped.
 
     A warning, not a gate, for one honest reason: a figure built on a *different*
     project's sheet is correct work, and this compares against the global
@@ -4834,6 +4839,13 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
                         "nothing was compared, and the sheet you meant is not "
                         "the one in effect either")
     written = mpl.rc_params_from_file(path, use_default_template=False)
+    named = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        before_comment = line.split("#", 1)[0]
+        if ":" in before_comment:
+            named.append(before_comment.split(":", 1)[0].strip())
+    dropped = sorted({k for k in named if k in mpl.rcParams
+                      and k not in written})
     drift = []
     for key, value in written.items():
         try:
@@ -4847,6 +4859,12 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
             same = bool(getattr(same, "all", lambda: same)())  # noqa: B023
         if not same:
             drift.append(key)
+    if dropped:
+        return "warn", (f"{len(dropped)} keys in {path.name} did not parse and "
+                        f"were dropped: {dropped[:5]}"
+                        f"{' ...' if len(dropped) > 5 else ''}  [FIX] write "
+                        "colors bare, e1e0d9 not #e1e0d9: # starts a comment "
+                        "in a style sheet")
     if not drift:
         return True, f"all {len(written)} keys match {path.name}"
     return "warn", (f"{len(drift)} of {len(written)} keys differ from "

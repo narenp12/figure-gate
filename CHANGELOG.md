@@ -72,6 +72,8 @@ behind a threshold this project enforces.
 
 #### Fixed
 
+- `check_style_sheet` warns on a key the sheet names that matplotlib dropped
+  while parsing, such as `grid.color: #e1e0d9`. It returned True for one.
 - The `scale` argument of `audit`, `report` and `audit_json`, and the return of
   `page_scale` itself, are documented as the ratio they are rather than as a
   length. Documentation only: no number a gate measures has moved.
@@ -147,6 +149,17 @@ behind a threshold this project enforces.
   `tests/test_palette.py`.
 
 ### Why it changed
+
+#### A hashed colour the style-sheet row could not see
+
+`check_style_sheet`'s docstring said it caught a colour written with a
+leading `#`. It compared the values matplotlib parsed from the sheet with the
+live rcParams, and `#` starts a comment in an mplstyle, so
+`grid.color: #e1e0d9` parses to no value and the key is dropped. The sheet
+and the live rcParams then agree on its absence: a sheet carrying that line
+returned `(True, 'all 1 keys match')`. The row now also reads the keys off
+the file's text. `test_style_sheet_row_notices_a_color_written_with_a_hash`
+pins it.
 
 #### SKILL.md and CONTRIBUTING.md against the code
 

@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2278 tests, and each check has one asserting it catches a
+    The suite is 2279 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

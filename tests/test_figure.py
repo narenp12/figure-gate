@@ -2009,9 +2009,8 @@ def test_label_attribution_is_quiet_on_a_single_curve():
 # --- style sheet ------------------------------------------------------------
 
 def test_style_sheet_row_notices_the_sheet_is_not_in_effect():
-    """The three silent failures at once: a color written with a leading `#`,
-    a forgotten `plt.style.use`, and a later rcParams override. Every one of
-    them ships stock matplotlib with the whole suite green."""
+    """A forgotten `plt.style.use` ships stock matplotlib with every other row
+    green."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
     ok, rows = cf.audit(fig)
@@ -2028,6 +2027,24 @@ def test_style_sheet_row_passes_when_the_sheet_is_the_one_in_effect():
         ok, rows = cf.audit(fig)
         plt.close(fig)
     assert gates(rows)["Style sheet"] is True
+
+
+def test_style_sheet_row_notices_a_color_written_with_a_hash(tmp_path,
+                                                             monkeypatch):
+    """`#` starts a comment in an mplstyle, so `grid.color: #e1e0d9` parses to
+    no value and matplotlib drops the key. The sheet and the live rcParams
+    then agree on its absence, and comparing the two finds no drift."""
+    sheet = tmp_path / "hashed.mplstyle"
+    sheet.write_text("grid.color: #e1e0d9\naxes.linewidth: 0.8\n",
+                     encoding="utf-8")
+    monkeypatch.setattr(cf, "STYLE_SHEET", sheet)
+    with plt.style.context(str(sheet)):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        ax.plot([0, 1], [0, 1])
+        status, detail = cf.check_style_sheet(fig)
+        plt.close(fig)
+    assert status == "warn", detail
+    assert "grid.color" in detail, detail
 
 
 # --- contour dash ---------------------------------------------------------
