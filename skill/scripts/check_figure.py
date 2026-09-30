@@ -4074,41 +4074,33 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                       venue: str | None = None) -> tuple[bool | str, str]:
     """Every drawn stroke against the printer's floor, measured ON THE PAGE.
 
-    SIAM states it plainly in its instructions for authors: illustrations must
-    use lines one point or thicker, because thinner lines break up or disappear.
-    It is the same failure as the type floor and it has the same cause — a
-    stroke authored at 0.8pt in a 9-inch figure placed at 5.5 inches prints at
-    0.49pt — so it is measured the same way, through `page_scale`.
+    SIAM's instructions for authors ask for lines one point or thicker, because
+    thinner lines break up or disappear. A stroke shrinks with the figure as
+    type does -- 0.8pt authored in a 9-inch figure placed at 5.5 inches prints
+    at 0.49pt -- so every width is multiplied by the page scale before it is
+    judged.
 
-    Furniture is held to a lower floor than data, `FURNITURE_FLOOR_PT` against
-    `LINE_FLOOR_PT`. A gridline that drops out at the printer costs the reader a
-    reference; a data curve that drops out costs them the finding. The sheet
-    ships the grid at 0.7pt and the axis rule at 0.8pt deliberately, and failing
-    those against the data floor would be failing the sheet's own design.
+    Data strokes are held to `LINE_FLOOR_PT`: lines, line collections, unfilled
+    contour sets, stroked patch edges and annotation arrows. Furniture is held
+    to the lower `FURNITURE_FLOOR_PT`: spines and the major and minor
+    gridlines. A gridline that drops out costs the reader a reference; a data
+    curve that drops out costs them the finding.
 
-    Patch edges and annotation arrows are data, and went unmeasured until they
-    were added here. A schematic is boxes and arrows and no `Line2D` at all, so
-    one drawn entirely at 0.15pt reported `no strokes to measure`: the gate was
-    silent on the figure whose every stroke was the defect.
+    Not measured: tick marks and colorbar axes, whose widths are matplotlib's
+    defaults rather than anything `figure.mplstyle` or the author set; filled
+    contour sets, whose linewidth is the seam between two fills; and any artist
+    that is invisible or draws no stroke.
 
-    Spines and gridlines, major and minor, are the furniture this sheet
-    authors, and they are measured against the furniture floor. Both artists
-    were skipped outright until now, which is not what the paragraph above
-    describes: a floor of zero is not a lower floor, and an axis rule set to
-    0.2pt went unreported. The minor grid is read off the minor ticks, since
-    the axis hands back only the major one.
+    Args:
+        fig: The figure to read strokes from.
+        scale: Placed size over authored size, overriding `page_scale`.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
-    Tick marks stay out, and the reason is not the one that used to be written
-    here. It was that they would fail the corpus; they do not, and neither do
-    spines. It is that the sheet does not author them. `axes.linewidth` and
-    `grid.linewidth` are set in `figure.mplstyle`; the tick widths are
-    matplotlib's untouched defaults, 0.8 major and 0.6 minor, which is the same
-    class as the colorbar dividers this function already skips a few lines down
-    for the same stated reason. Judging a default nobody chose reports the
-    library rather than the figure. They also carry an open disagreement with
-    `check_svg`, which does measure them, and settling that by side effect from
-    here would overturn a pinned measurement on a branch this code does not
-    touch.
+    Returns:
+        `(False, detail)` naming up to four strokes under a floor, data before
+        furniture. Otherwise `(True, detail)` with the thinnest width of each
+        kind measured.
     """
     from matplotlib.lines import Line2D
     from matplotlib.collections import LineCollection
@@ -4199,8 +4191,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
         # Furniture: the axis rule and the grid, against the lower floor. Tick
-        # marks are furniture too and stay out; see the docstring for why that
-        # is about who authored the width rather than about the corpus.
+        # marks stay out; see the docstring.
         for side, spine in ax.spines.items():
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
