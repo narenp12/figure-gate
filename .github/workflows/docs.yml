@@ -43,8 +43,8 @@ jobs:
   #                       `./style-guide.md` href, and the build exits 0. This
   #                       was measured, not assumed.
   #   symlink check       runs BEFORE the build, and is the only thing that
-  #                       catches a dangling pointer at all. Every page here is
-  #                       a symlink into skill/ or the repository root.
+  #                       catches a dangling pointer at all. Most pages here
+  #                       are symlinks into skill/ or the repository root.
   #   nav-page check      runs AFTER, and closes the gap between the two: if a
   #                       page in the nav produced no HTML, the site would ship
   #                       a 404 in its own sidebar.
@@ -69,7 +69,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # Every page under docs/ is a symlink into skill/ or the repository root.
+      # Most pages under docs/ are symlinks into skill/ or the repository root.
       # actions/checkout restores them as symlinks, so this is a cheap way to
       # find out that it did before the build reports a confusing missing-file.
       - name: Every docs/ symlink resolves in a fresh checkout

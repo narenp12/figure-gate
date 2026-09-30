@@ -1,10 +1,10 @@
 version: 2
 
 updates:
-  # Actions are pinned by commit in the release and CodeQL workflows, which
-  # means nothing about them updates on its own -- a pinned SHA is frozen until
-  # someone moves it. This is the thing that moves it, and it rewrites the
-  # trailing `# vX.Y.Z` comment along with the SHA.
+  # Actions are pinned by commit in every workflow, which means nothing about
+  # them updates on its own -- a pinned SHA is frozen until someone moves it.
+  # This is the thing that moves it, and it rewrites the trailing `# vX.Y.Z`
+  # comment along with the SHA.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

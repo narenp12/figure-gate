@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 # A second push to a pull request makes the first push's answer worthless: this
-# matrix is eight jobs across three operating systems, and the older run spends
-# all of it on a commit nobody is waiting on. Cancel it.
+# workflow's jobs span three operating systems, and the older run spends all of
+# them on a commit nobody is waiting on. Cancel it.
 #
 # Pushes are keyed on `github.run_id`, which is unique, so they never share a
 # group and a run on main is never cancelled or queued by anything. That is
@@ -74,7 +74,7 @@ jobs:
       - run: uv sync --group dev
 
       # The 3.8 floor on check_palette.py is enforced here through
-      # `per-file-target-version`, not only by the stdlib-only job below. That
+      # `per-file-target-version`, not only by the stdlib-only job above. That
       # job proves the two invocations it makes still run; this reads the whole
       # file against the 3.8 grammar.
       - run: uv run ruff check --output-format github .
@@ -334,11 +334,10 @@ jobs:
           grep -q "1 passed" "$RUNNER_TEMP/pgf.log"
 
   # The tests reconstruct the installed layout by copying files. That catches a
-  # dropped force-include in pyproject.toml, but it cannot catch the build
-  # producing something else, and the gap it was written for lived exactly
-  # there: the wheel shipped `skill/scripts` and no style sheet, so gate 16 read
-  # "nothing to compare" -- a pass -- for a figure drawn on stock matplotlib.
-  # So: build the real wheel, install it, and run the gate that used to be dead.
+  # dropped force-include in pyproject.toml, but not a build that produces
+  # something else, such as a wheel with no style sheet, where the style-sheet
+  # row has nothing to compare against. So: build the real wheel, install it,
+  # and run that row.
   package:
     name: The wheel gates a figure the way the checkout does
     runs-on: ubuntu-latest
@@ -399,7 +398,8 @@ jobs:
           status, detail = check_figure.check_style_sheet(fig)
           print("stock matplotlib ->", status, "|", detail)
           if status != "warn":
-              sys.exit("gate 16 passed a figure drawn on stock matplotlib")
+              sys.exit("the style-sheet row passed a figure drawn on stock "
+                       "matplotlib")
 
           plt.style.use(str(sheet))
           status, detail = check_figure.check_style_sheet(fig)
