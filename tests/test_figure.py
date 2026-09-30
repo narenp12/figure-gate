@@ -1159,7 +1159,7 @@ def test_pairs_mode_is_inferred_from_the_marks():
     10.5 floor and it clears both. That is a real result and it is pinned in
     `test_the_whole_cycle_now_clears_all_pairs` -- but it leaves this test
     needing a palette that still separates the modes, so it builds one: blue and
-    violet are 8.6 apart under protan simulation and never adjacent, with orange
+    violet are dE 8.9 apart under deuteranopia and never adjacent, with orange
     between them.
     """
     palette = ["#0072b2", "#d55e00", "#87019f"]
@@ -1388,7 +1388,7 @@ def test_series_color_scopes_the_comparison_to_a_panel():
     # the figure-wide harvest -- otherwise adjacent mode never compares them and
     # the old figure-wide code passes for the wrong reason.
     #
-    # Violet against blue is where protan simulation collapses hardest, and
+    # Violet against blue collapses to dE 8.9 under deuteranopia, and
     # violet is dE 33.3 from the pink in its own panel under CVD, so only the
     # cross-panel pair is close. A teal here read 9.8 against that pink, under
     # `CVD_TARGET`, and the fixture stopped isolating the cross-panel pair.
@@ -4301,9 +4301,9 @@ def test_line_weight_still_does_not_measure_tick_marks():
     `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
     of thirteen fixtures as firing on line weight largely because of it. Both
     are archived at the `archive/r-svg-substrate` tag, not merged, so a reader
-    looking for them here will not find them; the point is that the two substrates disagree
-    about this stroke, and settling that by side effect would overturn a pinned
-    measurement on a branch this one does not touch.
+    looking for them here will not find them; the point is that the two
+    substrates disagree about this stroke, and settling that by side effect
+    would overturn a measurement pinned on the archived substrate.
 
     If a later round decides to measure them, this test is where that argument
     has to be made rather than absorbed.
@@ -4732,9 +4732,9 @@ def test_what_furniture_alone_measures_depends_on_the_panel_size(figsize, blank)
 @pytest.mark.parametrize("sizes,ratio", [([10, 90], 9.0), ([20, 20], 1.0),
                                          ([4, 100], 25.0)])
 def test_the_mark_ratio_row_reports_the_ratio_of_the_marker_areas(sizes, ratio):
-    """`s` is an area in points squared, so the ratio the row names is the
-    ratio of the two numbers the caller passed -- exactly, before any
-    rendering. The drawn areas printed beside it are measured and will move
+    """`s` is a squared diameter, so drawn area is in proportion to it and
+    the ratio the row names is the ratio of the two numbers the caller passed
+    -- exactly, before any rendering. The drawn areas printed beside it are measured and will move
     with a renderer; this one cannot."""
     fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
     ax.scatter([0, 1], [0, 1], s=sizes)

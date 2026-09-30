@@ -336,9 +336,9 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 # deficiency is not that. Anomalous trichromacy - a cone whose peak sensitivity
 # is shifted rather than missing - is the more common form, and simulating only
 # the endpoint would be sound if the endpoint were the worst case. It is not.
-# Measured over 240000 pairs of hues this file would accept as series slots,
-# 0.87% clear CVD_TARGET under dichromacy and miss it at some lower severity,
-# and dichromacy overstates separation by up to 10.5 dE.
+# Measured over 244650 pairs of hues this file would accept as series slots,
+# 1.27% clear CVD_TARGET under dichromacy and miss it at some lower severity,
+# and dichromacy overstates separation by up to 12.7 dE.
 #
 # Published as Table 1 of Machado, Oliveira & Fernandes (2009), at severities in
 # tenths. Keyed by tenths so the lookup is an integer: severity 0.0 is the
@@ -810,10 +810,8 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     # here is only validated for the red-green forms, so a tritan number is
     # indicative rather than decisive.
     #
-    # Swept over severity, not read at the endpoint. Dichromacy is not the worst
-    # case: measured over 240000 pairs of hues this file would accept as series
-    # slots, 0.87% clear CVD_TARGET at dichromacy and miss it at some lower
-    # severity. See MACHADO.
+    # Swept over severity, not read at the endpoint: dichromacy is not the worst
+    # case. MACHADO's comment has the measurement.
     worst_cvd, worst_cvd_at = float("inf"), None
     for i, j in pairs:
         for kind in ("protan", "deutan"):

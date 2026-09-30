@@ -34,7 +34,9 @@ def test_series_pairs_pass_adjacent():
 
 def test_first_four_pass_all_pairs():
     """Scatter and small multiples compare every series against every other.
-    The guide says only the first four slots clear that, so it had better."""
+    The guide says the first six slots clear that;
+    `test_the_whole_cycle_now_clears_all_pairs` in test_figure.py holds all
+    six, and this holds the first four on their own."""
     ok, rows = cp.check(SERIES[:4], all_pairs=True)
     assert ok, rows
 
@@ -616,7 +618,7 @@ def test_the_severity_matrices_belong_on_linear_light():
 def test_dichromacy_is_not_the_worst_case():
     """The named failure. Two hues this file would accept as series slots that
     clear `CVD_TARGET` under both dichromacy models and miss it at severity
-    0.8, where far more readers actually sit.
+    0.9, where far more readers actually sit.
 
     Measured over 244650 such pairs in CAM02-UCS, 1.27% of them do this, and
     dichromacy overstates separation by up to 12.7 dE. Both numbers grew when

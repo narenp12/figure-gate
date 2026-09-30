@@ -909,7 +909,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
 
 
 def test_the_design_flow_diagram_draws_an_svg(page, server):
-    """mermaid, proven on the page.
+    r"""mermaid, proven on the page.
 
     The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
     diagram's SVG exists only after the page's own JavaScript has run, and the

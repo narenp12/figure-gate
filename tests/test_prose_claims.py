@@ -1958,9 +1958,9 @@ def test_the_two_entry_points_return_the_same_shape():
 
 
 def test_both_entry_points_are_documented():
-    """`audit` and `check` are the whole public surface. Both had no docstring
-    while private helpers carried paragraphs, which is the wrong way round for
-    anyone reading the module rather than the guide."""
+    """`audit` and `check` are the two entry points, and a reader of the
+    module starts there. `test_api_reference.py` holds every other public
+    callable to a docstring."""
     for name, func in (("check_figure.audit", cf.audit),
                        ("check_palette.check", cp.check)):
         assert (func.__doc__ or "").strip(), f"{name} has no docstring"
@@ -2236,3 +2236,19 @@ def test_test_docstrings_count_the_gallery_it_has(path, pattern):
     assert words.get(stated.group(1).lower()) == _gallery_builder_count(), (
         f"{path} says {stated.group(1)} figures; gallery.py builds "
         f"{_gallery_builder_count()}")
+
+
+# The severity sweep's result is quoted in the guide and above `MACHADO` in
+# check_palette.py. Nothing recomputes it here (the sweep takes minutes), so
+# the two copies are held to each other.
+
+def test_the_severity_sweep_is_quoted_the_same_in_the_guide_and_the_module():
+    def figures(text):
+        text = " ".join(text.split()).replace("244 650", "244650")
+        return (re.search(r"over (\d+) pairs", text).group(1),
+                re.search(r"([\d.]+)% clear", text).group(1),
+                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1))
+
+    guide = (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8")
+    module = (SKILL / "scripts" / "check_palette.py").read_text(encoding="utf-8")
+    assert figures(guide) == figures(module)

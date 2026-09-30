@@ -65,7 +65,7 @@ def _quiet_audit():
 
     The descriptions are what this file reads; the 20-odd gates behind
     `cf.report` are checked by their own tests, and running them here would be
-    eight audits nothing looks at, printed to the test log.
+    an audit per figure that nothing looks at, printed to the test log.
     """
     original = cf.report
     cf.report = lambda fig, name, **kwargs: True
@@ -88,7 +88,8 @@ def _gallery():
     """Every gallery figure, keyed by the name `finish` gives it.
 
     `finish` audits and saves; here it only records, so the suite neither
-    rewrites the committed PNGs nor pays for eleven audits it is not reading.
+    rewrites the committed PNGs nor pays for an audit per figure it is not
+    reading.
     """
     captured = {}
     original = gallery.finish

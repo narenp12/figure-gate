@@ -117,7 +117,7 @@ def test_delta_e_is_the_distance_colorspacious_would_report():
 
 
 def test_the_gate_agrees_with_the_oracle_on_the_pairs_it_judges():
-    """The end the colleague cares about: same verdict, same threshold.
+    """The end a caller acts on: same verdict, same threshold.
 
     Both sides simulate colour vision and measure the worst view, so this is the
     gate's whole decision compared against an independent implementation of it.
