@@ -277,7 +277,7 @@ MAX_SERIES_HUES = 6
 # reads this set and holds the prose to it.
 # Built from `GATES` at the bottom of this module, where each row declares
 # whether it is advisory beside the function that decides it. It was a second
-# hand-maintained list of the same twenty names for a while, which is two places
+# hand-maintained list of the same names for a while, which is two places
 # to update and one of them silently optional.
 def _advisory_gates() -> frozenset[str]:
     return frozenset(gate.name for gate in GATES if gate.advisory)
@@ -4918,8 +4918,8 @@ class Gate(NamedTuple):
     `needs` is the part worth having. The gates do not take the same arguments
     - some want the renderer, some the already-drawn canvas, some the page
     scale - and for as long as `audit` spelled each call out by hand, that
-    variation was twenty hand-written argument lists nobody could see the shape
-    of. Declaring it makes the variation data: `audit` supplies what a gate
+    variation was one hand-written argument list per gate, and nobody could see
+    its shape. Declaring it makes the variation data: `audit` supplies what a gate
     asks for, and a new gate says what it wants rather than being wired in.
 
     The signatures themselves stay as they are. A gate that takes a renderer
@@ -5022,11 +5022,10 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
           ) -> list[tuple[str, bool | str, str]]:
     """Every gate's row, measured on one canvas at `MEASURE_DPI`.
 
-    Split out of `audit` so that the figure is held at the measurement
-    resolution by a `with` around the whole sweep rather than by a `try/finally`
-    wrapped around a function body with two dozen statements in it. The dpi has
-    to be restored even when a gate raises, and `audit` catches those one at a
-    time, so the restore cannot live in the loop.
+    `audit` calls this inside `_at_draw_rc` and `_at_measure_dpi`, so the
+    figure's rcParams and dpi are restored however this returns. A gate that
+    raises is caught here, per gate, and becomes a row: False for a hard gate,
+    "warn" for an advisory one.
     """
     r, canvas = _renderer(fig)
     available = dict(zip(GATE_INPUTS,
