@@ -6,8 +6,8 @@ sdist PyPI is serving, so there is nothing to read before then:
 
     uv run python conda/update_recipe.py
 
-Stdlib only and no network beyond one urlopen, so it runs in a fresh checkout
-without installing anything.
+Stdlib only, and no network beyond two requests to PyPI (the release's JSON
+and its sdist), so it runs in a fresh checkout without installing anything.
 """
 
 import hashlib
@@ -42,12 +42,13 @@ def project_version():
 
 
 def pypi_sdist(version):
-    """The sdist's declared sha256, and the bytes it is a hash of.
+    """The sdist's sha256, computed from the download and checked against
+    PyPI's declared value.
 
-    Both, on purpose: PyPI's `digests.sha256` is the value the recipe needs,
-    but taking it on faith would put an unverified hash in a build recipe. The
-    download is hashed and compared, so what gets stamped is a number this
-    script computed.
+    PyPI's `digests.sha256` is the value the recipe needs, but taking it on
+    faith would put an unverified hash in a build recipe. The download is
+    hashed and compared, so what gets stamped is a number this script
+    computed.
     """
     url = PYPI_JSON.format(version=version)
     try:

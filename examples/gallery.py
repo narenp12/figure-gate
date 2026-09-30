@@ -38,14 +38,14 @@ The twentieth is there for a construct rather than a form. Ten rows were taught
 to look inside `ax.inset_axes` and the corpus had no figure with one carrying
 data, so the sweep that shipped that fix had nothing it could move.
 
-Figures fourteen to nineteen answer the same question asked mechanically
-rather than by eye. Run under coverage, the thirteen never reached a rotated
-label's oriented box, a `LineCollection`'s widths, a step drawstyle, a polar
-axes, a per-point alpha array, or the equal-radii path in the overplotting gate: 281 statements of
-`check_figure.py` the corpus could not speak for. Each of the six is a form a
-reader would recognise before it is a branch, which is the order that matters,
-and together they took that 281 down to 239. The palette audit below took
-`check_palette.py` from 74% to 82% on the same measurement.
+Figures fourteen to nineteen answer the same question asked mechanically rather
+than by eye. Run under coverage, the thirteen never reached a rotated label's
+oriented box, a `LineCollection`'s widths, a step drawstyle, a polar axes, a
+per-point alpha array, or the equal-radii path in the overplotting gate: 281
+statements of `check_figure.py` the corpus could not speak for. Each of the six
+is a form a reader would recognise before it is a branch, which is the order
+that matters, and together they took that 281 down to 239. The palette audit
+below took `check_palette.py` from 74% to 82% on the same measurement.
 
 Each one is audited and the script exits non-zero if any figure fails, so these
 are regression tests with pictures attached rather than decoration. `main` also
@@ -60,23 +60,17 @@ returns its figure, so a change to a gate can be measured against the corpus:
     gallery.OUT = None                  # build, audit, write nothing
     fig = gallery.field()
 
-That is the point of the corpus, and it used to be the one thing this file made
-hard. Importing it ran every builder, overwrote every committed PNG, read
-`sys.argv[1]` as an output directory, put the style sheet into the importing
-process for good, and then called `sys.exit`.
-
-Writing them
-found defects in the checks themselves. Nine are named below, and the comments
-say which; 0.9.0's changelog names the rows the callout and secondary-axis
-figures exposed:
-the readability gate reported a schematic's invisible tick labels, `check_ink`
-called every colorbar a saturated panel, the line-weight gate measured a
-colorbar's own dividers, a path and its start marker in one hue read as a
-wrapped color cycle, testing a label's backdrop against its dominant color
-failed every annotation ever placed on a heatmap, `check_label_attribution`
-was passing nearly everything it was given, and `_encloses` tested a band's
-outline through the affine part of the transform only, so on a log axis a
-confidence band stopped being its own curve's band and became its rival.
+Writing them found defects in the checks themselves. Nine are named below, and
+the comments say which; 0.9.0's changelog names the rows the callout and
+secondary-axis figures exposed. The readability gate reported a schematic's
+invisible tick labels, `check_ink` called every colorbar a saturated panel, the
+line-weight gate measured a colorbar's own dividers, a path and its start
+marker in one hue read as a wrapped color cycle, testing a label's backdrop
+against its dominant color failed every annotation ever placed on a heatmap,
+`check_label_attribution` was passing nearly everything it was given, and
+`_encloses` tested a band's outline through the affine part of the transform
+only, so on a log axis a confidence band stopped being its own curve's band and
+became its rival.
 
 The last two came in with those six figures, and both were in code no figure
 had ever run: `check_line_weight` raised TypeError on an `EventCollection`,
@@ -92,8 +86,9 @@ curves stopped at the last event and left their tail censoring ticks floating
 with no line beneath them, and the regime diagram's boundary labels were
 rotated by the data slope rather than the slope on the page, which on log axes
 is a different number and left both strings lying flat beside a rising curve.
-All four were obvious in the PNG and invisible to every check. That is step 7 of
-the procedure, and it is why the procedure has a step 7.
+All four were obvious in the PNG and invisible to every check. That is step 7
+of SKILL.md's procedure, "render a PNG and look at it", and it is why the
+procedure has a step 7.
 """
 
 from pathlib import Path
@@ -156,10 +151,8 @@ def finish(fig, name, description, **audit_kw):
     written out so you can look at what failed.
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
-    open. That is the mode for measuring a change against this corpus: the
-    twenty figures are the evidence a gate is checked against, and getting at
-    them used to mean either rewriting the committed PNGs or not getting at
-    them at all.
+    open. That is the mode for measuring a change against this corpus, which
+    is the evidence a gate is checked against.
     """
     cf.describe(fig, description)
     ok = cf.report(fig, name, **audit_kw)
@@ -1566,12 +1559,9 @@ def palettes():
 def main(argv=None):
     """Build all twenty, audit each, and report. Returns a process exit code.
 
-    Under `if __name__ == "__main__"`, so that importing this file builds
-    nothing, writes no PNG, reads no `sys.argv` and does not exit the
-    interpreter. Importing it used to do all four, which is why the test that
-    reads these figures cut the source at a marker string and executed the
-    prefix instead of importing it, and why measuring a gate against this
-    corpus overwrote every committed PNG as a side effect.
+    Called only under `if __name__ == "__main__"`, so that importing this file
+    builds nothing, writes no PNG, reads no `sys.argv` and does not exit the
+    interpreter.
     """
     global OUT
     argv = sys.argv[1:] if argv is None else list(argv)

@@ -7,10 +7,8 @@ the whole method in miniature: load the style sheet, take palette slots in
 order, run the checks, and only then look at the picture.
 
 The optional directory exists for `tests/test_example.py`, which runs this file
-to prove the documented example still works. Without it the test rewrote
-the committed PNG on every run: the bytes depend on the local fonts, so `pytest`
-left the working tree dirty and any `git add -A` swept a binary diff into an
-unrelated commit.
+to prove the documented example still works without rewriting the committed
+PNG; that test's docstring says why that matters.
 
 Importing this file builds nothing. `build(out=None)` returns `(fig, passed)`
 without writing, which is how a change is measured against this example:
@@ -98,11 +96,7 @@ def build(out=HERE):
     """Build, describe and audit the demo figure. Returns `(fig, passed)`.
 
     With `out` set to None it writes nothing and leaves the figure open, which
-    is what a caller measuring a change against this example wants. Writing was
-    unconditional and happened at import, so reading the figure meant rewriting
-    the committed PNG -- the bytes depend on the local fonts, so that left the
-    working tree dirty and any `git add -A` swept a binary diff into an
-    unrelated commit.
+    is what a caller measuring a change against this example wants.
     """
     rng = np.random.default_rng(0)
     x = np.linspace(0, 12, 300)
@@ -198,11 +192,10 @@ def build(out=HERE):
 def main(argv=None):
     """Build and write the demo figure. Returns a process exit code.
 
-    Under `if __name__ == "__main__"`, so that importing this file builds
-    nothing, writes no PNG, reads no `sys.argv` and does not exit the
-    interpreter. Reading `sys.argv[1]` at import was its own trap: under a test
-    runner that is the runner's argument, and this file took it for an output
-    directory.
+    Called only under `if __name__ == "__main__"`, so that importing this file
+    builds nothing, writes no PNG, reads no `sys.argv` and does not exit the
+    interpreter. Under a test runner `sys.argv[1]` is the runner's argument,
+    not an output directory.
     """
     argv = sys.argv[1:] if argv is None else list(argv)
     _fig, passed = build(Path(argv[0]) if argv else HERE)

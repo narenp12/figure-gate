@@ -36,18 +36,18 @@
   --fg-sky: #56b4e9;
 }
 
-/* Bare attribute selectors. The `:root` that looks like it belongs in front of
-   them is a bug, and it shipped.
+/* Bare attribute selectors. A `:root` in front of them looks right and takes
+   the stylesheet off the page; it did, for a release.
 
    Zensical sets `data-md-color-scheme` on `<body>`. `:root` is `<html>`, so
    `:root[data-md-color-scheme="slate"]` matches zero elements and takes this
    whole file off the page with it.
 
-   It was added to win a specificity fight that does not exist. With
-   `primary`/`accent` set to "custom" no theme `[data-md-color-primary=...]`
-   rule matches at all, and the theme's `:root` block loses to a declaration on
-   `<body>` by inheritance, not by specificity — there is no contest to lose.
-   Both upstreams document `:root > *` for this, which selects the body.
+   No specificity is needed. With `primary`/`accent` set to "custom" no theme
+   `[data-md-color-primary=...]` rule matches at all, and the theme's `:root`
+   block loses to a declaration on `<body>` by inheritance — there is no
+   contest to lose. Material for MkDocs documents `:root > *` for this, which
+   selects the body.
 
    `tests/test_docs_render.py` asserts these rules reach the page. */
 
@@ -73,11 +73,10 @@
 
 /* The header deliberately sets no color here.
 
-   A `.md-header { color: #ffffff }` used to, carried over from the Material
-   look where the header is a solid bar filled with the primary color. `modern`
-   does not fill it — the header is translucent over the page, white at 0.7
-   alpha in light mode — so that rule composited to white on white, 1.00:1, and
-   the site's own name was invisible.
+   `.md-header { color: #ffffff }` suits the Material look, where the header is
+   a solid bar filled with the primary color. `modern` does not fill it — the
+   header is translucent over the page, white at 0.7 alpha in light mode — so
+   that rule composites to white on white, 1.00:1, and hides the site's name.
 
    The theme's own header foreground is right for both variants: 16.07:1 light,
    19.56:1 dark. Anything put back here has to be measured against the
@@ -91,9 +90,9 @@
    paints the square.
 
    It is `::before` on the code span holding the hex, not a sibling element.
-   The first version was a sibling, and a swatch can be separated from its hex
-   by a line break: the diverging poles wrapped, leaving a red square at the end
-   of one line and `#b1182b` at the start of the next. Generated content cannot
+   A sibling can be separated from its hex by a line break: the diverging poles
+   wrapped that way, leaving a red square at the end of one line and `#b1182b`
+   at the start of the next. Generated content cannot
    be orphaned from the element that generates it, and `nowrap` closes the one
    break opportunity left, inside the code element itself.
 
@@ -106,8 +105,8 @@
    `content-box`, and the dark-mode mat below is drawn as `box-shadow` rather
    than as a thicker border. One point, twice: either alternative takes its
    4px out of the color area instead of out of the margin, which at this type
-   size is a third of the hue. The first draft used border, and slot 1 read as
-   an outline with something dark inside rather than as black.
+   size is a third of the hue. Drawn with a thicker border, slot 1 reads as an
+   outline with something dark inside rather than as black.
 
    The border is not decoration. `#ffffff` is the surface row of the ink table
    and is the page it is drawn on; `#F0E442` is slot 5, at 1.32:1, which at
@@ -153,7 +152,7 @@
 }
 
 /* The figures are opaque white because they are drawn for paper, which on the
-   dark page is seven bright slabs at 19.56:1.
+   dark page makes each one a bright slab at 19.56:1.
 
    Inverting them is not available: a filter moves every Okabe-Ito hue off the
    palette the gates enforce, and the gallery would stop showing what the
