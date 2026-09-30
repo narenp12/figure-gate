@@ -1,15 +1,14 @@
 """The gates that depend on the layout they are run from.
 
-Two of them do: the style-sheet gate, which probes for `figure.mplstyle`, and
-the two colour gates, which reach `check_palette` through `_sibling`. Both read
-their own surroundings, so both can only be tested by building a layout.
+Three of them do: the style-sheet gate, which probes for `figure.mplstyle`, and
+the two colour gates, which reach `check_palette` through `_sibling`. They read
+their own surroundings, so they can only be tested by building a layout.
 
-Gate 16 exists to catch a forgotten `plt.style.use`. Through 0.1.3 the wheel
-shipped `skill/scripts` and nothing else, so on `uv add figure-gate` there was
-no `figure.mplstyle` anywhere near `check_figure.py`, `_style_sheet` returned
-None, and the row read "nothing to compare" -- a pass -- for exactly the figure
-the gate was written for. Nothing in the suite noticed, because every test here
-runs from the checkout, where `assets/` is one directory up.
+The style-sheet gate exists to catch a forgotten `plt.style.use`. A test run
+from the checkout finds the sheet one directory up in `assets/` whatever the
+wheel ships. Through 0.1.3 the wheel shipped no sheet, `_style_sheet` returned
+None on an install, and the row passed with "nothing to compare" for exactly
+the figure the gate was written for, while the suite stayed green.
 
 So these tests do not read the source layout: they build the layout the wheel
 produces and run the checker inside it.

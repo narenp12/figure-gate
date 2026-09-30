@@ -1126,7 +1126,7 @@ def site_alt_texts():
 
 
 def test_the_examples_still_describe_every_figure():
-    """Eleven figures, eleven descriptions, plus the demo. A refactor that
+    """Twenty figures, twenty descriptions, plus the demo. A refactor that
     changes the call shape would otherwise leave this file comparing the site
     against a shorter list and finding no disagreement."""
     assert len(described_strings()) == 21, (

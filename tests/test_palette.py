@@ -2,8 +2,8 @@
 
 Two jobs here. The obvious one is that good palettes pass and bad ones fail. The
 less obvious one is that the *numbers quoted in the documentation* stay true:
-the guide makes specific claims (adjacent CVD dE 16.6, orange and sky blue
-differing by dL 0.011) and a reader who cannot trust those has no reason to
+the guide makes specific claims (adjacent CVD dE 32.0, orange and sky blue
+differing in relative luminance by 0.011) and a reader who cannot trust those has no reason to
 trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """

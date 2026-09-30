@@ -1,6 +1,6 @@
 """The composition gates, run over material this project did not author.
 
-Every other measurement of these gates is against the eleven figures in
+Every other measurement of these gates is against the twenty figures in
 `examples/gallery.py`, which the same person wrote to pass them. That is
 circular and has been the standing criticism of this project's evidence: the
 colour gates now answer to an independent implementation (`colorspacious`, in

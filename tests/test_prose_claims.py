@@ -2212,3 +2212,27 @@ def test_figure_tests_above_the_shared_numpy_import_import_their_own():
                and any(isinstance(n, ast.Name) and n.id == "np"
                        for n in ast.walk(fn))]
     assert not leaning, f"use the module-level np: {leaning}"
+
+
+# Test docstrings that count the gallery. Read against `BUILDERS`, parsed out
+# of gallery.py rather than imported, so the count is the script's.
+
+def _gallery_builder_count():
+    tree = ast.parse((ROOT / "examples" / "gallery.py").read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.Assign)
+                and any(getattr(t, "id", None) == "BUILDERS" for t in n.targets))
+    return len(node.value.elts)
+
+
+@pytest.mark.parametrize("path,pattern", [
+    ("tests/test_external_style_corpus.py", r"against the ([\w-]+) figures in"),
+    ("tests/test_docs_match_code.py", r"([\w-]+) figures, \1 descriptions"),
+])
+def test_test_docstrings_count_the_gallery_it_has(path, pattern):
+    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22}
+    text = " ".join((ROOT / path).read_text(encoding="utf-8").split())
+    stated = re.search(pattern, text, re.I)
+    assert stated, f"{path} no longer counts the gallery in the form read here"
+    assert words.get(stated.group(1).lower()) == _gallery_builder_count(), (
+        f"{path} says {stated.group(1)} figures; gallery.py builds "
+        f"{_gallery_builder_count()}")

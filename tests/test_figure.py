@@ -4295,8 +4295,8 @@ def test_line_weight_still_does_not_measure_tick_marks():
     They carry a second reason besides, not visible from this checkout.
     `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
     of thirteen fixtures as firing on line weight largely because of it. Both
-    live on the unmerged `spec-r-svg-substrate` branch, so a reader looking for
-    them here will not find them; the point is that the two substrates disagree
+    are archived at the `archive/r-svg-substrate` tag, not merged, so a reader
+    looking for them here will not find them; the point is that the two substrates disagree
     about this stroke, and settling that by side effect would overturn a pinned
     measurement on a branch this one does not touch.
 
