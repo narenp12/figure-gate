@@ -68,17 +68,12 @@ MODULES = {"check_figure.py": cf, "check_palette.py": cp}
 
 
 # --- the corpus, derived rather than listed -----------------------------------
-# This file swept four documents for its first two releases: the guide, the
-# forms reference, SKILL.md and the README. The repository had eleven, and
-# nothing anywhere said which seven were unswept. `CONTRIBUTING.md`,
-# `SECURITY.md`, `conda/README.md` and both site-only pages could say anything
-# they liked about the code and the suite stayed green, which is the same defect
-# one level out: an unchecked claim, invisible because nobody enumerated the
-# place it could hide.
-#
-# So the corpus is read out of git. A new document is swept the day it is
-# committed, or else it fails until `_is_historical` catches it and the tests
-# below record the reason it should not be.
+# The corpus is read out of git, not listed by hand. A hand-listed corpus of
+# four documents left seven unswept, and nothing said which: an unchecked
+# claim, invisible because nobody enumerated the place it could hide. A new
+# document is swept the day it is committed, or else it fails until
+# `_is_historical` catches it and the tests below record the reason it should
+# not be.
 #
 # `git ls-files` rather than a glob over the tree, for two reasons. A scratch
 # note left in the working directory is not documentation and should not fail
@@ -337,9 +332,9 @@ MPL_NAMES = _matplotlib_names()
 # to a symbol: gate verdicts, colormap kind names, Python literals. They are
 # spans because they are terms of art, not because they name code.
 # `"warn"` stays, with the quotes: it is the Python string the tuple API's
-# `status` holds. Bare `warn` came out when `check_json` shipped, because the
-# JSON spelling of that status is a real value the serialiser writes and
-# `JSON_KEYS` resolves it against the document rather than excusing it.
+# `status` holds. Bare `warn` is absent: it is the JSON spelling of that
+# status, a real value the serialiser writes, and `JSON_KEYS` resolves it
+# against the document rather than excusing it.
 VOCABULARY = {"misc", "sequential", "diverging", "cyclic", "qualitative",
               '"warn"', "True", "False", "None", "ggplot2",
               "facet_wrap", "n"}
@@ -530,8 +525,9 @@ def _is_colormap(name):
 # --- what the wider repository has a name for ---------------------------------
 # Two modules and matplotlib cannot resolve every document in the corpus:
 # `CONTRIBUTING.md` names workflows and dependency groups, `conda/README.md`
-# names recipe keys, and the pages name scripts that live outside `skill/`. Each of the domains below is a real place a name can be checked
-# against, so a typo in one of them fails rather than landing in the ledger.
+# names recipe keys, and the pages name scripts that live outside `skill/`. Each
+# of the domains below is a real place a name can be checked against, so a typo
+# in one of them fails rather than landing in the ledger.
 
 
 def _tracked_files():
@@ -1236,11 +1232,8 @@ KNOWN_HEXES |= {h.lower() for h in
 COUNTEREXAMPLE_HEXES = {
     # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
     # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    #
-    # It used to be #288ac6/#fd00db, at 8.4 and 7.9 against a floor of 8. Those
-    # two straddled the OKLab floor and sit either side of the CAM02-UCS one by
-    # 0.03 dE, which is a fixture that demonstrates nothing once rounded. The
-    # replacement clears dichromacy by 8.7 and misses the worst severity by 2.2.
+    # It clears dichromacy by 8.7 and misses the worst severity by 2.2, so the
+    # demonstration survives rounding.
     "#8e4dc7", "#1402ef",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
@@ -1977,28 +1970,14 @@ def test_both_entry_points_are_documented():
 # clause, so the guide's premise - that a gate's own message routes the reader -
 # holds for all but the one named here.
 #
-# The set was five. Four of those did route the reader and were misfiled: they
-# wrote the fix as prose without adopting the marker, and a test reading for
-# the marker reported "no remediation" when the remediation was right there.
-# `check_contour_dash` was the sharpest case, exempted as "advisory" while
-# naming an exact call. Rather than teach the detector to sniff prose for
-# imperatives, which is a guess about intent that rots, those four adopted the
-# marker. What is left is the gate that genuinely says nothing.
-#
-# The opposite error followed, and cost the marker its meaning: six clauses wore
-# the remediation marker while naming no action, only the reason the row fired.
-# `check_banking` said "Cleveland banks to 45 degrees", `check_line_weight`
-# cited SIAM, the normal-vision floor said "hard to tell apart in full color".
-# True, and not a fix, and the detector counted every one of them as one.
-#
-# So the one marker became two, and both are named rather than drawn. The old
-# `  <- ` said nothing about which of the two things it introduced, and a split
-# that turned on one glyph - an arrow against a tilde - would have been a
-# distinction no reader scanning a wall of detail text could hold. `[FIX]` and
-# `[WHY]` say it, and read against the `[PASS]`/`[FAIL]` the report already
-# prints. A message may hold both, in that order.
-# `test_a_reason_clause_never_stands_in_for_a_fix` stops the reasons drifting
-# back into the fix mark.
+# A fix written as prose without the marker reads as no fix, so a message that
+# names an action carries `[FIX]` rather than the detector sniffing prose for
+# imperatives. A reason is not a fix: "Cleveland banks to 45 degrees" is true
+# and names no action, so it carries `[WHY]`. A message may hold both, in that
+# order. The marks are words, not glyphs, so a reader scanning detail text can
+# tell them apart, and they read against the `[PASS]`/`[FAIL]` the report
+# already prints. `test_a_reason_clause_never_stands_in_for_a_fix` stops the
+# reasons drifting back into the fix mark.
 FIX_MARK, WHY_MARK = "  [FIX] ", "  [WHY] "
 
 MESSAGES_WITHOUT_A_FIX_CLAUSE = {
@@ -2163,8 +2142,8 @@ def test_the_clipping_message_sends_the_reader_to_the_documented_fix():
 
 # --- examples/demo.py's case for ink labels ----------------------------------
 # The comment above demo.py's direct labels argues from two measured colour
-# differences. They were OKLab numbers against an OKLab floor, and the floor
-# moved to CAM02-UCS with nothing re-reading them.
+# differences against `NORMAL_FLOOR`. These re-derive both, so a metric or
+# floor change that moves them fails here.
 
 def _darkened_to_text_contrast(hex_color):
     """`hex_color` with OKLab lightness lowered, hue kept, until 4.5:1 on white."""

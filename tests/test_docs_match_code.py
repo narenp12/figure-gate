@@ -29,10 +29,9 @@ ROOT = SKILL.parent
 GUIDE = SKILL / "references" / "style-guide.md"
 README = ROOT / "README.md"
 
-# The threshold tables, the roster counts and the usage examples were in the
-# README until it was cut down to a landing page. They are one copy still, on
-# the docs site, and every parser below that used to read the README reads the
-# page the claim actually lives on now.
+# The threshold tables, the roster counts and the usage examples live on the
+# docs site, one copy each, and every parser below reads the page the claim
+# lives on. The README is a landing page.
 GATES = ROOT / "docs" / "gates.md"
 DESIGN = ROOT / "docs" / "design.md"
 TUTORIAL = ROOT / "docs" / "tutorial.md"
@@ -1313,11 +1312,10 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 # in it and the number is now gone, which is the fix for that class rather than
 # an exemption from this one.
 #
-# The seven sentences used to be seven sentences in one file. Cutting the README
-# down to a landing page spread them over three, so each claim now carries the
+# The seven sentences are spread over four files, so each claim carries the
 # document it is made in: a count stated on the docs site and a count stated in
-# the README are the same claim about `audit()`, and the reason this exists is
-# that one copy of a claim can be updated without the others.
+# the README are the same claim about `audit()`, and one copy of a claim can be
+# updated without the others.
 
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                 "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,

@@ -61,8 +61,8 @@ def test_the_prose_counts_the_remedies_it_marks():
     assert (f"{WORDS[with_remedy]} rows carry a remedy" in GATES_TEXT
             and f"{WORDS[sum(1 for r in sf.REMEDIES if r.code)]} of those"
             in GATES_TEXT)
-    # One of the rest, `check_collisions`, names the two strings and no fix;
-    # the page said all of them named one, fifty lines below saying otherwise.
+    # One of the rest, `check_collisions`, names the two strings and no fix,
+    # so the page's count of the others excludes it.
     other = len(cf.GATES) - with_remedy
     assert (f"{WORDS[other - 1].capitalize()} of the other {WORDS[other]} "
             "name their fix" in " ".join(GATES_TEXT.split()))
@@ -104,9 +104,9 @@ def test_the_page_quotes_what_the_code_returns(page, quoted):
 
 
 # --- the venue table ---------------------------------------------------------
-# The count above says the table has as many rows as the dict. It said nothing
-# about the numbers in them, and six rows arrived at once from LaTeX logs, which
-# is six chances to transpose a digit between the log and the page. A width that
+# The count above says the table has as many rows as the dict, not what the
+# numbers in them are. Each width is read off a LaTeX log, and each is a chance
+# to transpose a digit between the log and the page. A width that
 # disagrees with the dict certifies type against a width nothing measures.
 
 def cli_venue_table():

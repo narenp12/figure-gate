@@ -532,9 +532,9 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
     # standard library, which is what this test is about. A name that is not
     # belongs nowhere on this list.
     #
-    # `json` arrived with `check_json` and `--json`, and is the reason the flag
-    # could be added here at all: a wire format needing a third-party serialiser
-    # would have cost this file the claim it exists to keep. The walk is over
+    # `json` is what `check_json` and `--json` serialise with, and the reason
+    # the flag fits here: a wire format needing a third-party serialiser would
+    # cost this file the claim it exists to keep. The walk is over
     # every `Import` node, so the function-local `import json` is on this list
     # rather than hidden by being deferred.
     assert imported <= {"__future__", "argparse", "collections", "itertools",
@@ -601,14 +601,12 @@ def test_the_severity_matrices_belong_on_linear_light():
             wrong = cp.simulate_anomalous(gamma, kind, 1.0)
             on_srgb += cp.delta_e(reference,
                                   tuple(to_linear(c) for c in wrong))
-        # 1.2 rather than the 1.3 this held before 0.8.0. The finding is
-        # unchanged - linear light reproduces Vienot dichromacy better, and it
-        # is the domain the table wants - but the margin is smaller when the
-        # difference is measured in CAM02-UCS instead of OKLab: mean 4.34 dE on
-        # linear light against 5.46 (protan) and 6.73 (deutan) on gamma-encoded
-        # sRGB, so ratios of 1.26 and 1.55 where OKLab reported 1.37 and 2.04.
-        # A metric change that moved this number is expected; one that flipped
-        # its sign would not be, and that is what the assertion is for.
+        # Linear light reproduces Vienot dichromacy better, and it is the
+        # domain the table wants. In CAM02-UCS the mean is 4.34 dE on linear
+        # light against 5.46 (protan) and 6.73 (deutan) on gamma-encoded sRGB:
+        # ratios of 1.26 and 1.55, so 1.2 is the margin. A metric change may
+        # move the ratio; one that flipped its sign is what this assertion is
+        # for.
         assert on_linear < on_srgb / 1.2, (
             f"{kind}: linear light {on_linear:.1f}, sRGB {on_srgb:.1f} - the "
             "two domains stopped being distinguishable, so this test no longer "
@@ -815,11 +813,11 @@ def test_no_size_weighting_leaked_into_the_validator():
 
 # --- the public surface no gate happens to call -----------------------------
 # `oklab_distance` and `cmap_back_travel` are in `__all__`, are rendered on
-# `docs/api.md`, and are held against the last tag by `audit_api.py`. Coverage
-# reported both bodies as never executed: the separation gates moved to
-# CAM02-UCS and `check_colormap` reads the float-sRGB `cmap_back_travel_rgb`,
-# so nothing in the suite reached either one. The API gate protects a signature.
-# It does not run a line, and a documented function nothing runs is a claim.
+# `docs/api.md`, and are held against the last tag by `audit_api.py`. No gate
+# calls either: the separation gates measure in CAM02-UCS and `check_colormap`
+# reads the float-sRGB `cmap_back_travel_rgb`. The API gate protects a
+# signature. It does not run a line, and a documented function nothing runs is a
+# claim.
 
 def test_oklab_distance_is_the_oklab_metric_it_documents():
     """Zero on a colour against itself, symmetric, and x100 the euclidean

@@ -56,10 +56,8 @@ TOL = 0.01          # how close a quoted value has to sit to the plotted one
 # --- building the figures the descriptions belong to -------------------------
 # Both examples are importable: the driver, the `sys.argv` read and the
 # `sys.exit` sit under `if __name__ == "__main__"`, and the style sheet is
-# scoped to the builders rather than applied at module scope. This file used to
-# cut each source at a marker string and execute the prefix, because importing
-# either one built every figure, rewrote the committed PNGs and then exited the
-# interpreter.
+# scoped to the builders rather than applied at module scope. Importing one
+# builds no figure and writes no PNG.
 
 @contextmanager
 def _quiet_audit():

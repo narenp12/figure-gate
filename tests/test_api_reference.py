@@ -41,12 +41,10 @@ MODULES = ("check_figure", "check_palette", "suggest_fixes")
 
 # Public callables the page deliberately does not document.
 #
-# The gates used to be exempt as a class, on the argument that `audit()` runs
-# them and computes the renderer, scale and canvas arguments they take, so
-# `docs/gates.md` documenting their thresholds was enough. It was not: a public
-# callable whose signature appears nowhere is one you read the source for, and
-# the exemption also meant a gate added later joined the page's blind spot
-# rather than the page. They are documented now, and
+# The gates are not exempt, although `audit()` computes the renderer, scale and
+# canvas arguments they take: a public callable whose signature appears nowhere
+# is one you read the source for, and an exemption by class would let a new gate
+# join the page's blind spot rather than the page.
 # `test_the_page_documents_every_gate_in_order` keeps a new one from being
 # forgotten.
 EXEMPT = {

@@ -251,12 +251,12 @@ def test_transparency_really_does_not_move_the_overplotting_gate():
 
 
 # --- the rows that did not run ------------------------------------------------
-# `suggest` used to be reached only by rows that had run: the three gates that
-# cannot always run returned True, and a passing row is skipped. They warn now,
-# and every remedy in this file answers the question its gate asks when it does
-# run. Without the mark, a missing style sheet is answered with "apply the sheet
-# inside the same rc_context" and a missing `check_palette.py` with "use
-# viridis", which are answers to questions nobody asked.
+# The three gates that cannot always run warn when they do not, so `suggest`
+# reaches their rows, and every remedy in this file answers the question its
+# gate asks when it does run. Without the mark, a missing style sheet is
+# answered with "apply the sheet inside the same rc_context" and a missing
+# `check_palette.py` with "use viridis", which are answers to questions nobody
+# asked.
 
 def _rows_that_could_not_run(monkeypatch):
     """The three real details, from the three checks, with nothing to run on."""

@@ -25,10 +25,9 @@ import pytest
 from conftest import SCRIPTS, STYLE_SHEET
 
 # Where the sheet lands, and what the wheel's force-include has to match for
-# the gate to fire on an install. This has moved twice: a bare
-# `figure.mplstyle` at the root of site-packages through 0.1.3, a namespacing
-# `figure_gate_data/` through 0.6.0, and now inside the package itself, where
-# the module that reads it lives and no other distribution can reach.
+# the gate to fire on an install: inside the package, where the module that
+# reads it lives and no other distribution can reach. It sat at the root of
+# site-packages through 0.1.3 and in `figure_gate_data/` through 0.6.0.
 PACKAGE = "figure_gate"
 INSTALLED_NAME = f"{PACKAGE}/figure.mplstyle"
 
@@ -270,9 +269,9 @@ def test_the_wheel_ships_the_typing_marker():
 # --- the vendored copy that took one file -------------------------------------
 # `install.md` warns to copy check_palette.py even when only figures are being
 # checked, because the series-colour and colormap rows travel on that import.
-# Through 0.9.0 the warning was all there was: both rows returned True with the
-# reason in the detail, so the copy that ignored it audited green with the only
-# colour checks in the file switched off. Both warn now.
+# Both rows warn when the import is missing. A pass with the reason in the
+# detail would let the copy that ignored the warning audit green with the only
+# colour checks in the file switched off.
 
 def _vendored_without_palette(tmp_path):
     """One loose `check_figure.py`, which is what ignoring the warning gives."""

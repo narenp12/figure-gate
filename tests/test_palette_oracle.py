@@ -17,18 +17,13 @@ import pytest
 
 import check_palette as cp
 
-# `pytest.importorskip` at module scope, which this used, raises during
-# collection: the module contributes zero tests rather than two skipped ones.
-# CI installs pytest, xdist and matplotlib and never the dev group, so it
-# collected 479 where a machine with cmasher collects 481 - and
-# `test_the_stated_test_count_is_the_real_one` compares a number written into
-# the docs against whatever the local run collected. The count was therefore
-# unwritable: 481 was honest here and wrong in CI, 479 the reverse, and the
-# documented number had been failing that test on every CI run since the oracle
-# was added.
-#
-# A collected-and-skipped test is visible in the count and in the summary. A
-# module that never collected is neither.
+# Checked here and skipped per test, not with `pytest.importorskip` at module
+# scope. That raises during collection, so the module contributes zero tests
+# rather than skipped ones, and CI, which never installs the dev group, would
+# collect fewer tests than a machine with cmasher. The count
+# `test_the_stated_test_count_is_the_real_one` holds the docs to would then
+# differ by machine. A collected-and-skipped test is visible in the count and in
+# the summary; a module that never collected is neither.
 HAVE_CMASHER = importlib.util.find_spec("cmasher") is not None
 
 pytestmark = pytest.mark.skipif(

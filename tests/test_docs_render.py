@@ -1037,9 +1037,8 @@ def _number_sort_key(cell):
 
 
 # One tile per documentation page, grouped on the home page by Diataxis mode.
-# Contributing and Security lost their tiles when the grids became a map of the
-# four modes: neither is documentation of the tool, and both are still in the
-# nav under Project.
+# Contributing and Security have no tile: neither is documentation of the tool,
+# and both are in the nav under Project.
 TILE_ICONS = {
     "rocket": "tutorial",
     "download": "install",

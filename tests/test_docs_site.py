@@ -75,11 +75,9 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # `skill/scripts/` at build time, so the single copy it serves is the code.
 # `tests/test_api_reference.py` holds the directives to the modules.
 #
-# `gates.md` and `getting-started.md` are site-only in the same sense
-# `gallery.md` is: they are the one copy of what they say. Both came out of the
-# README, which was carrying the threshold tables, the install routes and the
-# usage examples for a project that has a docs site. Nothing was duplicated in
-# the move, which is what keeps this set honest rather than a growing exemption.
+# The other pages are site-only in the same sense `gallery.md` is: each is the
+# one copy of what it says, and no symlinked document repeats it. That is what
+# keeps this set honest rather than a growing exemption.
 # `how-to.md` is site-only for the third reason: it is task recipes, and a
 # recipe is a claim about what the code does when you type it. `test_how_to.py`
 # runs the commands, recomputes the numbers and re-derives the row table from
@@ -264,14 +262,10 @@ def test_no_line_becomes_a_heading_by_accident(page, target):
 
 
 # --- one list of build dependencies, in pyproject.toml ------------------------
-# The build step used to read `uv run --no-project --with "zensical>=0.0.51,<0.1"`,
-# which is the `docs` dependency group spelled out a second time in a file
-# nothing resolves against `pyproject.toml`. It was correct for exactly as long
-# as the two lists happened to agree, and they stopped agreeing the first time
-# the build needed a package only one of them named: the group gained
-# `mkdocstrings-python` for the API page, the workflow line did not, and CI
-# failed with `No module named 'mkdocstrings'` after the same build passed
-# locally in a project environment that had it. `--group docs` leaves one list.
+# The build step installs `--group docs`, so the docs dependencies are listed
+# once. A `--with` list in the workflow is a second copy that drifts: when the
+# group gained `mkdocstrings-python` and the workflow line did not, CI failed
+# with `No module named 'mkdocstrings'` on a build that passed locally.
 
 WORKFLOW = ROOT / ".github" / "workflows" / "docs.yml"
 PYPROJECT = ROOT / "pyproject.toml"
@@ -496,9 +490,10 @@ def test_the_two_schemes_do_not_share_one_color():
         "override it exists to justify is no longer needed")
 
 
-# Seven were configured that no page used, and `pymdownx.emoji` was not inert:
-# it read the `:::` of a prose mkdocstrings mention as a shortcode and ate the
-# line. None = nothing to grep, so the entry says which test holds it instead.
+# Each configured extension maps to the syntax that shows a page uses it. An
+# unused extension is not inert: `pymdownx.emoji` read the `:::` of a prose
+# mkdocstrings mention as a shortcode and ate the line. None = nothing to grep,
+# so the entry says which test holds it instead.
 EXTENSION_SYNTAX = {
     "admonition": r"^\s*(!!!|\?\?\?\+?) \w", "attr_list": r"\{ *[.#][A-Za-z]",
     "md_in_html": r"markdown=[\"']?(span|block|1)", "tables": r"^\s*\|.*\|",

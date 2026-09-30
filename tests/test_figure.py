@@ -305,11 +305,10 @@ def test_a_row_spanning_mosaic_panel_is_not_redundant():
 
 
 # --- the x direction of the same row ----------------------------------------
-# The tick-duplication test ran over row groups only, so a row of panels
-# repeating a y tick column failed and the same figure rotated - a column of
-# panels repeating an x tick row - passed. The x direction inherits the
-# shared-scale requirement rather than re-deciding it; see the four keys in
-# `check_redundancy`.
+# Tick duplication is judged in both directions: a column of panels repeating
+# an x tick row fails like the same figure rotated, a row repeating a y tick
+# column. The x direction inherits the shared-scale requirement rather than
+# re-deciding it; see the four keys in `check_redundancy`.
 
 
 def _stacked(labels=("Signal (V)", "Signal (V)"), xlabels=(None, None),
@@ -1389,13 +1388,10 @@ def test_series_color_scopes_the_comparison_to_a_panel():
     # the figure-wide harvest -- otherwise adjacent mode never compares them and
     # the old figure-wide code passes for the wrong reason.
     #
-    # Violet rather than the teal this used before 0.8.0. The teal was picked to
-    # sit ~dE 6 from blue under the old OKLab metric and reads 8.6 under
-    # CAM02-UCS, still close enough for the cross-panel point -- but it also read
-    # 9.8 against the pink in its own panel, which the 10.5 floor now fails, so
-    # the fixture stopped isolating the thing it was built to isolate. Violet
-    # against blue is the same confusion and a cleaner one: it is where protan
-    # simulation collapses hardest, and it is 33.3 clear of the pink beside it.
+    # Violet against blue is where protan simulation collapses hardest, and
+    # violet is dE 33.3 from the pink in its own panel under CVD, so only the
+    # cross-panel pair is close. A teal here read 9.8 against that pink, under
+    # `CVD_TARGET`, and the fixture stopped isolating the cross-panel pair.
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
     a.plot([0, 1], [1, 0], color="#d55e00", label="Acquisition")  # orange
     a.plot([0, 1], [0, 1], color="#0072b2", label="GP mean")      # blue
@@ -3309,8 +3305,8 @@ def test_a_gridline_crossing_a_heatmap_label_is_not_data_ink():
         status, detail = cf.check_text_readability(fig, None)
     finally:
         plt.close(fig)
-    # The artefact shown rather than asserted: adding one gridline to a figure
-    # that measured clean used to take it to a third of the box.
+    # Without the ground anchor, one gridline takes a clean figure past ten
+    # times `TEXT_CLUTTER_MAX`; with it, the figure stays under.
     assert before > cf.TEXT_CLUTTER_MAX * 10, f"{before:.0%}"
     assert after <= cf.TEXT_CLUTTER_MAX, f"{after:.0%}"
     assert "sits on data ink" not in detail, detail
@@ -4044,8 +4040,8 @@ def test_box_blur_matches_scipy_uniform_filter():
 
 # --- line weight ----------------------------------------------------------
 #
-# This gate shipped without a single test, which is the one thing CONTRIBUTING
-# says a gate may not do. Everything below is the coverage it should have had.
+# CONTRIBUTING asks each gate for a test showing it fails and one showing it
+# does not over-fire. These are `check_line_weight`'s.
 
 
 def test_line_weight_catches_a_hairline_stroke():
@@ -5265,12 +5261,12 @@ def test_the_ramps_matched_against_are_continuous_and_unorderable():
 
 
 # --- a gate that raises ------------------------------------------------------
-# `audit` ran its gates in a list comprehension, so one exception anywhere
-# propagated and the caller lost the twenty rows already measured. No gate is
-# known to raise -- twenty adversarial figures, including 3D, polar, all-NaN,
-# infinite and zero-sized ones, found none -- but these gates read deep
-# matplotlib internals and `matplotlib>=3.8` has no upper bound, so the version
-# that breaks one is a version nobody has released yet.
+# `audit` catches an exception per gate, so a gate that raises costs its own row
+# and the caller keeps the rest. No gate is known to raise -- twenty adversarial
+# figures, including 3D, polar, all-NaN, infinite and zero-sized ones, found
+# none -- but these gates read deep matplotlib internals and `matplotlib>=3.8`
+# has no upper bound, so the version that breaks one is a version nobody has
+# released yet.
 
 
 def _with_broken_gate(monkeypatch, *names):
@@ -5331,13 +5327,12 @@ def test_the_row_says_the_defect_is_not_in_the_figure(monkeypatch):
 # --- child axes are panels too ----------------------------------------------
 #
 # `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` go through
-# `add_child_axes` and never reach `fig.axes`, so every row that walked
-# `fig.axes` audited the host and skipped the inset. The same content moved
-# from a panel into an inset went unjudged by ten rows. These build each of
-# those defects inside `ax.inset_axes` and assert the row that owns it is the
-# one that catches it. `mpl_toolkits.axes_grid1.inset_locator.inset_axes` is a
-# different route that goes through `add_axes` and was never blind, which is
-# why the blind one is named exactly in every test below.
+# `add_child_axes` and never reach `fig.axes`, so a row that walks `fig.axes`
+# audits the host and skips the inset; the rows walk `cf._all_axes` instead.
+# These build each defect inside `ax.inset_axes` and assert the row that owns
+# it is the one that catches it. `mpl_toolkits.axes_grid1.inset_locator.
+# inset_axes` goes through `add_axes` and reaches `fig.axes` either way, which
+# is why the child-axes route is named exactly in every test below.
 
 def _inset_host(inset=True):
     """A host whose data sits in the lower-left, so an inset in the upper-right
@@ -5530,9 +5525,9 @@ def test_a_secondary_axis_adds_no_new_fires():
 # --- contrast stack: alpha baked into the colour ----------------------------
 #
 # `get_alpha()` is None whenever opacity was written into an RGBA colour
-# rather than passed as a keyword, and the two draw the same pixels. Reading
-# None as 1.0 meant the row saw `alpha levels [1.0]` on a figure where nothing
-# was opaque.
+# rather than passed as a keyword, and the two draw the same pixels. Read as
+# 1.0, None reports `alpha levels [1.0]` on a figure where nothing is opaque,
+# so the row reads the colour's own alpha.
 
 def test_contrast_stack_reads_alpha_baked_into_an_rgba_colour():
     fig, ax = plt.subplots(figsize=(4, 3))

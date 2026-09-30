@@ -52,13 +52,10 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 # values somebody expected is not a constant.
 DPIS = (72, 100, 150, 300, 600)
 
-# The corpus the composition gates are calibrated against, by name.
-#
-# This said it was read off the module and was a hardcoded eleven, which is the
-# thing it claimed not to be. The gallery reached twenty while it sat there, so
-# nine figures -- every one added after the sweep was written, including the
-# rotated-label and leader-line cases three gates misfired on -- were never
-# swept at all.
+# The corpus the composition gates are calibrated against, by name, read off
+# `gallery.py` so a figure added there is swept here. A hardcoded list of eleven
+# stood here while the gallery reached twenty, and the nine it missed included
+# the rotated-label and leader-line cases three gates misfired on.
 #
 # Parsed rather than imported, because parametrize needs the names at collection
 # and importing the gallery there would build nothing but would still pull
