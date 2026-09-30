@@ -149,6 +149,9 @@ behind a threshold this project enforces.
   strict flags off"**, and "Changing a threshold" → names
   `tests/test_thresholds_are_constants.py` and `docs/gates.md` beside
   `tests/test_palette.py`.
+- `zensical.toml` **added** `favicon = "images/favicon.png"`, a 64px
+  `lucide/fence` in `#0072b2`, and `[project.theme.icon.admonition]` `note`
+  `lucide/paperclip` → **`lucide/pencil-line`**.
 
 ### Why it changed
 
@@ -452,6 +455,14 @@ Nothing here uses a 3.12 feature, so raising the floor would remove users and
 change no line of the checkers; what the floor is actually set by is `tomllib`,
 which arrived in 3.11. `docs/compatibility.md` now says so, because a floor that
 looks overdue and is not is a question a reader should not have to ask twice.
+
+#### The site's icons
+
+The browser tab showed the theme's stock favicon while the header showed the
+fence, so the favicon is now the fence. Nine call-outs are `note`, which the
+modern variant draws as a paperclip; the classic variant draws it as
+`material/pencil-circle`, and `lucide/pencil-line` is that glyph in Lucide's
+stroke.
 
 ## 0.9.0 — 2026-09-09
 

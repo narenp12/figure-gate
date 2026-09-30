@@ -117,6 +117,14 @@ features = [
   "toc.follow",
 ]
 
+# The header's `lucide/fence` as the tab icon, in place of the theme's stock
+# PNG. `lucide/fence.svg` with its stroke set to `#0072b2`, screenshotted at
+# 64px by Playwright's Chromium: ImageMagick's own SVG renderer draws this
+# stroke-only icon as a blank square. A PNG, as the theme's default is, because
+# the template's `<link rel="icon">` carries no `type` for a browser to fall
+# back on.
+favicon = "images/favicon.png"
+
 # `primary`/`accent` of "custom" is the documented hand-off: the theme stops
 # emitting color values of its own and `stylesheets/palette.css` becomes
 # authoritative. Left unset, the theme's default hue would be competing with
@@ -144,6 +152,12 @@ toggle.name = "Light"
 # swap costs no asset and every page carries it the way the tiles carry theirs.
 [project.theme.icon]
 logo = "lucide/fence"
+
+# The modern variant draws `note` as `lucide/paperclip`, and nine call-outs on
+# the site are `note`. Classic draws it as `material/pencil-circle`;
+# `pencil-line` is the Lucide equivalent, in the stroke style of the rest.
+[project.theme.icon.admonition]
+note = "lucide/pencil-line"
 
 # Only what the pages actually use, and this list is checked: the extension
 # audit in `test_docs_site.py` greps every page the site serves for each
