@@ -5031,13 +5031,10 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
             status, detail = gate.func(
                 fig, **{n: available[n] for n in gate.needs})
         except Exception as exc:                            # noqa: BLE001
-            # One gate raising used to lose the whole audit: this was a list
-            # comprehension, so an exception anywhere in the twenty-one
-            # propagated and the caller got a traceback instead of the twenty
-            # answers that had already been measured. These gates read deep
-            # matplotlib internals and `matplotlib>=3.8` has no upper bound, so
-            # the version that breaks one of them is a version nobody has
-            # released yet.
+            # Caught per gate, so a gate that raises costs its own row and
+            # every other gate still reports. These gates read matplotlib
+            # internals and `matplotlib>=3.8` has no upper bound, so a release
+            # nobody has tested against can break one.
             #
             # The verdict follows the gate's own severity rather than being
             # uniformly soft. An advisory that crashed warns; a hard gate that
