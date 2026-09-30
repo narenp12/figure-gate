@@ -16,11 +16,9 @@ outside the standard library, and none of that changes here.
 
     from figure_gate import check_figure as cf
 
-They landed at the top level of `site-packages` until 0.7.0 -- `check_figure`,
-`check_palette` and `suggest_fixes`, three of the most generic module names a
-distribution could claim, on a namespace shared with every other installed
-package. A name is permanent once callers import it, so this moved before the
-API was declared stable rather than after.
+They sit under `figure_gate` rather than at the top level of `site-packages`
+because `check_figure`, `check_palette` and `suggest_fixes` are generic names
+any distribution could claim.
 
 This file is what makes the second form a package. It deliberately re-exports
 nothing: the modules are independent, two of the three are useful without
@@ -39,9 +37,9 @@ except PackageNotFoundError:                                # pragma: no cover
     __version__ = "0.0.0.dev0"
 
 # Read off the installed distribution rather than written here. The version
-# already lives in five files that one `bump-my-version` run rewrites together,
+# already lives in six files that one `bump-my-version` run rewrites together,
 # and `tests/test_version_sites.py` exists because two of them once drifted; a
-# literal here would be a sixth site, hand-maintained, that the bump config
+# literal here would be a seventh site, hand-maintained, that the bump config
 # does not know about.
 
 __all__ = ["__version__"]

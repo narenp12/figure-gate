@@ -1,4 +1,5 @@
 ---
+title: "Gallery"
 description: "Twenty audited figures covering the forms that are hard to check, and the defects that writing them found."
 ---
 
@@ -9,10 +10,12 @@ The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
 They exist because `demo.py`, one panel and three curves, is easy for a gate to
-pass, and passing an easy case is the wrong thing for a gate to be good at.
+pass, so passing it says little about the gate.
 These are the compositions where a check has somewhere to hide. Writing them
-found nine defects in the checks themselves, and four in the figures that no
-check caught. Both kinds are listed at the end of this page.
+exposed defects of two kinds: in the checks themselves, and in figures no check
+flagged. Both are listed at the end of this page, except the six rows the
+callout and secondary-axis figures exposed, which
+[the 0.9.0 changelog](changelog.md) lists.
 
 Every alt text here is the string the figure itself carries, passed to
 `describe(fig, ...)` before the audit runs, so the alt-text gate reads it.
@@ -79,14 +82,14 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Counts of 812 deposited structures by resolution bin, as bars from a zero baseline. The distribution peaks at 268 structures in the 2.0 to 2.4 angstrom bin and falls away on both sides; the right-hand axis relabels the same bars as a share of the 812.](images/gallery-counts.png)
-  <figcaption>The only bar chart in the corpus. Counts from zero is the one comparison <a href="choosing-a-form/">choosing a form</a> sends to a bar rather than to a dot plot. The right-hand axis is a pure relabel of the same bars, which is the case <code>check_dual_axis</code> exists to permit: <code>secondary_yaxis</code> derives its ticks from the left scale, so the two cannot drift apart the way a <code>twinx</code> with hand-set limits silently can.</figcaption>
+  <figcaption>The only bar chart on Cartesian axes in the corpus. Counts from zero is the one comparison <a href="choosing-a-form/">choosing a form</a> sends to a bar rather than to a dot plot. The right-hand axis is a pure relabel of the same bars, which is the case <code>check_dual_axis</code> exists to permit: <code>secondary_yaxis</code> derives its ticks from the left scale, so the two cannot drift apart the way a <code>twinx</code> with hand-set limits silently can.</figcaption>
 </figure>
 
 ## A signed field
 
 <figure markdown="span">
   ![Observed minus fitted yield across a grid of flow rate against temperature, as a diverging red-blue field centred on zero with solid isolines. The residual is not noise: it alternates in a checkerboard of positive and negative cells across both factors, so the fitted model is missing an interaction term.](images/gallery-residual.png)
-  <figcaption>A residual has a meaningful zero and two directions away from it, which is what a diverging scale is for. The isolines are drawn solid on purpose: <code>contour.negative_linestyle</code> defaults to dashed, so a monochrome contour over signed data ships its negative half dashed with nobody having chosen it, and dashing here means unobserved or projected.</figcaption>
+  <figcaption>A residual has a meaningful zero and two directions away from it, which is what a diverging scale is for. The isolines are drawn solid on purpose: <code>contour.negative_linestyle</code> defaults to dashed, so a monochrome contour over signed data ships its negative half dashed with nobody having chosen it, and dashing here means unobserved, projected, or a threshold.</figcaption>
 </figure>
 
 ## Marks, then bins
@@ -114,7 +117,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Surviving fraction against months since randomisation, as two Kaplan-Meier staircases over 24 months. Both arms start at 1.0 and step down only at an observed event; the treated arm stays above the control throughout, and short vertical ticks on each curve mark the times where follow-up ended without an event.](images/gallery-survival.png)
-  <figcaption>The first staircase in the corpus. <code>ax.step</code> keeps the points it was handed and draws risers between them, so the drawstyle has to be expanded before any geometry is harvested; read raw, the label and banking rows measure the diagonal chord of each riser instead of the two segments actually drawn.</figcaption>
+  <figcaption>The first staircase in the corpus. <code>ax.step</code> keeps the points it was handed and draws risers between them, so the drawstyle has to be expanded before any geometry is harvested; read raw, the label and banking rows measure the diagonal chord of each riser instead of the two segments drawn.</figcaption>
 </figure>
 
 ## A spike raster
@@ -156,12 +159,12 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Infrared absorbance against wavenumber from 1000 to 1100 inverse centimetres, for four temperatures from 100 to 400 kelvin, drawn in samples of a single purple-to-green ramp and labelled on the curves where they are furthest apart. A broad band centred near 1064 grows with temperature, while a narrow doublet on its short-wavenumber flank broadens and loses height as it broadens. An inset over the upper left, joined to the region it magnifies, holds wavenumbers 1038 to 1052: the doublet is two resolved lines at the coldest temperature and a single merged peak by 300 kelvin. The lower panel, on the same wavenumber scale, is each spectrum minus the coldest; it is positive across the band and dips below zero at the two line centres, which is what broadening at constant line strength looks like.](images/gallery-broadening.png)
-  <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale - the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
+  <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale: the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
 </figure>
 
 ---
 
-## Why figures ten to thirteen exist
+## Why figures eight to eleven exist
 
 The first seven figures were audited against every gate, and the detail strings
 showed which rows had never measured anything. Five had not. No figure drew a
@@ -173,7 +176,7 @@ A row that passes by having seen nothing looks exactly like a row that passed.
 That is the blind spot [how the checkers decide](design.md#what-a-passing-run-does-not-mean)
 names, and this page had been an example of it.
 
-## Why the last six exist
+## Why figures fourteen to nineteen exist
 
 The same question, asked mechanically rather than by eye. Run under coverage,
 the thirteen figures above never reached a rotated label's oriented box, a
@@ -181,8 +184,8 @@ the thirteen figures above never reached a rotated label's oriented box, a
 array, or the equal-radii path in the overplotting gate: 281 statements of
 `check_figure.py` that no figure here could speak for.
 
-Each of the six is a form a reader would recognise before it is a branch, which
-is the order that matters. A figure drawn to reach a line of code is not
+Each of the six is a form a reader would recognise before it is a branch. A
+figure drawn to reach a line of code is not
 evidence about anything. They took the 281 down to 239, and two of them found
 defects in the checker on the way in. `main` also audits the sheet's own
 palette with `check_palette`, which no figure exercises: that took the second
@@ -222,11 +225,11 @@ module from 74% to 82% on the same measurement.
 All four were obvious in the PNG and invisible to every check. They are why the
 procedure has a step that says to render the figure and look at it.
 
-## The figure the checker is supposed to fail
+## The self-test, and the demo
 
 `python skill/scripts/check_figure.py` with no arguments builds a deliberately
-broken figure and audits it, so the self-test proves the gates can fail rather
-than only that they can pass.
+broken figure and audits it, so the self-test shows the gates can fail rather
+than only that they can pass. The demo below is the figure that passes.
 
 <figure markdown="span">
   ![Validation loss against training epoch for three optimisers over 12 epochs. All three fall; the Bayesian run reaches 0.12 by epoch 6 and 0.02 by epoch 12, while the baseline is still at 0.25 at epoch 12.](images/demo.png)

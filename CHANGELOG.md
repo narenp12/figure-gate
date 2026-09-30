@@ -11,6 +11,459 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
+## Unreleased
+
+### What changed
+
+#### Added
+
+- `check_figure.audit_json` and `check_palette.check_json`, which return
+  `audit`'s and `check`'s verdict as a JSON document rather than a printed
+  table. `check_figure.AUDIT_SCHEMA` and `check_palette.AUDIT_SCHEMA` name the
+  wire format, and both are `figure-gate/audit/1`.
+- `check_palette.py --json` prints `check_json`'s document instead of the table.
+  The exit code is unchanged.
+- `__all__` in `check_figure.py`, `check_palette.py` and `suggest_fixes.py`,
+  listing every public module-level name.
+- `CITATION.cff`, carrying the Zenodo concept DOI `10.5281/zenodo.21784217`. Its
+  `version` is the sixth site the release bump rewrites.
+- `check_figure.load_config`, `find_config` and `config_keys`. `load_config`
+  assigns the `check_figure` and `check_palette` constants named in a
+  `figure-gate.toml`, or in a `[tool.figure-gate]` table in `pyproject.toml`.
+  An integer constant takes a whole number, stored as an int; `STYLE_SHEET`
+  takes a string and `CONTENT_WIDTH_PT` a number. `CONFIG_FILENAMES`, `CONFIG_TABLE` and `CONFIG_ALIASES` hold the two filenames,
+  the table path and the one key that is not a constant, `venue`.
+- `check_figure.py --config`, which prints the file found at or above the current
+  directory, the values it sets, and every key this version accepts. Read before
+  the matplotlib import, as `--venues` is.
+- Six rows in `VENUE_WIDTH_PT`, taking it from twelve to eighteen: `amsart`
+  360.0, `siam` 370.38, `revtex` 510.0, `revtex-column` 246.0, `beamer-43`
+  307.29 and `beamer-169` 398.34.
+- `check_figure.DID_NOT_RUN` and `suggest_fixes.DID_NOT_RUN`, the prefix a detail
+  carries when the gate could not run. `suggest` skips a row that carries it.
+- `NOT_CONFIGURABLE` in `check_figure.py` and `check_palette.py`, naming the
+  uppercase numbers a configuration file may not set and the reason each is not
+  a threshold: `MEASURE_DPI`, `BOLD_WEIGHT_MIN`, `GRID_PAIR_CAP`, `RAMP_LUT_N`
+  and `CMAP_SAMPLES`. `config_keys()` drops from 60 keys to 55, and
+  `load_config` raises with the reason rather than the "names no threshold"
+  message.
+- A `doi` or a `no_doi` field on every entry of `EXTERNAL_CLAIMS` in
+  `tests/test_prose_claims.py`, and three tests over them:
+  `test_every_external_claim_carries_a_doi_or_says_why_it_cannot`,
+  `test_a_cited_doi_is_printed_where_the_reader_is` and
+  `test_no_two_claims_cite_the_same_doi`.
+- `doi:` lines on five references that had none: Cleveland & McGill 1984,
+  Cleveland, McGill & McGill 1988 and Heer & Agrawala 2006 in
+  `choosing-a-form.md`; Nuñez et al. 2018 and Stone, Szafir & Setlur 2014 in
+  `style-guide.md`.
+
+#### Changed
+
+- `check_style_sheet` returns `"warn"` rather than `True` when no
+  `figure.mplstyle` is found. Advisory, so `ok` is unchanged.
+- `check_series_color` and `check_colormap` return `"warn"` rather than `True`
+  when `check_palette.py` is not importable beside `check_figure.py`. Advisory,
+  so `ok` is unchanged.
+- All three of those details now open with `DID_NOT_RUN`, and `suggest` returns
+  no remedy for a row that carries it.
+- Nothing a caller could do at 0.9.0 has stopped working. `griffe check` against
+  the tag reports one change, `VENUE_WIDTH_PT`'s value, which is the six rows
+  above, and no break in `check_palette` or `suggest_fixes`.
+
+#### Fixed
+
+- `release.yml`'s TeX install retries at `timeout 60` and `timeout 240`, down
+  from 300 and 600, and no longer sleeps after its last attempt.
+- `check_style_sheet` warns on a key the sheet names that matplotlib dropped
+  while parsing, such as `grid.color: #e1e0d9`. It returned True for one.
+- The `scale` argument of `audit`, `report` and `audit_json`, and the return of
+  `page_scale` itself, are documented as the ratio they are rather than as a
+  length. Documentation only: no number a gate measures has moved.
+- The nine authored documentation pages declare a `title:`, so the site serves
+  each page's own name instead of its filename: "Commands" rather than "Cli",
+  "How the checkers decide" rather than "Design". The home page and the seven
+  symlinked pages are unchanged.
+- `skill/SKILL.md` and `skill/references/style-guide.md` name the configuration
+  file. Both sent a reader to `CONTENT_WIDTH_PT` at the top of a vendored copy
+  and stopped there, which is the one-copy route the file exists to replace, and
+  the skill is what an agent reads. The build snippet calls `load_config`.
+- Heer & Agrawala 2006 **changed** IEEE TVCG `12(4)` → **`12(5)`**, in
+  `choosing-a-form.md` and in the `EXTERNAL_CLAIMS` entry. The pages, 701-708,
+  were right.
+- Stone, Szafir & Setlur 2014 **changed** `2014(1)` → **`22(1)`** in
+  `style-guide.md`, the volume and issue `10.2352/CIC.2014.22.1.art00045`
+  resolves to. The pages, 253-258, were right.
+- `docs/design.md` **changed** the stated suite size `2190` → **`2256`**.
+- `tests/test_renderer_invariance.py` sweeps every gallery figure. `BUILDER_NAMES`
+  was a hardcoded eleven under a comment saying it was read off the module; it is
+  parsed from `BUILDERS` now, and the nine figures added since the sweep was
+  written are in it. All twenty hold every row identical across the range.
+- The dpi sweep's measured cost **changed** `34` rows over eleven figures →
+  **`76`** over twenty, in `check_figure.py`, `docs/design.md` and the sweep's
+  own docstring. The one status flip is still `orbit`'s ink coverage at 600 dpi.
+- `check_palette.oklab_distance`, `cmap_back_travel` and `hex_to_linear`'s raise
+  are exercised. Coverage of `check_palette.py` 86% → 88%.
+- README `## Try it` **changed** "The second command prints a failing report" →
+  **"`check-figure` prints a failing report"**.
+- `test_the_readme_names_the_one_command_that_fails` and
+  `test_every_source_states_the_real_defect_count` **added** in
+  `tests/test_docs_match_code.py`.
+- `pyyaml` **added** to the `dev` dependency group, and to the `ci.yml` `test`
+  leg that installs cmasher. On a clean `uv sync --group dev`
+  `tests/test_version_sites.py` goes from 13 passed and 6 skipped to 19 passed.
+- `test_a_configured_navigation_feature_reaches_the_built_page` and
+  `NAVIGATION_MARKUP` **moved** from `tests/test_docs_site.py` to
+  `tests/test_docs_render.py`, and the four cases now depend on `built_site`.
+  They skipped in every CI job, and in about half of local `-n auto` runs.
+- `check_type_size` **changed** its scale in the detail string from the unrounded
+  float to two decimals, the format `check_line_weight` already used.
+- `docs/design.md` **removed** the claim that the colormap row passes when
+  `check_palette.py` is not importable, and the "five verdicts" sentence.
+- `docs/design.md` **changed** "without a Python interpreter on PATH" → **"with a
+  bare Python interpreter and nothing installed"**.
+- `docs/gallery.md` **changed** the heading "The figure the checker is supposed to
+  fail" → **"The self-test, and the demo"**, and "The only bar chart" → **"The only
+  bar chart on Cartesian axes"**.
+- `docs/compatibility.md` **changed** what sets the 3.11 floor to name
+  `load_config`, and **removed** the paragraph repeating the two floors.
+- `docs/install.md`, `docs/how-to.md` and `docs/api.md` **removed** copies of the
+  import-line history, the `py.typed` note, the `suggest_fixes.py` note and the
+  "default route" claim, and link to the one copy that stays.
+- `choosing-a-form.md` **changed** "a sevenfold difference" → **"one bar eight
+  times the length of the other, for values 7% apart"**, "the one
+  `check_figure.py` fails" → **"one of the three"**, "task 2/3" → **"rank 2/3"**,
+  and "Color sits at the bottom" → **"Color saturation sits at the bottom, and
+  hue is off the list"**.
+- `choosing-a-form.md` and `style-guide.md` **removed** transparency as a fix for
+  overplotting; `test_transparency_does_not_move_the_overplotting_row` **added**.
+- `style-guide.md` **changed** the Fast path's and Procedure's `check_figure.py`
+  step → **`report(fig)`**, the adjacent CVD figure `32.0` → **`32.0 at dichromacy
+  and 31.7 at the worst severity the gate reports`**, and the sub-35% placement
+  sentence → **"prints a 10pt label under 3.5pt"**. **Removed** "the one figure
+  in this repository that uses a legend".
+- `SKILL.md` Setup **added** `suggest_fixes.py` to the copy step, **changed** "it
+  only sets the type floor" → **"the error moves the measured type and stroke
+  sizes by the same 5%"**, and "nearly all of them matplotlib" → **"matplotlib
+  was the most-imported charting library among them"**.
+- `CONTRIBUTING.md` **changed** "mypy runs unannotated" → **"mypy runs with the
+  strict flags off"**, and "Changing a threshold" → names
+  `tests/test_thresholds_are_constants.py` and `docs/gates.md` beside
+  `tests/test_palette.py`.
+- `zensical.toml` **added** `favicon = "images/favicon.png"`, a 64px
+  `lucide/fence` in `#0072b2`, and `[project.theme.icon.admonition]` `note`
+  `lucide/paperclip` → **`lucide/pencil-line`**.
+
+### Why it changed
+
+#### A release retry loop longer than its job
+
+`release.yml`'s `test` job is bounded at 20 minutes, and its TeX retry loop
+could take 3 x (300 + 600) seconds plus 90 of sleeps, 2790 in all. A stalled
+mirror would have been cancelled mid-loop, before the loop's `::error::`
+line ran: the defect `pgf` in `ci.yml` was already fixed for. The loop now
+uses `pgf`'s budget, 945 seconds, and
+`test_a_retry_loop_fits_inside_its_job` holds every retry loop to its job.
+
+#### A hashed colour the style-sheet row could not see
+
+`check_style_sheet`'s docstring said it caught a colour written with a
+leading `#`. It compared the values matplotlib parsed from the sheet with the
+live rcParams, and `#` starts a comment in an mplstyle, so
+`grid.color: #e1e0d9` parses to no value and the key is dropped. The sheet
+and the live rcParams then agree on its absence: a sheet carrying that line
+returned `(True, 'all 1 keys match')`. The row now also reads the keys off
+the file's text. `test_style_sheet_row_notices_a_color_written_with_a_hash`
+pins it.
+
+#### SKILL.md and CONTRIBUTING.md against the code
+
+`SKILL.md` step 6 uses `report(fig, suggest=True)`, which prints nothing extra
+without the file its Setup never copied. `CONTENT_WIDTH_PT` scales the line-weight
+gate through the same `page_scale` as the type gate. Potluri et al. report
+matplotlib as the most-imported charting library, not as the source of nearly
+every image. `pyproject.toml`'s own mypy comment says every function in
+`skill/scripts` is annotated. The value of every threshold is pinned in
+`tests/test_thresholds_are_constants.py`, which the old sentence did not name.
+
+#### The two references against the code
+
+`check_overplotting` reads offsets and sizes, and
+`test_the_overplotting_remedy_does_not_advise_transparency` already held the
+remedy to that, while both references still offered transparency first. Bars
+101 and 108 on a baseline of 100 are 1 and 8 long. `check_figure.py` with no
+arguments runs the self-test, so the Fast path's validate step never audited the
+reader's figure. The gate prints 31.7 for the shipped cycle, so a reader
+checking the guide's 32.0 against it found a mismatch. `examples/gallery.py`
+calls `legend` at four sites. A figure's label size under a small placement
+depends on the size it was authored at, which "every label at or below 6pt" left
+out.
+
+#### A docs pass for claims the code no longer backs
+
+`check_colormap` warns without `check_palette.py` (`check_figure.py:4523`), so
+the design page contradicted its own "WARN is not FAIL" note. One status flip
+over five resolutions is two verdicts, not five. `check_palette.py` runs under
+Python, so it cannot run without an interpreter. The wind rose at
+`examples/gallery.py:1172` is also a bar chart, and the image under the old
+heading is the demo, which passes. The tutorial printed
+`scale 0.44164444444444445` beside a Line weight row reading `scale 0.44`.
+
+#### The README's first claim was about the wrong command
+
+The second command in `## Try it` is `check-palette`, which passes on the three
+hexes the README gives it. The test runs every command in that block and
+requires the one that prints `[FAIL]` to be the one the sentence names.
+
+#### A number in capitals is not always a threshold
+
+`_config_targets` selects by shape, which is what keeps it from falling behind a
+threshold added tomorrow. Shape cannot tell a floor from the frame the floors
+are measured in. `MEASURE_DPI` is a float named in capitals like every
+threshold, and a file setting it would rescale every pixel threshold in
+`check_figure` at once while each threshold's value stayed where a reader could
+see it, which is the failure `MEASURE_DPI` was added to close.
+`tests/test_thresholds_are_constants.py` already drew this distinction in its
+`NOT_A_THRESHOLD` ledger. The config surface did not read it.
+
+Five constants, each with the reason in the module beside it. A raise rather
+than a silent skip, for the reason an unknown key already raises: a threshold
+quietly ignored leaves a project believing it raised a floor. A different
+message, because "names no threshold" sends a reader to check their spelling and
+the spelling is right.
+
+`check_palette.py` carries its own list. These files are vendored one at a time,
+so a contract between two of them cannot live in an import either may lack, and
+that file reads no TOML anyway: `tomllib` arrived in 3.11 and CI holds it to 3.8.
+
+#### A citation the prose gates could not check
+
+`EXTERNAL_CLAIMS` held every external claim to a source, a dated verification
+and a quote, and three tests over it. None of them could see a wrong citation.
+`test_an_external_source_is_named_in_the_references` asserts the first surname
+appears in the document, so "Heer" satisfied it whatever the volume said, and
+`choosing-a-form.md` gave Heer & Agrawala as IEEE TVCG 12(4) for as long as the
+entry existed. The paper is 12(5). It was the one reference in either section
+carrying no DOI.
+
+So a deposited work is now cited by identifier, and the identifier is printed
+where the reader is. Resolving it catches a wrong volume, issue, page or year,
+which no string comparison in this file can. The lookup is the reader's: nothing
+in the suite reaches the network, and a claim whose source has no DOI, such as a
+publisher's instructions-for-authors page or a file in the LaTeX2e kernel, says
+so in `no_doi` rather than leaving the field empty. An absent identifier is
+otherwise indistinguishable from an oversight, which is how this one survived.
+
+The third test rejects two entries sharing one DOI. The wrong issue number came
+from a neighbouring entry; copying the identifier too is the same slip, one
+field further along.
+
+#### One set of thresholds a group can agree on
+
+The two documented ways to move a threshold are to edit a vendored copy and to
+assign the global before calling `audit`. Both are one person's copy, and
+`docs/how-to.md` names what the second costs: a threshold moved in one test file
+is a figure that passes locally and fails in CI. More than one author on one
+document had nowhere to write the floor down once.
+
+A file is read only when something calls `load_config`. Reading one on import
+would move a threshold the caller never named, in a project that keeps every
+threshold visible as a constant.
+
+A key naming no constant raises, and the message lists what is accepted. A
+misspelled threshold that is quietly skipped leaves a project believing it raised
+a floor. Every key is checked before any is assigned, so a file with one bad key
+changes nothing.
+
+Settable keys are computed from the modules, so a threshold added to either one
+is settable the day it lands. Numeric constants only, plus `CONTENT_WIDTH_PT`,
+`STYLE_SHEET` and `venue`. `AUDIT_SCHEMA` is a wire format and `DRAW_RC_ATTR` is
+an attribute name: a file that could reach those could rename the JSON contract
+from TOML.
+
+`check_palette.py` reads no TOML. `tomllib` arrived in 3.11 and CI runs that file
+on 3.8, so `check_figure` reads the file and sets the palette constants through
+the sibling import it already has.
+
+#### Six venues measured, not copied
+
+Six of the twelve rows were machine-learning conference styles; the rest were
+IEEE, Nature and bare `article`. A mathematician had no row. `amsart` and SIAM's
+class carry most of that work, `revtex4-2` is what APS asks for, and
+`skill/SKILL.md` claims slides and lecture decks as targets against no slide
+width at all. `docs/how-to.md` used SIAM as its worked example of raising a
+threshold while the table did not know SIAM's width.
+
+The six were measured, not looked up: on TeX Live 2026, by typesetting an empty
+document in each class and reading `\the\textwidth` out of the log. That is the
+procedure the table's comment demands of a reader. Each row names the class
+version the log reported, because a width is a property of that version and
+style files get revised between years. `siamart220329.cls` is not in TeX Live; it
+came from SIAM's own macro distribution.
+
+`amsart` and `siam` are one-column classes, so their `\columnwidth` equals their
+`\textwidth` and is not listed twice. `revtex` carries its column because APS
+reprint is two-column.
+
+#### A row that could not run is not a row that passed
+
+Three gates reported a pass for having checked nothing. `check_style_sheet`
+passed when it found no `figure.mplstyle`, which is exactly the figure it exists
+to catch: one drawn with `plt.style.use` forgotten. The inconsistency was
+visible in the suite, where a `STYLE_SHEET` pointing at a missing file has
+warned since 0.1.4 and no sheet at all passed. `check_series_color` and
+`check_colormap` passed when `check_palette.py` was not importable beside them,
+which is the vendored copy that took one file and ignored the install page's
+warning: the only colour checks in the file, switched off, reported green.
+
+All three are warns rather than hard failures. A copy that deliberately left the
+palette module out is doing correct work, and a missing style sheet is not a
+defect in the figure. What was wrong was the status, not the severity: `ok` turns
+on hard `False` only, so no build that passed before fails now, and the row says
+which check did not run.
+
+`check_series_color` and `check_colormap` are not advisory and still fail on what
+they measure, so the count in `ADVISORY_GATES` is unchanged at eight. Three rows
+can now both fail and warn where Type size was the only one.
+
+Turning three passes into warns routed them somewhere they had never been.
+`suggest` offers a remedy for every row that is not passing, and all three gates
+have one: a row that did not run was answered with "apply the sheet where the
+figure is drawn, inside the same rc_context" when there is no sheet, and "use a
+ramp whose lightness runs one way" when nothing was classified. Gate name cannot
+tell the cases apart, because the style-sheet gate's other warn does want that
+remedy. So the detail says which it is. `DID_NOT_RUN` is a prefix, `suggest`
+skips a row that opens with it, and each of those rows already carries the right
+action in its own `[FIX]` clause. Both files spell the string out rather than
+share it through an import: `suggest_fixes.py` is the optional third file and
+cannot require the module it describes, so a test asserts the two copies agree,
+as one does for `AUDIT_SCHEMA` across the two checkers.
+
+#### A verdict a build can read
+
+`report` prints a table for a person and `audit` returns tuples for Python. A CI
+step that wanted the rows had neither: parsing the table means depending on a
+layout that is there to be read, and calling `audit` means the build is a Python
+program. `audit_json` and `check_json` are the third route, and they serialise
+the object the checker already computed rather than re-measuring, so the three
+cannot disagree about one figure.
+
+Both documents carry the inputs, not only the verdict. A figure that passes at
+`venue="neurips"` and fails at `icml-column` is one figure and two true answers,
+and the same eight hexes pass on white and fail on a tinted page. A stored
+artifact recording only `ok` is one nobody can reproduce a month later, which is
+the failure a CI artifact exists to prevent.
+
+`status` is spelled `pass`, `fail` or `warn` rather than carrying the tuple API's
+`True`, `False` and `"warn"`. One JSON field holding a bool for two cases and a
+string for the third is a shape every consumer would have to learn, and `ok` is
+already the bool worth branching on.
+
+`check_palette.py` gained one import to do this, `json`, which is in the standard
+library. The file's claim to import nothing else is what makes it vendorable into
+a non-Python toolchain, and `--json` did not cost it.
+
+There is no `--json` on `check_figure.py`, because that command audits no figure
+of yours: run with no arguments it self-tests on a deliberately broken figure.
+The equivalent is `audit_json` in the API.
+
+#### The title a reader sees before the page
+
+Zensical titles a page from its filename. Not from its `# heading`, and not
+from the nav label: `cli.md` served as "Cli - figure-gate" with `# Commands` in
+the file and "Commands" in the nav, `design.md` as "Design" against "How the
+checkers decide". Every page on the site was serving a slug, in the browser tab,
+the search result and the link preview.
+
+`title:` front matter is what the theme reads, and only the nine authored pages
+can carry it. The other seven are symlinks; front matter in their targets would
+surface in the README on PyPI and in the style guide a reader vendors. The home
+page keeps its filename's title for that reason. Two tests hold one half each:
+that a page writes its name down, and that the site serves it under that name.
+
+#### A scale that was documented as a length
+
+`page_scale` returns `width * placed_frac / (fig.get_size_inches()[0] * 72)`,
+which divides points by points. Four docstrings named a unit for it anyway,
+larger than the real number by 72. A reader who passed `scale=` as that unit
+would certify every figure at 72 times the size it prints at.
+
+The correction is in the wording alone. `docs/design.md` had it right, and so
+did `audit_json`'s own paragraph two lines above the `Args:` entry that
+contradicted it. The retired sentence is now an entry in
+`tests/test_prose_claims.py`'s retraction ledger, which sweeps the documents and
+both modules, so it cannot be copied back.
+
+#### One definition of public
+
+`griffe` reads `__all__` when a module declares one, and
+`skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+pull request. So an `__all__` that omitted a name would not merely mislead a
+reader about the public surface: it would narrow what the API gate compares, and
+a break in the omitted name would stop being reported at all. The lists are
+therefore exhaustive, and
+`tests/test_api_reference.py::test_all_is_the_whole_public_surface` regenerates
+each one from the module's own top level and fails on any disagreement. The gate
+was run against v0.9.0 with the lists in place and reports the same surface it
+reported without them, which is the evidence that nothing went quiet.
+
+#### A citation, and the floor it does not move
+
+`CITATION.cff` carries the concept DOI rather than a per-version one. Zenodo
+mints a fresh number on each deposit, so a per-version DOI cannot be derived from
+the version and cannot be a bump site; a citation carrying one sends every future
+reader to whichever release was current when the line was written. `date-released`
+is absent for the same reason, and
+`tests/test_version_sites.py::test_the_citation_carries_no_date_released` is what
+keeps that a decision rather than an oversight.
+
+Those six tests ran nowhere but a contributor's machine. `yaml` was in no
+declared group; it reached the local environment as a transitive dependency of
+the `docs` group's MkDocs tree, and `pytest.importorskip` turned its absence into
+a skip rather than an error. A clean `uv sync --group dev` gave 13 passed and 6
+skipped, and `ci.yml`'s `test` matrix installs only pytest, xdist and matplotlib,
+so it skipped them too. So the newest version site had the parametrised pattern
+test watching its shape and nothing at all checking it was still a citation: not
+the DOI, not the author, not the version a reader resolves. `pyyaml` is named in
+`dev` now, for the same reason `api` names griffe outright instead of taking it
+from `docs`: a group that gets its tool by accident from another group's tree
+stops working the day that tree changes.
+
+The `importorskip` in `citation()` stays. A plain `import yaml` fails collection
+on every `test` leg, and the count `docs/design.md` states with it. One `test`
+leg installs PyYAML, so the six run in CI.
+
+Looking for the same shape elsewhere found four more.
+`test_a_configured_navigation_feature_reaches_the_built_page` reads
+`site/gates/index.html` and skipped when it was absent, which was every CI job:
+the only one that builds a site is the docs workflow's and it ran
+`tests/test_docs_render.py` alone, while `ci.yml` syncs `--group dev` and carries
+no zensical. So a navigation feature could stop reaching the theme's markup and
+the four cases watching for it would report nothing.
+
+Locally it was worse than absent. `built_site` cleans and rewrites the one
+`site/` a checkout has, and this test read that directory without taking the
+fixture, so under `-n auto` it opened a path another worker was replacing: two
+isolated runs back to back gave 53 skips and then 57, for a site that existed
+before and after both. The test and `NAVIGATION_MARKUP` are in
+`test_docs_render.py` now and depend on `built_site`, which is the coordination
+and also why the docs workflow already runs them. A test that reads a directory
+another test rewrites has to take the fixture that owns it.
+
+The Python floor stays at 3.11. SPEC 0 recommends dropping a release about three
+years after it ships, and by that calendar 3.11 was due to go in April 2026.
+Nothing here uses a 3.12 feature, so raising the floor would remove users and
+change no line of the checkers; what the floor is actually set by is `tomllib`,
+which arrived in 3.11. `docs/compatibility.md` now says so, because a floor that
+looks overdue and is not is a question a reader should not have to ask twice.
+
+#### The site's icons
+
+The browser tab showed the theme's stock favicon while the header showed the
+fence, so the favicon is now the fence. Nine call-outs are `note`, which the
+modern variant draws as a paperclip; the classic variant draws it as
+`material/pencil-circle`, and `lucide/pencil-line` is that glyph in Lucide's
+stroke.
+
 ## 0.9.0 — 2026-09-09
 
 ### What changed

@@ -1,19 +1,18 @@
 """The guide quotes numbers. The code computes them. They have to agree.
 
-This exists because they did not. Every contrast ratio in the palette table was
-computed against a surface (`#fcfcfb`) that no figure in this project ever
-rendered - `figure.mplstyle` has always drawn on white. The numbers were all
-slightly wrong, and one of them was wrong in a way that changed a rule: reddish
-purple was marked as needing a mandatory direct label at 2.98, when against the
-surface actually used it clears 3:1 at 3.06.
+A number in prose is not executable, so each one is read out of the document
+and recomputed: every row of the palette table against `contrast()`, and the
+rosters, counts and constants the pages quote against the code that defines
+them. A quoted measurement that drifts from the code is a test failure.
 
-Nothing caught it, because a number in prose is not executable. So: read the
-table out of the guide and check every row against `contrast()`. A quoted
-measurement that drifts from the code is now a test failure rather than a thing
-someone notices in a year.
+The table once held every contrast ratio against `#fcfcfb`, a surface no figure
+here renders. One of them changed a rule: reddish purple was marked as needing
+a direct label at 2.98, and on white it clears 3:1 at 3.06.
 """
 
+import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -27,10 +26,9 @@ ROOT = SKILL.parent
 GUIDE = SKILL / "references" / "style-guide.md"
 README = ROOT / "README.md"
 
-# The threshold tables, the roster counts and the usage examples were in the
-# README until it was cut down to a landing page. They are one copy still, on
-# the docs site, and every parser below that used to read the README reads the
-# page the claim actually lives on now.
+# The threshold tables, the roster counts and the usage examples live on the
+# docs site, one copy each, and every parser below reads the page the claim
+# lives on. The README is a landing page.
 GATES = ROOT / "docs" / "gates.md"
 DESIGN = ROOT / "docs" / "design.md"
 TUTORIAL = ROOT / "docs" / "tutorial.md"
@@ -331,13 +329,75 @@ def test_the_page_states_the_advisory_count_it_marks():
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    claimed = re.search(r'note "WARN is not FAIL"\s+\n\s*(\w+)',
-                        DESIGN.read_text(encoding="utf-8"))
-    assert claimed, ("docs/design.md no longer states an advisory count in the "
+    claimed = re.search(r"(\w+) of the \d+ rows are advisory",
+                        GATES.read_text(encoding="utf-8"))
+    assert claimed, ("docs/gates.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
     assert word in WORD_NUMBERS, f"unreadable advisory count {word!r}"
     assert WORD_NUMBERS[word] == len(cf.ADVISORY_GATES)
+
+
+def test_the_readme_states_the_split_it_promises():
+    """The landing page's own count of what can fail, in words.
+
+    `docs/gates.md` states the advisory count; the README states both halves,
+    which is two numbers derived from one list and no machinery under either.
+    A gate added as advisory moves both.
+    """
+    import check_figure as cf
+
+    claimed = re.search(r"(\w+) rows can fail a build\. The other (\w+) are "
+                        r"advisory", " ".join(README.read_text(encoding="utf-8").split()))
+    assert claimed, ("the README no longer states the fail/advisory split in "
+                     "the form this test reads")
+    fails, advisory = (WORD_NUMBERS[w.lower()] for w in claimed.groups())
+    assert advisory == len(cf.ADVISORY_GATES)
+    assert fails == len(cf.GATES) - len(cf.ADVISORY_GATES)
+    assert fails + advisory == len(audit_gate_names())
+
+
+# --- the commands a reader runs first -----------------------------------------
+# `## Try it` said "The second command prints a failing report". The second was
+# `check-palette`, which passes on the three hexes it is given; the one that
+# fails is `check-figure`, the third. Counting commands is how that went wrong,
+# so the sentence names one and the test below runs every one.
+
+SCRIPT_MODULES = dict(re.findall(
+    r'^([a-z-]+) = "figure_gate\.(\w+):main"',
+    (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M))
+
+
+def try_it_commands():
+    """The console-script lines of the README's `## Try it` block, as argv."""
+    block = re.search(r"## Try it\s+```bash\n(.*?)```",
+                      README.read_text(encoding="utf-8"), re.S)
+    assert block, "the README no longer opens `## Try it` with a bash block"
+    argvs = [shlex.split(line, comments=True)
+             for line in block.group(1).splitlines()]
+    return [argv for argv in argvs if argv and argv[0] in SCRIPT_MODULES]
+
+
+def test_the_readme_names_the_one_command_that_fails():
+    claimed = re.search(r"`([a-z-]+)` prints a failing report and exits 0",
+                        " ".join(README.read_text(encoding="utf-8").split()))
+    assert claimed, ("the README no longer names the failing command in the "
+                     "form this test reads")
+    commands = try_it_commands()
+    assert len(commands) > 1, f"read {commands} out of `## Try it`"
+    failing = []
+    for argv in commands:
+        script = SKILL / "scripts" / f"{SCRIPT_MODULES[argv[0]]}.py"
+        result = subprocess.run(
+            [sys.executable, str(script), *argv[1:]], capture_output=True,
+            text=True, timeout=300, env={**os.environ, "MPLBACKEND": "Agg"})
+        assert result.returncode == 0, (
+            f"`{shlex.join(argv)}` exited {result.returncode}:\n{result.stderr}")
+        if "[FAIL]" in result.stdout:
+            failing.append(argv[0])
+    assert failing == [claimed.group(1)], (
+        f"the README says `{claimed.group(1)}` prints a failing report; the "
+        f"commands that printed one were {failing}")
 
 
 def test_every_advisory_gate_is_a_gate_that_exists():
@@ -385,13 +445,11 @@ def test_no_advisory_gate_ever_returns_false():
 
 # --- the threshold column ----------------------------------------------------
 # Four rosters are held to `audit()`: the module docstring, the gate table's
-# first column, SKILL.md's sentence, and the advisory tags. The numbers beside
-# them were held to nothing. Eleven of the twenty rows name a constant and quote
-# its value, and every one of them agreed on the day this was written - which is
-# the argument for writing it, not against. `#fcfcfb` was the surface the
-# contrast table really had been computed against; `#898781` really was in the
-# style sheet; the test count really was 171. Each was right when it was typed.
-# This column is eleven claims of that shape with no machinery under them.
+# first column, SKILL.md's sentence, and the advisory tags. The threshold column
+# is a claim per row: every row outside `PROSE_THRESHOLDS` names a constant and
+# quotes its value. A quoted number is right when typed and nothing keeps it
+# right: `#fcfcfb` was the surface the contrast table had been computed against,
+# `#898781` was in the style sheet, and the test count was 171.
 
 THRESHOLD_CONST = re.compile(
     r"`([A-Z][A-Z0-9_]*(?:\s*,\s*[A-Z][A-Z0-9_]*)*)\s*=\s*([^`]+)`")
@@ -740,13 +798,13 @@ def test_validator_default_surface_is_what_the_style_sheet_renders():
 GALLERY = ROOT / "examples" / "gallery.py"
 DOCS_GALLERY = ROOT / "docs" / "gallery.md"
 
-DEFECT_COUNT = re.compile(r"found (\w+) defects? in")
+DEFECT_COUNT = re.compile(r"(\w+) are named below")
 
 
 def defect_claims():
     """Every file that states how many defects writing the gallery found."""
     return {path.name: DEFECT_COUNT.search(path.read_text(encoding="utf-8"))
-            for path in (GALLERY, README, DOCS_GALLERY)}
+            for path in (GALLERY,)}
 
 
 def test_every_source_still_states_a_defect_count():
@@ -773,8 +831,8 @@ def test_the_three_sources_agree_on_the_defect_count():
 #
 # Prose does not use the gate's label, so the join has to be written down. It is
 # asserted complete against `audit` rather than trusted, which is what stops a
-# twentieth gate from being added to the code and to two rosters but not this
-# one - the map goes stale loudly.
+# new gate from being added to the code and to two rosters but not this one -
+# the map goes stale loudly.
 
 SKILL_MD = SKILL / "SKILL.md"
 
@@ -1065,7 +1123,7 @@ def site_alt_texts():
 
 
 def test_the_examples_still_describe_every_figure():
-    """Eleven figures, eleven descriptions, plus the demo. A refactor that
+    """Twenty figures, twenty descriptions, plus the demo. A refactor that
     changes the call shape would otherwise leave this file comparing the site
     against a shorter list and finding no disagreement."""
     assert len(described_strings()) == 21, (
@@ -1198,11 +1256,10 @@ def test_the_colormaps_the_guide_condemns_do_fail(name):
 
 
 # --- constants quoted in the reference material ------------------------------
-# The README's threshold column is checked above. The guide quotes constants
-# too, now that it explains how the kind is measured, and a guide that names a
-# threshold is making the same executable claim a table cell does. One pattern,
-# both documents, so a constant renamed in code cannot be left standing in
-# either.
+# The gate table's threshold column is checked above. The guide and SKILL.md
+# quote constants too, and a document that names a threshold makes the same
+# executable claim a table cell does. One pattern, both documents, so a constant
+# renamed in code cannot be left standing in either.
 
 CONSTANT_DOCS = [GUIDE, SKILL_MD]
 
@@ -1252,11 +1309,10 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 # in it and the number is now gone, which is the fix for that class rather than
 # an exemption from this one.
 #
-# The seven sentences used to be seven sentences in one file. Cutting the README
-# down to a landing page spread them over three, so each claim now carries the
+# The seven sentences are spread over four files, so each claim carries the
 # document it is made in: a count stated on the docs site and a count stated in
-# the README are the same claim about `audit()`, and the reason this exists is
-# that one copy of a claim can be updated without the others.
+# the README are the same claim about `audit()`, and one copy of a claim can be
+# updated without the others.
 
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                 "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
@@ -1271,7 +1327,7 @@ ROSTER_COUNT_CLAIMS = {
     "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
     "the elimination-gate claim": (DESIGN, r"(\d+) passing rows means the"),
     "the named-defect count": (DESIGN, r"figure avoids (\d+) named defects"),
-    "the advisory paragraph": (DESIGN, r"of the (\d+) rows are advisory"),
+    "the advisory paragraph": (GATES, r"of the (\d+) rows are advisory"),
 }
 
 
@@ -1310,7 +1366,7 @@ GALLERY_PY = ROOT / "examples" / "gallery.py"
 GALLERY_COUNT_CLAIMS = {
     "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
     "the gallery page": (DOCS_GALLERY, r"builds these (\w+) figures and audits"),
-    "the README": (README, r"Writing those (\w+) found"),
+    "the README": (README, r"Writing those (\w+) exposed"),
 }
 
 
@@ -1345,6 +1401,38 @@ def test_every_source_states_the_real_gallery_count(label):
         f"{gallery_figure_count()}")
 
 
+# --- how many defects the gallery found ---------------------------------------
+# Two copies of one number: the gallery page's heading and gallery.py's
+# docstring. `docs/gallery.md` numbers the list, so the list is the count and
+# both are read against it.
+
+GALLERY_DEFECT_CLAIMS = {
+    "the gallery page's heading": (DOCS_GALLERY, r"## The (\w+) defects in the checks"),
+    "gallery.py's docstring": (GALLERY_PY, r"(\w+) are named below"),
+}
+
+
+def gallery_defect_count():
+    """Numbered items under the gallery page's defect heading."""
+    section = re.search(r"^## The \w+ defects in the checks\n(.*?)^## ",
+                        DOCS_GALLERY.read_text(encoding="utf-8"), re.S | re.M)
+    assert section, "docs/gallery.md no longer has the defect heading this reads"
+    return len(re.findall(r"^\d+\. ", section.group(1), re.M))
+
+
+@pytest.mark.parametrize("label", sorted(GALLERY_DEFECT_CLAIMS))
+def test_every_source_states_the_real_defect_count(label):
+    path, pattern = GALLERY_DEFECT_CLAIMS[label]
+    claimed = re.search(pattern, " ".join(path.read_text(encoding="utf-8").split()))
+    assert claimed, f"{label} no longer states the defect count in the form this test reads"
+    word = claimed.group(1).lower()
+    assert word in WORD_NUMBERS, f"{label} states an unreadable count {word!r}"
+    assert gallery_defect_count() > 1
+    assert WORD_NUMBERS[word] == gallery_defect_count(), (
+        f"{label} says {word} defects; docs/gallery.md lists "
+        f"{gallery_defect_count()}")
+
+
 # --- every gate has somewhere to send a reader --------------------------------
 # The fifth roster, and the one that is not a roster: the gate table says what
 # a gate measures, the reference material says why the rule is there and what to
@@ -1353,8 +1441,8 @@ def test_every_source_states_the_real_gallery_count(label):
 # and no explanation anywhere a reader would look. The suite was green.
 #
 # Prose does not use the gate's label, so the join is written down, the same way
-# `FIGURE_PROSE` is. Asserted complete against `audit()`, so a twenty-first gate
-# goes stale loudly instead of quietly having no guidance.
+# `FIGURE_PROSE` is. Asserted complete against `audit()`, so a new gate goes
+# stale loudly instead of quietly having no guidance.
 
 GUIDE_FILES = {
     "style-guide.md": GUIDE,
@@ -1405,8 +1493,8 @@ GUIDANCE_ANCHORS = {
 # is not and is anti-correlated with under the edit that reading suggests.
 #
 # Kept rather than deleted. It is the union with `GUIDANCE_ANCHORS` that makes
-# the completeness assertion below mean anything, and a twenty-first gate
-# arriving unexplained needs an honest place to sit while its guidance is
+# the completeness assertion below mean anything, and a new gate arriving
+# unexplained needs an honest place to sit while its guidance is
 # written. `test_the_exemption_set_is_empty` is what keeps that temporary.
 NO_GUIDANCE: set[str] = set()
 
@@ -1503,3 +1591,128 @@ def test_the_over_fire_form_quotes_real_gate_names():
     assert quoted <= roster, (
         f"{sorted(quoted - roster)} are offered as example gate names and "
         "`audit` returns no row by those names")
+
+
+# --- SECURITY.md --------------------------------------------------------------
+# Both claims below were false for months before anything read them: the table
+# offered fixes for `0.1.x` while the tree was on 0.10, and the policy credited
+# Dependabot with dev-dependency updates `dependabot.yml` deliberately omits.
+SECURITY = ROOT / "SECURITY.md"
+
+
+def test_the_supported_versions_table_names_no_series_that_can_go_stale():
+    """A pinned series is wrong the release after it is written: the table
+    said `0.1.x` while the tree was on 0.10. The policy is the latest
+    release, so the table says that."""
+    rows = re.findall(r"^\| ([^|]+?) +\| (yes|no) \|$",
+                      SECURITY.read_text(encoding="utf-8"), re.M)
+    assert rows == [("latest release", "yes"), ("anything older", "no")], rows
+
+
+def test_the_dependabot_sentence_names_only_configured_ecosystems():
+    config = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+    ecosystems = re.findall(r'package-ecosystem: "([^"]+)"', config)
+    line = next(l for l in SECURITY.read_text(encoding="utf-8").splitlines()
+                if "Dependabot" in l)
+    assert ecosystems == ["github-actions"], (
+        "dependabot.yml changed; say what it updates in SECURITY.md")
+    assert "GitHub Actions" in line and "dev-dependency" not in line, (
+        "SECURITY.md credits Dependabot with updates dependabot.yml does not "
+        "configure")
+
+
+# --- gallery defect counts ----------------------------------------------------
+# "Writing those twenty found nine defects" stayed in the README and on the
+# gallery page after 0.9.0's callout and secondary-axis figures exposed six more
+# rows. A total goes stale with every figure that finds one, so the count now
+# lives beside the list it counts: the heading, and gallery.py's docstring.
+GALLERY_PAGE = ROOT / "docs" / "gallery.md"
+
+
+def test_no_page_totals_the_checker_defects_the_gallery_found():
+    for path in (README, GALLERY_PAGE):
+        prose = " ".join(path.read_text(encoding="utf-8").split())
+        assert not re.search(r"found \w+ defects in the checks", prose), (
+            f"{path.name} states a total; the lists and the changelog carry it")
+
+
+# --- the pie's ranks, read against the page's own ordering --------------------
+# "Angle and area are the two weakest quantitative tasks" sat forty lines below
+# a numbered list putting them third and fourth of six.
+FORM = SKILL / "references" / "choosing-a-form.md"
+ORDINALS = {"one": 1, "first": 1, "second": 2, "third": 3, "fourth": 4,
+            "fifth": 5, "sixth": 6}
+
+
+def test_the_pie_bullet_quotes_the_ranks_the_ordering_gives():
+    text = FORM.read_text(encoding="utf-8")
+    ranks = {int(n): task for n, task in re.findall(r"^(\d)\. (.+)$", text, re.M)}
+    assert len(ranks) == 6, "the ordering is no longer six numbered ranks"
+    bullet = " ".join(re.search(r"\*\*Pie and donut\.\*\*(.*?)\n- ", text,
+                                re.S).group(1).split())
+    stated = re.search(r"Angle and area rank (\w+) and (\w+) of the six", bullet)
+    assert stated, "the pie bullet no longer states the two ranks"
+    angle, area = (ORDINALS[w] for w in stated.groups())
+    assert "angle" in ranks[angle].lower() and "area" in ranks[area].lower()
+
+
+# --- rows the composition rules hand to the checker ---------------------------
+# Both lists were headed as rules no script decides while listing two the
+# checker gates. The leads now name those rows, and the names have to be rows.
+@pytest.mark.parametrize("path", [SKILL_MD, GUIDE], ids=lambda p: p.name)
+def test_the_composition_rules_name_rows_audit_returns(path):
+    pytest.importorskip("matplotlib")
+    text = " ".join(path.read_text(encoding="utf-8").split())
+    lead = re.search(r"The checker gates (.*?)[;.] (?:the|The) rest", text)
+    assert lead, f"{path.name} no longer says which composition rules are gated"
+    named = [r for r in ("Contrast stack", "Mark ratio", "Axis redundancy")
+             if r in lead.group(1)]
+    assert len(named) == 3, f"{path.name}'s lead names {named}"
+    assert set(named) <= set(audit_gate_names())
+
+
+# --- which publishers set a type minimum --------------------------------------
+# The gates page credited Science with a type minimum; the ledger's own quote
+# for "journal type floors" says Science publishes none, only a 6pt floor on
+# symbols and 0.5pt on lines.
+def test_the_gates_page_names_only_publishers_with_a_type_minimum():
+    text = " ".join(GATES.read_text(encoding="utf-8").split())
+    claim = re.search(r"and the ([\w, ]+?) type minima", text)
+    assert claim, "the gates page no longer names the type minima it cites"
+    assert set(re.split(r", | and ", claim.group(1))) == {"Nature", "PNAS"}
+
+
+# --- sources the style guide cites in its body --------------------------------
+# Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
+# from the References, which `CONTRIBUTING.md` says a cited work may not be.
+GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
+               "Potluri", "Bateman", "Tufte")
+
+
+@pytest.mark.parametrize("surname", GUIDE_CITED)
+def test_a_source_the_style_guide_names_is_in_its_references(surname):
+    body, refs = GUIDE.read_text(encoding="utf-8").split("\n## References\n")
+    assert surname in body, f"{surname} is no longer cited; drop it here"
+    assert re.search(rf"^- {surname}, ", refs, re.M), (
+        f"the style guide cites {surname} and its References do not list them")
+
+
+def test_an_audited_figure_is_left_on_an_agg_canvas():
+    """`docs/gates.md` says drawing on Agg rebinds `fig.canvas`, so an audited
+    figure no longer shows in a GUI window. A GUI canvas cannot be built in CI,
+    so an SVG canvas stands in for any canvas that is not Agg."""
+    import matplotlib
+    matplotlib.use("agg")
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.backends.backend_svg import FigureCanvasSVG
+    from matplotlib.figure import Figure
+
+    import check_figure as cf
+
+    assert "rebinds `fig.canvas`" in GATES.read_text(encoding="utf-8"), (
+        "docs/gates.md no longer makes the claim; drop this test with it")
+    fig = Figure()
+    FigureCanvasSVG(fig)
+    fig.add_subplot().plot([0, 1], [0, 1])
+    cf.audit(fig)
+    assert type(fig.canvas) is FigureCanvasAgg

@@ -24,13 +24,13 @@ Checks, in the order `audit` runs them
     4. Contrast stack    - something is at full opacity; alpha levels are few
     5. Mark ratio        - largest / smallest mark area within MARK_RATIO_MAX
     6. Overplotting      - scatter marks do not merge into an unreadable mass
-    7. Axis redundancy   - shared-axis panels do not repeat a tick label column
+    7. Axis redundancy   - panels on one scale do not repeat ticks or labels
     8. Type size         - every rendered string clears the floor once scaled
     9. Line weight       - every stroke clears LINE_FLOOR_PT once scaled
    10. Banking           - the panel's aspect keeps segments near 45 degrees
    11. Ink coverage      - the data region is neither empty nor packed
    12. Series color      - the hues in each panel separate under color blindness
-   13. Dual axis         - no second y scale carrying data of its own
+   13. Dual axis         - no two data-carrying axes share one frame
    14. Form              - no pie, no 3D, no truncated bar baseline
    15. Identity channel  - series are not told apart by color alone
    16. Label attribution - each label is nearest the curve it names
@@ -48,6 +48,7 @@ import copy
 import importlib
 import itertools
 import math
+import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -62,6 +63,49 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 
+# The public surface, in source order. `tests/test_api_reference.py` regenerates
+# this list from the module's own top level and fails on any disagreement, so it
+# cannot quietly fall behind a name that was added or removed.
+#
+# Exhaustive on purpose. `griffe` reads `__all__` when one is present, and
+# `skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+# pull request: a name left out of this list is a name the API gate stops
+# comparing, which turns a break into a silent one. That is the opposite of what
+# the list is for, so completeness here is load-bearing rather than tidy.
+__all__ = [
+    "DID_NOT_RUN",
+    "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
+    "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
+    "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
+    "MAX_SERIES_HUES", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
+    "MARK_RIDE_TOL_PX", "MARK_RIDE_FRAC_MIN", "SERIES_ENCLOSED_FRAC",
+    "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
+    "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
+    "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
+    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "MATH_SCRIPT_FLOOR_PT",
+    "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
+    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
+    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
+    "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
+    "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
+    "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
+    "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
+    "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
+    "check_redundancy", "check_type_size", "check_ink", "check_series_color",
+    "check_dual_axis", "FORM_BAR_MIN_PATCHES", "FORM_BAR_BASELINE_TOL",
+    "bars_rest_on_a_shared_edge", "check_form", "check_identity_channel",
+    "check_label_attribution", "check_contour_dash", "check_line_weight",
+    "check_banking", "ANONYMOUS_CMAP_NAMES", "RAMP_LUT_N", "RAMP_CHANNEL_TOL",
+    "RAMP_SPACING_TOL", "RAMP_MIN_STEPS", "check_colormap", "check_fonts",
+    "ALT_TEXT_ATTR", "ALT_TEXT_MIN_CHARS", "describe",
+    "ALT_TEXT_KEY_BY_SUFFIX", "ALT_TEXT_KEY_DEFAULT",
+    "ALT_TEXT_UNSUPPORTED_SUFFIXES", "alt_metadata", "check_alt_text",
+    "check_style_sheet", "GATE_INPUTS", "Gate", "GATES", "ADVISORY_GATES",
+    "audit", "report", "AUDIT_SCHEMA", "audit_json", "self_test_figure",
+    "main",
+]
+
+
 def _sibling(name: str) -> Any:
     """A sibling checker module, or None when it was not copied along.
 
@@ -71,12 +115,9 @@ def _sibling(name: str) -> Any:
     vendored, where they are loose files beside each other. `__package__` is
     empty in the second, which is what distinguishes them.
 
-    One helper, rather than the two-step written out at each call site. It was
-    written out, and when the package layout arrived one of the three sites was
-    missed -- `check_colormap`, whose fallback returns True. So on the install
-    path that gate reported a pass and the words "not importable beside this
-    file", and stopped classifying colormaps entirely. A guarded import whose
-    failure is a pass is exactly the kind that has to exist once.
+    Every cross-module import goes through here, so both layouts are handled
+    in one place. A caller that gets None must say what it skipped and must not
+    report a pass: a row that could not run is not a row that passed.
     """
     if __package__:
         try:
@@ -87,6 +128,19 @@ def _sibling(name: str) -> Any:
         return importlib.import_module(name)
     except ImportError:
         return None
+
+
+# What a detail says when the gate could not run at all: no style sheet to
+# compare against, or no `check_palette` to classify a colour with. The three
+# rows that can say it warn, and the warn is why the mark has to be legible to a
+# program as well as a reader: `suggest_fixes.suggest` offers a remedy for every
+# row that is not passing, and every remedy it holds answers the question the
+# gate asks when it does run. "Apply the sheet inside the same rc_context" is
+# the wrong answer to "there is no sheet". So the mark is a prefix rather than
+# prose anywhere in the string, and `suggest_fixes.py` carries its own copy:
+# these files are vendored one at a time, and a contract between two of them
+# cannot live in an import either one may not have.
+DID_NOT_RUN = "did not run: "
 
 # The resolution every pixel measurement in this file is taken at, regardless of
 # what the figure was authored at.
@@ -100,8 +154,8 @@ def _sibling(name: str) -> Any:
 # 300, and the same figure gets two verdicts for a number nobody thought they
 # were setting.
 #
-# Measured on the eleven gallery figures across 100/150/200/300/600 dpi, before
-# this constant existed: thirty-four rows moved and one flipped -- `orbit`'s ink
+# Measured on the twenty gallery figures across 100/150/200/300/600 dpi, before
+# this constant existed: seventy-six rows moved and one flipped -- `orbit`'s ink
 # fraction ran 0.13 at 100 dpi down to 0.04 at 300 and out the bottom of the band
 # at 600, because a marker's antialiased fringe is a fixed number of pixels wide
 # and so a shrinking share of a mark that grows with the resolution. The figure
@@ -186,19 +240,16 @@ INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
 # Summed per-channel distance from the page color at which a pixel counts as
 # ink, in 0-255 RGB. Above antialiasing and JPEG-grade noise, below any mark a
 # reader can see. The measurement `check_ink` reports is a count of pixels over
-# this line, so it is the gate's other threshold and was written inline.
+# this line, so it is the gate's other threshold.
 INK_DELTA_MIN = 24
 # Share of a scatter's points whose nearest neighbour sits close enough for the
 # two marks to touch on the page before the cloud is called an unreadable mass.
-# Touching, not centre-inside-mark: see `check_overplotting`. Up here with its
-# siblings rather than inside `check_overplotting`, because the README's claim
-# is that every threshold is a module-level constant you can read and change,
-# and this was the one that was not.
+# Touching, not centre-inside-mark: see `check_overplotting`.
 OVERPLOT_THRESHOLD = 0.5
 
 # The theme has six categorical slots and the guide's claim is that there is no
 # seventh: a generated hue is indistinguishable from an existing slot under
-# simulated color blindness. Until now that claim was prose only.
+# simulated color blindness.
 MAX_SERIES_HUES = 6
 
 # Rows `audit` can return "warn" for and never False. They are the checks whose
@@ -218,7 +269,7 @@ MAX_SERIES_HUES = 6
 # reads this set and holds the prose to it.
 # Built from `GATES` at the bottom of this module, where each row declares
 # whether it is advisory beside the function that decides it. It was a second
-# hand-maintained list of the same twenty names for a while, which is two places
+# hand-maintained list of the same names for a while, which is two places
 # to update and one of them silently optional.
 def _advisory_gates() -> frozenset[str]:
     return frozenset(gate.name for gate in GATES if gate.advisory)
@@ -291,8 +342,7 @@ TEXT_FOOTPRINT_MIN_PX = 60
 TEXT_CONTRAST_MIN = 4.5
 TEXT_CONTRAST_MIN_LARGE = 3.0
 # The sizes at which WCAG calls text large, ON PAGE. They select which of the
-# two floors above applies, so they are thresholds in their own right and were
-# the last two in this gate still written as literals inside it.
+# two floors above applies, so they are thresholds in their own right.
 LARGE_TEXT_PT = 18.0
 LARGE_TEXT_BOLD_PT = 14.0
 # Numeric font weight at which CSS, and matplotlib after it, calls a face bold.
@@ -432,6 +482,17 @@ CONTENT_WIDTH_PT = None
 # general answer and it is also the step people skip, so the common cases are
 # here already. Pass one as `venue=` rather than editing CONTENT_WIDTH_PT.
 #
+# The six rows tagged TL2026 were measured rather than copied, on TeX Live 2026
+# (pdfTeX 3.141592653-2.6-1.40.29), by typesetting an empty document in the
+# class and reading the log:
+#
+#     \documentclass{amsart}
+#     \begin{document}\typeout{W=\the\textwidth C=\the\columnwidth}\end{document}
+#
+# Each row names the class version the log reported, because the number is a
+# property of that version. `siamart220329.cls` is not in TeX Live; it came from
+# epubs.siam.org/pb-assets/macros/standard/.
+#
 # VERIFY BEFORE TRUSTING for anything that matters: put `\the\textwidth` in your
 # own document and read the log. Style files get revised between years, a
 # `geometry` package call in the preamble silently overrides all of this, and a
@@ -449,6 +510,14 @@ VENUE_WIDTH_PT = {
     "nature-column": 252.28,       # single column, 89mm
     "article-letter": 345.0,       # \textwidth, article 10pt letterpaper
     "article-a4": 418.25,          # \textwidth, article 10pt a4paper
+    # TL2026, measured. amsart and siam are one-column classes, so their
+    # \columnwidth is the same number and is not listed twice.
+    "amsart": 360.0,               # \textwidth, amsart 2020/05/29 v2.20.6
+    "siam": 370.38,                # \textwidth, siamart220329 2022/03/29 v1.4.4
+    "revtex": 510.0,               # \textwidth, revtex4-2 2022/06/05 4.2f [reprint]
+    "revtex-column": 246.0,        # \columnwidth, same run: APS reprint is two-column
+    "beamer-43": 307.29,           # \textwidth, beamer 2026/01/22 v3.77 (128x96mm)
+    "beamer-169": 398.34,          # \textwidth, same class [aspectratio=169]
 }
 
 
@@ -478,7 +547,7 @@ def content_width_pt(venue: str | None = None) -> float | None:
 
 def page_scale(fig: Figure, placed_frac: float = 1.0,
                venue: str | None = None) -> float:
-    """Scale from authored inches to points on the page.
+    """Scale from the authored figure to the one placed on the page.
 
     `placed_frac` is the fraction of the content width the figure is placed at,
     so it reads like the call site: `\\includegraphics[width=0.48\\textwidth]`
@@ -497,8 +566,9 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
     Returns:
-        Points on the page per authored inch. `1.0` when no content width is
-        set, which measures the figure at the size it was authored.
+        Placed size over authored size: a ratio, not a length. `1.0` when no
+        content width is set, which measures the figure at the size it was
+        authored.
 
     Raises:
         ValueError: `placed_frac` is not 1.0 and no content width is set.
@@ -515,6 +585,254 @@ def page_scale(fig: Figure, placed_frac: float = 1.0,
                 "and drop placed_frac.")
         return 1.0
     return width * placed_frac / (fig.get_size_inches()[0] * 72)
+
+
+# --- configuration -----------------------------------------------------------
+# Every threshold is a module-level constant, so the two ways to move one are to
+# edit a vendored copy and to assign the global before calling `audit`. Both are
+# one person's copy, and `docs/how-to.md` names what the second costs: one floor
+# in a test file and another in the build.
+#
+# Nothing here runs on import. A threshold that moved because of a file the
+# caller never named is not a threshold anyone can read off the source.
+#
+# Settable: numeric constants, plus `CONTENT_WIDTH_PT`, `STYLE_SHEET` and
+# `venue`. `AUDIT_SCHEMA` is a wire format and `DRAW_RC_ATTR` is an attribute
+# name, so neither is reachable from a file. `NOT_CONFIGURABLE` names the rest
+# of what a numeric constant can be besides a threshold.
+
+CONFIG_FILENAMES = ("figure-gate.toml", "pyproject.toml")
+
+# Where `pyproject.toml` keeps the keys. A `figure-gate.toml` holds them at its
+# top level: a file named after one tool needs no table to say so.
+CONFIG_TABLE = ("tool", "figure-gate")
+
+# The keys that name no constant. `venue` is a width, and `CONTENT_WIDTH_PT` is
+# the constant it sets.
+CONFIG_ALIASES = ("venue",)
+
+# Uppercase numbers that are not thresholds, and the reason each one is not.
+# `_config_targets` selects by shape, which is what keeps it from falling behind
+# a threshold added tomorrow, and shape cannot tell a floor from the frame the
+# floors are measured in. A file setting `MEASURE_DPI` would move every pixel
+# threshold in this module at once while every threshold's value stayed where a
+# reader could see it, which is the failure `MEASURE_DPI` was added to close.
+#
+# Not a silent skip: `load_config` raises and prints the reason, because a
+# threshold quietly ignored leaves a project believing it raised a floor. The
+# constants are still module globals, so assigning one by hand does what it
+# always did. What a file cannot do is make that one person's choice everyone's.
+#
+# A reason rather than a bare set. An entry with no reason is indistinguishable
+# from an entry somebody added to make a test pass.
+NOT_CONFIGURABLE = {
+    "MEASURE_DPI":
+        "the resolution every pixel threshold here was calibrated at. Half of "
+        "them are pixel counts, so moving it rescales their calibration "
+        "without moving any value a reader can see",
+    "BOLD_WEIGHT_MIN":
+        "CSS's definition of a bold face, which matplotlib follows. Not this "
+        "project's number to set",
+    "GRID_PAIR_CAP":
+        "the memory bound on check_overplotting's fallback, about 100MB of "
+        "working set. It moves no verdict",
+    "RAMP_LUT_N":
+        "the sample count a registered ramp is compared over, not a boundary "
+        "any verdict falls on",
+}
+
+
+def _config_targets() -> dict[str, Any]:
+    """`{key: module}` for every constant a configuration file may set.
+
+    Computed rather than listed, so a threshold added to either module is
+    settable the day it lands and a list cannot fall behind. Each module's own
+    `NOT_CONFIGURABLE` is what the shape rule cannot see: which of its numbers
+    are the frame the thresholds are measured in rather than thresholds.
+    """
+    targets: dict[str, Any] = {}
+    modules = [sys.modules[__name__]]
+    palette = _sibling("check_palette")
+    if palette is not None:
+        modules.append(palette)
+    for module in modules:
+        pinned = getattr(module, "NOT_CONFIGURABLE", {})
+        for name, value in vars(module).items():
+            if name.startswith("_") or not name.isupper():
+                continue
+            if isinstance(value, bool):          # a flag, not a floor
+                continue
+            if name in pinned:
+                continue
+            if isinstance(value, (int, float)):
+                targets.setdefault(name, module)
+    for name in ("CONTENT_WIDTH_PT", "STYLE_SHEET"):
+        targets[name] = sys.modules[__name__]
+    return targets
+
+
+def _pinned_reason(key: str) -> Any:
+    """Why `key` is not settable from a file, or `None` when it is not pinned.
+
+    Both modules, for the same reason `_config_targets` reads both: a palette
+    constant is named in the same file as a figure one.
+    """
+    for module in (sys.modules[__name__], _sibling("check_palette")):
+        if module is None:
+            continue
+        reason = getattr(module, "NOT_CONFIGURABLE", {}).get(key)
+        if reason is not None:
+            return reason
+    return None
+
+
+def config_keys() -> list[str]:
+    """Every key a configuration file may set, sorted.
+
+    `venue` is in the list and is not a constant: it sets `CONTENT_WIDTH_PT`
+    from `VENUE_WIDTH_PT`.
+
+    A palette key is only here when `check_palette.py` is importable. Naming one
+    without it raises rather than being ignored.
+    """
+    return sorted(set(_config_targets()) | set(CONFIG_ALIASES))
+
+
+def find_config(start: Any = None) -> Any:
+    """The nearest configuration file at or above `start`, or `None`.
+
+    Walks up from `start` (the current directory when it is `None`) to the
+    filesystem root, and at each level takes `figure-gate.toml` before
+    `pyproject.toml`. A `pyproject.toml` with no `[tool.figure-gate]` table is
+    not a configuration file and the walk continues past it: a project that
+    keeps its figures in a subdirectory with its own file is the ordinary case,
+    and stopping at the first `pyproject.toml` would find the wrong one.
+
+    Args:
+        start: Directory to search from. `None` means the current directory.
+
+    Returns:
+        A `pathlib.Path`, or `None` when no file above `start` carries the keys.
+    """
+    here = Path(start if start is not None else ".").resolve()
+    for folder in (here, *here.parents):
+        for name in CONFIG_FILENAMES:
+            candidate = folder / name
+            if candidate.is_file() and _config_table(candidate) is not None:
+                return candidate
+    return None
+
+
+def _config_table(path: Any) -> Any:
+    """The keys `path` sets, or `None` when it sets none.
+
+    `tomllib` rather than a hand parser: it is in the standard library from 3.11,
+    which is this file's floor already. `check_palette.py` stays clear of it
+    because CI runs that file on 3.8, where it does not exist.
+    """
+    import tomllib
+    with open(path, "rb") as handle:
+        try:
+            document = tomllib.load(handle)
+        except tomllib.TOMLDecodeError as exc:
+            raise ValueError(f"{path} is not readable as TOML: {exc}") from None
+    if Path(path).name == "pyproject.toml":
+        for key in CONFIG_TABLE:
+            if not isinstance(document, dict) or key not in document:
+                return None
+            document = document[key]
+    return document if isinstance(document, dict) else None
+
+
+def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
+    """Apply a configuration file to the threshold constants.
+
+    Assigns the module-level constants the file names, in `check_palette` as well
+    as here. That is what `cf.TYPE_FLOOR_PT = 9.0` does by hand: the gates read
+    the global when they run. Call it once, before `audit`.
+
+    Every key is checked before any is assigned, so a file with one bad key
+    changes nothing. A key that names no constant raises rather than being
+    skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
+    `KeyError` `content_width_pt` raises, which lists the rows it knows.
+
+    Args:
+        path: The file to read. `None` searches with `find_config`.
+        start: Directory to search from when `path` is `None`.
+
+    Returns:
+        `{name: value}` for every constant assigned, `CONTENT_WIDTH_PT`
+        included when the file set it through `venue`. Empty when there is no
+        file to read.
+
+    Raises:
+        ValueError: A key names no settable constant, a value has the wrong
+            type, a value for an integer constant is not a whole number, or
+            the file sets both `venue` and `CONTENT_WIDTH_PT`.
+    """
+    if path is None:
+        path = find_config(start)
+        if path is None:
+            return {}
+    table = _config_table(path)
+    if table is None:
+        raise ValueError(
+            f"{path} carries no keys for this tool. A figure-gate.toml holds "
+            "them at its top level; a pyproject.toml holds them under "
+            "[tool.figure-gate]")
+
+    targets = _config_targets()
+    if "venue" in table and "CONTENT_WIDTH_PT" in table:
+        raise ValueError(
+            f"{path} sets both venue and CONTENT_WIDTH_PT, which are the same "
+            "width written twice. Keep one")
+
+    planned: dict[str, Any] = {}
+    for key, value in table.items():
+        if key == "venue":
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{path}: venue is {type(value).__name__}, expected a "
+                    "string naming a row of VENUE_WIDTH_PT")
+            planned["CONTENT_WIDTH_PT"] = content_width_pt(value)
+            continue
+        if key not in targets:
+            pinned = _pinned_reason(key)
+            if pinned is not None:
+                raise ValueError(
+                    f"{path} sets {key!r}, which is not a threshold: {pinned}. "
+                    f"Assign the global before calling audit if you mean it")
+            raise ValueError(
+                f"{path} sets {key!r}, which names no threshold. "
+                f"`python check_figure.py --config` lists every key this "
+                f"version accepts. Known: {', '.join(config_keys())}")
+        if key == "STYLE_SHEET":
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"{path}: STYLE_SHEET is {type(value).__name__}, expected "
+                    "a string naming a .mplstyle file")
+            planned[key] = value
+            continue
+        # Typed by name, not by the current value, which is None until set.
+        current = (0.0 if key == "CONTENT_WIDTH_PT"
+                   else getattr(targets[key], key))
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(
+                f"{path}: {key} is {type(value).__name__}, expected a "
+                f"number ({key} is {getattr(targets[key], key)!r})")
+        # An int constant is a count or a window size, and TOML writes `9.0`
+        # as a float, which `range` and slicing refuse.
+        if isinstance(current, int):
+            if not float(value).is_integer():
+                raise ValueError(
+                    f"{path}: {key} is {value!r}, expected a whole number "
+                    f"({key} is {current!r})")
+            value = int(value)
+        planned[key] = value
+
+    for key, value in planned.items():
+        setattr(targets.get(key, sys.modules[__name__]), key, value)
+    return planned
 
 
 def _authored_dpi(fig: Figure) -> float:
@@ -898,8 +1216,8 @@ def check_clipping(fig: Figure, r: Any) -> tuple[bool | str, str]:
     Reads the axis-aligned box and is correct to: an AABB is the bounding box
     of the oriented box's own corners, so its extremes are attained by real
     corners of the label and a min/max test against the canvas gives the same
-    answer either way. Rotation costs this gate nothing, and only
-    `check_collisions` had to change, because two AABBs can overlap where the
+    answer either way. Rotation costs this gate nothing. `check_collisions`
+    cannot take the same shortcut, because two AABBs can overlap where the
     boxes inside them do not.
     """
     w, h = fig.canvas.get_width_height()
@@ -1262,9 +1580,9 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
     H, W = backdrop.shape[:2]
     furniture = _furniture(fig)
     # Ticks that exist on the axes but never reach the page — a hidden axes, a
-    # location outside the view. `check_clipping` learned about these the same
-    # way this did: by reporting a defect on a schematic that draws no axes and
-    # still carries the tick Text objects matplotlib made for it.
+    # location outside the view, or a schematic that draws no axes but still
+    # carries the tick Text objects matplotlib made for it. `check_clipping`
+    # and `check_type_size` skip the same set.
     ghosts = _ghost_ticks(fig)
     radial = _polar_radial_ticks(fig)
     cluttered, faint, checked, unjudged = [], [], 0, 0
@@ -1443,27 +1761,24 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy.
 
-    Both halves used to over-fire, and on the two forms where alpha is doing
-    real work rather than decorating.
+    Neither half fires on the two forms where alpha is doing real work rather
+    than decorating.
 
-    **A graded run of one colour is one decision, not one per band.** The
-    per-point branch below has always said so: an alpha array on a single
-    artist counts once, because "a continuous encoding is a single decision". A
-    fan chart is that same encoding spelled across separate artists, and it was
-    counted once per band. With `ALPHA_LEVELS_MAX` at 3 and the opaque median
-    line the row itself demands taking one of the three slots, a fan chart was
-    allowed **two** bands before it failed, and the row's advice was to draw
-    fewer prediction intervals. Non-opaque alphas on artists sharing a colour
-    now collapse to one level once there are `ALPHA_RAMP_MIN_STEPS` of them.
+    **A graded run of one colour is one decision, not one per band.** An alpha
+    array on a single artist counts once, because "a continuous encoding is a
+    single decision", and a fan chart is that same encoding spelled across
+    separate artists. So non-opaque alphas on artists sharing a colour collapse
+    to one level once there are `ALPHA_RAMP_MIN_STEPS` of them. Counted per
+    band, `ALPHA_LEVELS_MAX` of 3, less the opaque median line the row itself
+    demands, would allow a fan chart two bands.
     Artists of different colours never collapse, so five series at five alphas
     still reads as five decisions, which is the case this half is for.
 
     **A single alpha is not a stack.** "Nothing is opaque, so the figure has no
     focal point" presupposes something to focus on among alternatives. A
     density scatter drawn wholly at `alpha=0.3` asserts no hierarchy and has no
-    ranking to top out, and the remedy the row printed - raise the artist that
-    carries the point to alpha 1 - destroys the encoding it is aimed at, the
-    same defect `check_mark_ratio`'s clip remedy carried. The opacity test now
+    ranking to top out, and raising the artist that carries the point to
+    alpha 1 destroys the encoding it is aimed at. The opacity test
     applies only where there is more than one level, which is where an author
     has built a hierarchy and left it headless. Two levels with nothing opaque
     still fail.
@@ -1475,14 +1790,14 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     at `alpha=0.02` reach 1% and `Ink coverage` warns. Alpha alone cannot tell
     those apart and the render can.
 
-    A contrast floor was tried here first and is the wrong tool. Compositing
+    A contrast floor is the wrong tool. Compositing
     each artist over its panel and requiring WCAG 2.1's 3:1 non-text ratio
     sounds principled and condemns the project's own palette: Okabe-Ito orange
     `#E69F00` measures **2.25:1 on white at full opacity** and can never clear
     the floor at any alpha, and the green needs 0.9. That floor is also one
     this project deliberately keeps advisory, in `check_palette`, where a
     sub-3:1 hue is legal and merely obligates a second channel. Borrowing it as
-    a hard gate here would have been the same category error as judging a
+    a hard gate here would be the same category error as judging a
     mathtext script against the body type floor.
     """
     import numpy as np
@@ -1511,15 +1826,13 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             elif np.ndim(al) == 0:
                 alphas.append(round(float(al), 2))
             else:
-                # matplotlib has taken a per-point alpha array since 3.4, and
-                # `float()` raises on one. A raising non-advisory gate is turned
-                # into a hard `False` by `_rows`, so a legal figure failed on a
-                # defect in the checker rather than on anything in the figure.
+                # matplotlib has taken a per-point alpha array since 3.4, so
+                # `al` may be an array, and `float()` raises on one.
                 #
                 # A ramp across one artist is ONE level, not one per value: the
                 # question this row asks is how many separate alpha decisions
                 # the reader has to resolve, and a continuous encoding is a
-                # single decision. Counting each value instead made an ordinary
+                # single decision. Counting each value would make an ordinary
                 # `pcolormesh` report sixteen levels of haze.
                 #
                 # Opacity is the exception and is read per value, because
@@ -1775,9 +2088,7 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     bar thirty times another bar is the encoding working, not a defect.
 
     **The bar exemption is about the channel, not about whether size carries a
-    value.** This docstring used to end "this gate is about marks whose size is
-    not carrying the value", which reads as an exemption for a size-encoded
-    scatter and is not one. Cleveland and McGill ranked the elementary
+    value.** A size-encoded scatter is not exempt. Cleveland and McGill ranked the elementary
     perceptual tasks and put position and length near the top and area near the
     bottom; `references/choosing-a-form.md` states it and cites them. A bar
     thirty times another bar is read as thirty because length is judged well. A
@@ -1786,18 +2097,12 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     case where the reader is asked to decode a number off the weak channel, so
     it is the last figure that should be exempt.
 
-    The row's own how-to, its remedy and
-    `test_mark_ratio_measures_a_size_encoded_scatter_inside_an_inset` all
-    already judged size-encoded scatters. That one sentence was the only thing
-    saying otherwise, and it is now gone.
-
     What the size distribution does change is the *advice*. When the largest
     mark exceeds the next largest by `MARK_ORNAMENT_GAP` it is one ornament
     stuck on top of a plot, and capping the size range is the fix. When the
     sizes are graded the figure is encoding something, and clipping the array
     silently flattens the values it encodes: measured on a 60-mark bubble
-    chart, the snippet this project used to print unconditionally collapsed 52
-    of the 60 onto one size, drew every value from 5.8 to 39.9 identically, and
+    chart, capping the size range collapsed 52 of the 60 onto one size, drew every value from 5.8 to 39.9 identically, and
     turned the row green. There the fix is the form, not the numbers.
 
     Both operands go through one conversion because the two APIs take different
@@ -1806,10 +2111,7 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     documentation calls it - see `scatter_diameter_pt`. Converting one side and
     not the other leaves a standing 4/pi = 1.27x error on any figure mixing
     `scatter` with `plot(marker=...)`, which is enough against a 5.0 threshold
-    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x. That
-    error was fixed on the `markersize` side first and survived on the `s` side
-    until this change, where two marks of measurably identical drawn area -
-    741 pixels each - still reported 1.3x.
+    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x.
     """
     worst = None
     for ax in _all_axes(fig):
@@ -2104,10 +2406,7 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     `scatter` spelled `edgecolors="none"` keeps reporting a `patch.linewidth`
     of 0.70 for a stroke it never lays down.
 
-    This was left undone for a round on a stated cost that measurement did not
-    support - `gallery-parity` moving from 49% to 55% and flipping. Parity is
-    spelled `edgecolors="none"`, so the 55% was that phantom 0.70pt and the
-    figure does not move. What the corpus actually holds, every mark-drawing
+    What the corpus holds, every mark-drawing
     artist on all 21 figures:
 
     ```text
@@ -2121,13 +2420,9 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     correctness one and its exposure is honestly near zero; the figure that
     would have moved is the one that proves the naive version wrong.
 
-    Two separate errors used to make this roughly 1.8x too lenient, and a
-    scatter of 64 discs each overlapping its neighbours by a quarter of their
-    diameter rendered as one solid square while the gate returned clean. The
-    radius came from `sqrt(s / pi)`, treating `s` as an area it is not (see
-    `scatter_diameter_pt`), which is 12.8% too large; and the comparison was
-    against one radius rather than two, which is the condition for a mark's
-    *centre* to be swallowed rather than for the two marks to touch.
+    Two marks touch when their centres are closer than the sum of their two
+    radii. One radius would test whether a mark's *centre* is swallowed. Each
+    radius comes from `scatter_diameter_pt`, because `s` is not an area.
 
     Nearest is the wrong neighbour to ask about once radii vary. Contact is
     `d < r_i + r_j`, and the `j` that minimises `d` need not be the `j` that
@@ -2224,8 +2519,12 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
 
 
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
-    """Side-by-side panels on the same scale should share their axis furniture.
-    Two identical tick columns and two identical axis labels is duplicated ink."""
+    """Panels on the same scale should share their axis furniture.
+
+    Same-row panels are compared on their y axis and same-column panels on
+    their x axis. A repeated axis label, or a repeated run of tick labels on
+    the same limits, scale and label, is duplicated ink.
+    """
     # Only same-row panels can share a y axis, and only same-column panels can
     # share an x axis. Two panels side by side each legitimately need their own
     # x label; repeating the y label between them is the duplication.
@@ -2235,10 +2534,8 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
         ss = ax.get_subplotspec()
         if ss is None:
             continue
-        # A panel at `axis("off")` shows no furniture to duplicate. Its tick
-        # Text objects still exist and still carry their strings, which is how
-        # three image panels with no visible axis at all came to be told to
-        # "use sharex/sharey" — advice with nothing to act on.
+        # A panel at `axis("off")` shows no furniture to duplicate, though its
+        # tick Text objects still exist and still carry their strings.
         if not ax.axison:
             continue
         r_, c_ = ss.rowspan.start, ss.colspan.start
@@ -2257,20 +2554,13 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
 
     # Both directions, on the same terms. A column of panels repeating its x
     # tick row is the same duplicated ink as a row of panels repeating its y
-    # tick column, and only the second was measured: two stacked panels on one
-    # x scale printed the identical run of numbers twice and passed. The
-    # grouping mirrors the label check above, `rows` for y and `cols` for x,
-    # because only same-row panels can share a y axis and only same-column
-    # panels can share an x one.
+    # tick column. The grouping mirrors the label check above, `rows` for y and
+    # `cols` for x.
     #
-    # Grouped by the scale as well as the tick strings. `docs/gates.md`
-    # promises this row fires on "panels on a shared scale", and comparing
-    # tick text alone broke that promise: two panels carrying different
-    # quantities in different units, whose tick strings happen to coincide,
-    # were told to use `sharey`. Taking that advice would put unrelated
-    # data on one axis, so the row was not merely noisy, it was wrong. The x
-    # direction inherits that requirement rather than re-deciding it, or the
-    # promise goes stale for half the gate.
+    # Grouped by the scale as well as the tick strings, because `docs/gates.md`
+    # promises this row fires on "panels on a shared scale". Two panels in
+    # different units whose tick strings happen to coincide do not share one,
+    # and telling them to use `sharey` would put unrelated data on one axis.
     #
     # The axis label is part of the key because limits and scale type alone
     # do not settle it: two panels can carry 0 to 2 kilometres and 0 to 2
@@ -2368,10 +2658,9 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     """Every rendered string clears the legibility floor once the figure is
     scaled into the document.
 
-    This used to be a regex over the source file hunting for `fontsize=`, which
-    missed anything set through rcParams, anything computed, and anything set by
-    a helper. Reading `get_fontsize()` off the artists that actually rendered
-    reports what is on the page instead of what is in the source.
+    Reads `get_fontsize()` off the artists that actually rendered, so a size
+    set through rcParams, computed, or set by a helper is measured like one
+    written as `fontsize=`.
 
     Mathtext is measured rather than read, against its own floor. A script is
     drawn at 0.7 of the level above it, so the property is not the size on the
@@ -2399,12 +2688,12 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     if small or scripts:
         bits = []
         if small:
-            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale}: "
+            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
         if scripts:
             bits.append(
                 f"mathtext script under {MATH_SCRIPT_FLOOR_PT}pt on page at "
-                f"scale {scale}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
+                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
                 "of nesting, or raise the base size  [WHY] matplotlib shrinks "
                 "0.7 per script level with no floor. LaTeX stops at "
                 "scriptscript and never sets math type under 5pt")
@@ -2468,8 +2757,9 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
             return check_ink(fig, context_axes, canvas)
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
+    # The page colour is read off the top-left pixel, which assumes nothing is
+    # drawn in that corner.
     bg = buf[0, 0]
-    # anything more than a few levels off the page color counts as ink
     ink_mask = (np.abs(buf - bg).sum(axis=2) > INK_DELTA_MIN)
 
     if context_axes is None:
@@ -2497,7 +2787,7 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
             sub_buf = buf[h - y1:h - y0, x0:x1].astype(float)
             flat = sub_buf.reshape(-1, 3)
             m1 = flat.mean(axis=0)
-            # init second centroid offset so they diverge
+            # Seeded apart from the mean: two equal centroids never split.
             m2 = m1 + 30.0
             for _ in range(12):
                 d1 = np.abs(flat - m1).sum(axis=1)
@@ -2514,7 +2804,6 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
                 m1, m2 = nm1, nm2
             surf = c1 if c1.sum() > c2.sum() else c2
             surf_mask = surf.reshape(sub.shape)
-            # Ink = pixels in the ink_mask AND not in the surface cluster
             frac = float((sub & ~surf_mask).mean())
         else:
             frac = float(sub.mean())
@@ -2867,6 +3156,12 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     head = f"up to {max_per_panel} data hues per panel"
     if fails:
         return False, f"{head}: " + "; ".join(fails)
+    if cp is None:
+        # The hue-count and identity-collision checks above ran; separation,
+        # the reason this row exists, did not. A pass would say otherwise.
+        return "warn", (DID_NOT_RUN + f"{head}: " + "; ".join(notes)
+                        + "  [FIX] copy check_palette.py in beside it, or "
+                        "install the package")
     return True, f"{head}: " + ("; ".join(notes) if notes else "nothing to compare")
 
 
@@ -2879,8 +3174,8 @@ def _has_data(ax: Axes) -> bool:
 
 
 def check_dual_axis(fig: Figure) -> tuple[bool | str, str]:
-    """Two y scales in one frame, which nothing in this project banned and a
-    `twinx` figure sailed straight through.
+    """Two data scales in one frame: axes at the same position, both drawing
+    data. `twinx` and `twiny` both land here.
 
     Both scales are set by the author, so the crossing point of the two curves
     is an artifact of the limits chosen rather than anything in the data. Move
@@ -3070,8 +3365,12 @@ def _baselined_bars(ax: Axes) -> str | None:
 
 def check_form(fig: Figure) -> tuple[bool | str, str]:
     """The mechanical subset of form choice - the three cases where the form is
-    wrong no matter what the data is. `references/choosing-a-form.md` carries
-    the judgement calls this cannot make.
+    wrong no matter what the data is: a pie or donut (any `Wedge`), a 3D axes,
+    and bars standing on a shared baseline along a linear axis that starts above
+    zero. `references/choosing-a-form.md` carries the judgement calls this
+    cannot make.
+
+    Returns False naming each case found, else True.
     """
     from matplotlib.container import BarContainer
     from matplotlib.patches import Wedge
@@ -3097,8 +3396,7 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         # baseline. `ax.barh(left=...)` draws a Gantt chart and
         # `ax.bar(bottom=...)` draws a waterfall, and each bar there carries
         # its own offset, so there is no shared edge for a truncated axis to
-        # cut. The hand-drawn route has always excluded both. The container
-        # route reached the verdict without ever asking.
+        # cut. `_baselined_bars` excludes both on the hand-drawn route.
         elif not bars_rest_on_a_shared_edge(ax, orientation == "vertical"):
             orientation = None
         if orientation is None:
@@ -3398,15 +3696,10 @@ def _encloses(artist: Any, pts: np.ndarray) -> bool:
         inside = np.zeros(len(pts), dtype=bool)
         for path in artist.get_paths():
             # `path.transformed(t)`, not `contains_points(pts, transform=t)`.
-            # The keyword form freezes the transform and hands it to the C
-            # containment test, which applies its AFFINE part only, so on a log
-            # axis the band's outline was tested at the wrong coordinates and
-            # every point read as outside. Nothing raised: `_encloses` returned
-            # False, the band went back to being a rival for the curve it
-            # covers, and every direct label under a band on a log scale failed
-            # `check_label_attribution` with the band sitting at 0px. Only the
-            # log case was ever wrong, which is why the linear fixtures beside
-            # it stayed green. `Path.transformed` applies the whole transform.
+            # The keyword form hands the C containment test only the
+            # transform's AFFINE part, so on a log axis the outline is tested
+            # at the wrong coordinates and every point reads as outside, with
+            # nothing raised. `Path.transformed` applies the whole transform.
             inside |= path.transformed(transform).contains_points(pts)
         return bool(inside.mean() >= SERIES_ENCLOSED_FRAC)
     except Exception:
@@ -3565,13 +3858,11 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
             # directly on its line divides by ~zero, and every other line in
             # the figure reads as infinitely far.
             d_own = max(_series_distance(own_line, bb, px[own_line]), 0.5)
-            # The minimum over every OTHER curve, box-to-polyline. A KD-tree
-            # over the pooled points was tried here for speed and was wrong:
-            # it returns the nearest *points*, so for a label sitting close to
-            # its own dense curve all the near points belong to that curve, no
-            # other curve is ever reached, and `d_other` stays infinite. Which
-            # is to say it passed every label it was closest to — the common
-            # case, and the one the gate exists for.
+            # The minimum over every OTHER curve, box-to-polyline, taken per
+            # curve. A KD-tree over the pooled points is the wrong tool: it
+            # returns the nearest *points*, and beside a dense own curve every
+            # near point is the label's own, so `d_other` never leaves
+            # infinity and the label passes.
             # Rivals only. A band that encloses this series, or a series this
             # one encloses, is the same thing on the page and cannot be the
             # neighbour a reader confuses it with.
@@ -3608,15 +3899,6 @@ def _style_sheet() -> Path | None:
     A configured path is returned whether or not it exists: a sheet named and
     missing is a mistake worth a row, not a silent fall-through to a sheet the
     project did not ask for.
-
-    There were three candidates until 0.7.0, and the first was
-    `figure_gate_data/figure.mplstyle`, probed ahead of the rest. That
-    directory existed because the modules installed to the root of
-    `site-packages`, where a bare `figure.mplstyle` is a name any distribution
-    could claim, so the sheet needed somewhere namespaced to live and needed to
-    be found before a stray one. `here` is now the `figure_gate` package
-    directory, which is already namespaced, so the sheet sits beside this file
-    on both routes and one candidate covers what two did.
     """
     if STYLE_SHEET is not None:
         return Path(STYLE_SHEET)
@@ -3682,7 +3964,7 @@ def _negative_levels_are_dashed(cs: Any) -> bool:
 
 
 def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
-    """Negative-level contours auto-dash via matplotlib default.
+    """Warns when a monochrome contour set draws its negative levels dashed.
 
     In a monochrome contour, `rcParams["contour.negative_linestyle"]` is
     "dashed" by default, so negative-Z contours ship dashed isolines nobody
@@ -3691,13 +3973,10 @@ def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
 
     Non-monochrome (colored) contours are always solid and unaffected.
 
-    The condition used to be that EVERY level was non-positive, which is the
-    one shape a genuinely signed field never has: `contour` over data spanning
-    zero draws levels either side of it, matplotlib dashes the negative half,
-    and the gate skipped the figure entirely. It fired only on data that is
-    non-positive throughout — which is what the original test drew, so the hole
-    was invisible from inside the suite. The rule is now "any negative level",
-    asked of the drawn strokes.
+    The rule is "any negative level", asked of the drawn strokes, not "every
+    level non-positive": `contour` over data spanning zero draws levels either
+    side of it and matplotlib dashes the negative half, and that signed field
+    is the case this gate is for.
     """
     from matplotlib.contour import ContourSet
 
@@ -3741,41 +4020,33 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                       venue: str | None = None) -> tuple[bool | str, str]:
     """Every drawn stroke against the printer's floor, measured ON THE PAGE.
 
-    SIAM states it plainly in its instructions for authors: illustrations must
-    use lines one point or thicker, because thinner lines break up or disappear.
-    It is the same failure as the type floor and it has the same cause — a
-    stroke authored at 0.8pt in a 9-inch figure placed at 5.5 inches prints at
-    0.49pt — so it is measured the same way, through `page_scale`.
+    SIAM's instructions for authors ask for lines one point or thicker, because
+    thinner lines break up or disappear. A stroke shrinks with the figure as
+    type does -- 0.8pt authored in a 9-inch figure placed at 5.5 inches prints
+    at 0.49pt -- so every width is multiplied by the page scale before it is
+    judged.
 
-    Furniture is held to a lower floor than data, `FURNITURE_FLOOR_PT` against
-    `LINE_FLOOR_PT`. A gridline that drops out at the printer costs the reader a
-    reference; a data curve that drops out costs them the finding. The sheet
-    ships the grid at 0.7pt and the axis rule at 0.8pt deliberately, and failing
-    those against the data floor would be failing the sheet's own design.
+    Data strokes are held to `LINE_FLOOR_PT`: lines, line collections, unfilled
+    contour sets, stroked patch edges and annotation arrows. Furniture is held
+    to the lower `FURNITURE_FLOOR_PT`: spines and the major and minor
+    gridlines. A gridline that drops out costs the reader a reference; a data
+    curve that drops out costs them the finding.
 
-    Patch edges and annotation arrows are data, and went unmeasured until they
-    were added here. A schematic is boxes and arrows and no `Line2D` at all, so
-    one drawn entirely at 0.15pt reported `no strokes to measure`: the gate was
-    silent on the figure whose every stroke was the defect.
+    Not measured: tick marks and colorbar axes, whose widths are matplotlib's
+    defaults rather than anything `figure.mplstyle` or the author set; filled
+    contour sets, whose linewidth is the seam between two fills; and any artist
+    that is invisible or draws no stroke.
 
-    Spines and gridlines, major and minor, are the furniture this sheet
-    authors, and they are measured against the furniture floor. Both artists
-    were skipped outright until now, which is not what the paragraph above
-    describes: a floor of zero is not a lower floor, and an axis rule set to
-    0.2pt went unreported. The minor grid is read off the minor ticks, since
-    the axis hands back only the major one.
+    Args:
+        fig: The figure to read strokes from.
+        scale: Placed size over authored size, overriding `page_scale`.
+        placed_frac: Fraction of the content width the figure is placed at.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
-    Tick marks stay out, and the reason is not the one that used to be written
-    here. It was that they would fail the corpus; they do not, and neither do
-    spines. It is that the sheet does not author them. `axes.linewidth` and
-    `grid.linewidth` are set in `figure.mplstyle`; the tick widths are
-    matplotlib's untouched defaults, 0.8 major and 0.6 minor, which is the same
-    class as the colorbar dividers this function already skips a few lines down
-    for the same stated reason. Judging a default nobody chose reports the
-    library rather than the figure. They also carry an open disagreement with
-    `check_svg`, which does measure them, and settling that by side effect from
-    here would overturn a pinned measurement on a branch this code does not
-    touch.
+    Returns:
+        `(False, detail)` naming up to four strokes under a floor, data before
+        furniture. Otherwise `(True, detail)` with the thinnest width of each
+        kind measured.
     """
     from matplotlib.lines import Line2D
     from matplotlib.collections import LineCollection
@@ -3866,8 +4137,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
         # Furniture: the axis rule and the grid, against the lower floor. Tick
-        # marks are furniture too and stay out; see the docstring for why that
-        # is about who authored the width rather than about the corpus.
+        # marks stay out; see the docstring.
         for side, spine in ax.spines.items():
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
@@ -4044,24 +4314,18 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
 #
 # The name is version-dependent and that is why this is a list rather than one
 # string. matplotlib 3.8.4, 3.9.4 and 3.10.0 call it "from_list"; 3.11.1 calls
-# it "unnamed". Shipping only the 3.11 spelling is what put every contour
-# figure - including `gallery-field.png` - into a hard FAIL on the two CI jobs
-# that run older matplotlib, while every local run on 3.11 stayed green.
-# `test_matplotlib_still_names_an_author_built_colormap_something_we_skip`
+# it "unnamed". A missing spelling fails every contour figure on the versions
+# that use it. `test_matplotlib_still_names_an_author_built_colormap_something_we_skip`
 # fails loudly if a future version invents a fourth spelling.
 ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 
 
 # A ramp the author evaluated themselves and handed over as plain colours draws
-# no array, so the loop below sees no colormap at all. Six `jet` steps built
-# with `cmap(i / 5)` and passed to `ax.plot` cleared every row on the figure:
-# nothing array-carrying for this one, and six hues against a ceiling of
-# `MAX_SERIES_HUES` for `check_series_color`. `jet` escaping the checker
-# outright is what these constants close.
-#
-# `_data_colors_by_axes` already names the rule in its own docstring - draw an
-# ordinal ramp `c=values, cmap=...`, "never as a pre-evaluated RGBA list" - and
-# until this ran, nothing enforced it.
+# no array, so the loop below sees no colormap at all, and `check_series_color`
+# sees only hues: six `jet` steps built with `cmap(i / 5)` and passed to
+# `ax.plot` sit within `MAX_SERIES_HUES`. These constants catch that ramp. The
+# rule is the one `_data_colors_by_axes` states: draw an ordinal ramp
+# `c=values, cmap=...`, "never as a pre-evaluated RGBA list".
 #
 # Recognised by reverse lookup, not by classifying the drawn colours. Handing
 # the panel's hues to `cmap_kind_rgb` would condemn every categorical palette,
@@ -4073,9 +4337,9 @@ ANONYMOUS_CMAP_NAMES = ("_no_name", "unnamed", "from_list", None)
 #
 # The candidate set inherits the `CMAP_QUALITATIVE_N` split the classifier
 # branch below makes, and that filter is load-bearing rather than tidy: without
-# it `tab10`, `Set2`, `Dark2` and this project's own registered `okabe_ito` all
+# it `tab10`, `Set2`, `Dark2` and matplotlib's registered `okabe_ito` all
 # classify `misc` over 256 samples, and using Okabe-Ito as a series palette -
-# the thing the skill tells people to do - would have failed this row.
+# the thing the skill tells people to do - would fail this row.
 RAMP_LUT_N = 256
 RAMP_CHANNEL_TOL = 3.0 / 255.0
 RAMP_SPACING_TOL = 0.02
@@ -4185,18 +4449,24 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     every row on the figure passes. See `_sampled_ramp` for how a sampled ramp
     is told from a categorical palette, which is the whole difficulty.
 
-    Two ways this row passes without having judged anything, both deliberate.
-    A colormap matplotlib built from colours the author set on an artist is
-    skipped, since `contour(colors=[...])` is three levels of one hue rather
-    than three categories, and classifying it qualitative would fail it. And the
-    row needs `check_palette.py` importable beside this file: without it there
-    is nothing to classify with, so it says so in the detail and passes. A pass
-    here is worth reading, not just counting.
+    One way this row passes without having judged anything, and it is
+    deliberate: a colormap matplotlib built from colours the author set on an
+    artist is skipped, since `contour(colors=[...])` is three levels of one hue
+    rather than three categories, and classifying it qualitative would fail it.
+
+    The other way was not. The row needs `check_palette.py` importable beside
+    this file, and without it there is nothing to classify with, so the row
+    warns rather than passing a gate that never ran. The warn cannot fail a
+    build -- `ok` turns on
+    hard `False` only -- so a vendored copy that deliberately left the palette
+    module out still audits, and says which rows went unjudged.
     """
     cp = _sibling("check_palette")
     if cp is None:
-        return True, ("check_palette.py is not importable beside this file, "
-                      "so no colormap was classified")
+        return "warn", (DID_NOT_RUN + "check_palette.py is not importable "
+                        "beside this file, so no colormap was classified  "
+                        "[FIX] copy check_palette.py in beside it, or install "
+                        "the package")
 
     import matplotlib as mpl
     from matplotlib.colors import to_hex
@@ -4515,26 +4785,46 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     """Every key in the sheet against the rcParams that are actually in effect.
 
     Three separate silent failures land here at once: a color written with a
-    leading `#` (which is a comment in this format, so matplotlib keeps its own
-    default), a forgotten `plt.style.use`, and an rcParams override applied
+    leading `#`, a forgotten `plt.style.use`, and an rcParams override applied
     later. All three ship stock matplotlib while every other check passes.
+
+    The first cannot be seen by comparing values. `#` starts a comment in this
+    format, so `grid.color: #e1e0d9` parses to no value and matplotlib drops
+    the key: the sheet and the live rcParams agree on its absence. So the keys
+    the file names are read off its text as well, and any that matplotlib
+    knows but did not parse are reported as dropped.
 
     A warning, not a gate, for one honest reason: a figure built on a *different*
     project's sheet is correct work, and this compares against the global
     rcParams rather than what the figure was drawn under, so a figure built
     inside an `rc_context` that has since exited reads as drift when it is not.
     Both make a hard failure the wrong instrument. The row names the keys.
+
+    Finding no sheet at all warns too, as a `STYLE_SHEET` pointing at a
+    missing file does: either way the figure may be stock matplotlib, the case
+    this gate was written for. Installed, the sheet is inside the package and
+    is always found; only a vendored copy that took the script without it
+    reaches this.
     """
     import matplotlib as mpl
     path = _style_sheet()
     if path is None:
-        return True, ("no figure.mplstyle beside this script or in assets/, "
-                      "nothing to compare")
+        return "warn", (DID_NOT_RUN + "no figure.mplstyle beside this script "
+                        "or in assets/, so nothing was compared and a "
+                        "forgotten plt.style.use would read clean  [FIX] copy "
+                        "figure.mplstyle in beside it, or set STYLE_SHEET")
     if not path.is_file():
         return "warn", (f"STYLE_SHEET is set to {path}, which is not a file: "
                         "nothing was compared, and the sheet you meant is not "
                         "the one in effect either")
     written = mpl.rc_params_from_file(path, use_default_template=False)
+    named = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        before_comment = line.split("#", 1)[0]
+        if ":" in before_comment:
+            named.append(before_comment.split(":", 1)[0].strip())
+    dropped = sorted({k for k in named if k in mpl.rcParams
+                      and k not in written})
     drift = []
     for key, value in written.items():
         try:
@@ -4548,6 +4838,12 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
             same = bool(getattr(same, "all", lambda: same)())  # noqa: B023
         if not same:
             drift.append(key)
+    if dropped:
+        return "warn", (f"{len(dropped)} keys in {path.name} did not parse and "
+                        f"were dropped: {dropped[:5]}"
+                        f"{' ...' if len(dropped) > 5 else ''}  [FIX] write "
+                        "colors bare, e1e0d9 not #e1e0d9: # starts a comment "
+                        "in a style sheet")
     if not drift:
         return True, f"all {len(written)} keys match {path.name}"
     return "warn", (f"{len(drift)} of {len(written)} keys differ from "
@@ -4567,11 +4863,15 @@ GATE_INPUTS = ("r", "canvas", "scale", "placed_frac", "venue", "context_axes")
 class Gate(NamedTuple):
     """One row of the audit: what it is called, what runs it, what it needs.
 
+    `func(fig, **needs)` returns `(status, detail)`: `status` is True, False
+    or "warn", and a gate marked `advisory` never returns False. `detail` is
+    the text the report prints beside the row.
+
     `needs` is the part worth having. The gates do not take the same arguments
     - some want the renderer, some the already-drawn canvas, some the page
     scale - and for as long as `audit` spelled each call out by hand, that
-    variation was twenty hand-written argument lists nobody could see the shape
-    of. Declaring it makes the variation data: `audit` supplies what a gate
+    variation was one hand-written argument list per gate, and nobody could see
+    its shape. Declaring it makes the variation data: `audit` supplies what a gate
     asks for, and a new gate says what it wants rather than being wired in.
 
     The signatures themselves stay as they are. A gate that takes a renderer
@@ -4623,10 +4923,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Run every gate over a figure. Returns `(ok, rows)`.
 
-    `check_palette.check` returns the same shape. It returned `(rows, ok)`
-    until 0.4.0, and unpacking either one the wrong way binds a bool to the
-    rows and raises nothing at the call site, which is why they were made to
-    agree rather than documented as differing.
+    `check_palette.check` returns the same shape.
 
     `rows` are `(label, status, detail)`, one per gate, in the order the report
     prints them. `status` is True, False, or the string "warn"; only a hard
@@ -4641,18 +4938,16 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
 
-    `context_axes` and `venue` are keyword-only. They were positional until
-    0.9.0, and a `venue` passed in the `context_axes` slot was iterated into a
-    frozenset of axes ids rather than raising, because a string is iterable.
-    The venue was discarded and the figure was measured at the wrong width: a
-    wrong verdict, reported green, from an argument order. Keyword-only is the
-    only shape in which that call cannot be written.
+    `context_axes` and `venue` are keyword-only. `context_axes` is iterated and
+    a string is iterable, so a venue in that slot would be read as axes rather
+    than raise, and the figure measured at the wrong width.
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
             and handed back on its authored dpi, so the verdict depends on
             neither the backend it was made on nor the resolution it was set to.
-        scale: Points per authored inch, overriding `page_scale` outright.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
         placed_frac: Fraction of the content width the figure is placed at.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
         context_axes: Axes whose fill is a context surface, not data ink.
@@ -4663,8 +4958,6 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     """
     with _at_draw_rc(fig), _at_measure_dpi(fig):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
-    # "warn" rows are advisory: they report something worth a look without
-    # failing the build. Only a hard False gates.
     return all(s is not False for _, s, _ in rows), rows
 
 
@@ -4673,11 +4966,10 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
           ) -> list[tuple[str, bool | str, str]]:
     """Every gate's row, measured on one canvas at `MEASURE_DPI`.
 
-    Split out of `audit` so that the figure is held at the measurement
-    resolution by a `with` around the whole sweep rather than by a `try/finally`
-    wrapped around a function body with two dozen statements in it. The dpi has
-    to be restored even when a gate raises, and `audit` catches those one at a
-    time, so the restore cannot live in the loop.
+    `audit` calls this inside `_at_draw_rc` and `_at_measure_dpi`, so the
+    figure's rcParams and dpi are restored however this returns. A gate that
+    raises is caught here, per gate, and becomes a row: False for a hard gate,
+    "warn" for an advisory one.
     """
     r, canvas = _renderer(fig)
     available = dict(zip(GATE_INPUTS,
@@ -4692,13 +4984,10 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
             status, detail = gate.func(
                 fig, **{n: available[n] for n in gate.needs})
         except Exception as exc:                            # noqa: BLE001
-            # One gate raising used to lose the whole audit: this was a list
-            # comprehension, so an exception anywhere in the twenty-one
-            # propagated and the caller got a traceback instead of the twenty
-            # answers that had already been measured. These gates read deep
-            # matplotlib internals and `matplotlib>=3.8` has no upper bound, so
-            # the version that breaks one of them is a version nobody has
-            # released yet.
+            # Caught per gate, so a gate that raises costs its own row and
+            # every other gate still reports. These gates read matplotlib
+            # internals and `matplotlib>=3.8` has no upper bound, so a release
+            # nobody has tested against can break one.
             #
             # The verdict follows the gate's own severity rather than being
             # uniformly soft. An advisory that crashed warns; a hard gate that
@@ -4737,18 +5026,14 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
 
-    `context_axes`, `venue` and `suggest` are keyword-only, matching `audit`.
-    They were positional until 0.9.0, and a `venue` passed in the
-    `context_axes` slot was iterated into a frozenset of axes ids rather than
-    raising, because a string is iterable. The venue was discarded and the
-    figure was measured at the wrong width: a wrong verdict, reported green,
-    from an argument order. Keyword-only is the only shape in which that call
-    cannot be written.
+    `context_axes`, `venue` and `suggest` are keyword-only, for the reason
+    `audit` gives.
 
     Args:
         fig: The built figure.
         name: A heading for the table.
-        scale: Points per authored inch, overriding `page_scale` outright.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
         placed_frac: Fraction of the content width the figure is placed at.
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
         context_axes: Axes whose fill is a context surface, not data ink.
@@ -4795,6 +5080,94 @@ def _print_suggestions(rows: Sequence[tuple[str, bool | str, str]]) -> None:
     print()
 
 
+# The one wire format both checkers emit. Bumped when a consumer that reads the
+# current one would read the next one wrong; adding a key does not bump it,
+# because a reader that indexes by name ignores keys it does not know.
+AUDIT_SCHEMA = "figure-gate/audit/1"
+
+# `status` is True, False or "warn" in the tuples, and a JSON consumer should not
+# have to know that a bool and a string share a field. Three names, so a filter
+# reads `row["status"] == "fail"` rather than `row["status"] is False`.
+_STATUS_JSON = {True: "pass", False: "fail", "warn": "warn"}
+
+
+def _rows_json(rows: list[tuple[str, bool | str, str]]) -> list[dict[str, str]]:
+    """`(label, status, detail)` triples as JSON objects, in report order."""
+    return [{"name": label, "status": _STATUS_JSON[status], "detail": detail}
+            for label, status, detail in rows]
+
+
+def audit_json(fig: Figure, scale: float | None = None,
+               placed_frac: float = 1.0,
+               *,
+               name: str = "",
+               context_axes: Sequence[Axes] | None = None,
+               venue: str | None = None) -> str:
+    """`audit()`, as a JSON document. Returns the text, and prints nothing.
+
+    `report` is for a person reading a terminal; this is for a build that has to
+    decide something. The arguments are `audit`'s, plus `name`, and the verdict
+    is the same object `audit` computed: this function serialises, it does not
+    re-measure.
+
+    The document carries the measurement context as well as the rows, because a
+    verdict without the width it was measured against cannot be read later. A
+    figure that passes at `venue="neurips"` and fails at `icml-column` is one
+    figure and two true answers, and a stored artifact that records only the
+    answer is the one that gets quoted at the wrong width. `scale` is the one the
+    gates actually ran at, resolved from `placed_frac` and `venue` rather than
+    echoed from the argument, so it is filled in even when the caller passed
+    neither.
+
+    `scale` is `page_scale`'s number, which is a ratio and not a length: placed
+    size over authored size, `1.0` for a figure measured as authored. The field
+    is named for the argument rather than for a unit, because there is no unit to
+    name.
+
+    `status` is `"pass"`, `"fail"` or `"warn"`, not the tuple API's
+    `True`/`False`/`"warn"`. A JSON consumer should not have to know that one
+    field holds a bool for two of the three cases, and `ok` is already the bool
+    worth branching on.
+
+    `schema` is `AUDIT_SCHEMA`, and `check_palette.check_json` emits the same
+    one. The two documents differ only in `tool` and `inputs`, so a CI step that
+    collects both can read `ok` and `rows` out of either without asking which
+    checker produced it.
+
+    Args:
+        fig: The built figure, measured exactly as `audit` measures it.
+        scale: Placed size over authored size, overriding `page_scale`
+            outright.
+        placed_frac: Fraction of the content width the figure is placed at.
+        name: Recorded as `inputs.name`, for telling stored artifacts apart.
+        venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
+        context_axes: Axes whose fill is a context surface, not data ink.
+
+    Returns:
+        A JSON object as text, with `schema`, `tool`, `ok`, `inputs` and `rows`.
+    """
+    import json
+
+    ok, rows = audit(fig, scale, placed_frac,
+                     context_axes=context_axes, venue=venue)
+    return json.dumps({
+        "schema": AUDIT_SCHEMA,
+        "tool": "check_figure",
+        "ok": ok,
+        "inputs": {
+            "name": name,
+            "placed_frac": placed_frac,
+            "venue": venue,
+            "content_width_pt": content_width_pt(venue),
+            "scale": (scale if scale is not None
+                      else page_scale(fig, placed_frac, venue)),
+            "figsize_in": list(fig.get_size_inches()),
+            "context_axes": 0 if context_axes is None else len(context_axes),
+        },
+        "rows": _rows_json(rows),
+    }, indent=2)
+
+
 def self_test_figure() -> Figure:
     """A figure that breaks several checks on purpose.
 
@@ -4818,14 +5191,37 @@ def main() -> None:
     so `check-figure` in a build verifies the checker itself is still working."""
     import sys
     # Before the matplotlib import, not after: `--venues` prints a dict of
-    # numbers and needs nothing installed to do it. Asking for it on a machine
-    # without matplotlib used to hit the install message instead.
+    # numbers and needs nothing installed to do it.
     if "--venues" in sys.argv:
         print("\nContent widths, in points. Pass one as venue= to audit().")
         print("Verify against `\\the\\textwidth` in your own document before "
               "trusting one for anything that matters.\n")
         for name, pt in sorted(VENUE_WIDTH_PT.items()):
             print(f"  {name:<16} {pt:>7.2f} pt   ({pt / 72:.2f} in)")
+        print()
+        return
+
+    # Same reason as `--venues`: reading a TOML file and listing the keys it may
+    # set needs tomllib and nothing else. A project checking which file its build
+    # picks up should not have to have matplotlib to find out.
+    if "--config" in sys.argv:
+        found = find_config()
+        if found is None:
+            print("\nNo configuration file found at or above this directory.")
+            print("Write a figure-gate.toml, or a [tool.figure-gate] table in "
+                  "pyproject.toml.\n")
+        else:
+            applied = load_config(found)
+            print(f"\n{found}")
+            if applied:
+                for name, value in sorted(applied.items()):
+                    print(f"  {name:<32} {value!r}")
+            else:
+                print("  sets nothing")
+            print()
+        print("Keys this version accepts:")
+        for name in config_keys():
+            print(f"  {name}")
         print()
         return
 

@@ -1,11 +1,8 @@
 # One command per thing CI does, so that "run the audit" is a thing a person can
 # do rather than a procedure they reconstruct from a workflow file.
 #
-# The audit had been run three times before this file existed, each time by
-# reading the previous audit's changelog entry and redoing it from memory. That
-# is how the second one missed `conda/recipe.yaml` as a version site and the
-# third missed seven of the eleven prose documents: not because the checks were
-# hard, but because the list of them lived in somebody's head.
+# An audit redone from memory drops whichever checks memory drops. This file is
+# the list.
 #
 # `specs/2026-07-30-standardized-docs-audit.md` is the long form: what each
 # target proves, and what it deliberately does not.
@@ -70,6 +67,7 @@ coverage:
 # sweep on its own says nothing, and the answer is the diff between two. A gate
 # change that fires more often is adjudicated against this before it ships, and
 # reconstructing the procedure from memory each round is how a sweep ends up
-# measuring the wrong route. See the docstring for the two-commit workflow.
+# measuring the wrong route. See `examples/corpus_sweep.py`'s docstring for the
+# two-commit workflow.
 sweep:
 	uv run python examples/corpus_sweep.py sweep.json

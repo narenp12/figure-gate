@@ -28,7 +28,7 @@ compositions where the checks have somewhere to hide:
     gallery-trendmap.png          a field with its own significance faded out
     gallery-broadening.png        an inset carrying its own four curves
 
-Figures ten to thirteen exist because measuring the first seven against every
+Figures eight to eleven exist because measuring the first seven against every
 gate found rows that had never seen anything: no figure drew a band, a bar, a
 diverging map, a signed contour set or a `scatter`, so five checks had returned
 a passing row seven times over without once running the code that decides. A
@@ -38,14 +38,14 @@ The twentieth is there for a construct rather than a form. Ten rows were taught
 to look inside `ax.inset_axes` and the corpus had no figure with one carrying
 data, so the sweep that shipped that fix had nothing it could move.
 
-The last six answer the same question asked mechanically rather than by eye.
-Run under coverage, the thirteen never reached a rotated label's oriented box,
-a `LineCollection`'s widths, a step drawstyle, a polar axes, a per-point alpha
-array, or the equal-radii path in the overplotting gate: 281 statements of
-`check_figure.py` the corpus could not speak for. Each of the six is a form a
-reader would recognise before it is a branch, which is the order that matters,
-and together they took that 281 down to 239. The palette audit below took
-`check_palette.py` from 74% to 82% on the same measurement.
+Figures fourteen to nineteen answer the same question asked mechanically rather
+than by eye. Run under coverage, the thirteen never reached a rotated label's
+oriented box, a `LineCollection`'s widths, a step drawstyle, a polar axes, a
+per-point alpha array, or the equal-radii path in the overplotting gate: 281
+statements of `check_figure.py` the corpus could not speak for. Each of the six
+is a form a reader would recognise before it is a branch, which is the order
+that matters, and together they took that 281 down to 239. The palette audit
+below took `check_palette.py` from 74% to 82% on the same measurement.
 
 Each one is audited and the script exits non-zero if any figure fails, so these
 are regression tests with pictures attached rather than decoration. `main` also
@@ -60,23 +60,19 @@ returns its figure, so a change to a gate can be measured against the corpus:
     gallery.OUT = None                  # build, audit, write nothing
     fig = gallery.field()
 
-That is the point of the corpus, and it used to be the one thing this file made
-hard. Importing it ran every builder, overwrote every committed PNG, read
-`sys.argv[1]` as an output directory, put the style sheet into the importing
-process for good, and then called `sys.exit`.
+Writing them found defects in the checks themselves. Nine are named below, and
+the comments say which; 0.9.0's changelog names the rows the callout and
+secondary-axis figures exposed. The readability gate reported a schematic's
+invisible tick labels, `check_ink` called every colorbar a saturated panel, the
+line-weight gate measured a colorbar's own dividers, a path and its start
+marker in one hue read as a wrapped color cycle, testing a label's backdrop
+against its dominant color failed every annotation ever placed on a heatmap,
+`check_label_attribution` was passing nearly everything it was given, and
+`_encloses` tested a band's outline through the affine part of the transform
+only, so on a log axis a confidence band stopped being its own curve's band and
+became its rival.
 
-Writing them
-found nine defects in the checks themselves, and the comments below say which:
-the readability gate reported a schematic's invisible tick labels, `check_ink`
-called every colorbar a saturated panel, the line-weight gate measured a
-colorbar's own dividers, a path and its start marker in one hue read as a
-wrapped color cycle, testing a label's backdrop against its dominant color
-failed every annotation ever placed on a heatmap, `check_label_attribution`
-was passing nearly everything it was given, and `_encloses` tested a band's
-outline through the affine part of the transform only, so on a log axis a
-confidence band stopped being its own curve's band and became its rival.
-
-The last two came in with the last six figures, and both were in code no figure
+The last two came in with those six figures, and both were in code no figure
 had ever run: `check_line_weight` raised TypeError on an `EventCollection`,
 because a collection reports one width where every other reports a sequence;
 and `check_label_attribution` counted a curve's own censoring ticks as a rival
@@ -90,8 +86,9 @@ curves stopped at the last event and left their tail censoring ticks floating
 with no line beneath them, and the regime diagram's boundary labels were
 rotated by the data slope rather than the slope on the page, which on log axes
 is a different number and left both strings lying flat beside a rising curve.
-All four were obvious in the PNG and invisible to every check. That is step 7 of
-the procedure, and it is why the procedure has a step 7.
+All four were obvious in the PNG and invisible to every check. That is step 7
+of SKILL.md's procedure, "render a PNG and look at it", and it is why the
+procedure has a step 7.
 """
 
 from pathlib import Path
@@ -115,16 +112,14 @@ import check_figure as cf          # noqa: E402
 STYLE = SKILL / "assets" / "figure.mplstyle"
 
 # Where `finish` writes. Same optional argument as `demo.py`, and for the same
-# reason: the test that runs this file used to rewrite every committed PNG
-# on every `pytest`. Resolved in `main` rather than from `sys.argv` at import,
+# reason: a test that runs this file must not rewrite the committed PNGs.
+# Resolved in `main` rather than from `sys.argv` at import,
 # because under a test runner `sys.argv[1]` is the runner's own argument and
 # this file would take it for an output directory.
 OUT: Path | None = HERE
 
-# Read under the sheet, not with it left in effect. `plt.style.use` at module
-# scope put the sheet into every process that imported this file, and
-# `check_style_sheet` -- whose whole job is noticing the sheet is NOT in effect
-# -- stopped being able to fail in that process. See `styled`.
+# Read under the sheet, not with it left in effect, for the reason `demo.py`
+# gives. See `styled`.
 with plt.style.context(str(STYLE)):
     SERIES = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     SURFACE = plt.rcParams["axes.facecolor"]
@@ -156,10 +151,8 @@ def finish(fig, name, description, **audit_kw):
     written out so you can look at what failed.
 
     Returns the figure, and with `OUT` set to None writes nothing and leaves it
-    open. That is the mode for measuring a change against this corpus: the
-    twenty figures are the evidence a gate is checked against, and getting at
-    them used to mean either rewriting the committed PNGs or not getting at
-    them at all.
+    open. That is the mode for measuring a change against this corpus, which
+    is the evidence a gate is checked against.
     """
     cf.describe(fig, description)
     ok = cf.report(fig, name, **audit_kw)
@@ -235,9 +228,8 @@ def small_multiples():
 
 
 # --- 2. a filled field with isolines and a colorbar --------------------------
-# The case that broke `check_ink` and taught it about context surfaces: a
-# contourf backdrop covers the whole panel, so measured as data ink it reads
-# 100% and every such figure stood at WARN. `context_axes` says the fill is
+# The context-surface case for `check_ink`: a contourf backdrop covers the
+# whole panel, so measured as data ink it reads 100% and the row warns. `context_axes` says the fill is
 # ground rather than figure, and the ink fraction is measured off what sits on
 # top of it.
 
@@ -256,11 +248,10 @@ def field():
     # guide's rule is that a context surface gets structure and not just a hue
     # — an unstructured gradient gives the eye no edge to hold.
     #
-    # Six levels, not the sixteen this started with. Isoline density is a
-    # legibility budget and the labels are spending from the same one: at
-    # sixteen there was no band anywhere in the panel wide enough to set a word
-    # in, which the readability check reported as 41% of 'start' sitting on
-    # other ink. Thinning the isolines is what bought the clear ground.
+    # Six levels. Isoline density is a legibility budget and the labels are
+    # spending from the same one: at sixteen no band in the panel is wide
+    # enough to set a word in, and the readability check measured 41% of
+    # 'start' on other ink.
     ax.contour(gx, gy, z, levels=6, colors=SURFACE, linewidths=1.0,
                alpha=1.0, linestyles="solid")
 
@@ -425,10 +416,9 @@ def forms():
     # pairing away, and the pairing is what the panel is about: every one of
     # the twelve individuals rises, and the spread they start from is wider
     # than the change itself, neither of which survives a pair of means.
-    # The comment here said eleven of twelve for two releases. The draw has
-    # never produced a fall: `after` adds a normal centred at 0.11 with a
-    # spread of 0.05, so a drop needs a draw 2.2 sigma low, and under this
-    # seed the smallest gain is 0.047. `test_alt_text_numbers.py` now counts.
+    # `after` adds a normal centred at 0.11 with a spread of 0.05, so a drop
+    # needs a draw 2.2 sigma low, and under this seed the smallest gain is
+    # 0.047. `test_alt_text_numbers.py` counts the rises.
     before = rng.uniform(0.22, 0.68, 12)
     after = before + rng.normal(0.11, 0.05, 12)
     for lo, hi in zip(before, after):
@@ -489,11 +479,11 @@ def convergence():
         # asymptotic middle rather than from the whole range.
         err = c * h ** order + 2e-16 / h
         ax.loglog(h, err, marker="o", ms=3.5, color=color, label=name)
-        # Labelled at the LEFT, not at the right end past the last marker,
-        # which is where this started. Out in the right margin the three labels
-        # sat 29px from their own curve and 35px from a neighbour's, and
-        # `check_label_attribution` failed all three: a label outside the data
-        # is not resolved by proximity to anything. On a log-log fan the curves
+        # Labelled at the LEFT, not at the right end past the last marker. Out
+        # in the right margin the three labels sit 29px from their own curve and
+        # 35px from a neighbour's, and `check_label_attribution` fails all
+        # three: a label outside the data is not resolved by proximity to
+        # anything. On a log-log fan the curves
         # are three decades apart at small h and the labels are unambiguous
         # there.
         #
@@ -509,9 +499,8 @@ def convergence():
     # The slope triangle. It is a *statement of the observed order*, so it is
     # drawn against the fitted slope rather than the theoretical one, and it
     # sits on clear ground rather than on the curve it describes.
-    # Bottom right, under RK4. It started in the upper left, which is also the
-    # only clear ground for the direct labels — two things competing for one
-    # empty corner, and the collision check said so.
+    # Bottom right, under RK4. The upper left is the only clear ground for the
+    # direct labels, and two things in one empty corner collide.
     x0, x1 = 3.0e-2, 1.0e-1
     y0 = 1.0e-10
     y1 = y0 * (x1 / x0) ** 2
@@ -544,10 +533,8 @@ def convergence():
 # — which is the whole reason the context-dependent checks warn instead of
 # failing. A gate everyone learns to ignore is worse than no gate.
 #
-# That paragraph was written before the row could see this figure and was untrue
-# for seven releases: `check_overplotting` read `ax.collections`, this is a
-# marker-only `plot`, and the answer here was "no scatter overplotting" every
-# time. It warns now, at 95% of 168000 marks in contact. The number is what a
+# The row warns at 95% of 168000 marks in contact. `check_overplotting` reads
+# marker-only `plot` lines as well as `ax.collections`, and the number is what a
 # one-pixel marker gives — `marker=","` is the one marker matplotlib does not
 # scale by `markersize`, so reading the size off the property instead of off the
 # drawn path put this at a radius seventeen times its own and reported 100%.
@@ -684,7 +671,7 @@ def encoding():
     # Ticked at the wrap and at both ends, so the bar shows the reader that its
     # two ends are the same angle. A bar whose ends match is the visible claim
     # that the colormap closes the loop -- exactly what `cmap_kind` measures as
-    # a wrap dE below 3.0.
+    # a wrap dE below `CMAP_WRAP_DE_MAX`.
     bar_c = fig.colorbar(phase, ax=c, pad=0.02,
                          ticks=[-np.pi, 0.0, np.pi])
     bar_c.set_ticklabels([r"$-\pi$", "$0$", r"$\pi$"])
@@ -711,13 +698,9 @@ def encoding():
 # The shape `check_label_attribution` is hardest on: a direct label under a
 # confidence band. A band lies on top of the curve it belongs to, so on distance
 # alone it is tied with that curve at zero, and `_encloses` is what tells the
-# two apart. Nothing in the first seven figures drew a band, so the rule that
-# makes the row usable had never run on a real figure — and it was broken.
-# `_encloses` asked `Path.contains_points(pts, transform=...)`, which applies
-# the affine part of the transform only, so on this figure's log x axis the
-# band's outline was tested at the wrong coordinates, every point read as
-# outside, and both labels failed against their own bands at 0px. That is the
-# seventh defect writing this file found, and the first one a log scale hid.
+# two apart. The log x axis is deliberate: `_encloses` has to apply the whole
+# transform, not only its affine part, or the band's outline is tested at the
+# wrong coordinates and both labels fail against their own bands at 0px.
 #
 # It is also the one figure here that is audited for a PLACE rather than for
 # the canvas: `venue` and `placed_frac` mirror
@@ -774,11 +757,10 @@ def uncertainty():
 
 
 # --- 9. counts, and a second unit for them -----------------------------------
-# The only bar chart in the corpus, and the reason it exists is that `check_form`
-# had no figure to read: it forbids a bar on a truncated baseline, and for seven
-# figures there was no `BarContainer` anywhere for it to measure. Counts from
-# zero is the one comparison `choosing-a-form.md` sends to a bar rather than to
-# a dot plot, so this is the passing case that proves the row looks.
+# The only Cartesian bar chart in the corpus, and the `BarContainer` that
+# `check_form`'s truncated-baseline rule reads. Counts from zero is the one
+# comparison `choosing-a-form.md` sends to a bar rather than to a dot plot, so
+# this is the passing case that proves the row looks.
 #
 # The right-hand axis is the other half: a second scale that is a pure relabel
 # of the same bars carries no data of its own, which is the case `check_dual_axis`
@@ -821,15 +803,14 @@ def counts():
 # --- 10. a signed field ------------------------------------------------------
 # The encoding figure covers three of the four colormap kinds and this one
 # covers the fourth. A residual has a meaningful zero and two directions away
-# from it, which is the definition of a diverging scale, and `cmap_kind` had
-# never been handed one from this corpus.
+# from it, which is the definition of a diverging scale.
 #
 # The isolines are the other reason. `rcParams["contour.negative_linestyle"]` is
 # "dashed", so a monochrome contour over signed data ships its negative half
 # dashed with nobody having chosen that — and in this repo's vocabulary dashing
 # means unobserved, projected or threshold, none of which is true of half a
-# measured field. `check_contour_dash` warns on it, and until this figure the
-# row had no signed contour set anywhere to look at.
+# measured field. `check_contour_dash` warns on it, and this is the corpus's
+# signed contour set.
 
 @styled
 def residual():
@@ -866,12 +847,10 @@ def residual():
 
 
 # --- 11. marks, then bins ----------------------------------------------------
-# `check_overplotting` reads scatters, and the orbit diagram is not one: it is
-# `plot(marker=",")`, which the row skips because it has no offsets to measure.
-# So the gate had returned "no scatter overplotting" seven times without ever
-# building a tree. This figure gives it one, with mark area carrying a third
+# A true `scatter` for `check_overplotting`, with mark area carrying a third
 # variable so the radii vary and the octave path runs rather than the equal-radii
-# shortcut.
+# shortcut. The orbit diagram reaches the row too, as a marker-only `plot`, but
+# at one radius.
 #
 # Panel (b) is the answer the row's own message gives at 40000 points: past some
 # density a scatter is a silhouette of its own support, and the count per bin is
@@ -935,10 +914,10 @@ def density():
 
 # --- 12. a callout that points -----------------------------------------------
 # `check_collisions`, `check_label_attribution` and `check_text_readability` all
-# read one box per string, and on an Annotation that box used to span the arrow
-# too: a one-character callout measured 285 points wide. No corpus figure drew a
-# leader line, which is why three rows could misfire on one for as long as they
-# did.
+# read one box per string. On an Annotation with a leader, the window extent
+# spans the arrow too -- a one-character callout measures 285 points wide -- so
+# the gates read the string's own box, and `check_label_attribution` judges the
+# annotation at its anchor. This is the corpus's leader line.
 
 @styled
 def callout():
@@ -997,8 +976,8 @@ def secondary_scale():
 # and draws risers between them, so `_drawstyle_xy` expands the drawstyle before
 # any geometry is harvested; without it the label gate and the banking gate read
 # the diagonal chord of each riser rather than the two segments actually drawn.
-# Thirteen figures went by without one, because every other line here is a
-# function sampled finely enough that its polyline IS its shape.
+# Every other line here is a function sampled finely enough that its polyline
+# IS its shape.
 #
 # Kaplan-Meier is where a staircase is not a stylistic choice: the estimate only
 # changes at an observed event, and drawing through the flat stretch between two
@@ -1098,10 +1077,9 @@ def survival():
 # --- 15. a spike raster ------------------------------------------------------
 # `eventplot` draws an `EventCollection`, which is a `LineCollection`, and
 # `check_line_weight` reads a collection's widths as a sequence rather than as
-# one number. That branch had never run: the corpus draws lines as `Line2D` and
-# fields as meshes, and its only collections carry offsets or contour paths.
-# A gate measuring the wrong widths passes for the same reason it fails, so the
-# branch needed material rather than a fixture.
+# one number. This is the corpus's line collection: the rest draw lines as
+# `Line2D` and fields as meshes. A gate measuring the wrong widths passes for
+# the same reason it fails, so the branch needs material rather than a fixture.
 
 @styled
 def raster():
@@ -1148,8 +1126,7 @@ def raster():
 # The first polar axes in the corpus, and `check_text_readability` carries a
 # clause written for one: radial tick labels sit on the data by construction, so
 # the gate sets them aside rather than reporting every ordinary polar plot at
-# 2.0:1. That clause was argued from eight figures none of which are here, so
-# `_polar_radial_ticks` had never been handed a polar axes to find them on.
+# 2.0:1. This is the polar axes `_polar_radial_ticks` finds them on.
 #
 # A direction is the case where a linear axis is wrong rather than ugly: 350
 # degrees and 10 degrees are 20 apart, and a bar chart of compass bins puts them
@@ -1191,11 +1168,9 @@ def rose():
 
 
 # --- 17. observed against predicted ------------------------------------------
-# Every scatter in this corpus varies its mark area, so `check_overplotting`
-# has only ever taken the mixed-radius path: marks grouped into radius octaves,
-# each group queried separately. The equal-radii shortcut, which is the branch
-# an ordinary `scatter` reaches and therefore the one most figures are judged
-# by, had never run once.
+# The corpus's equal-radii scatter. The others vary mark area, so they take
+# `check_overplotting`'s mixed-radius path; this one takes the shortcut an
+# ordinary `scatter` reaches, which is the branch most figures are judged by.
 #
 # A parity plot is where equal marks are the point. Each mark is one case and
 # nothing about it is being ranked, so varying the area would encode a variable
@@ -1229,8 +1204,8 @@ def parity():
 
 
 # --- 18. a regime diagram ----------------------------------------------------
-# Every string in the first thirteen figures sits at 0 or 90 degrees, so the
-# oriented-box path three gates share had never run: `_corners` reconstructs a
+# The corpus's rotated labels, for the oriented-box path three gates share:
+# `_corners` reconstructs a
 # rotated label's four corners, and `_oriented_mask` asks which sampled pixels
 # the label actually covers. On one 45-degree string, four fifths of the block
 # an axis-aligned box samples belongs to the label only through that box, and
@@ -1315,8 +1290,8 @@ def phase():
 # on one. `check_contrast_stack` reads the array rather than the scalar for
 # exactly this figure, counting a ramp across one artist as one alpha decision
 # and not as one per cell; a `pcolormesh` read the other way reports sixteen
-# levels of haze and fails a figure that made a single choice. Nothing in the
-# corpus carried an alpha array, so the branch that decides had never run.
+# levels of haze and fails a figure that made a single choice. This is the
+# corpus's alpha array.
 #
 # Fading the cells that are not significant is the alternative to stippling
 # them, and it is the same statement: the map is the estimate, and the reader is
@@ -1358,19 +1333,16 @@ def trendmap():
 
 
 # --- 20. an inset that carries its own data ----------------------------------
-# The construct ten rows were taught to look inside and the corpus then had no
-# example of. `ax.inset_axes` is added through `add_child_axes` and never
-# reaches `fig.axes`, so a gate walking `fig.axes` audited the host panel and
-# skipped the child; the fix shipped with a sweep that could not move, because
-# every inset in the corpus was empty. This figure is the sweep's material.
+# `ax.inset_axes` is added through `add_child_axes` and never reaches
+# `fig.axes`, so a gate walking `fig.axes` audits the host panel and skips the
+# child. This is the corpus's inset with data in it.
 #
 # Three things at once, which is why it is one figure and not three. The inset
 # carries four curves of its own, so the child-axes traversal has artists to
 # find. Those four are drawn in colours sampled off `viridis` for an ordered
-# variable, which is the case `check_colormap_kind`'s sampled-ramp reader was
-# written for and was exposed to two panels of twenty. And the two panels are
-# stacked on one x, which is the direction `check_redundancy` could not measure
-# until this cycle and had one panel of twenty to measure it on.
+# variable, which is the case `check_colormap`'s sampled-ramp reader is for.
+# And the two panels are stacked on one x, the direction `check_redundancy`
+# compares same-column panels in.
 #
 # The zoom is the point of the form rather than decoration: the doublet is
 # 3.4 wavenumbers wide inside a 100-wavenumber window, so at the scale that
@@ -1587,12 +1559,9 @@ def palettes():
 def main(argv=None):
     """Build all twenty, audit each, and report. Returns a process exit code.
 
-    Under `if __name__ == "__main__"`, so that importing this file builds
-    nothing, writes no PNG, reads no `sys.argv` and does not exit the
-    interpreter. Importing it used to do all four, which is why the test that
-    reads these figures cut the source at a marker string and executed the
-    prefix instead of importing it, and why measuring a gate against this
-    corpus overwrote every committed PNG as a side effect.
+    Called only under `if __name__ == "__main__"`, so that importing this file
+    builds nothing, writes no PNG, reads no `sys.argv` and does not exit the
+    interpreter.
     """
     global OUT
     argv = sys.argv[1:] if argv is None else list(argv)

@@ -305,11 +305,10 @@ def test_a_row_spanning_mosaic_panel_is_not_redundant():
 
 
 # --- the x direction of the same row ----------------------------------------
-# The tick-duplication test ran over row groups only, so a row of panels
-# repeating a y tick column failed and the same figure rotated - a column of
-# panels repeating an x tick row - passed. The x direction inherits the
-# shared-scale requirement rather than re-deciding it; see the four keys in
-# `check_redundancy`.
+# Tick duplication is judged in both directions: a column of panels repeating
+# an x tick row fails like the same figure rotated, a row repeating a y tick
+# column. The x direction inherits the shared-scale requirement rather than
+# re-deciding it; see the four keys in `check_redundancy`.
 
 
 def _stacked(labels=("Signal (V)", "Signal (V)"), xlabels=(None, None),
@@ -1160,7 +1159,7 @@ def test_pairs_mode_is_inferred_from_the_marks():
     10.5 floor and it clears both. That is a real result and it is pinned in
     `test_the_whole_cycle_now_clears_all_pairs` -- but it leaves this test
     needing a palette that still separates the modes, so it builds one: blue and
-    violet are 8.6 apart under protan simulation and never adjacent, with orange
+    violet are dE 8.9 apart under deuteranopia and never adjacent, with orange
     between them.
     """
     palette = ["#0072b2", "#d55e00", "#87019f"]
@@ -1389,13 +1388,10 @@ def test_series_color_scopes_the_comparison_to_a_panel():
     # the figure-wide harvest -- otherwise adjacent mode never compares them and
     # the old figure-wide code passes for the wrong reason.
     #
-    # Violet rather than the teal this used before 0.8.0. The teal was picked to
-    # sit ~dE 6 from blue under the old OKLab metric and reads 8.6 under
-    # CAM02-UCS, still close enough for the cross-panel point -- but it also read
-    # 9.8 against the pink in its own panel, which the 10.5 floor now fails, so
-    # the fixture stopped isolating the thing it was built to isolate. Violet
-    # against blue is the same confusion and a cleaner one: it is where protan
-    # simulation collapses hardest, and it is 33.3 clear of the pink beside it.
+    # Violet against blue collapses to dE 8.9 under deuteranopia, and
+    # violet is dE 33.3 from the pink in its own panel under CVD, so only the
+    # cross-panel pair is close. A teal here read 9.8 against that pink, under
+    # `CVD_TARGET`, and the fixture stopped isolating the cross-panel pair.
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
     a.plot([0, 1], [1, 0], color="#d55e00", label="Acquisition")  # orange
     a.plot([0, 1], [0, 1], color="#0072b2", label="GP mean")      # blue
@@ -1407,14 +1403,19 @@ def test_series_color_scopes_the_comparison_to_a_panel():
 
 
 def test_a_scatter_in_one_panel_does_not_force_all_pairs_on_another():
-    """`_axes_all_pairs` returned True if *any* axes held a scatter, which
-    flipped line-only panels into the stricter regime too. The six theme slots
-    clear adjacent separation (what lines need) but not all-pairs; a scatter two
-    panels over must not be what fails them."""
+    """The mode is decided per panel: a scatter two panels over must not
+    flip line-only panels into the stricter regime. Blue, orange and violet
+    clear adjacent separation (what lines need) and fail all-pairs, blue and
+    violet dE 8.9 apart under deuteranopia, so only the per-panel mode passes
+    them. `test_pairs_mode_is_inferred_from_the_marks` uses the same three."""
+    import check_palette as cp
+    blue_violet = cp.delta_e(cp.simulate(cp.hex_to_linear("#0072b2"), "deutan"),
+                             cp.simulate(cp.hex_to_linear("#87019f"), "deutan"))
+    assert round(blue_violet, 1) == 8.9 < cp.CVD_TARGET
     fig, (a, b) = plt.subplots(1, 2, figsize=(8, 4), constrained_layout=True)
-    for i, c in enumerate(OKABE):
-        a.plot([0, 1], [i, i + 1], color=c)          # six lines: adjacent-legal
-    b.scatter([0, 1], [0, 1], color=OKABE[0])        # one scatter, one hue
+    for i, c in enumerate(["#0072b2", "#d55e00", "#87019f"]):
+        a.plot([0, 1], [i, i + 1], color=c)          # three lines: adjacent-legal
+    b.scatter([0, 1], [0, 1], color="#0072b2")       # one scatter, one hue
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Series color"] is True
@@ -1458,6 +1459,17 @@ def test_dual_axis_catches_twinx_carrying_its_own_data():
     ax.plot([0, 1, 2], [1, 2, 3], color=OKABE[0])
     tw = ax.twinx()
     tw.plot([0, 1, 2], [300, 200, 100], color=OKABE[1])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Dual axis"] is False
+
+
+def test_dual_axis_catches_twiny_carrying_its_own_data():
+    """`check_dual_axis` says `twiny` lands in the same place as `twinx`."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([1, 2, 3], [0, 1, 2], color=OKABE[0])
+    tw = ax.twiny()
+    tw.plot([300, 200, 100], [0, 1, 2], color=OKABE[1])
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Dual axis"] is False
@@ -1824,6 +1836,7 @@ def test_equal_length_rectangles_on_a_baseline_encode_nothing():
     """A rug and a single-row heatmap both stand on one edge. Neither uses
     length to say anything, which is what a bar does and the whole reason a
     truncated baseline lies."""
+    import numpy as np
     from matplotlib.patches import Rectangle
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [101, 109], color=OKABE[0])
@@ -1998,9 +2011,8 @@ def test_label_attribution_is_quiet_on_a_single_curve():
 # --- style sheet ------------------------------------------------------------
 
 def test_style_sheet_row_notices_the_sheet_is_not_in_effect():
-    """The three silent failures at once: a color written with a leading `#`,
-    a forgotten `plt.style.use`, and a later rcParams override. Every one of
-    them ships stock matplotlib with the whole suite green."""
+    """A forgotten `plt.style.use` ships stock matplotlib with every other row
+    green."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
     ok, rows = cf.audit(fig)
@@ -2017,6 +2029,24 @@ def test_style_sheet_row_passes_when_the_sheet_is_the_one_in_effect():
         ok, rows = cf.audit(fig)
         plt.close(fig)
     assert gates(rows)["Style sheet"] is True
+
+
+def test_style_sheet_row_notices_a_color_written_with_a_hash(tmp_path,
+                                                             monkeypatch):
+    """`#` starts a comment in an mplstyle, so `grid.color: #e1e0d9` parses to
+    no value and matplotlib drops the key. The sheet and the live rcParams
+    then agree on its absence, and comparing the two finds no drift."""
+    sheet = tmp_path / "hashed.mplstyle"
+    sheet.write_text("grid.color: #e1e0d9\naxes.linewidth: 0.8\n",
+                     encoding="utf-8")
+    monkeypatch.setattr(cf, "STYLE_SHEET", sheet)
+    with plt.style.context(str(sheet)):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        ax.plot([0, 1], [0, 1])
+        status, detail = cf.check_style_sheet(fig)
+        plt.close(fig)
+    assert status == "warn", detail
+    assert "grid.color" in detail, detail
 
 
 # --- contour dash ---------------------------------------------------------
@@ -2155,6 +2185,23 @@ def test_overplotting_warns_on_dense_scatter():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Overplotting"] == "warn"
+
+
+def test_transparency_does_not_move_the_overplotting_row():
+    """`choosing-a-form.md` says transparency does not clear this row, because
+    the gate reads positions and sizes. The same cloud at two alphas, measured."""
+    import numpy as np
+    rng = np.random.default_rng(42)
+    x = rng.normal(0.5, 0.015, 70)
+    y = rng.normal(0.5, 0.015, 70)
+    rows_at = {}
+    for alpha in (1.0, 0.1):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.scatter(x, y, s=160, alpha=alpha)
+        rows_at[alpha] = cf.check_overplotting(fig)
+        plt.close(fig)
+    assert rows_at[1.0] == rows_at[0.1]
+    assert rows_at[0.1][0] == "warn"
 
 
 def test_overplotting_clean_on_spread_scatter():
@@ -2581,6 +2628,7 @@ def test_a_scatter_spelled_edgecolors_none_is_not_widened_by_its_linewidth():
     `get_linewidths()` still reports the `patch.linewidth` default, so a width
     read on its own widens the mark by a stroke that is never laid down. This
     is how `gallery-parity` is spelled."""
+    import numpy as np
     fig, ax = plt.subplots()
     coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, edgecolors="none")
     plt.close(fig)
@@ -2603,6 +2651,7 @@ def test_counting_the_stroke_does_not_fire_on_a_parity_style_scatter():
     """The corpus figure the question reaches. Taking its reported 0.70pt as
     drawn carries it past `OVERPLOT_THRESHOLD`; reading whether the edge is
     drawn at all leaves it where the render puts it."""
+    import numpy as np
     rng = np.random.default_rng(19)
     observed = rng.uniform(0.6, 9.2, 84)
     predicted = observed + rng.normal(0.0, 0.55, observed.size) + 0.1
@@ -3261,8 +3310,8 @@ def test_a_gridline_crossing_a_heatmap_label_is_not_data_ink():
         status, detail = cf.check_text_readability(fig, None)
     finally:
         plt.close(fig)
-    # The artefact shown rather than asserted: adding one gridline to a figure
-    # that measured clean used to take it to a third of the box.
+    # Without the ground anchor, one gridline takes a clean figure past ten
+    # times `TEXT_CLUTTER_MAX`; with it, the figure stays under.
     assert before > cf.TEXT_CLUTTER_MAX * 10, f"{before:.0%}"
     assert after <= cf.TEXT_CLUTTER_MAX, f"{after:.0%}"
     assert "sits on data ink" not in detail, detail
@@ -3996,8 +4045,8 @@ def test_box_blur_matches_scipy_uniform_filter():
 
 # --- line weight ----------------------------------------------------------
 #
-# This gate shipped without a single test, which is the one thing CONTRIBUTING
-# says a gate may not do. Everything below is the coverage it should have had.
+# CONTRIBUTING asks each gate for a test showing it fails and one showing it
+# does not over-fire. These are `check_line_weight`'s.
 
 
 def test_line_weight_catches_a_hairline_stroke():
@@ -4251,10 +4300,10 @@ def test_line_weight_still_does_not_measure_tick_marks():
     They carry a second reason besides, not visible from this checkout.
     `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
     of thirteen fixtures as firing on line weight largely because of it. Both
-    live on the unmerged `spec-r-svg-substrate` branch, so a reader looking for
-    them here will not find them; the point is that the two substrates disagree
-    about this stroke, and settling that by side effect would overturn a pinned
-    measurement on a branch this one does not touch.
+    are archived at the `archive/r-svg-substrate` tag, not merged, so a reader
+    looking for them here will not find them; the point is that the two
+    substrates disagree about this stroke, and settling that by side effect
+    would overturn a measurement pinned on the archived substrate.
 
     If a later round decides to measure them, this test is where that argument
     has to be made rather than absorbed.
@@ -4683,9 +4732,9 @@ def test_what_furniture_alone_measures_depends_on_the_panel_size(figsize, blank)
 @pytest.mark.parametrize("sizes,ratio", [([10, 90], 9.0), ([20, 20], 1.0),
                                          ([4, 100], 25.0)])
 def test_the_mark_ratio_row_reports_the_ratio_of_the_marker_areas(sizes, ratio):
-    """`s` is an area in points squared, so the ratio the row names is the
-    ratio of the two numbers the caller passed -- exactly, before any
-    rendering. The drawn areas printed beside it are measured and will move
+    """`s` is a squared diameter, so drawn area is in proportion to it and
+    the ratio the row names is the ratio of the two numbers the caller passed
+    -- exactly, before any rendering. The drawn areas printed beside it are measured and will move
     with a renderer; this one cannot."""
     fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
     ax.scatter([0, 1], [0, 1], s=sizes)
@@ -5217,12 +5266,12 @@ def test_the_ramps_matched_against_are_continuous_and_unorderable():
 
 
 # --- a gate that raises ------------------------------------------------------
-# `audit` ran its gates in a list comprehension, so one exception anywhere
-# propagated and the caller lost the twenty rows already measured. No gate is
-# known to raise -- twenty adversarial figures, including 3D, polar, all-NaN,
-# infinite and zero-sized ones, found none -- but these gates read deep
-# matplotlib internals and `matplotlib>=3.8` has no upper bound, so the version
-# that breaks one is a version nobody has released yet.
+# `audit` catches an exception per gate, so a gate that raises costs its own row
+# and the caller keeps the rest. No gate is known to raise -- twenty adversarial
+# figures, including 3D, polar, all-NaN, infinite and zero-sized ones, found
+# none -- but these gates read deep matplotlib internals and `matplotlib>=3.8`
+# has no upper bound, so the version that breaks one is a version nobody has
+# released yet.
 
 
 def _with_broken_gate(monkeypatch, *names):
@@ -5283,13 +5332,12 @@ def test_the_row_says_the_defect_is_not_in_the_figure(monkeypatch):
 # --- child axes are panels too ----------------------------------------------
 #
 # `ax.inset_axes` and `secondary_xaxis`/`secondary_yaxis` go through
-# `add_child_axes` and never reach `fig.axes`, so every row that walked
-# `fig.axes` audited the host and skipped the inset. The same content moved
-# from a panel into an inset went unjudged by ten rows. These build each of
-# those defects inside `ax.inset_axes` and assert the row that owns it is the
-# one that catches it. `mpl_toolkits.axes_grid1.inset_locator.inset_axes` is a
-# different route that goes through `add_axes` and was never blind, which is
-# why the blind one is named exactly in every test below.
+# `add_child_axes` and never reach `fig.axes`, so a row that walks `fig.axes`
+# audits the host and skips the inset; the rows walk `cf._all_axes` instead.
+# These build each defect inside `ax.inset_axes` and assert the row that owns
+# it is the one that catches it. `mpl_toolkits.axes_grid1.inset_locator.
+# inset_axes` goes through `add_axes` and reaches `fig.axes` either way, which
+# is why the child-axes route is named exactly in every test below.
 
 def _inset_host(inset=True):
     """A host whose data sits in the lower-left, so an inset in the upper-right
@@ -5482,9 +5530,9 @@ def test_a_secondary_axis_adds_no_new_fires():
 # --- contrast stack: alpha baked into the colour ----------------------------
 #
 # `get_alpha()` is None whenever opacity was written into an RGBA colour
-# rather than passed as a keyword, and the two draw the same pixels. Reading
-# None as 1.0 meant the row saw `alpha levels [1.0]` on a figure where nothing
-# was opaque.
+# rather than passed as a keyword, and the two draw the same pixels. Read as
+# 1.0, None reports `alpha levels [1.0]` on a figure where nothing is opaque,
+# so the row reads the colour's own alpha.
 
 def test_contrast_stack_reads_alpha_baked_into_an_rgba_colour():
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -5544,3 +5592,97 @@ def test_one_translucent_series_against_a_solid_one_still_passes():
     plt.close(fig)
     assert status is True, detail
     assert "0.4" in detail and "1.0" in detail
+
+
+# --- the JSON document ------------------------------------------------------
+
+def test_audit_json_reports_the_verdict_audit_reported(clean):
+    """The serialiser serialises. It does not re-measure.
+
+    Every row `audit` returned, in order, with the same verdict and the same
+    detail string. A document that disagreed with the tuple API would make the
+    two routes two answers about one figure, and the printed table a third.
+    """
+    import json
+    ok, rows = cf.audit(clean)
+    document = json.loads(cf.audit_json(clean))
+    assert document["ok"] is ok
+    assert [row["name"] for row in document["rows"]] == [n for n, _, _ in rows]
+    assert [row["detail"] for row in document["rows"]] == [d for _, _, d in rows]
+
+
+def test_audit_json_spells_the_statuses_out(clean):
+    """`pass`, `fail` and `warn`, never `True` or `False`.
+
+    Asserted against the self-test figure as well as a clean one, because that
+    figure exists to fail several gates and is the only input that puts a `fail`
+    in the document without building a defect here to do it.
+    """
+    import json
+    for fig in (clean, cf.self_test_figure()):
+        document = json.loads(cf.audit_json(fig))
+        statuses = {row["status"] for row in document["rows"]}
+        assert statuses <= {"pass", "fail", "warn"}, statuses
+        assert document["ok"] == (not any(
+            row["status"] == "fail" for row in document["rows"]))
+    plt.close("all")
+
+
+def test_audit_json_records_the_scale_the_gates_ran_at(clean):
+    """A verdict without the width it was measured against cannot be read back.
+
+    One figure passes at one venue and fails at another, and both answers are
+    true. `scale` is resolved rather than echoed, so it is filled in even when
+    the caller passed neither `scale` nor `venue`, and it is `page_scale`'s
+    number: a ratio of placed size to authored size, not a length.
+    """
+    import json
+    document = json.loads(cf.audit_json(clean, venue="neurips", name="fig1"))
+    inputs = document["inputs"]
+    assert inputs["name"] == "fig1"
+    assert inputs["venue"] == "neurips"
+    assert inputs["content_width_pt"] == cf.VENUE_WIDTH_PT["neurips"]
+    assert inputs["scale"] == cf.page_scale(clean, 1.0, "neurips")
+    assert inputs["figsize_in"] == list(clean.get_size_inches())
+
+
+def test_audit_json_records_an_explicit_scale_as_given(clean):
+    """`scale` overrides `page_scale` outright, so the document must report the
+    override rather than recomputing a number the gates did not use."""
+    import json
+    document = json.loads(cf.audit_json(clean, scale=2.5))
+    assert document["inputs"]["scale"] == 2.5
+
+
+def test_audit_json_counts_the_context_axes_rather_than_naming_them(clean):
+    """Axes are not serialisable and their ids mean nothing to a later reader.
+
+    The count is the part that explains a verdict: whether the run treated any
+    panel's fill as a context surface rather than as data ink.
+    """
+    import json
+    bare = json.loads(cf.audit_json(clean))
+    assert bare["inputs"]["context_axes"] == 0
+    with_context = json.loads(cf.audit_json(clean, context_axes=clean.axes))
+    assert with_context["inputs"]["context_axes"] == len(clean.axes)
+
+
+def test_audit_json_names_the_shared_schema(clean):
+    """One `schema` string across both checkers, so a CI step collecting figure
+    and palette verdicts reads `ok` and `rows` out of either without asking
+    which one wrote the file."""
+    import json
+    document = json.loads(cf.audit_json(clean))
+    assert document["schema"] == cf.AUDIT_SCHEMA
+    assert document["tool"] == "check_figure"
+
+
+def test_audit_json_leaves_the_figure_on_its_authored_dpi(clean):
+    """`audit` measures through an Agg canvas at `MEASURE_DPI` and hands the
+    figure back as authored. `audit_json` goes through `audit`, so it inherits
+    that; this asserts it rather than assuming, because a serialiser that left a
+    figure on the measurement dpi would silently change what a later `savefig`
+    produced."""
+    authored = clean.get_dpi()
+    cf.audit_json(clean)
+    assert clean.get_dpi() == authored

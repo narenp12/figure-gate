@@ -1,11 +1,14 @@
-"""The style-sheet gate on the installed layout, and the way to redirect it.
+"""The gates that depend on the layout they are run from.
 
-Gate 16 exists to catch a forgotten `plt.style.use`. Through 0.1.3 the wheel
-shipped `skill/scripts` and nothing else, so on `uv add figure-gate` there was
-no `figure.mplstyle` anywhere near `check_figure.py`, `_style_sheet` returned
-None, and the row read "nothing to compare" -- a pass -- for exactly the figure
-the gate was written for. Nothing in the suite noticed, because every test here
-runs from the checkout, where `assets/` is one directory up.
+Three of them do: the style-sheet gate, which probes for `figure.mplstyle`, and
+the two colour gates, which reach `check_palette` through `_sibling`. They read
+their own surroundings, so they can only be tested by building a layout.
+
+The style-sheet gate exists to catch a forgotten `plt.style.use`. A test run
+from the checkout finds the sheet one directory up in `assets/` whatever the
+wheel ships. Through 0.1.3 the wheel shipped no sheet, `_style_sheet` returned
+None on an install, and the row passed with "nothing to compare" for exactly
+the figure the gate was written for, while the suite stayed green.
 
 So these tests do not read the source layout: they build the layout the wheel
 produces and run the checker inside it.
@@ -21,10 +24,9 @@ import pytest
 from conftest import SCRIPTS, STYLE_SHEET
 
 # Where the sheet lands, and what the wheel's force-include has to match for
-# the gate to fire on an install. This has moved twice: a bare
-# `figure.mplstyle` at the root of site-packages through 0.1.3, a namespacing
-# `figure_gate_data/` through 0.6.0, and now inside the package itself, where
-# the module that reads it lives and no other distribution can reach.
+# the gate to fire on an install: inside the package, where the module that
+# reads it lives and no other distribution can reach. It sat at the root of
+# site-packages through 0.1.3 and in `figure_gate_data/` through 0.6.0.
 PACKAGE = "figure_gate"
 INSTALLED_NAME = f"{PACKAGE}/figure.mplstyle"
 
@@ -71,7 +73,7 @@ def _installed(tmp_path, with_sheet=True):
     return tmp_path
 
 
-def _run(tmp_path, body):
+def _run(tmp_path, body, imports="from figure_gate import check_figure"):
     """Run `body` with the checkout off `sys.path`, so only `tmp_path` answers.
 
     The pruning loop is the point, and it is not defensive. An editable install
@@ -101,7 +103,7 @@ def _run(tmp_path, body):
         import matplotlib
         matplotlib.use("agg")
         import matplotlib.pyplot as plt
-        from figure_gate import check_figure
+        {imports}
     """) + textwrap.dedent(body), encoding="utf-8")
     result = subprocess.run([sys.executable, str(script)],
                             capture_output=True, text=True, cwd=tmp_path)
@@ -166,16 +168,22 @@ def test_the_shipped_sheet_matches_itself_once_applied(tmp_path):
     assert out.startswith("True |"), out
 
 
-def test_without_the_sheet_the_row_is_the_old_silent_pass(tmp_path):
-    """Pinned so the regression is legible: this is what shipped through
-    0.1.3, and it is a pass."""
+def test_without_the_sheet_the_row_warns(tmp_path):
+    """The case that shipped as a pass through 0.9.0.
+
+    A pass here is the gate reporting clean for the figure it was written to
+    catch: no sheet anywhere, so a forgotten `plt.style.use` is invisible. It
+    warns now, which is what a `STYLE_SHEET` pointing at a missing file has
+    done since 0.1.4. Advisory either way, so no build that passed now fails.
+    """
     out = _run(_installed(tmp_path, with_sheet=False), """
         fig, ax = plt.subplots()
         ax.plot([0, 1], [0, 1])
         status, detail = check_figure.check_style_sheet(fig)
         print(status, "|", detail)
     """)
-    assert out.startswith("True | no figure.mplstyle beside this script"), out
+    assert out.startswith(
+        "warn | did not run: no figure.mplstyle beside this script"), out
 
 
 def test_STYLE_SHEET_wins_over_both_probed_locations(tmp_path):
@@ -255,3 +263,57 @@ def test_the_wheel_ships_the_typing_marker():
     assert f"{PACKAGE}/py.typed" in _built_wheel_names(), (
         "the wheel has no py.typed, so every annotation in it resolves to Any "
         "in a caller's type checker")
+
+
+# --- the vendored copy that took one file -------------------------------------
+# `install.md` warns to copy check_palette.py even when only figures are being
+# checked, because the series-colour and colormap rows travel on that import.
+# Both rows warn when the import is missing. A pass with the reason in the
+# detail would let the copy that ignored the warning audit green with the only
+# colour checks in the file switched off.
+
+def _vendored_without_palette(tmp_path):
+    """One loose `check_figure.py`, which is what ignoring the warning gives."""
+    shutil.copy(SCRIPTS / "check_figure.py", tmp_path / "check_figure.py")
+    return tmp_path
+
+
+def _run_vendored(tmp_path, body):
+    """`_run`, but importing the loose module rather than the package."""
+    return _run(tmp_path, body, imports="import check_figure").strip()
+
+
+def test_series_colour_warns_when_check_palette_was_not_copied(tmp_path):
+    out = _run_vendored(_vendored_without_palette(tmp_path), """
+        fig, ax = plt.subplots()
+        ax.plot([0, 1], [0, 1], color="#0072b2", label="a")
+        ax.plot([0, 1], [1, 0], color="#d55e00", label="b")
+        status, detail = check_figure.check_series_color(fig)
+        print(status, "|", detail)
+    """)
+    assert out.startswith("warn |"), out
+    assert "check_palette.py is not importable" in out, out
+
+
+def test_colormap_warns_when_check_palette_was_not_copied(tmp_path):
+    out = _run_vendored(_vendored_without_palette(tmp_path), """
+        import numpy as np
+        fig, ax = plt.subplots()
+        ax.imshow(np.random.rand(4, 4), cmap="viridis")
+        status, detail = check_figure.check_colormap(fig)
+        print(status, "|", detail)
+    """)
+    assert out.startswith("warn |"), out
+    assert "no colormap was classified" in out, out
+
+
+def test_neither_warn_can_fail_a_build(tmp_path):
+    """The reason these are warns rather than hard failures: a copy that left
+    the palette module out on purpose still audits."""
+    out = _run_vendored(_vendored_without_palette(tmp_path), """
+        fig, ax = plt.subplots()
+        ax.plot([0, 1], [0, 1], color="#0072b2", label="a")
+        ok, rows = check_figure.audit(fig)
+        print(ok, "|", [n for n, s, d in rows if s is False])
+    """)
+    assert out.startswith("True |"), out

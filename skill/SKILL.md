@@ -1,10 +1,10 @@
 ---
 name: research-figures
 description: >
-  Produce publication-quality static figures for documents — papers, slides,
-  lecture decks, reports, theses, posters — using matplotlib, with mechanical
+  Produce publication-quality static figures for documents (papers, slides,
+  lecture decks, reports, theses, posters) using matplotlib, with mechanical
   gates for colorblind-safe color, composition, and type legibility at the size
-  the figure actually prints. Use this whenever the user is making a figure,
+  the figure prints. Use this whenever the user is making a figure,
   diagram, chart, or explanatory graphic that will be placed in a written or
   presented document, even if they only say "add a figure to the paper," "make
   a diagram for this slide," "plot the results for my thesis," or hand you a
@@ -12,7 +12,7 @@ description: >
   colorblind-safe or accessible palettes, Okabe-Ito, viridis, reliability or
   calibration diagrams, figure typography, why a figure looks amateurish or
   "AI-generated," or why text in a rendered figure came out too small to read.
-  Not for interactive web dashboards or HTML/React charts — that is a different
+  Not for interactive web dashboards or HTML/React charts, which are a different
   problem with different constraints.
 ---
 
@@ -22,16 +22,15 @@ Build figures that look authored rather than generated. The method has three
 parts: decide the figure's one job, build it on the bundled style sheet, then
 run two validators that catch the failures the eye reliably misses.
 
-Every rule here was written for a specific defect on a real figure, and
+The rules here were written for defects on real figures, and
 `references/style-guide.md` names the failure beside the rule. When you are
-about to deviate, read the relevant note first. Most deviations were already
-tried and reverted for a measured reason.
+about to deviate, read the relevant note first: it says whether the deviation
+was already tried and reverted, and why.
 
 ## What matplotlib already handles
 
-Do not hand-roll any of these. Reaching for a custom colormap or a manual
-rcParams dict is the most common way this work goes wrong, because the builtin
-was designed by people who measured it:
+Do not hand-roll any of these. A custom colormap or a manual rcParams dict
+replaces a builtin that was designed by people who measured it:
 
 | Need | Use | Not |
 |---|---|---|
@@ -42,8 +41,8 @@ was designed by people who measured it:
 | Defaults: type, ink, spines, grid | `assets/figure.mplstyle` | an rcParams dict in the plotting file |
 | Layout | `constrained_layout=True` | manual `subplots_adjust` |
 
-Three things remain genuinely project-specific: which figure to draw, how large
-the type must end up **on the page**, and whether the composition works.
+Three things remain project-specific: which figure to draw, how large the type
+must end up **on the page**, and whether the composition works.
 
 ## Setup
 
@@ -53,6 +52,7 @@ Copy the bundled files into the project, once:
 mkdir -p diagrams
 cp <skill>/assets/figure.mplstyle diagrams/
 cp <skill>/scripts/check_palette.py <skill>/scripts/check_figure.py diagrams/
+cp <skill>/scripts/suggest_fixes.py diagrams/    # optional: report(fig, suggest=True)
 ```
 
 Then set two things and nothing else:
@@ -60,18 +60,33 @@ Then set two things and nothing else:
 1. Set `font.serif` in `figure.mplstyle` to the surrounding document's body face.
 2. Set `CONTENT_WIDTH_PT` at the top of `check_figure.py` to the usable width,
    in points, of the page the figure lands in. Render one page, place a
-   full-width figure, and measure. Within about 5% is fine, because it only sets
-   the type floor.
+   full-width figure, and measure. Within about 5% is fine: the error moves the
+   measured type and stroke sizes by the same 5%.
+
+The second of those is one copy's setting. When more than one person authors the
+figures, or a build has to agree with them, write the thresholds in a
+`figure-gate.toml` at the project root instead, or in a `[tool.figure-gate]`
+table in `pyproject.toml`:
+
+```toml
+venue = "amsart"          # sets CONTENT_WIDTH_PT from VENUE_WIDTH_PT
+TYPE_FLOOR_PT = 9.0
+```
+
+Call `load_config` once where the project starts. Nothing reads the file on
+import, and a key that names no threshold raises rather than being skipped.
+`python check_figure.py --config` prints the file a build picks up, the values it
+sets, and every key it accepts.
 
 If the project already has brand colors, use them and re-run `check_palette.py`.
-The method survives the swap. The specific hex values do not.
+The method carries over; the hex values in this guide do not.
 
 ## Procedure
 
 **1. Write the read before drawing anything.** One sentence: *"This is a
 &lt;form&gt; for &lt;audience&gt;, whose job is &lt;the one takeaway&gt;."* It
-is what you check the finished figure against, and it prevents the most
-expensive failure: a well-made figure answering a question nobody asked.
+is what you check the finished figure against, and it catches a well-made
+figure answering a question nobody asked.
 
 **2. Ground it in the surrounding text.** Read the section the figure lands in
 and steal its vocabulary. If the text says "binding affinity," the figure says
@@ -86,7 +101,7 @@ average, the figure must show that average, not just the trajectories around it.
 A figure that illustrates an algorithm but omits its defining object is a
 diagram of something else.
 
-Compute real numbers. Fit the actual model and compute the actual curve. A
+Compute real numbers. Fit the model and compute the curve. A
 hand-drawn approximation of a statistical object will eventually be wrong in a
 way a reader notices, and this matters most in teaching material, because
 readers believe it.
@@ -138,13 +153,15 @@ because "this is a cycle" is not a hedge.
 Each one forbids a single enumerated failure, and none of them ever looks at the
 figure as a whole. A figure can pass all of them and still be a gray smudge.
 
-These are the composition rules no script can infer for you:
+These are the composition rules. The checker gates the first two and shared
+axis furniture at their limits, as Contrast stack, Mark ratio and Axis
+redundancy; the rest are yours to judge:
 
 - Keep one thing opaque, and use at most 3 alpha levels. Context layers get the
   transparency; the data does not. Everything semi-transparent reads as haze
   with no focal point.
 - Keep marks within about 4x of each other in area. Emphasis is a different
-  *shape* or a label, never 5x the area. Past that, a mark stops reading as data
+  *shape* or a label, never size. Past that, a mark stops reading as data
   and starts reading as an ornament stuck on top.
 - Give context surfaces structure, such as bands or hairline isolines, rather
   than a plain neutral hue. An unstructured gradient is a coffee stain, because
@@ -170,7 +187,7 @@ ha = "left" if above else "right"
 ```
 
 Anchor on the extreme of the data across the label's span, not on its value at
-one point, because sampled noise routinely spikes further than any sane offset.
+one point, because sampled noise spikes further than a label offset.
 
 Casing (`path_effects=[pe.withStroke(...)]`) rescues a 0.7pt gridline behind a
 label. It does not rescue a 1.6pt curve, where it only hides the collision by
@@ -214,10 +231,10 @@ choice between them is yours. Every remedy that ships a code snippet is executed
 by the test suite against a figure that fails its gate, and the gate has to pass
 afterwards.
 
-**Describe the figure for a reader who cannot see it.** Across 100,000 public
-notebooks, 99.81% of generated images shipped with no alt text, nearly all of
-them matplotlib. Say what the reader would have taken from looking, meaning the
-numbers and the direction, rather than what the figure is made of:
+**Describe the figure for a reader who cannot see it.** Almost no notebook
+figure carries alt text; `references/style-guide.md` cites the measurement. Say
+what the reader would have taken from looking, meaning the numbers and the
+direction, rather than what the figure is made of:
 
 ```python
 describe(fig, "Validation loss against epoch for three optimisers. All three "
@@ -242,14 +259,11 @@ contour dash, colormap kind, font embedding, and alt text, in that order.
 `check_palette.py` gates lightness band, chroma floor, colorblind separation,
 normal-vision separation, and contrast against the surface.
 
-The two used to be unable to speak. `check_palette.py` judged a list of hexes
-someone remembered to paste into a terminal, and `check_figure.py` never looked
-at color. So a figure on matplotlib's default `tab10` cycle passed the whole
-composition suite clean, while its orange and green sat at CAM02-UCS ΔE 2.4
-under protanopia against a floor of 10.5, and were one hue to that reader.
-**Series color** closes the gap by reading the hues the figure actually drew and
-putting those through the palette gates, inferring adjacent versus all-pairs
-from whether the marks are scatter.
+**Series color** runs the hues the figure drew through the palette gates,
+inferring adjacent versus all-pairs from whether the marks are scatter. Without
+it, a figure on matplotlib's default `tab10` cycle passes every composition row
+while its orange and green sit at CAM02-UCS ΔE 2.4 under protanopia, against a
+floor of 10.5.
 
 **WARN is not FAIL.** A sub-3:1 hue is legal *if* it carries a visible direct
 label, and a saturated panel is fine *if* it is a heatmap. Read the row and
@@ -267,9 +281,8 @@ stops being the width you authored, and the type gate derives its floor from
 that width. The gate then passes a figure whose shipped size it never measured.
 
 **8. Render the finished document and look at that too.** A figure that is
-perfect as a standalone PNG can be illegible on the page it ships on. This is
-the step that gets skipped, and the one that catches the most embarrassing
-defects.
+perfect as a standalone PNG can be illegible on the page it ships on, and no
+gate reads the compiled document.
 
 ## Color
 
@@ -292,8 +305,8 @@ There is one limit. Scatter and small multiples compare *every* series against
 every other, and the first six slots clear that. The worst pair is `#0072B2` vs
 `#CC79A7` at ΔE 12.8 under protanopia, against a target of 10.5. That limit used
 to read five, because the sixth measured 7.9 against a target of 8 in OKLab,
-whose distances have no calibrated threshold, and the two spaces do not even
-agree on which pair is worst. There is no seventh series hue either: a generated
+whose distances have no calibrated threshold, and the two spaces do not agree
+on which pair is worst. There is no seventh series hue either: a generated
 one is indistinguishable from an existing slot under simulated color blindness.
 
 `figure.mplstyle` sets `axes.prop_cycle` to the six series slots, so a figure
@@ -305,8 +318,7 @@ a **visible direct label**, and **a legend entry does not count as one.** The
 obligation exists because the mark is faint against the page, and a legend
 leaves the reader matching a small faint swatch to a small faint curve, which is
 the step a direct label removes. Put the text at the mark. Yellow at 1.32:1
-genuinely vanishes as a hairline, so use it as a fill with a dark edge, or not at
-all.
+vanishes as a hairline, so use it as a fill with a dark edge, or not at all.
 
 **Grayscale is a separate question, and Okabe-Ito does not solve it.** The
 canonical first two, orange and sky blue, separate by relative luminance 0.011
@@ -321,7 +333,7 @@ desaturation keeps.
 **Status colors come from the same palette:** `good #009E73`,
 `warning #E69F00`, `critical #D55E00`, always shipped with an icon or label. An
 independent status set lands in near-misses rather than matches, and a reader
-cannot tell whether two nearly-identical reds mean two things or one. Status is
+cannot tell whether two nearly identical reds mean two things or one. Status is
 a role, not a reservation: a hue can be a series color or a status color in a
 given figure, never both.
 
@@ -350,11 +362,11 @@ a separate class and not a small value. Draw it in an explicit neutral and key
 it *off* the bar, never as `cmap(0)`. The bar is the range that was measured,
 and putting a non-value at the bottom of it claims a quantity nobody measured.
 
-**Categorical or ordinal is the decision that matters,** and the intuitive
-answer is usually wrong. Categorical means independent identities. Ordinal means
+**Categorical or ordinal is the decision that matters.** Categorical means
+independent identities. Ordinal means
 ordered steps of one thing, which takes a lightness ramp. **A numbered cycle is
-ordinal.** Reaching for four unrelated hues because there are four boxes is the
-most common mistake in this whole skill.
+ordinal.** Four unrelated hues for four numbered boxes treats an order as a set
+of identities.
 
 **Text on a colored fill** clears the *text* threshold, not the mark threshold:
 4.5:1, or 3:1 at ≥14pt bold. Text otherwise wears ink tokens, never the series
@@ -362,9 +374,8 @@ color. A colored mark *beside* text carries the identity.
 
 ## Type legibility
 
-**Author each figure at the width it will actually be placed at.** Then the
-scale is 1.0, authored points are printed points, and there is no budget to
-compute. This is what journal templates have always done.
+**Author each figure at the width it will be placed at.** Then the scale is
+1.0, authored points are printed points, and there is no budget to compute.
 
 When you cannot, `check_figure.py` derives the scale per figure, from that
 figure's own width against `CONTENT_WIDTH_PT`, and fails any string landing
@@ -385,16 +396,15 @@ always know what you wrote in the document.
 
 **Skip the measuring when the venue is a known one.** `audit(fig,
 venue="neurips")` measures against that class file's `\textwidth`, and
-`python check_figure.py --venues` lists what it knows. Verify against
+`python check_figure.py --venues` lists what it knows, eighteen of them. A
+project that wrote its venue in a configuration file need not pass it per call.
+Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-7.5pt is stricter than every journal that publishes a number. Nature sets a 5pt
-minimum and a 7pt maximum, and PNAS requires nothing smaller than 6pt (2mm)
-after reduction. Those are the sizes at which a string is still *possible* to
-read. 7.5 is where it is
-comfortable, and it is cheap to hold, because the fix is nearly always cutting
-words.
+7.5pt is stricter than the Nature, PNAS and Science figure guides, which
+`references/style-guide.md` quotes. It is cheap to hold, because the fix is
+nearly always cutting words.
 
 **Strokes have a floor too, and it is 1pt on the page.** SIAM states it in its
 instructions for authors: lines thinner than one point break up or disappear in
@@ -404,11 +414,10 @@ through the same `page_scale`. Gridlines are held to a lower floor than data: a
 gridline that drops out costs the reader a reference, and a curve that drops out
 costs them the finding.
 
-**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3. IEEE PDF
-eXpress does not accept Type 3 and refuses the upload, while ACM and Elsevier
-check embedding in production, so there it surfaces after acceptance instead.
-`figure.mplstyle` sets it. Nothing else warns you, because the figure renders
-identically and the paper bounces at the latest possible moment.
+**Embed fonts as Type 42.** matplotlib defaults `pdf.fonttype` to 3, which
+some publishers refuse at upload; `references/style-guide.md` names them.
+`figure.mplstyle` sets it, and the Fonts row warns when it is not in effect. The
+figure renders identically either way, so nothing on screen shows it.
 
 **If text does not fit, cut the text.** "Acquisition function ranks the
 candidate molecules" becomes "Rank every candidate." The caption carries the
@@ -419,7 +428,9 @@ lecture-hall screen while looking fine on your monitor.
 
 ```python
 import pytest
-from check_figure import audit
+from check_figure import audit, load_config
+
+load_config()                    # the project's thresholds, where it wrote them
 
 @pytest.mark.parametrize("name", sorted(DIAGRAMS))
 def test_figure_is_composed(name):
@@ -429,13 +440,11 @@ def test_figure_is_composed(name):
 ```
 
 Include a test asserting the gate **fails** on a deliberately bad figure too.
-This one silently stopped working twice while it was being written.
+A gate that stops firing leaves every other test green.
 
 ## When a figure passes everything and still looks wrong
 
-That names a failure mode with no gate yet. Write the gate. Every check in
-`check_figure.py` exists because a figure passed all the checks that came before
-it and was still visibly broken.
+That names a failure mode with no gate yet. Write the gate.
 
 Put a rule in `figure.mplstyle` rather than in prose, because a rule you have to
 remember eventually gets forgotten, and prefer a check you can run over an

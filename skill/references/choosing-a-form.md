@@ -11,7 +11,7 @@ which is why it is prose.
 
 The lineage is statistical graphics rather than general information design:
 Cleveland and McGill's perceptual experiments, Tukey's exploratory work, and
-Wilkinson's grammar as it reached most people through `ggplot2`. Each rule below
+Wilkinson's grammar as `ggplot2` implements it. Each rule below
 names the perceptual or inferential result it rests on, so you can argue with it
 on those terms.
 
@@ -30,7 +30,7 @@ ranks and not seven:
 5. Volume, curvature
 6. Shading, color saturation
 
-Colour **hue** is not ranked there. Lists that append it are extending the paper
+Color **hue** is not ranked there. Lists that append it are extending the paper
 rather than quoting it. This guide gives hue no magnitude job at all. Hue
 carries identity, which is a different question from how accurately a magnitude
 can be read off it.
@@ -38,12 +38,12 @@ can be read off it.
 Almost every rule below is a corollary of one instruction: **move the reader's
 judgement up the list.** A dot plot beats a bar because position beats length.
 Small multiples beat grouped bars because identical non-aligned scales beat
-comparing lengths across a gap. A pie loses because angle and area are both near
-the bottom.
+comparing lengths across a gap. A pie loses because angle and area both rank
+below position.
 
-Color sits at the bottom. That is why it identifies series rather than carrying
-their magnitudes, and it is why `check_palette.py` exists at all: the weakest
-channel is the one that has to survive a reader who sees it differently.
+Color saturation sits at the bottom, and hue is off the list. Color identifies
+series, and `check_palette.py` exists because that channel has to survive a
+reader who sees it differently.
 
 ---
 
@@ -69,15 +69,16 @@ channel is the one that has to survive a reader who sees it differently.
 ## Distributions: show the points while you can
 
 **At n below about 30, draw every observation** as a strip or jittered dot plot.
-A box plot is a five-number summary, and Tukey designed it for batches too large
-to draw by hand. At n = 8 it hides the two things a reader needs: how many
+A box plot is a five-number summary (Tukey, in the references). At n = 8 it
+hides the two things a reader needs: how many
 observations there are, and whether they are bimodal. Two groups with identical
 quartiles and completely different shapes draw the same box. In teaching
 material this matters more, not less, because readers take the summary as the
 data.
 
-Above roughly 30 the summary starts earning its ink. Above a few hundred, a
-violin or a box beats a cloud of overlapping points.
+The 30 is a working threshold, not a published result: above it the summary
+starts earning its ink, and once points overlap, a violin or a box beats the
+cloud.
 
 **State n either way**, in the axis label or the caption. A distribution figure
 without n is not interpretable.
@@ -93,9 +94,8 @@ interval.
 
 **A bar encodes its value as length, so its baseline must be zero.** Cut the
 axis and every ratio on the chart is misstated. Bars at 101 and 108 drawn from a
-baseline of 100 look like a sevenfold difference. This is the one form error
-that reliably changes a reader's conclusion, and it is the one `check_figure.py`
-fails.
+baseline of 100 draw one bar eight times the length of the other, for values
+7% apart. It is one of the three form errors `check_figure.py` fails.
 
 **When the baseline is not meaningful, change the form.** A Cleveland dot plot
 encodes the value as position, which carries no zero obligation, so the axis can
@@ -133,11 +133,11 @@ comparison is the point, make the comparison the thing on the axis.
 
 Beyond about three series in three groups, a grouped bar chart asks the reader
 to compare lengths that are not adjacent and do not share a baseline position.
-That is task 3 crossed with task 2, done repeatedly.
+That is rank 3 crossed with rank 2, done repeatedly.
 
 Trellis display (Cleveland, 1993, and `facet_wrap` to everyone who met it
 through `ggplot2`) splits the same comparison into panels on identical scales,
-which is task 2 done once per panel.
+which is rank 2 done once per panel.
 
 Panels share their axis furniture: one tick column, one axis label.
 `check_figure.py` gates that separately as Axis redundancy.
@@ -163,7 +163,7 @@ any of these:
 - **Use a consistent marker grammar.** A circle is an observation, a triangle is
   a prediction, a cross is an extremum, and the mapping holds across every panel
   that shares that kind of mark.
-- **Check each panel's distinctive mark is actually present.** If three panels
+- **Check each panel's distinctive mark is present.** If three panels
   carry a credible band, the fourth carries one too, or the caption says why it
   cannot. A missing band beside three that have one reads as an oversight rather
   than as a statement about the model. Draw it, label the panel "not
@@ -217,10 +217,11 @@ At large n, marks stop being individually visible and the figure reports
 density rather than observations. Shrinking the marker does not fix it. It
 trades one unreadable picture for a fainter one.
 
-Use transparency within the three-alpha-level budget, a hexbin, or a 2-D density
-estimate, and say which one you used. If the individual points genuinely matter,
-the honest answer is that the sample is too large for a scatter and the figure
-needs to change question.
+Use a hexbin or a 2-D density estimate, and say which one you used.
+Transparency within the three-alpha-level budget makes density visible, but it
+does not clear the Overplotting row, which reads mark positions and sizes, not
+alpha. If the individual points matter, the sample is too large for a scatter,
+and the figure needs to change question.
 
 ## Encode only what exists
 
@@ -241,8 +242,7 @@ When the reader's job is to judge **rates of change**, the aspect ratio is a
 data choice rather than a layout choice. Cleveland's banking to 45 degrees, which
 chooses the height-to-width ratio so the typical line segment sits near 45
 degrees, is where slope discrimination is most accurate. A cycle that is obvious
-in one aspect ratio disappears in another, and the wrong one is usually the one
-the default produced.
+in one aspect ratio disappears in another.
 
 **The failure is a resolution failure.** Take a saw wave whose decay limbs
 alternate between two rates, one exactly twice the other. At 2.4 x 5.2 inches the
@@ -281,9 +281,9 @@ banked.
 
 ## The forms with no research-figure use
 
-- **Pie and donut.** Angle and area are the two weakest quantitative tasks, for
-  a job a sorted dot plot does better. Two categories do not need a figure.
-- **3D bars, and 3D surfaces for 2D data.** Perspective makes identical values
+- **Pie and donut.** Angle and area rank third and fourth of the six, for a job
+  a sorted dot plot does at rank one. Two categories do not need a figure.
+- **3D bars and surfaces.** Perspective makes identical values
   plot at different sizes, and near marks occlude far ones. A third variable
   belongs in a facet, a color scale, or a contour.
 - **Radar and spider.** Area scales as the square of the values, the shape
@@ -298,16 +298,18 @@ banked.
 
 - Cleveland, W. S. & McGill, R. (1984). Graphical perception: theory,
   experimentation, and application to the development of graphical methods.
-  *JASA* 79(387), 531-554. The perceptual ordering above.
+  *JASA* 79(387), 531-554. doi:10.1080/01621459.1984.10478080. The perceptual
+  ordering above.
 - Cleveland, W. S., McGill, M. E. & McGill, R. (1988). The shape parameter of a
-  two-variable graph. *JASA* 83(402), 289-300. The median-absolute-slope
-  criterion and the experiments behind banking to 45°.
+  two-variable graph. *JASA* 83(402), 289-300.
+  doi:10.1080/01621459.1988.10478598. The median-absolute-slope criterion and
+  the experiments behind banking to 45°.
 - Cleveland, W. S. (1993). *Visualizing Data.* Dot plots, Trellis display,
   banking.
 - Heer, J. & Agrawala, M. (2006). Multi-scale banking to 45 degrees. *IEEE
-  Transactions on Visualization and Computer Graphics* 12(4), 701-708. The
-  "slopeless lines" culling the gate applies, and the survey of banking
-  criteria.
+  Transactions on Visualization and Computer Graphics* 12(5), 701-708.
+  doi:10.1109/TVCG.2006.163. The "slopeless lines" culling the gate applies,
+  and the survey of banking criteria.
 - Tukey, J. W. (1977). *Exploratory Data Analysis.* The box plot, and what it
   was for.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* The decomposition `ggplot2`

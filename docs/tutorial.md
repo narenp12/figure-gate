@@ -1,4 +1,5 @@
 ---
+title: "Gate your first figure"
 description: "Build a figure that fails the checks, read the report, and fix it until every row passes at the size it prints."
 ---
 
@@ -37,6 +38,12 @@ check_palette.py
 figure.mplstyle
 suggest_fixes.py
 ```
+
+!!! note "If you installed the package instead"
+
+    `pip install figure-gate` ships the same four files, and every step below
+    works against them. Only the import line differs, and
+    [Choose your import line](install.md#choose-your-import-line) gives it.
 
 ## Step 2: Build a figure and audit it
 
@@ -117,7 +124,7 @@ Look at the row that failed:
                    [FIX] cut words, do not shrink type
 ```
 
-Every detail string is built the same way. It names the measurement, the two
+Every detail string is built the same way. It names the measurement, the
 strings that produced it, and after `[FIX]`, the action to take. You set both
 axis labels to 6pt, and the floor is 7.5pt.
 
@@ -179,8 +186,8 @@ from check_figure import describe, report
 
 ```python
 describe(fig, "Validation loss against training epoch for a baseline and a "
-              "tuned run over 12 epochs. Both fall; the tuned run reaches 0.02 "
-              "by epoch 12, while the baseline is still at 0.25.")
+              "tuned run over 12 epochs. Both fall; the tuned run reaches 0.03 "
+              "by epoch 12, while the baseline is still at 0.66.")
 
 report(fig, "loss")
 ```
@@ -211,7 +218,7 @@ report(fig, "loss", venue="neurips", placed_frac=0.48)
 Two rows that passed a moment ago now fail:
 
 ```text
-  [FAIL] Type size    under 7.5pt on page at scale 0.44164444444444445: [(4.2, 'baseline'), (4.2, 'tuned'), (4.4, '0.0'), (4.4, '0.2')]
+  [FAIL] Type size    under 7.5pt on page at scale 0.44: [(4.2, 'baseline'), (4.2, 'tuned'), (4.4, '0.0'), (4.4, '0.2')]
                       [FIX] cut words, do not shrink type
   [FAIL] Line weight  under 1.0pt on page at scale 0.44: ['baseline at 0.71pt', 'tuned at 0.71pt']
                       [FIX] set linewidth to at least 2.26 at this scale
@@ -246,7 +253,7 @@ Composition audit: loss
   -> COMPOSED
 ```
 
-The figure passes at the size it will actually print.
+The figure passes at the size it will print.
 
 ## What you did
 

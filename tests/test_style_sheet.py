@@ -143,20 +143,21 @@ def test_the_series_cycle_is_the_palette_the_guide_prescribes():
     """Until this key existed the sheet set every visual default except the one
     that decides whether a colorblind reader can separate two curves, so a
     figure built on it inherited matplotlib's `tab10` -- whose orange and green
-    measure dE 1.4 under protanopia."""
+    measure dE 2.4 under protanopia."""
     cycle = [c.upper() for c in parsed()["axes.prop_cycle"].by_key()["color"]]
     assert cycle == OKABE_SERIES, cycle
 
 
 def test_the_cycle_clears_the_palette_gates_it_is_measured_by():
     """The sheet cannot prescribe a palette that its own validator rejects.
-    Adjacent for lines and bars; the first four for scatter and small
-    multiples, which compare every series against every other."""
+    Adjacent for lines and bars, and all-pairs over the whole cycle for
+    scatter and small multiples, which compare every series against every
+    other."""
     import check_palette as cp
     cycle = parsed()["axes.prop_cycle"].by_key()["color"]
     ok, rows = cp.check(cycle)
     assert ok, rows
-    ok, rows = cp.check(cycle[:4], all_pairs=True)
+    ok, rows = cp.check(cycle, all_pairs=True)
     assert ok, rows
 
 

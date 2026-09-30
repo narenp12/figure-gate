@@ -1,4 +1,5 @@
 ---
+title: "How the checkers decide"
 description: "The measurement model behind the checks, the evidence for the thresholds, and what a passing run does not mean."
 ---
 
@@ -46,10 +47,11 @@ flowchart TD
     verdict -- "flagged" --> fail["the row names the defect"]
 ```
 
-The two checkers stay separate files because their contracts differ.
+The two checkers stay separate files because their inputs and import rules
+differ.
 `check_palette.py` takes hex strings and imports nothing outside the standard
-library, so a non-Python toolchain can gate a palette without a Python
-interpreter on PATH. `check_figure.py` renders a matplotlib figure, which is a
+library, so a non-Python toolchain can gate a palette with a bare Python
+interpreter and nothing installed. `check_figure.py` renders a matplotlib figure, which is a
 Python object by definition. The figure checker imports the palette checker,
 never the other way around.
 
@@ -87,7 +89,9 @@ curve it belongs to.
 
 ## What a passing run does not mean
 
-**A row can be reporting the checker rather than the figure.** Every gate runs
+### A row can report the checker rather than the figure
+
+Every gate runs
 inside its own exception handler. A gate that raises keeps its row and puts the
 exception in the detail, marked as a defect in the checker rather than in the
 figure. It takes its own severity: an advisory that crashed warns, a hard gate
@@ -98,14 +102,19 @@ No gate is known to raise. Twenty adversarial figures, including 3D, polar,
 all-NaN, infinite, and zero-sized ones, found none. The handler is there anyway,
 because these gates read matplotlib internals that are free to move.
 
-**Two blind spots remain, because a passing row looks the same as an absent
-one.** The colormap gate reads a `Colormap`'s name to tell an encoding from a
-hand-set list of colors, so a map matplotlib left unnamed is skipped rather than
-judged. It also needs `check_palette.py` importable beside it; without that, the
-row reports that it classified nothing, and passes. Both are deliberate.
+### A passing row looks the same as an absent one
 
-**The rules do not transfer to interactive web charts**, where hover, responsive
-reflow, and dark mode change most of the constraints.
+The colormap gate reads a `Colormap`'s name to tell an encoding from a
+hand-set list of colors. A map matplotlib left unnamed is skipped, and the row
+passes without judging it. `contour(colors=[...])` builds such a map from three
+levels of one hue; classified as qualitative, it would fail the all-pairs
+separation floor it was never meant to meet.
+
+### The rules do not transfer to interactive web charts
+
+Hover, responsive reflow, and dark mode change the constraints: type has no
+fixed printed size to hold a floor against, and the ground color is the
+reader's to switch.
 
 ## What the evidence is
 
@@ -123,7 +132,7 @@ of them. Four of those styles are published by their authors as accessible under
 colour vision deficiency. The colour gate rejects none of those four, and
 rejects 21 of the 24 that make no such claim.
 
-The same sweep names what does *not* discriminate, which is the more useful half.
+The same sweep names what does *not* discriminate.
 `check_style_sheet` and `check_fonts` fire on 28 styles out of 28. The first asks
 whether this project's sheet is in effect, and the second asks for Type 42
 embedding; on anyone else's sheet both answers are known in advance. Both rows
@@ -131,32 +140,25 @@ are advisory, and neither is evidence of anything about a figure.
 
 ## What the API promises
 
-The public API is every name without a leading underscore in `check_figure.py`,
-`check_palette.py`, and `suggest_fixes.py`. That is broader than the handful you
-would guess, and it is deliberately the same set the release gate compares, so
-the statement and the enforcement cannot drift apart.
-
-Below 1.0, a minor release may break it. No change reaches `main` whose
-`## Unreleased` section fails to name what moved: CI runs
+[The version policy](compatibility.md#version-policy) defines the public API as
+every name without a leading underscore. That is the same set
 [`audit_api.py`](https://github.com/narenp12/figure-gate/blob/main/skill/scripts/audit_api.py)
-against the last tag on every pull request, and a symbol that changed without
-being written down fails the build.
+compares against the last tag on every pull request, so the statement and the
+enforcement cannot drift apart.
 
 What is not enforced is the sentence rather than the symbol. The gate checks
 that a changed name appears in `## Unreleased` next to a word admitting a
 change. It cannot check that the sentence describes the change accurately.
-
-For the version table, see [Compatibility](compatibility.md).
 
 ## Design decisions
 
 ???+ note "Use what matplotlib ships"
 
     viridis for sequential, `RdBu` for diverging, `okabe_ito` for categorical,
-    style sheets for defaults, `constrained_layout` for layout. Earlier versions
-    hand-rolled all four and each was worse: `RdBu`'s poles clear every gate in
-    `check_palette.py` unmodified, and a windowed custom ramp discarded 35% of
-    viridis for no measured gain.
+    style sheets for defaults, `constrained_layout` for layout. Where earlier
+    versions hand-rolled these, the two measured cases came out worse: `RdBu`'s
+    poles clear every gate in `check_palette.py` unmodified, and a windowed
+    custom ramp discarded 35% of viridis for no measured gain.
 
 ???+ note "Pixels are measured at one resolution, `MEASURE_DPI = 150`"
 
@@ -172,20 +174,18 @@ For the version table, see [Compatibility](compatibility.md).
     was authored at, and hands the figure back on the dpi it arrived on.
 
     The cost of not doing this was measured before the constant existed. Across
-    100, 150, 200, 300, and 600 dpi, the eleven gallery figures moved 34 rows
-    and flipped one. The same figure, five verdicts, from a knob that has
-    nothing to do with whether it reads. `savefig.dpi` is unaffected, so what
+    100, 150, 200, 300, and 600 dpi, the twenty gallery figures moved 76 rows
+    and flipped one. `savefig.dpi` is unaffected, so what
     you write out is still yours to choose.
 
 ???+ note "WARN is not FAIL"
 
-    Eight of the 21 rows are advisory: they can return `"warn"` but never
-    `False`. A sub-3:1 hue is legal when it carries a direct label, and a
-    heatmap panel legitimately measures 0.98 ink coverage. Failing those would
-    train people to ignore the row.
+    A sub-3:1 hue is legal when it carries a direct label, and a heatmap panel
+    legitimately measures 0.98 ink coverage. Failing those would train people
+    to ignore the row, so [the advisory rows](gates.md#advisory-rows) can
+    return `"warn"` but never `False`.
 
-    Type size is the one row that does both. It fails under the floor, and warns
-    on a figure placed under 35% of the content width.
+    A row that could not run measured nothing, so it warns rather than passes.
 
 ???+ note "A detail string carries two marks, and they mean different things"
 
@@ -201,7 +201,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 1998 tests, and each check has one asserting it catches a
+    The suite is 2293 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -209,8 +209,8 @@ For the version table, see [Compatibility](compatibility.md).
 
 ## History: the backend used to change the answer
 
-You do not have to set the backend for the numbers to come out right. The
-checker normalises for this itself. It did not always.
+You do not have to set the backend for the numbers to come out right: since
+0.1.2 the checker normalises for it.
 
 A HiDPI GUI backend, macosx on a Retina display or Qt on a scaled desktop, sets
 `fig.dpi` to the authored dpi times the display's device pixel ratio at the
@@ -223,18 +223,14 @@ calibrated for. The same figure passed under Agg and failed under macosx.
 
 Since 0.1.2 the checker measures on Agg regardless of what the figure was built
 under, so the verdict is a property of the figure rather than of the display.
-0.8.0 finished the job: the display's pixel ratio was only ever the loud case of
-a pixel threshold read against a resolution nobody had pinned, so the canvas is
-now drawn at `MEASURE_DPI = 150`. Setting `figure.dpi` yourself no longer moves a
-verdict either.
+The display's pixel ratio was one case of a pixel threshold read against a
+resolution nobody had pinned. Since 0.8.0 the canvas is drawn at
+`MEASURE_DPI = 150`, so setting `figure.dpi` yourself no longer moves a verdict
+either.
 
-The bug never reached CI. Every test and every example pins Agg, so nothing in
-the suite could construct the failing condition, and it stayed green across a
-release.
-
-One consequence is unchanged and still worth knowing: an audited figure is no
-longer attached to its GUI canvas and will not show in a window. Audit last, or
-audit a figure you rebuild for the purpose.
+CI could not have caught the bug. Every test and every example pins Agg, so
+nothing in the suite could construct the failing condition, and it stayed green
+across a release.
 
 ## Further reading
 

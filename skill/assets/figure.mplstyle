@@ -3,14 +3,13 @@
 #     import matplotlib.pyplot as plt
 #     plt.style.use("figure.mplstyle")
 #
-# Every rule here used to be a line of prose telling you to remember it. A style
-# sheet is matplotlib's own mechanism for this, so the guide states the intent
-# once and this file enforces it.
+# A style sheet is matplotlib's own mechanism for defaults, so the guide states
+# each rule's intent once and this file enforces it.
 #
 # TRAP: `#` starts a comment in this format, so colors are written BARE -
 # `grid.color: e1e0d9`, never `#e1e0d9`. With the hash, matplotlib logs "does
-# not look like a color arg" and silently keeps its defaults. Nothing gates
-# color on the figure side, so every other check still passes.
+# not look like a color arg" and silently keeps its defaults. The Style sheet
+# row warns on the dropped key; every other check still passes.
 #
 # TRAP: do not save with `bbox_inches="tight"`. It trims to the drawn content,
 # so the saved width is no longer the width you authored - and `page_scale()`
@@ -47,11 +46,9 @@ ytick.labelsize:    10
 legend.fontsize:    9.5
 
 # --- series color -----------------------------------------------------------
-# Okabe-Ito, canonical order, six slots. Until this line existed the sheet set
-# every other visual default and left the one that decides whether a colorblind
-# reader can separate two curves on matplotlib's `tab10` - whose orange and
-# green measure dE 1.4 under protanopia. A figure on that cycle passed the whole
-# composition suite clean, because nothing on the figure side looked at color.
+# Okabe-Ito, canonical order, six slots. Without this line a figure falls back
+# to matplotlib's `tab10`, whose orange and green measure dE 1.4 under
+# protanopia.
 #
 # Two slots are held out. Yellow #F0E442 is 1.32:1 on white and vanishes as a
 # hairline (use it as a fill with a dark edge). Black is the ink token, and
@@ -73,11 +70,9 @@ text.color:         000000
 axes.labelcolor:    52514e
 axes.edgecolor:     c3c2b7
 # Tick labels are text and take the WCAG *text* threshold, 4.5:1, not the 3:1
-# a mark gets - a glyph stem is thinner than a mark. The muted ink token
-# 898781 measures 3.59:1 on white and shipped here until the readability check
-# was written and failed the sheet's own ticks on every figure in the repo.
-# 777570 is 4.6:1 and still sits below the 7.94:1 axis label, so the hierarchy
-# axis label > tick label > grid survives the correction.
+# a mark gets - a glyph stem is thinner than a mark. The muted ink token 898781
+# measures 3.59:1 on white and fails that. 777570 is 4.6:1 and still sits below
+# the 7.94:1 axis label, so the hierarchy axis label > tick label > grid holds.
 xtick.color:        777570
 ytick.color:        777570
 
@@ -92,10 +87,8 @@ legend.frameon:     False
 axes.axisbelow:     True
 
 # --- marks ------------------------------------------------------------------
-# Hairlines, not dashboard strokes. These were prose in the guide and passed by
-# hand at every call site (`lw=1.6` in the usage example), which is the same
-# failure mode the rest of this file exists to fix: a rule you have to remember
-# is a rule that eventually gets forgotten.
+# Hairlines, not dashboard strokes, set here rather than passed at every call
+# site.
 lines.linewidth:        1.6
 lines.markersize:       5
 lines.markeredgewidth:  0.0

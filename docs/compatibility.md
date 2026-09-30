@@ -1,4 +1,5 @@
 ---
+title: "Compatibility"
 description: "Python and matplotlib floors, optional dependencies, import lines by version, and what the version policy promises."
 ---
 
@@ -22,6 +23,14 @@ that needs 3.11. The `requires-python` floor for the distribution is 3.11.
 CI runs the palette checker on Python 3.8, 3.9, 3.11, and 3.13 with no
 `pip install` at all. The test job runs against the current matplotlib and pins
 one row to matplotlib 3.8.4, so a break in either direction shows up.
+
+The floor moves when the code needs it to, not on a schedule. The scientific
+Python ecosystem's SPEC 0 recommends dropping a Python release about three years
+after it ships, and by that calendar 3.11 was due to go in April 2026. It has not
+gone, because nothing here uses a 3.12 feature: raising the floor would remove
+users and change no line of the checkers. What sets the floor is `tomllib`,
+which arrived in 3.11: `load_config` reads a configuration file with it, and the
+build reads `pyproject.toml` with it.
 
 ### Optional dependencies
 
@@ -51,11 +60,7 @@ Version 0.7.0 moved the modules into the `figure_gate` package. Through 0.6.0
 the wheel put them at the top level of site-packages, which is why an older
 install uses the same line as a vendored copy.
 
-To check which version you have:
-
-```bash
-uv pip show figure-gate      # or: conda list figure-gate
-```
+To check which version you have, see [Install](install.md).
 
 ## Version policy
 
@@ -66,13 +71,13 @@ Below 1.0, a minor release may break that API. Version 0.7.0 broke the install
 path's import line. Every break is named in
 [the changelog](changelog.md) under its release heading.
 
-Two things about the contract:
+A row's shape is part of that API. `audit` returns `(ok, rows)`, each row a
+`(name, status, detail)` triple whose `status` is `True`, `False`, or `"warn"`,
+and `check` returns the same shape. A change to that shape is a break, named in
+the changelog like any other.
 
-- The number of rows is not part of it. Gates get added: `check_banking`
-  arrived after 0.6.0 and moved the count.
-- The shape is part of it. `audit` returns `(ok, rows)`, each row a
-  `(name, status, detail)` triple whose `status` is `True`, `False`, or
-  `"warn"`. `check` returns the same shape.
+The number of rows is not part of it. Gates get added: `check_banking` arrived
+after 0.6.0 and moved the count.
 
 On every pull request, CI compares the public API against the last tag and
 fails a build whose changelog does not name what moved.
@@ -83,8 +88,9 @@ fails a build whose changelog does not name what moved.
 The checks in `check_figure.py` are matplotlib-specific, because they read a
 matplotlib `Figure`. The rules they enforce are not.
 [The figure style guide](style-guide.md) writes up each rule independently of
-any library, so you can apply them by hand or port the checks. Each one reads
-geometry that any plotting library can report.
+any library, so you can apply them by hand or port the checks. The composition
+checks read geometry that any plotting library can report. Style sheet and Fonts
+read matplotlib's rcParams, and a port needs its own equivalent.
 
 `check_palette.py` has no such limit. It takes hex strings, so any toolchain can
 call it.

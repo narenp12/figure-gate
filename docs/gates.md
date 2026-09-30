@@ -1,4 +1,5 @@
 ---
+title: "The gates"
 description: "Every row the two checkers return, the threshold it measures against, and whether it can fail a build."
 ---
 
@@ -19,7 +20,8 @@ threshold sits where it does, see
 
 `check_figure.py` renders the figure through an Agg canvas at
 `MEASURE_DPI = 150`, measures the result, and hands the figure back on the dpi
-it arrived on. `audit()` returns these 21 rows in this order.
+it arrived on. Drawing on Agg rebinds `fig.canvas`, so an audited figure no
+longer shows in a GUI window. `audit()` returns these 21 rows in this order.
 
 Where a row below says *panel*, it means every axes on the figure, an
 `ax.inset_axes` or a `secondary_xaxis` included. Those are added through
@@ -32,7 +34,7 @@ string counts the top-level panels first and the child axes after them.
 |---|---|---|
 | Clipping | canvas bounds | a text artist's bbox extends past the canvas |
 | Text collision | oriented box overlap | two text boxes overlap, rotation included, tick labels on a shared axis exempted |
-| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it actually got, or data ink crosses its glyphs. Furniture, and the ground the label sits on, do not count as ink; a rule lying under the text still counts against contrast |
+| Text readability | `TEXT_CONTRAST_MIN = 4.5` | text misses WCAG AA against the backdrop it got, or data ink crosses its glyphs. Furniture, and the ground the label sits on, do not count as ink; a rule lying under the text still counts against contrast |
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour count as a single level. A single flat alpha is not judged for a focal point |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
@@ -41,12 +43,12 @@ string counts the top-level panels first and the child axes after them.
 | Line weight | `LINE_FLOOR_PT = 1.0`, `FURNITURE_FLOOR_PT = 0.5` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Spines and gridlines are furniture and are held to the lower floor. Tick marks are matplotlib's defaults rather than the sheet's and are not measured |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
-| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues actually drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
+| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
 | Dual axis | none | a `twinx` second scale carries data of its own |
 | Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
 | Label attribution | `LABEL_MARGIN = 2.0` | a label's nearest rival series, line or scatter or filled region, is closer than 2x its distance to the one it names |
-| Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle` *(advisory)* |
+| Style sheet | 40 keys | the rcParams in effect differ from `figure.mplstyle`, or no sheet was found to compare against *(advisory)* |
 | Contour dash | none | a signed contour set dashes its negative levels *(advisory)* |
 | Colormap kind | `CMAP_BACKTRAVEL_MAX = 0.02` | a colormap classifies `misc`: its lightness reverses, or its span is flat, or its halves are monotone and its ends match neither cyclic nor diverging. Also when a qualitative map's levels fail all-pairs separation, and when a panel's series colours are `RAMP_MIN_STEPS = 3` or more evenly spaced samples of such a map, sampled in code rather than handed to an artist |
 | Fonts | Type 42 | PDF or PS export would embed Type 3, or no named typeface resolves *(advisory)* |
@@ -69,8 +71,10 @@ list:
 - Fonts
 - Alt text
 
-Type size is the one row that does both. It fails under the floor, and warns on
-a figure placed under `PLACED_FRAC_WARN = 0.35` of the content width.
+Three rows do both. Type size fails under the floor and warns on a figure placed
+under `PLACED_FRAC_WARN = 0.35` of the content width. Series color and Colormap
+kind fail on what they measure and warn when `check_palette.py` is not importable
+beside `check_figure.py`.
 
 ### Detail strings
 
@@ -94,6 +98,13 @@ under 1.0pt on page at scale 0.50: ['a stroke at 0.40pt']
 Every gate except `check_collisions` names a fix. That gate names the two
 colliding strings and stops, because which of the pair is free to move is a fact
 about the layout it cannot see.
+
+Three details open with `did not run:` instead: the style-sheet row with no sheet
+to compare against, and the two colour rows with no `check_palette.py` to
+classify with.
+
+That prefix is `DID_NOT_RUN`. A row carrying it gets no remedy from `suggest`,
+because a remedy answers the question a gate asks when it runs.
 
 ## Palette gates
 
@@ -136,8 +147,9 @@ ramp:
 ## What each row tells you to do
 
 Eleven rows carry a remedy in `suggest_fixes.py`, and eight of those come with a
-runnable snippet. The other ten name their fix in the detail string and stop,
-mostly because the answer is to draw something else.
+runnable snippet. Nine of the other ten name their fix in the detail string and
+stop, mostly because the answer is to draw something else. Text collision names
+the two strings and no fix.
 
 | Row | First move | `suggest()` |
 |---|---|---|
@@ -168,7 +180,10 @@ mostly because the answer is to draw something else.
 Every threshold is a module-level constant. To change one, see
 [Change a threshold](how-to.md#change-a-threshold).
 
-Thresholds cite a published floor where one exists: SIAM's one point, WCAG's
-4.5:1, and the Nature, Science, and PNAS type minima. The rest were measured.
+Thresholds cite a published floor where one exists: SIAM's one point for data
+strokes, Science's half point for furniture, WCAG's 4.5:1, and the Nature and
+PNAS type minima. The rest were measured or set by judgement.
+`ALT_TEXT_MIN_CHARS = 60` is judgement: the length below which a description
+names the figure rather than describing it.
 [The figure style guide](style-guide.md) records the measurement and the figure
 that motivated each one.

@@ -50,7 +50,7 @@ extra_javascript = [
 # Grouped by what the reader came to do, after Diataxis: a tutorial teaches, a
 # how-to guide serves a goal the reader already has, reference states what is
 # true, and explanation gives the background. The four are kept apart on
-# purpose. The page that used to be "Getting started" was all four at once.
+# purpose.
 nav = [
   { "Home" = "index.md" },
   { "Tutorial" = "tutorial.md" },
@@ -117,6 +117,14 @@ features = [
   "toc.follow",
 ]
 
+# The header's `lucide/fence` as the tab icon, in place of the theme's stock
+# PNG. `lucide/fence.svg` with its stroke set to `#0072b2`, screenshotted at
+# 64px by Playwright's Chromium: ImageMagick's own SVG renderer draws this
+# stroke-only icon as a blank square. A PNG, as the theme's default is, because
+# the template's `<link rel="icon">` carries no `type` for a browser to fall
+# back on.
+favicon = "images/favicon.png"
+
 # `primary`/`accent` of "custom" is the documented hand-off: the theme stops
 # emitting color values of its own and `stylesheets/palette.css` becomes
 # authoritative. Left unset, the theme's default hue would be competing with
@@ -145,14 +153,15 @@ toggle.name = "Light"
 [project.theme.icon]
 logo = "lucide/fence"
 
+# The modern variant draws `note` as `lucide/paperclip`, and nine call-outs on
+# the site are `note`. Classic draws it as `material/pencil-circle`;
+# `pencil-line` is the Lucide equivalent, in the stroke style of the rest.
+[project.theme.icon.admonition]
+note = "lucide/pencil-line"
+
 # Only what the pages actually use, and this list is checked: the extension
 # audit in `test_docs_site.py` greps every page the site serves for each
-# extension's own syntax and fails on one nothing uses. Seven were carried in
-# on the first build and removed once the audit was written -- `footnotes`,
-# `pymdownx.caret`, `keys`, `mark`, `tilde`, `inlinehilite` and `emoji`. The
-# emoji one had a comment claiming the home page's tiles were `:lucide-rocket:`
-# shortcodes; they became inline SVG when the grid moved to raw HTML, and the
-# comment outlived the syntax.
+# extension's own syntax and fails on one nothing uses.
 #
 # What is left, and where: the style guide is `tables` and `attr_list` colour
 # swatches, the gallery is `md_in_html` figures, gates is an `md_in_html` div
@@ -168,9 +177,9 @@ logo = "lucide/fence"
 permalink = true
 # The contents sidebar stops at h3. Only the changelog goes deeper: each release
 # there is an h2 carrying a "What changed" and a "Why it changed" h3, and the
-# topical headings inside the second one are h4. Listing those put 28 entries
-# three levels deep in the sidebar of a 2400-line page, which is a worse index
-# than none. Every other document in the project has no h4 at all, and the API
+# topical headings inside the second one are h4. Listing those puts every
+# topical heading three levels deep in the sidebar of the longest page, which
+# is a worse index than none. Every other document in the project has no h4 at all, and the API
 # page's symbol headings are h3 -- checked in the built HTML, not assumed, since
 # mkdocstrings chooses that level rather than the source doing it -- so nothing
 # else loses an entry to this.
@@ -207,8 +216,8 @@ auto_append = ["includes/abbreviations.md"]
 # MkDocs configuration, and the comment at the top of this file is about what
 # Zensical silently ignores from one. The extension is what it actually runs.
 [project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python]
-# The scripts are three loose files meant to be vendored, not a package, so
-# there is no import path to walk -- the handler is pointed at the directory.
+# The package is named `figure_gate` only in the wheel. In the repository the
+# modules sit in `skill/scripts`, so the handler is pointed at that directory.
 paths = ["skill/scripts"]
 
 [project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python.options]
@@ -225,8 +234,8 @@ docstring_style = "google"
 docstring_section_style = "table"
 show_symbol_type_heading = true
 show_symbol_type_toc = true
-# `brief` over `full`: these are loose files, so a fully qualified annotation
-# path names a module the reader would import as a single file anyway.
+# `brief` over `full`: vendored, each file is imported on its own, so the
+# module prefix a full annotation path adds names nothing the reader imports.
 annotations_path = "brief"
 # On, and this is what makes the page a reference rather than an essay. Each
 # `:::` here names one function, so the root heading is that function's name

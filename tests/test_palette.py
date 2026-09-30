@@ -2,8 +2,8 @@
 
 Two jobs here. The obvious one is that good palettes pass and bad ones fail. The
 less obvious one is that the *numbers quoted in the documentation* stay true:
-the guide makes specific claims (adjacent CVD dE 16.6, orange and sky blue
-differing by dL 0.011) and a reader who cannot trust those has no reason to
+the guide makes specific claims (adjacent CVD dE 32.0, orange and sky blue
+differing in relative luminance by 0.011) and a reader who cannot trust those has no reason to
 trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """
@@ -34,7 +34,9 @@ def test_series_pairs_pass_adjacent():
 
 def test_first_four_pass_all_pairs():
     """Scatter and small multiples compare every series against every other.
-    The guide says only the first four slots clear that, so it had better."""
+    The guide says the first six slots clear that;
+    `test_the_whole_cycle_now_clears_all_pairs` in test_figure.py holds all
+    six, and this holds the first four on their own."""
     ok, rows = cp.check(SERIES[:4], all_pairs=True)
     assert ok, rows
 
@@ -206,6 +208,126 @@ def test_cli_exit_codes(tmp_path):
                          capture_output=True)
     assert good.returncode == 0
     assert bad.returncode == 1
+
+
+def test_cli_json_exits_the_same_way_the_table_does(tmp_path):
+    """`--json` changes what is printed, not what is decided.
+
+    The flag exists so a build can read the rows. A build that already branches
+    on `$?` must keep working, and a flag that quietly made a failing palette
+    exit 0 would turn every such build green at once.
+    """
+    import json
+    import subprocess
+    import sys
+    script = str(__import__("pathlib").Path(cp.__file__))
+    for colors, expected in ((",".join(SERIES[:2]), 0), ("#808080,#0072B2", 1)):
+        run = subprocess.run([sys.executable, script, colors, "--json"],
+                             capture_output=True, text=True)
+        assert run.returncode == expected, colors
+        document = json.loads(run.stdout)
+        assert document["ok"] is (expected == 0)
+
+
+def test_cli_json_prints_the_document_and_nothing_else():
+    """stdout is the document, parseable without stripping a table off it.
+
+    `json.loads` on the whole of stdout is the assertion: a stray heading, a
+    trailing verdict line, or the table printed alongside would all raise here.
+    The table is for a person and this is for a machine, and a stream carrying
+    both is neither.
+    """
+    import json
+    import subprocess
+    import sys
+    script = str(__import__("pathlib").Path(cp.__file__))
+    run = subprocess.run([sys.executable, script, ",".join(SERIES), "--json"],
+                         capture_output=True, text=True)
+    document = json.loads(run.stdout)
+    assert "PASS" not in run.stdout and "->" not in run.stdout
+    assert document["tool"] == "check_palette"
+
+
+# --- the JSON document ------------------------------------------------------
+
+def test_check_json_reports_the_verdict_check_reported():
+    """The serialiser serialises. It does not re-gate.
+
+    Every row `check` returned, in order, with the same verdict. A document that
+    disagreed with the tuple API would make the two routes two answers, which is
+    the defect `check` and `audit` were made to return the same shape to avoid.
+    """
+    import json
+    ok, rows = cp.check(SERIES, all_pairs=True)
+    document = json.loads(cp.check_json(SERIES, all_pairs=True))
+    assert document["ok"] is ok
+    assert [row["name"] for row in document["rows"]] == [n for n, _, _ in rows]
+    assert [row["detail"] for row in document["rows"]] == [d for _, _, d in rows]
+
+
+def test_check_json_spells_the_three_statuses_out():
+    """`pass`, `fail` and `warn`, never `True` or `False`.
+
+    A JSON consumer should not have to know that one field holds a bool for two
+    of the three cases and a string for the third. The mapping is asserted
+    against a palette chosen to produce all three at once: gray fails the chroma
+    floor, and the Okabe-Ito oranges warn on contrast against white.
+    """
+    import json
+    colors = ["#808080", "#E69F00", "#56B4E9"]
+    ok, rows = cp.check(colors)
+    document = json.loads(cp.check_json(colors))
+    assert {row["status"] for row in document["rows"]} == {"pass", "fail", "warn"}
+    for row, (_, status, _) in zip(document["rows"], rows):
+        assert row["status"] == {True: "pass", False: "fail", "warn": "warn"}[status]
+
+
+def test_check_json_records_the_inputs_that_produced_the_verdict():
+    """A verdict without its surface and its mode cannot be read back.
+
+    The same hexes pass on white and fail on a tinted page, and are gated by
+    different rows as a ramp than as a categorical set. An artifact that stored
+    only `ok` would be a number nobody can reproduce, which is the whole reason
+    the inputs are in the document rather than in the caller's memory.
+    """
+    import json
+    document = json.loads(cp.check_json(
+        SERIES, surface="#eeeeee", all_pairs=True, ordinal=False,
+        ink=["#52514e", "#000000"]))
+    assert document["inputs"] == {
+        "colors": list(SERIES),
+        "surface": "#eeeeee",
+        "pairs": "all",
+        "ordinal": False,
+        # Sorted, so two runs that passed the same set in two orders produce the
+        # same bytes.
+        "ink": ["#000000", "#52514e"],
+    }
+
+
+def test_check_json_is_stable_across_ink_ordering():
+    """Two callers passing the same ink in two orders get identical bytes.
+
+    `ink` is a set in the signature, so the order it arrived in is not
+    information. Left unsorted it would land in the document anyway, and two
+    identical runs would produce two files that diff.
+    """
+    first = cp.check_json(SERIES, ink=["#000000", "#52514e"])
+    second = cp.check_json(SERIES, ink=["#52514e", "#000000"])
+    assert first == second
+
+
+def test_the_two_checkers_agree_on_the_schema():
+    """`AUDIT_SCHEMA` is written out in both modules, and must be one string.
+
+    Not imported from one into the other: `check_palette.py` is vendored on its
+    own and imports nothing outside the standard library, so the constant is
+    duplicated on purpose. A duplicated constant is one that can drift, and a
+    consumer pinning the schema would then accept one checker's document and
+    reject the other's.
+    """
+    cf = pytest.importorskip("check_figure")
+    assert cp.AUDIT_SCHEMA == cf.AUDIT_SCHEMA
 
 
 # --- colormap kind -----------------------------------------------------------
@@ -411,8 +533,14 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
     # 3.8 floor holds, and the second is where `Sequence` comes from. Both are
     # standard library, which is what this test is about. A name that is not
     # belongs nowhere on this list.
+    #
+    # `json` is what `check_json` and `--json` serialise with, and the reason
+    # the flag fits here: a wire format needing a third-party serialiser would
+    # cost this file the claim it exists to keep. The walk is over
+    # every `Import` node, so the function-local `import json` is on this list
+    # rather than hidden by being deferred.
     assert imported <= {"__future__", "argparse", "collections", "itertools",
-                        "math"}, imported
+                        "json", "math"}, imported
 
 
 # --- anomalous trichromacy ---------------------------------------------------
@@ -475,14 +603,12 @@ def test_the_severity_matrices_belong_on_linear_light():
             wrong = cp.simulate_anomalous(gamma, kind, 1.0)
             on_srgb += cp.delta_e(reference,
                                   tuple(to_linear(c) for c in wrong))
-        # 1.2 rather than the 1.3 this held before 0.8.0. The finding is
-        # unchanged - linear light reproduces Vienot dichromacy better, and it
-        # is the domain the table wants - but the margin is smaller when the
-        # difference is measured in CAM02-UCS instead of OKLab: mean 4.34 dE on
-        # linear light against 5.46 (protan) and 6.73 (deutan) on gamma-encoded
-        # sRGB, so ratios of 1.26 and 1.55 where OKLab reported 1.37 and 2.04.
-        # A metric change that moved this number is expected; one that flipped
-        # its sign would not be, and that is what the assertion is for.
+        # Linear light reproduces Vienot dichromacy better, and it is the
+        # domain the table wants. In CAM02-UCS the mean is 4.34 dE on linear
+        # light against 5.46 (protan) and 6.73 (deutan) on gamma-encoded sRGB:
+        # ratios of 1.26 and 1.55, so 1.2 is the margin. A metric change may
+        # move the ratio; one that flipped its sign is what this assertion is
+        # for.
         assert on_linear < on_srgb / 1.2, (
             f"{kind}: linear light {on_linear:.1f}, sRGB {on_srgb:.1f} - the "
             "two domains stopped being distinguishable, so this test no longer "
@@ -492,7 +618,7 @@ def test_the_severity_matrices_belong_on_linear_light():
 def test_dichromacy_is_not_the_worst_case():
     """The named failure. Two hues this file would accept as series slots that
     clear `CVD_TARGET` under both dichromacy models and miss it at severity
-    0.8, where far more readers actually sit.
+    0.9, where far more readers actually sit.
 
     Measured over 244650 such pairs in CAM02-UCS, 1.27% of them do this, and
     dichromacy overstates separation by up to 12.7 dE. Both numbers grew when
@@ -685,3 +811,85 @@ def test_no_size_weighting_leaked_into_the_validator():
     the shape of a thing that gets wired back in without the measurement."""
     assert not hasattr(cp, "size_factor")
     assert not hasattr(cp, "ND_SIZE_C")
+
+
+# --- the public surface no gate happens to call -----------------------------
+# `oklab_distance` and `cmap_back_travel` are in `__all__`, are rendered on
+# `docs/api.md`, and are held against the last tag by `audit_api.py`. No gate
+# calls either: the separation gates measure in CAM02-UCS and `check_colormap`
+# reads the float-sRGB `cmap_back_travel_rgb`. The API gate protects a
+# signature. It does not run a line, and a documented function nothing runs is a
+# claim.
+
+def test_oklab_distance_is_the_oklab_metric_it_documents():
+    """Zero on a colour against itself, symmetric, and x100 the euclidean
+    distance in the space `linear_to_oklab` returns."""
+    blue = cp.hex_to_linear("#0072b2")
+    orange = cp.hex_to_linear("#d55e00")
+    assert cp.oklab_distance(blue, blue) == 0.0
+    assert cp.oklab_distance(blue, orange) == cp.oklab_distance(orange, blue)
+    a, b = cp.linear_to_oklab(blue), cp.linear_to_oklab(orange)
+    expected = 100 * math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+    assert cp.oklab_distance(blue, orange) == pytest.approx(expected)
+
+
+def test_oklab_distance_is_not_delta_e():
+    """The two are different metrics on the same pair, which is why the
+    migration to CAM02-UCS was a migration and not a rename."""
+    blue, orange = cp.hex_to_linear("#0072b2"), cp.hex_to_linear("#d55e00")
+    assert cp.oklab_distance(blue, orange) != pytest.approx(
+        cp.delta_e(blue, orange), abs=0.5)
+
+
+@pytest.mark.parametrize("name", ("viridis", "Greys"))
+def test_cmap_back_travel_agrees_with_the_float_srgb_route(name):
+    """`cmap_back_travel_rgb` is the covered one. The hex route is the same
+    measurement through an 8-bit round trip, so it has to land within it."""
+    import matplotlib.pyplot as plt
+
+    cmap = plt.get_cmap(name)
+    rgb = [cmap(i / (cp.CMAP_SAMPLES - 1))[:3] for i in range(cp.CMAP_SAMPLES)]
+    hexes = ["#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in channel))
+             for channel in rgb]
+    assert cp.cmap_back_travel(hexes) == pytest.approx(
+        cp.cmap_back_travel_rgb(rgb), abs=0.01)
+
+
+def test_cmap_back_travel_reads_zero_on_a_monotone_ramp():
+    """0.0 is the documented reading for a ramp that never runs backwards."""
+    grey = [f"#{v:02x}{v:02x}{v:02x}" for v in range(0, 256, 8)]
+    assert cp.cmap_back_travel(grey) == 0.0
+
+
+def test_cmap_back_travel_sees_a_ramp_that_turns_around():
+    """The other side of the same line: out and back reads as travel."""
+    out = list(range(0, 256, 8))
+    there_and_back = [f"#{v:02x}{v:02x}{v:02x}" for v in out + out[::-1]]
+    assert cp.cmap_back_travel(there_and_back) > cp.CMAP_BACKTRAVEL_MAX
+
+
+@pytest.mark.parametrize("bad", ("#fff", "0072b2ff", "", "#0072b"))
+def test_hex_to_linear_refuses_anything_that_is_not_six_digits(bad):
+    """The only raise in the module's entry point, and it was unexercised. A
+    three-digit hex is the shorthand a reader is likeliest to try."""
+    with pytest.raises(ValueError, match="expected 6-digit hex"):
+        cp.hex_to_linear(bad)
+
+
+def test_cmap_back_travel_has_no_travel_to_report_on_one_sample():
+    """`_back_travel`'s emptiness guard, reached through the public name. One
+    colour has no steps between colours."""
+    assert cp.cmap_back_travel(["#0072b2"]) == 0.0
+
+
+def test_cmap_back_travel_has_no_span_to_divide_by_on_a_flat_ramp():
+    """The other guard. Travel is reported as a fraction of the span, and a
+    ramp of one lightness has none."""
+    assert cp.cmap_back_travel(["#777570"] * 8) == 0.0
+
+
+def test_cmap_kind_rgb_calls_a_flat_ramp_misc():
+    """`misc` is the verdict the guide's colour rules exist to produce, and the
+    float-sRGB route reached it nowhere in the suite."""
+    flat = [(0.47, 0.46, 0.44)] * cp.CMAP_QUALITATIVE_N
+    assert cp.cmap_kind_rgb(flat) == "misc"

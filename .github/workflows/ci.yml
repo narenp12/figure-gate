@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 # A second push to a pull request makes the first push's answer worthless: this
-# matrix is eight jobs across three operating systems, and the older run spends
-# all of it on a commit nobody is waiting on. Cancel it.
+# workflow's jobs span three operating systems, and the older run spends all of
+# them on a commit nobody is waiting on. Cancel it.
 #
 # Pushes are keyed on `github.run_id`, which is unique, so they never share a
 # group and a run on main is never cancelled or queued by anything. That is
@@ -31,9 +31,9 @@ jobs:
   stdlib-only:
     name: check_palette on Python ${{ matrix.python }} (no dependencies)
     runs-on: ubuntu-latest
-    # 5 here and on `lint`, `api`, `package` and `skill`, down from 10 and 15.
-    # Measured across three successful runs on main, the slowest of those five
-    # took 22 seconds and the fastest 7. A single floor rather than a bound
+    # 5 here and on `lint`, `api`, `package` and `skill`. Measured across three
+    # successful runs on main, the slowest of those five took 22 seconds and the
+    # fastest 7. A single floor rather than a bound
     # fitted to each one: the point of the number is to catch a hang, and five
     # minutes is already more than an order of magnitude of headroom over jobs
     # that do a checkout and run one script. `test` and `pgf` keep their own
@@ -74,7 +74,7 @@ jobs:
       - run: uv sync --group dev
 
       # The 3.8 floor on check_palette.py is enforced here through
-      # `per-file-target-version`, not only by the stdlib-only job below. That
+      # `per-file-target-version`, not only by the stdlib-only job above. That
       # job proves the two invocations it makes still run; this reads the whole
       # file against the 3.8 grammar.
       - run: uv run ruff check --output-format github .
@@ -107,12 +107,9 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       # The gate itself lives in skill/scripts/audit_api.py, which `make
-      # audit-api` also runs and tests/test_audit_api.py covers. This job used
-      # to carry its own copy of the same logic, and the two drifted: the copy
-      # here accepted six changelog verbs where the script accepts twelve, so a
-      # release note saying a symbol "gained" a row passed locally and failed
-      # here. One gate, one implementation, and the implementation is the one
-      # with tests.
+      # audit-api` also runs and tests/test_audit_api.py covers. One
+      # implementation, so this job and `make audit-api` cannot disagree about
+      # what the changelog has to say.
       - name: Compare every module against the last release
         run: uv run --only-group api python skill/scripts/audit_api.py
 
@@ -121,8 +118,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The suite runs in a couple of minutes. The bound stays because a hung job
     # is not a failure, it is a runner held to GitHub's six-hour cap with the
-    # run yellow the whole time. It is 10 rather than 20 now that the TeX
-    # install is not in front of the tests.
+    # run yellow the whole time. The TeX install runs in `pgf`, not in front of
+    # these tests.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -132,11 +129,10 @@ jobs:
       # Two legs rather than a third dimension, because what the other platforms
       # are here to check is not version-specific. `check_fonts` asks whether the
       # family a figure names is one the machine can actually resolve, and font
-      # availability is the most OS-dependent thing this project touches -- every
-      # run until now was on a Linux image with one font situation. The rest is
-      # path handling: `_style_sheet` joins paths and `alt_metadata` switches on
-      # a filename suffix, and neither had ever been asked a question on a
-      # case-insensitive filesystem or behind a backslash separator.
+      # availability is the most OS-dependent thing this project touches. The
+      # rest is path handling: `_style_sheet` joins paths and `alt_metadata`
+      # switches on a filename suffix, which a case-insensitive filesystem or a
+      # backslash separator can change.
       matrix:
         os: [ubuntu-latest]
         python: ["3.11", "3.13"]
@@ -159,14 +155,12 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
-          # uv.lock now that it is committed. It used to say pyproject.toml,
-          # because the lock was gitignored and the glob matched nothing -- and
-          # pyproject only moves when a constraint is edited, so a transitive
-          # release changed what got installed without changing the key. The
-          # cache is only re-saved when the primary key misses ("if the provided
-          # `key` doesn't match an existing cache, a new cache is automatically
-          # created"), so a key that never moves is a cache that never refreshes.
-          # The lock moves exactly when the resolution does.
+          # uv.lock, because it moves exactly when the resolution does.
+          # pyproject.toml moves only when a constraint is edited, and the cache
+          # is only re-saved when the primary key misses ("if the provided `key`
+          # doesn't match an existing cache, a new cache is automatically
+          # created"), so a key that never moves is a cache that never
+          # refreshes.
           cache-dependency-glob: "uv.lock"
       - name: Install
         # Stated, because the default on the Windows leg is pwsh and the `if`
@@ -180,12 +174,11 @@ jobs:
           else
             uv pip install --system "matplotlib==${{ matrix.matplotlib }}"
           fi
-      # The classifier's thresholds were justified by a differential against
-      # cmasher across 148 colormaps, and until now that differential never ran
-      # anywhere but a developer machine: this job installs pytest, xdist and
-      # matplotlib and nothing else, so `test_palette_oracle.py` skipped on
-      # every CI run since it was written. An oracle that only runs where
-      # someone remembers to install it is not a check.
+      # The classifier's thresholds rest on a differential against cmasher
+      # across 148 colormaps. This job installs pytest, xdist and matplotlib and
+      # nothing else, so without this step `test_palette_oracle.py` skips. An
+      # oracle that only runs where someone remembers to install it is not a
+      # check.
       #
       # One job, not three. The differential is over matplotlib's registry
       # rather than over anything version-specific, so running it on every leg
@@ -193,6 +186,11 @@ jobs:
       - name: Install the differential oracle (this job only)
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
         run: uv pip install --system cmasher
+      # `test_version_sites.py`'s six CITATION.cff tests skip without PyYAML,
+      # and read one file, so one leg is enough.
+      - name: Install PyYAML for the CITATION.cff tests (this job only)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13' && matrix.matplotlib == 'latest'
+        run: uv pip install --system pyyaml
       # The one test that needs a real TeX runs in the `pgf` job below rather
       # than here. It skips itself on every leg of this matrix, which is what
       # that job exists to assert.
@@ -201,17 +199,9 @@ jobs:
       # The arm64 `macos-latest` image carries about half the memory of the
       # x86 one it replaced, and `auto` gives every core a worker that builds
       # gallery figures of its own while `test_example.py` runs the whole
-      # corpus in a subprocess beside them, so the cap is worth keeping.
-      #
-      # It was not, however, what was killing this leg. That was a 226GB
-      # allocation: `check_figure._contact_fraction` enumerated every pair of
-      # marks when scipy was absent, which is exactly the install this job
-      # makes, and `gallery.orbit` draws 168000 of them. Linux refuses the
-      # mapping and macOS accepts it and then kills the process, which is why
-      # one leg of an eight-job matrix was red and no local run reproduced it.
-      # The fallback walks a grid now. Two workers stays as headroom over a
-      # figure that no longer needs it; the figures here are closed where they
-      # are built.
+      # corpus in a subprocess beside them, so the cap is worth keeping as
+      # headroom. `_contact_fraction`'s scipy-free fallback walks a grid, so
+      # `gallery.orbit`'s 168000 marks do not need it.
       - run: pytest -n auto -q
         if: matrix.os != 'macos-latest'
       - run: pytest -n 2 -q
@@ -226,12 +216,10 @@ jobs:
       - name: The example builds and passes its own gates
         run: python examples/demo.py
 
-  # Its own job rather than a step on `test`, for the reason `lint` above gives:
-  # this says nothing about whether the gates work, so it should not wait behind
-  # a TeX install to say it. `test` carried the install for a while and paid for
-  # it twice. A stalled apt mirror delayed the whole suite's answer rather than
-  # one narrow assertion, and the several hundred megabytes of texlive-xetex sat
-  # in front of a run that finishes in about two minutes.
+  # Its own job rather than a step on `test`: a stalled apt mirror here delays
+  # one narrow assertion rather than the whole suite, and several hundred
+  # megabytes of texlive-xetex do not sit in front of a run that finishes in
+  # about two minutes.
   #
   # What it checks: `test_pgf_rejects_the_metadata_kwarg_at_any_value` asserts
   # that matplotlib's PGF backend still refuses `metadata=`. That is a fact
@@ -243,7 +231,7 @@ jobs:
   # this test is about: the assertion is that matplotlib raises, not that a
   # particular TeX distribution renders.
   #
-  # Every part of the install is there for a reason the hang taught: `timeout`
+  # Every part of the install has a reason: `timeout`
   # because a stalled mirror is not an error and apt will wait on it forever,
   # the loop because the next mirror usually works, and no `-qq` on the install
   # because a silent step gives a reader nothing to look at when it does stall
@@ -251,18 +239,13 @@ jobs:
   pgf:
     name: The PGF backend still refuses metadata=
     runs-on: ubuntu-latest
-    # Derived from the loop below rather than guessed at, which is what it used
-    # to be. The two disagreed: three attempts of `timeout 300` plus
-    # `timeout 600`, with sleeps, budgeted 46 minutes against a 20 minute bound,
-    # so a genuinely unlucky run was killed partway through its third attempt
-    # and reported "The operation was canceled" -- the loop's own
-    # `::error::could not install texlive-xetex` never ran, and the one line
-    # that says what went wrong was the line the bound removed.
-    #
-    # The loop is now budgeted at 3 x (60 + 240) seconds plus sleeps of 15 and
-    # 30, so 945 seconds worst case. Eighteen minutes covers that with room for
-    # the rest of the job and is still under the 20 it replaces. Healthy runs
-    # measure 73, 76 and 82 seconds for the whole install step.
+    # Derived from the loop below. A bound shorter than the loop cancels it
+    # before its `::error::` line runs, and the log says "The operation was
+    # canceled" rather than what failed. The loop is budgeted at 3 x (60 + 240)
+    # seconds plus sleeps of 15 and 30, so 945 seconds worst case; eighteen
+    # minutes covers that with room for the rest of the job, and
+    # `tests/test_workflow_timeouts.py` checks the fit. Healthy runs measure
+    # 73, 76 and 82 seconds for the whole install step.
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -275,11 +258,9 @@ jobs:
           cache-dependency-glob: "uv.lock"
       - name: Install
         run: uv pip install --system pytest matplotlib
-      # 60 and 240, down from 300 and 600. Both were round numbers rather than
-      # measured ones, and together they budgeted more than twice what the job
-      # was allowed to take. Healthy runs put `apt-get update` in the seconds
-      # and the whole step at 73 to 82, so these are roughly six and three
-      # times what each half really costs.
+      # 60 and 240. Healthy runs put `apt-get update` in the seconds and the
+      # whole step at 73 to 82, so these are roughly six and three times what
+      # each half really costs.
       #
       # Tight is the safe direction here, which is the argument for cutting
       # them rather than raising the bound: a per-attempt timeout that fires
@@ -287,8 +268,7 @@ jobs:
       # job bound that fires early costs the whole run and says nothing about
       # why.
       #
-      # The last attempt no longer sleeps. It used to wait 45 seconds after the
-      # third failure purely to arrive at the same `exit 1`.
+      # The last attempt does not sleep: nothing follows it but `exit 1`.
       - name: Install TeX
         run: |
           # The runner ships third-party apt sources this job never fetches
@@ -319,9 +299,8 @@ jobs:
           exit 1
 
       # The test skips itself when xelatex is missing, and a skip is invisible
-      # in a green run: that is exactly how test_palette_oracle.py sat dead for
-      # months. This job is the only place the row can run, so assert that it
-      # ran rather than trusting the install step above.
+      # in a green run. This job is the only place the row can run, so assert
+      # that it ran rather than trusting the install step above.
       - name: The PGF test ran here rather than skipping
         run: |
           pytest tests/test_figure.py::test_pgf_rejects_the_metadata_kwarg_at_any_value \
@@ -329,11 +308,10 @@ jobs:
           grep -q "1 passed" "$RUNNER_TEMP/pgf.log"
 
   # The tests reconstruct the installed layout by copying files. That catches a
-  # dropped force-include in pyproject.toml, but it cannot catch the build
-  # producing something else, and the gap it was written for lived exactly
-  # there: the wheel shipped `skill/scripts` and no style sheet, so gate 16 read
-  # "nothing to compare" -- a pass -- for a figure drawn on stock matplotlib.
-  # So: build the real wheel, install it, and run the gate that used to be dead.
+  # dropped force-include in pyproject.toml, but not a build that produces
+  # something else, such as a wheel with no style sheet, where the style-sheet
+  # row has nothing to compare against. So: build the real wheel, install it,
+  # and run that row.
   package:
     name: The wheel gates a figure the way the checkout does
     runs-on: ubuntu-latest
@@ -365,9 +343,8 @@ jobs:
           # Any in a caller's type checker.
           if "figure_gate/py.typed" not in names:
               sys.exit(f"{wheel} has no py.typed")
-          # Nothing outside the package. Through 0.6.0 this wheel put
-          # check_figure, check_palette and suggest_fixes at the top level of
-          # site-packages -- generic names on a namespace shared with every
+          # Nothing outside the package: check_figure, check_palette and
+          # suggest_fixes are generic names on a namespace shared with every
           # other distribution, and permanent once callers import them.
           stray = [n for n in names
                    if not n.startswith(("figure_gate/", "figure_gate-"))]
@@ -394,7 +371,8 @@ jobs:
           status, detail = check_figure.check_style_sheet(fig)
           print("stock matplotlib ->", status, "|", detail)
           if status != "warn":
-              sys.exit("gate 16 passed a figure drawn on stock matplotlib")
+              sys.exit("the style-sheet row passed a figure drawn on stock "
+                       "matplotlib")
 
           plt.style.use(str(sheet))
           status, detail = check_figure.check_style_sheet(fig)

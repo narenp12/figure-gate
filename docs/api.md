@@ -1,4 +1,5 @@
 ---
+title: "API"
 description: "Signatures and docstrings for the three modules, read out of the scripts when this page builds."
 ---
 
@@ -7,25 +8,9 @@ description: "Signatures and docstrings for the three modules, read out of the s
 Signatures and docstrings are read out of `skill/scripts/` when this page
 builds, so what is shown is what the code has.
 
-Installed, the three modules are a package:
-
-```python
-from figure_gate import check_figure as cf     # needs matplotlib
-from figure_gate import check_palette as cp    # standard library only
-from figure_gate import suggest_fixes as sf
-```
-
-Vendoring, the default route, copies the files into your own project. They are
-then whatever you named them, imported flat:
-
-```python
-import check_figure as cf
-import check_palette as cp
-import suggest_fixes as sf
-```
-
-Same modules, same signatures; only the import line differs. Everything below
-applies to both.
+Installed and vendored copies have the same signatures. Only the import line
+differs, and [Choose your import line](install.md#choose-your-import-line)
+gives it.
 
 Not on this page: **the thresholds**. They are module-level constants, one
 table per module on [the gates](gates.md), with the measurement behind each on
@@ -36,6 +21,12 @@ Everything else is here, including the 21 gate functions, at the bottom.
 canvas and scale arguments they take. Call one directly and that is yours to
 reproduce, which [the how-to](how-to.md#read-one-row-or-call-one-gate) covers.
 
+Three ways to take the same verdict out: `audit` returns the rows, `report`
+prints them for a person, and `audit_json` serialises them for a build.
+`check_palette.check` and `check_palette.check_json` are the same pair on the
+colour side, and both JSON documents carry the same `schema` string, so a CI step
+collecting figure and palette verdicts reads `ok` and `rows` out of either.
+
 ## check_figure
 
 Composition. Takes a built figure, measures what it renders at print size.
@@ -44,6 +35,8 @@ Composition. Takes a built figure, measures what it renders at print size.
 
 ::: check_figure.report
 
+::: check_figure.audit_json
+
 ::: check_figure.describe
 
 ::: check_figure.alt_metadata
@@ -51,6 +44,12 @@ Composition. Takes a built figure, measures what it renders at print size.
 ::: check_figure.page_scale
 
 ::: check_figure.content_width_pt
+
+::: check_figure.load_config
+
+::: check_figure.find_config
+
+::: check_figure.config_keys
 
 ::: check_figure.scatter_diameter_pt
 
@@ -68,6 +67,8 @@ Colour. Standard library only, so these are also the functions to port when
 the checks are reimplemented elsewhere.
 
 ::: check_palette.check
+
+::: check_palette.check_json
 
 ::: check_palette.cmap_kind
 

@@ -2,20 +2,20 @@
 
 Half of `check_figure`'s thresholds are pixel counts: `TEXT_EDGE_WINDOW`,
 `TEXT_FOOTPRINT_MIN_PX`, `INK_DELTA_MIN`, and the fractions built on top of them.
-A pixel count is a measurement only when the resolution is fixed, and until
-`MEASURE_DPI` existed it was not: the gates drew at `fig.dpi`, which is whatever
-the author set, whatever sheet is in effect, or the authored value times the
-device pixel ratio of a display that happened to be attached.
+A pixel count is a measurement only when the resolution is fixed, so the gates
+draw at `MEASURE_DPI` rather than at `fig.dpi`, which is whatever the author
+set, whatever sheet is in effect, or the authored value times the device pixel
+ratio of a display that happened to be attached.
 
 `test_figure.py` already held one instance of this: a Retina canvas must not
 move a verdict. That test was written as a HiDPI test. It was really a
-resolution test, and this file is the general form of it: the same eleven
-figures the composition gates are calibrated against, audited across a range of
-authored dpi wider than anyone would use, with every row required to come back
-identical down to the message.
+resolution test, and this file is the general form of it: every figure the
+composition gates are calibrated against, audited across a range of authored dpi
+wider than anyone would use, with every row required to come back identical down
+to the message.
 
 The sweep is not hypothetical. Before `MEASURE_DPI`, across 100/150/200/300/600:
-thirty-four rows moved and one flipped. `orbit`'s ink fraction ran 0.13 at 100
+seventy-six rows moved and one flipped. `orbit`'s ink fraction ran 0.13 at 100
 dpi to 0.04 at 300 and out the bottom of the band at 600, because a mark's
 antialiased fringe is a fixed number of pixels wide and therefore a shrinking
 share of a mark that grows with the resolution. `test_the_sweep_can_fail` puts
@@ -31,6 +31,7 @@ whole suite, this sweep included, a measurement taken at both ends of the
 declared support rather than at whichever version the author has installed.
 """
 
+import ast
 import contextlib
 import importlib
 import io
@@ -51,12 +52,27 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 # values somebody expected is not a constant.
 DPIS = (72, 100, 150, 300, 600)
 
-# The eleven the composition gates are calibrated against, by name. Read off the
-# module rather than listed twice, so a twelfth figure joins this sweep by being
-# added to the gallery.
-BUILDER_NAMES = ("small_multiples", "field", "schematic", "forms",
-                 "convergence", "orbit", "encoding", "uncertainty", "counts",
-                 "residual", "density")
+# The corpus the composition gates are calibrated against, by name, read off
+# `gallery.py` so a figure added there is swept here. A hardcoded list of eleven
+# stood here while the gallery reached twenty, and the nine it missed included
+# the rotated-label and leader-line cases three gates misfired on.
+#
+# Parsed rather than imported, because parametrize needs the names at collection
+# and importing the gallery there would build nothing but would still pull
+# matplotlib into every collection of this file. The `gallery` fixture is where
+# the import belongs: it has to switch the writer off first.
+def _builder_names():
+    source = ast.parse((EXAMPLES / "gallery.py").read_text(encoding="utf-8"))
+    for node in source.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if [t.id for t in node.targets if isinstance(t, ast.Name)] != ["BUILDERS"]:
+            continue
+        return tuple(e.id for e in node.value.elts)
+    raise AssertionError("examples/gallery.py defines no BUILDERS tuple")
+
+
+BUILDER_NAMES = _builder_names()
 
 
 @pytest.fixture(scope="module")
@@ -112,8 +128,8 @@ def test_no_row_moves_with_the_authored_dpi(gallery, name):
 
     Statuses alone would be too weak. The status is a thresholded number and
     most of this corpus sits nowhere near a threshold, so a gate could drift by
-    a factor of three and still report PASS on all eleven, which is roughly
-    what was happening. The detail strings carry the measurements, so comparing
+    a factor of three and still report PASS on every one of them, which is
+    roughly what was happening. The detail strings carry the measurements, so comparing
     them is comparing the numbers.
     """
     baseline = rows_at(gallery, name, cf.MEASURE_DPI)

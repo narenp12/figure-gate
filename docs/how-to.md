@@ -1,4 +1,5 @@
 ---
+title: "How-to guides"
 description: "Task recipes: fix a failing row, gate a test suite, place a figure at a venue's width, attach alt text, move a threshold."
 ---
 
@@ -110,7 +111,7 @@ for name, status, detail in rows:
 ## Gate a palette from a toolchain that is not Python
 
 `check_palette.py` imports nothing outside the standard library and exits 1 on a
-failing row. That exit code is the contract for a non-Python build:
+failing row. A non-Python build can gate on that exit code:
 
 ```bash
 python check_palette.py "#E69F00,#56B4E9,#009E73" --pairs all
@@ -142,7 +143,7 @@ know how far the figure is scaled on the way there. Three arguments carry that:
 ```python
 audit(fig, venue="neurips")                       # full content width
 audit(fig, venue="neurips", placed_frac=0.48)     # \includegraphics[width=0.48\textwidth]
-audit(fig, scale=0.74)                            # points per authored inch, set outright
+audit(fig, scale=0.74)                            # placed over authored size, set outright
 ```
 
 To see what a placement does to the scale, call `page_scale` on a 4-inch-wide
@@ -156,14 +157,13 @@ figure with 10pt labels:
 ```
 
 At full width the labels arrive at 13.8pt and pass. At `placed_frac=0.48` they
-arrive at 6.6pt, under the 7.5pt floor, and the row fails. Same figure, same
-call, different page.
+arrive at 6.6pt, under the 7.5pt floor, and the row fails.
 
 `float()` appears here because the scale comes back as a `numpy.float64`, which
 a REPL prints as `np.float64(1.38...)` on numpy 2. It compares and computes like
 a float everywhere it matters.
 
-For all twelve venue widths, see [Venue widths](cli.md#venue-widths). Verify one
+For all eighteen venue widths, see [Venue widths](cli.md#venue-widths). Verify one
 against `\the\textwidth` in your own document before you trust it.
 
 ## Attach alt text
@@ -215,13 +215,15 @@ Two limits apply when you call a gate directly:
 Gates that take no renderer argument and use no pixel threshold, such as
 `check_form` and `check_dual_axis`, are the ones this is safe for.
 
+`audit` rebinds `fig.canvas` to Agg, so the figure no longer shows in a GUI
+window. Call `plt.show()` before auditing, or audit a figure you rebuild for
+the purpose.
+
 ## Change a threshold
 
-If you vendored the checkers, edit the constant at the top of the file. That is
-the reason the default route is a copy.
-
-If you installed the package, assign to the constant. The gates read the module
-global when they run:
+If you vendored the checkers, edit the constant at the top of the file. If you
+installed the package, assign to the constant. The gates read the module global
+when they run:
 
 ```python
 import check_figure as cf
@@ -232,9 +234,46 @@ ok, rows = cf.audit(fig)
 
 Assign before you call `audit`, not inside a gate, and put the assignment
 somewhere your reader will find it. A threshold moved in one test file is a
-figure that passes locally and fails in CI.
+figure that passes locally and fails in CI. To move it for every author at once,
+see [Agree on thresholds across a project](#agree-on-thresholds-across-a-project).
 
-Every threshold is a module-level constant for this reason.
-[The gates](gates.md) names each one, and
+[The gates](gates.md) names each threshold, and
 [the figure style guide](style-guide.md) records what was measured to land on
 it.
+
+## Agree on thresholds across a project
+
+Write them in a file, so the build and every author read one set. A
+`figure-gate.toml` at the project root, or a `[tool.figure-gate]` table in
+`pyproject.toml`:
+
+```toml
+venue = "amsart"          # sets CONTENT_WIDTH_PT from VENUE_WIDTH_PT
+TYPE_FLOOR_PT = 9.0
+CVD_TARGET = 12.0         # a check_palette threshold, same file
+```
+
+Read it once, where your project starts:
+
+```python
+import check_figure as cf
+
+cf.load_config()          # searches upward from the current directory
+```
+
+Nothing reads the file on import. `load_config` returns what it assigned, so a
+build can log it. A key that names no threshold raises rather than being skipped.
+
+Not every number in capitals is a threshold. `MEASURE_DPI` is the resolution the
+pixel thresholds were calibrated at, and `NOT_CONFIGURABLE` in each module names
+it and the others like it. A file setting one raises and says why. They are
+still module globals, so assigning one by hand does what it always did: what a
+file cannot do is make that choice everyone's.
+
+To see which file a build picks up:
+
+```bash
+python check_figure.py --config
+```
+
+It prints the file, the values it sets, and every key this version accepts.

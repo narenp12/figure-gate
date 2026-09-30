@@ -7,10 +7,8 @@ the whole method in miniature: load the style sheet, take palette slots in
 order, run the checks, and only then look at the picture.
 
 The optional directory exists for `tests/test_example.py`, which runs this file
-to prove the documented example still works. Without it the test rewrote
-the committed PNG on every run: the bytes depend on the local fonts, so `pytest`
-left the working tree dirty and any `git add -A` swept a binary diff into an
-unrelated commit.
+to prove the documented example still works without rewriting the committed
+PNG; that test's docstring says why that matters.
 
 Importing this file builds nothing. `build(out=None)` returns `(fig, passed)`
 without writing, which is how a change is measured against this example:
@@ -63,9 +61,9 @@ SERIES = OKABE_ITO[1:4]
 # palettes that quietly disagree.
 #
 # Read under the sheet rather than with it left in effect. `plt.style.use` at
-# module scope put the sheet into every process that imported this file, and
-# `check_style_sheet` -- whose whole job is noticing the sheet is NOT in effect
-# -- stopped being able to fail in that process.
+# module scope would put the sheet into every process that imports this file,
+# and `check_style_sheet` -- whose whole job is noticing the sheet is NOT in
+# effect -- could not fail in that process.
 with plt.style.context(str(STYLE)):
     CYCLE = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     # The halo has to be the surface the figure actually sits on, not a
@@ -98,11 +96,7 @@ def build(out=HERE):
     """Build, describe and audit the demo figure. Returns `(fig, passed)`.
 
     With `out` set to None it writes nothing and leaves the figure open, which
-    is what a caller measuring a change against this example wants. Writing was
-    unconditional and happened at import, so reading the figure meant rewriting
-    the committed PNG -- the bytes depend on the local fonts, so that left the
-    working tree dirty and any `git add -A` swept a binary diff into an
-    unrelated commit.
+    is what a caller measuring a change against this example wants.
     """
     rng = np.random.default_rng(0)
     x = np.linspace(0, 12, 300)
@@ -119,8 +113,8 @@ def build(out=HERE):
     # the guide's most-repeated failure is a callout that is true of the concept and
     # false of the line beside it.
     #
-    # Where each curve is labelled, on which side, and -- the part that took three
-    # tries -- with which horizontal alignment.
+    # Where each curve is labelled, on which side, and with which horizontal
+    # alignment.
     for color, decay, label, at_x, side in zip(
             SERIES,
             (0.12, 0.22, 0.35),
@@ -137,24 +131,22 @@ def build(out=HERE):
         #
         # The label stays ink black rather than taking its series color, which is
         # the usual advice and was measured before being rejected. Text needs 4.5:1
-        # to be legible; darkening these hues far enough to reach it puts orange at
-        # dE 18.6 from its own line and sky blue at 17.1, both past the NORMAL_FLOOR
-        # of 15 that `check_palette` uses to call two colors different series. A
-        # label that reads as a fourth hue is worse than a black one. Below 15 the
-        # text is not legible. There is no setting that satisfies both, so identity
-        # rides on proximity alone -- which is why `check_label_attribution` exists
-        # and why it is a hard gate rather than a warning.
+        # to be legible. Darkening orange to reach it, lightness lowered and hue
+        # kept, gives #aa6700 at dE 21.7 from its own line, past the NORMAL_FLOOR
+        # of 21.0 at which `check_palette` calls two colors different series: the
+        # label would read as a fourth hue. Sky blue lands at #107eb0, dE 20.5,
+        # just under it. Ink keeps one rule for every label, so identity rides on
+        # proximity alone -- which is why `check_label_attribution` exists and why
+        # it is a hard gate rather than a warning.
         #
         # ALIGNMENT. These curves descend, so the ground above a curve is clear to
         # the RIGHT of any anchor and the ground below it is clear to the LEFT.
-        # `ha="center"` -- the obvious choice, and what this file shipped with --
-        # is the one alignment that ignores that: it clears the curve at the anchor
-        # and puts both ends of the box back down on the line, because over 2.2
-        # epochs the baseline curve falls 0.07, four times the offset holding the
-        # text up. The label read as sitting ON the curve, its casing punched a
-        # visible white gap through the data, and every check in the suite passed.
-        # `check_text_readability` is the gate that was missing; the alignment below
-        # is the fix.
+        # `ha="center"`, the obvious choice, is the one alignment that ignores
+        # that: it clears the curve at the anchor and puts both ends of the box
+        # back down on the line, because over 2.2 epochs the baseline curve falls
+        # 0.07, four times the offset holding the text up. The label reads as
+        # sitting ON the curve, and its casing punches a visible white gap
+        # through the data; `check_text_readability` is the gate that says so.
         lo, hi = (at_x, at_x + LABEL_SPAN) if side > 0 else (at_x - LABEL_SPAN, at_x)
         window = (x >= lo) & (x <= hi)
         # Anchor on the extreme of the noise across the label's own span, not on the
@@ -178,8 +170,8 @@ def build(out=HERE):
     ax.set_ylabel("Validation loss")
 
     # The caption carries the mechanism; the figure carries no internal title.
-    # The description is for a reader who cannot see the figure. Across 100,000
-    # public notebooks, 99.81% of generated images shipped without one.
+    # The description is for a reader who cannot see the figure; `describe`
+    # says why it matters.
     cf.describe(fig, "Validation loss against training epoch for three optimisers "
                      "over 12 epochs. All three fall; the Bayesian run reaches 0.12 "
                      "by epoch 6 and 0.02 by epoch 12, while the baseline is still "
@@ -200,11 +192,10 @@ def build(out=HERE):
 def main(argv=None):
     """Build and write the demo figure. Returns a process exit code.
 
-    Under `if __name__ == "__main__"`, so that importing this file builds
-    nothing, writes no PNG, reads no `sys.argv` and does not exit the
-    interpreter. Reading `sys.argv[1]` at import was its own trap: under a test
-    runner that is the runner's argument, and this file took it for an output
-    directory.
+    Called only under `if __name__ == "__main__"`, so that importing this file
+    builds nothing, writes no PNG, reads no `sys.argv` and does not exit the
+    interpreter. Under a test runner `sys.argv[1]` is the runner's argument,
+    not an output directory.
     """
     argv = sys.argv[1:] if argv is None else list(argv)
     _fig, passed = build(Path(argv[0]) if argv else HERE)

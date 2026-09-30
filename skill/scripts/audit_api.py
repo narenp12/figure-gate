@@ -64,6 +64,17 @@ def _notes(changelog: str) -> tuple[str, str]:
 
 
 def main() -> None:
+    """Compare each module's public API against the last tag; exit 0 or 1.
+
+    Run from the repository root: it reads `CHANGELOG.md` and `pyproject.toml`
+    from the working directory and needs `git` and `griffe` on the path.
+
+    Exits 0 when nothing broke, or when every broken name appears in the
+    notes section `_notes` picks, in a paragraph that also holds a `CHANGED`
+    verb. Exits 1, with the reason on stderr, when there is no tag, when
+    griffe is missing or fails without a finding, or when a broken name is
+    not written down.
+    """
     tag_result = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"],
         capture_output=True, text=True,
@@ -117,19 +128,10 @@ def main() -> None:
     changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
     section, heading = _notes(changelog)
     paragraphs = section.split("\n\n")
-    # `(?<!\w)`/`(?!\w)` rather than `\b`, because half the names griffe reports
-    # end in a character `\b` cannot follow. A parameter change is reported as
-    # `audit(context_axes)`, and a `\b` after that `)` asks for a word character
-    # next to it -- so it matched only when the name was immediately followed by
-    # a letter, which no sentence does. The gate was unsatisfiable for that whole
-    # class of break: no wording of the notes could clear it, and the first
-    # parameter change this project made failed CI with the section naming every
-    # one of the five. Every earlier release passed because griffe had only ever
-    # reported bare names like `delta_e` and `GATES`, which end in a word
-    # character.
-    #
-    # The lookarounds keep what `\b` was there for: `delta_e` still does not
-    # match inside `delta_error`.
+    # `(?<!\w)`/`(?!\w)` rather than `\b`. Griffe reports a parameter change as
+    # `audit(context_axes)`, and `\b` after the `)` would need a word character
+    # next to it, which no sentence puts there. The lookarounds still keep
+    # `delta_e` from matching inside `delta_error`.
     silent = sorted(
         name for name in broken
         if not any(

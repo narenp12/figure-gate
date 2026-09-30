@@ -248,3 +248,50 @@ def test_transparency_really_does_not_move_the_overplotting_gate():
     finally:
         for fig in figs:
             plt.close(fig)
+
+
+# --- the rows that did not run ------------------------------------------------
+# The three gates that cannot always run warn when they do not, so `suggest`
+# reaches their rows, and every remedy in this file answers the question its
+# gate asks when it does run. Without the mark, a missing style sheet is
+# answered with "apply the sheet inside the same rc_context" and a missing
+# `check_palette.py` with "use viridis", which are answers to questions nobody
+# asked.
+
+def _rows_that_could_not_run(monkeypatch):
+    """The three real details, from the three checks, with nothing to run on."""
+    monkeypatch.setattr(cf, "_sibling", lambda name: None)
+    monkeypatch.setattr(cf, "_style_sheet", lambda: None)
+    fig, ax = plt.subplots()
+    try:
+        ax.plot([0, 1], [0, 1], color="#0072b2", label="a")
+        ax.plot([0, 1], [1, 0], color="#d55e00", label="b")
+        ax.imshow(np.random.default_rng(0).random((4, 4)), cmap="viridis")
+        return [("Series color", *cf.check_series_color(fig)),
+                ("Colormap kind", *cf.check_colormap(fig)),
+                ("Style sheet", *cf.check_style_sheet(fig))]
+    finally:
+        plt.close(fig)
+
+
+def test_the_three_rows_that_can_report_they_did_not_run_say_so(monkeypatch):
+    for name, status, detail in _rows_that_could_not_run(monkeypatch):
+        assert status == "warn", name
+        assert detail.startswith(cf.DID_NOT_RUN), (name, detail)
+
+
+def test_a_row_that_did_not_run_gets_no_remedy(monkeypatch):
+    rows = _rows_that_could_not_run(monkeypatch)
+    assert {name for name, _, _ in rows} <= {r.gate for r in sf.REMEDIES}, (
+        "this test proves nothing unless all three gates have a remedy to skip")
+    assert sf.suggest(rows) == []
+
+    unmarked = [(n, s, d[len(cf.DID_NOT_RUN):]) for n, s, d in rows]
+    assert [n for n, _ in sf.suggest(unmarked)] == [n for n, _, _ in rows], (
+        "the mark is what skips the row, and the gate name is not")
+
+
+def test_both_files_carry_the_same_mark():
+    """Written out in each rather than imported, because this one is the
+    optional third file and cannot require the module it describes."""
+    assert sf.DID_NOT_RUN == cf.DID_NOT_RUN

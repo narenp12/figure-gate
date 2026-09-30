@@ -42,10 +42,13 @@ from conftest import SKILL
 import check_palette as cp
 
 from test_docs_match_code import swatch_pairs
-from test_docs_site import CONFIG, CSS, SLATES, nav_targets, scheme_link_colors
+from test_docs_site import (CONFIG, CSS, SLATES, authored_nav_pages, declared_title,
+                            nav_targets, scheme_link_colors)
 
 ROOT = SKILL.parent
 SITE = ROOT / "site"
+# Beside zensical's own `.cache/`, which every run in this checkout shares.
+BUILD_LOCK = ROOT / ".cache" / "figure-gate-docs-build.lock"
 
 # Set by the nested run at the bottom of this file, and read by the test that
 # starts it, so that run does not start one of its own.
@@ -139,10 +142,12 @@ def _build_the_site():
     """
     if shutil.which("uv") is None:
         pytest.skip("uv is needed to build the site")
-    result = subprocess.run(
-        ["uv", "run", "--only-group", "docs",
-         "zensical", "build", "--strict"],
-        cwd=ROOT, capture_output=True, text=True)
+    BUILD_LOCK.parent.mkdir(exist_ok=True)
+    with file_lock()(str(BUILD_LOCK)):
+        result = subprocess.run(
+            ["uv", "run", "--only-group", "docs",
+             "zensical", "build", "--strict"],
+            cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, (
         "the site did not build, so there is nothing to measure:\n"
         f"{result.stdout}\n{result.stderr}")
@@ -165,12 +170,12 @@ def built_site(tmp_path_factory, worker_id):
     This is pytest-xdist's documented answer -- a lock on
     `tmp_path_factory.getbasetemp().parent`, which is the one directory every
     worker shares -- with a marker file so the workers that lose the race wait
-    for the build rather than repeat it.
+    for the build rather than repeat it. That lock is one run's; the build
+    itself also holds `BUILD_LOCK`, which every run in the checkout shares.
     """
     # Before the `master` branch below, not inside the worker path that needs
-    # it: this is the fixture's declaration of what it costs to use, and every
-    # test that asks for a built site now inherits the skip from one place.
-    # Asking after the branch is what shipped -- see `file_lock()`.
+    # it, so every test that asks for a built site skips the same way under
+    # `pytest` and `pytest -n auto`. `file_lock()` says why that matters.
     FileLock = file_lock()
 
     if worker_id == "master":
@@ -184,6 +189,32 @@ def built_site(tmp_path_factory, worker_id):
             _build_the_site()
             marker.write_text("built", encoding="utf-8")
     return SITE
+
+
+def test_the_build_holds_a_lock_every_run_in_the_checkout_shares(monkeypatch):
+    """Two `zensical build`s at once corrupt the site and can still exit 0.
+
+    They share `.cache/`, so separate output directories do not help: two
+    concurrent builds into two directories left one with no nav markup and
+    25 links to `.md` files. `built_site`'s own lock lives in the run's temp
+    directory and serialises one run's workers, not two runs. So the build
+    takes `BUILD_LOCK` as well, and a second handle on it must wait.
+    """
+    FileLock = file_lock()
+    from filelock import Timeout
+    held = []
+
+    def fake_build(*args, **kwargs):
+        try:
+            with FileLock(str(BUILD_LOCK), timeout=0):
+                held.append(False)
+        except Timeout:
+            held.append(True)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_build)
+    _build_the_site()
+    assert held == [True], "zensical ran without BUILD_LOCK held"
 
 
 @pytest.fixture(scope="session")
@@ -244,8 +275,8 @@ def page(browser, server):
 #
 # `--md-typeset-a-color` is read off `<body>`, not `<html>`, because that is
 # where the scheme attribute lives and therefore where the custom properties
-# this site sets actually resolve. Reading it at the root is what made the
-# original defect invisible to inspection.
+# this site sets actually resolve. Read at the root, it hides the `:root`-
+# prefixed selectors the module docstring describes.
 PROBE = r"""
 () => {
   const parse = c => { const m = (c || '').match(/[\d.]+/g);
@@ -377,9 +408,10 @@ def rendered(browser, server):
 
 
 # --- the selectors reach the page ---------------------------------------------
-# The direct guard on the original defect. If `palette.css` stops applying,
-# these fail before any contrast question is asked, and the failure names the
-# cause instead of leaving someone to infer it from a ratio.
+# The direct guard on the `:root` selectors in the module docstring. If
+# `palette.css` stops applying, these fail before any contrast question is
+# asked, and the failure names the cause instead of leaving someone to infer it
+# from a ratio.
 
 @pytest.mark.parametrize("mode,scheme", sorted(SCHEMES.items()))
 def test_the_theme_selected_the_scheme_we_think_it_did(rendered, mode, scheme):
@@ -908,7 +940,7 @@ def test_collapsible_notes_toggle_open_on_click(page, server, path, count,
 
 
 def test_the_design_flow_diagram_draws_an_svg(page, server):
-    """mermaid, proven on the page.
+    r"""mermaid, proven on the page.
 
     The built HTML keeps the fence's text in a `<pre class="mermaid">`; the
     diagram's SVG exists only after the page's own JavaScript has run, and the
@@ -1036,9 +1068,8 @@ def _number_sort_key(cell):
 
 
 # One tile per documentation page, grouped on the home page by Diataxis mode.
-# Contributing and Security lost their tiles when the grids became a map of the
-# four modes: neither is documentation of the tool, and both are still in the
-# nav under Project.
+# Contributing and Security have no tile: neither is documentation of the tool,
+# and both are in the nav under Project.
 TILE_ICONS = {
     "rocket": "tutorial",
     "download": "install",
@@ -1052,6 +1083,54 @@ TILE_ICONS = {
     "shapes": "choosing-a-form",
     "image": "gallery",
 }
+
+
+@pytest.mark.parametrize("page", authored_nav_pages())
+def test_the_built_page_is_titled_what_it_says_it_is(page, built_site):
+    """The other half of `test_an_authored_page_writes_down_its_own_title`.
+    That one asserts the name is written down. This one asserts the theme reads
+    it, which front matter on its own says nothing about. The suffix is
+    `site_name`, and the whole string is what a browser tab shows.
+    """
+    built = built_site / page[:-3] / "index.html"
+    found = re.search(r"<title>(.*?)</title>",
+                      built.read_text(encoding="utf-8"), re.S)
+    assert found, f"{page} built without a <title>"
+    assert found.group(1).strip() == f"{declared_title(page)} - figure-gate", (
+        f"{page} declares the title {declared_title(page)!r} and the site "
+        f"serves {found.group(1).strip()!r}")
+
+
+# Each of these emits markup. The two view-time features are further down this
+# file, and `navigation.indexes` is not set: it measured as a no-op, because no
+# section in the nav points at a file.
+NAVIGATION_MARKUP = {
+    "navigation.tabs": "md-tabs",
+    "navigation.sections": "md-nav__item--section",
+    "navigation.path": "md-path",
+    "navigation.footer": "md-footer__link",
+}
+
+
+@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
+def test_a_configured_navigation_feature_reaches_the_built_page(
+        feature, marker, built_site):
+    """The silent-typo guard, as an assertion.
+
+    In this file because it reads `site/`, and `built_site` is what says a build
+    finished. It lived in `test_docs_site.py` with a `pytest.skip` when the page
+    was missing, and took the fixture from nothing: under `-n auto` another
+    worker's `built_site` cleans `site/` while this runs, so about half of runs
+    reported four skips for a site that existed before and after. The fixture is
+    the coordination, and a test that reads a directory another test rewrites has
+    to take it.
+    """
+    built = built_site / "gates" / "index.html"
+    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
+        f"{feature} left the features list; drop this row with it")
+    assert marker in built.read_text(encoding="utf-8"), (
+        f"{feature} is configured and `{marker}` is absent from the built "
+        "page, so the name is doing nothing - check it against the theme's")
 
 
 def home_article(built_site):

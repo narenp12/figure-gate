@@ -27,6 +27,29 @@ import itertools
 import math
 from collections.abc import Collection, Sequence
 
+
+# The public surface, in source order. `tests/test_api_reference.py` regenerates
+# this list from the module's own top level and fails on any disagreement, so it
+# cannot quietly fall behind a name that was added or removed.
+#
+# Exhaustive on purpose. `griffe` reads `__all__` when one is present, and
+# `skill/scripts/audit_api.py` runs `griffe check` against the last tag on every
+# pull request: a name left out of this list is a name the API gate stops
+# comparing, which turns a break into a silent one. That is the opposite of what
+# the list is for, so completeness here is load-bearing rather than tidy.
+__all__ = [
+    "hex_to_linear", "linear_to_oklab", "linear_to_cam02ucs",
+    "relative_luminance", "contrast", "CVD", "simulate", "MACHADO",
+    "ANOMALOUS_SEVERITIES", "simulate_anomalous", "delta_e", "oklab_distance",
+    "CMAP_SAMPLES", "CMAP_QUALITATIVE_N", "CMAP_SPAN_MIN",
+    "CMAP_BACKTRAVEL_MAX", "CMAP_WRAP_DE_MAX", "NOT_CONFIGURABLE",
+    "cmap_back_travel", "cmap_kind",
+    "cmap_back_travel_rgb", "cmap_kind_rgb", "CHROMA_MIN", "CVD_TARGET",
+    "NORMAL_FLOOR", "CONTRAST_MIN", "ORDINAL_DL_MIN",
+    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX", "check",
+    "AUDIT_SCHEMA", "check_json", "main",
+]
+
 # --- color conversion -------------------------------------------------------
 
 
@@ -152,6 +175,18 @@ def _post_adapt(rgb: Sequence[float], f_l: float) -> tuple[float, float, float]:
 
 def _viewing_conditions() -> tuple[tuple[float, float, float],
                                    float, float, float, float, float, float]:
+    """CIECAM02's viewing-condition terms for the sRGB environment above.
+
+    Names follow CIE 159:2004. Computed once, into the `_D_RGB` ... `_A_W`
+    module constants below.
+
+    Returns:
+        `(d_rgb, f_l, n, z, n_bb, n_cb, a_w)`: the per-channel CAT02
+        adaptation gains, the luminance-level adaptation factor F_L, the
+        background ratio Y_b / Y_w, the exponent base z, the brightness and
+        chromatic induction factors N_bb and N_cb (equal by definition), and
+        the achromatic response A_w of the white point.
+    """
     d = _SURROUND_F * (1 - (1 / 3.6) * math.exp((-_L_A - 42) / 92))
     d = min(1.0, max(0.0, d))
     rgb_w = _mul3(_M_CAT02, _XYZ_W)
@@ -301,9 +336,9 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 # deficiency is not that. Anomalous trichromacy - a cone whose peak sensitivity
 # is shifted rather than missing - is the more common form, and simulating only
 # the endpoint would be sound if the endpoint were the worst case. It is not.
-# Measured over 240000 pairs of hues this file would accept as series slots,
-# 0.87% clear CVD_TARGET under dichromacy and miss it at some lower severity,
-# and dichromacy overstates separation by up to 10.5 dE.
+# Measured over 244650 pairs of hues this file would accept as series slots,
+# 1.27% clear CVD_TARGET under dichromacy and miss it at some lower severity,
+# and dichromacy overstates separation by up to 12.7 dE.
 #
 # Published as Table 1 of Machado, Oliveira & Fernandes (2009), at severities in
 # tenths. Keyed by tenths so the lookup is an integer: severity 0.0 is the
@@ -485,10 +520,10 @@ def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
 
 # --- colormap kind ----------------------------------------------------------
 
-CMAP_SAMPLES = 256
-CMAP_QUALITATIVE_N = 40
-CMAP_SPAN_MIN = 0.02
-CMAP_BACKTRAVEL_MAX = 0.02
+CMAP_SAMPLES = 256          # points `check_figure` samples a colormap at
+CMAP_QUALITATIVE_N = 40     # fewer entries than this is a category list, not a ramp
+CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat
+CMAP_BACKTRAVEL_MAX = 0.02  # backward lightness travel, as a fraction of the span
 # A ramp is cyclic when its two ends are the same colour, and "the same colour"
 # now has a definition instead of a tuning: CAM02-UCS is fitted so that a unit
 # of its distance is about one just-noticeable difference, so ends closer than
@@ -500,6 +535,18 @@ CMAP_BACKTRAVEL_MAX = 0.02
 # diverging map, BrBG, wraps at 27.963. The threshold has two orders of
 # magnitude of clearance on either side, so it is a definition rather than a fit.
 CMAP_WRAP_DE_MAX = 1.0
+
+# Uppercase numbers here that are not thresholds, and the reason each is not.
+# `check_figure.load_config` reads this through the sibling import and refuses a
+# configuration file that names one; this module reads no TOML itself, because
+# `tomllib` arrived in 3.11 and CI holds this file to 3.8. Its own copy rather
+# than a list in `check_figure`, because these files are vendored one at a time
+# and a contract between two of them cannot live in an import either may lack.
+NOT_CONFIGURABLE = {
+    "CMAP_SAMPLES":
+        "the sample count a colormap is read at, not a boundary any verdict "
+        "falls on",
+}
 
 
 def _back_travel(ls: Sequence[float]) -> float:
@@ -668,9 +715,7 @@ CVD_TARGET = 10.5         # 2x Stone et al.; below this, secondary encoding is m
 NORMAL_FLOOR = 21.0       # 4x Stone et al.; hard floor, no secondary encoding excuses it
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
-# The three ordinal rows. `--ordinal` swaps the categorical gates for these, and
-# all three ran on literals inside `check` while every categorical threshold sat
-# up here, so half the validator was tunable and half was not.
+# The three ordinal rows. `--ordinal` swaps the categorical gates for these.
 ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
 ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
@@ -682,11 +727,7 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Gate a palette. Returns `(ok, rows)`.
 
-    The order matches `check_figure.audit`. It did not until 0.4.0: this
-    returned `(rows, ok)` and the README carried a paragraph warning about the
-    difference, which is documentation standing in for a fix. Unpacking either
-    one the wrong way binds a bool to the rows and raises nothing, so the two
-    were made the same rather than described.
+    `check_figure.audit` returns the same shape.
 
     `rows` are `(name, status, detail)`, one per gate. `status` is True,
     False, or the string "warn" for the advisory contrast row, and only a
@@ -769,10 +810,8 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     # here is only validated for the red-green forms, so a tritan number is
     # indicative rather than decisive.
     #
-    # Swept over severity, not read at the endpoint. Dichromacy is not the worst
-    # case: measured over 240000 pairs of hues this file would accept as series
-    # slots, 0.87% clear CVD_TARGET at dichromacy and miss it at some lower
-    # severity. See MACHADO.
+    # Swept over severity, not read at the endpoint: dichromacy is not the worst
+    # case. MACHADO's comment has the measurement.
     worst_cvd, worst_cvd_at = float("inf"), None
     for i, j in pairs:
         for kind in ("protan", "deutan"):
@@ -821,6 +860,71 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     return ok, rows
 
 
+# The one wire format both checkers emit, and the same string
+# `check_figure.AUDIT_SCHEMA` carries. Written out rather than imported: this file
+# is vendored on its own and must import nothing outside the standard library, so
+# a shared constant would be a dependency the vendoring claim does not allow.
+# `tests/test_palette.py::test_the_two_checkers_agree_on_the_schema` is what keeps
+# the two copies equal.
+AUDIT_SCHEMA = "figure-gate/audit/1"
+
+# `status` is True, False or "warn" in the tuples, and a JSON consumer should not
+# have to know that a bool and a string share a field.
+_STATUS_JSON = {True: "pass", False: "fail", "warn": "warn"}
+
+
+def check_json(colors: Sequence[str], surface: str = "#ffffff",
+               all_pairs: bool = False, ordinal: bool = False,
+               ink: Collection[str] = frozenset()) -> str:
+    """`check()`, as a JSON document. Returns the text, and prints nothing.
+
+    What `--json` prints, and what to call from a build that has to decide
+    something rather than show someone a table. The arguments are `check`'s, and
+    the verdict is the object `check` computed: this function serialises, it does
+    not re-gate.
+
+    The document carries the inputs as well as the rows. A palette verdict is a
+    verdict about a palette *on a surface*, gated as categorical or as a ramp,
+    and one that records only `ok` cannot be read a month later: the same eight
+    hexes pass on white and fail on a tinted page, and both answers are true.
+
+    `status` is `"pass"`, `"fail"` or `"warn"`, not the tuple API's
+    `True`/`False`/`"warn"`, and `schema` is the one
+    `check_figure.audit_json` emits, so a CI step collecting both reads `ok` and
+    `rows` out of either without asking which checker wrote it.
+
+    Args:
+        colors: Hex strings, the palette to gate.
+        surface: The page colour they are drawn on.
+        all_pairs: Gate every pair rather than adjacent ones.
+        ordinal: Swap the categorical rows for the ramp rows.
+        ink: Colours to treat as furniture rather than data.
+
+    Returns:
+        A JSON object as text, with `schema`, `tool`, `ok`, `inputs` and `rows`.
+    """
+    import json
+
+    ok, rows = check(colors, surface, all_pairs, ordinal, ink)
+    return json.dumps({
+        "schema": AUDIT_SCHEMA,
+        "tool": "check_palette",
+        "ok": ok,
+        "inputs": {
+            "colors": list(colors),
+            "surface": surface,
+            "pairs": "all" if all_pairs else "adjacent",
+            "ordinal": ordinal,
+            # Sorted, not insertion-ordered: `ink` is a set in the signature, so
+            # the order a caller happened to pass is not information, and an
+            # unsorted dump makes two identical runs produce two different files.
+            "ink": sorted(ink),
+        },
+        "rows": [{"name": name, "status": _STATUS_JSON[status],
+                  "detail": detail} for name, status, detail in rows],
+    }, indent=2)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Validate a figure palette.")
     ap.add_argument("colors", help="comma-separated hex colors")
@@ -835,10 +939,28 @@ def main() -> None:
     ap.add_argument(
         "--ink", default="",
         help="comma-separated ink/neutral hexes (exempt from chroma and lightness rules)")
+    # Exit code unchanged: a build that already branches on `$?` keeps working,
+    # and a build that wants the rows gets them on stdout instead of a table
+    # nobody should be parsing. The table is for a person; this is for a machine,
+    # and printing both would make stdout neither.
+    ap.add_argument("--json", action="store_true",
+                    help="print the verdict as JSON instead of a table")
     a = ap.parse_args()
 
     colors = [c.strip() for c in a.colors.split(",") if c.strip()]
     ink_set = frozenset(c.strip() for c in a.ink.split(",") if c.strip())
+
+    if a.json:
+        import json
+
+        # One gating run, and the exit code read back out of the document that
+        # gets printed. Calling `check` a second time for the bool would make the
+        # code and the document two answers that are only usually the same.
+        document = check_json(colors, a.surface, a.pairs == "all", a.ordinal,
+                              ink_set)
+        print(document)
+        raise SystemExit(0 if json.loads(document)["ok"] else 1)
+
     ok, rows = check(colors, a.surface, a.pairs == "all", a.ordinal, ink_set)
 
     kind = "ordinal ramp" if a.ordinal else "categorical"

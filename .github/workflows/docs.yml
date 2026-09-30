@@ -9,18 +9,12 @@ on:
 permissions:
   contents: read
 
-# Per pull request, not per repository. `group: pages` sat here and applied to
-# the whole workflow, so every Docs run in the repository queued in one line --
-# and GitHub keeps exactly one run pending per group: "any existing `pending`
-# job or workflow in the same concurrency group will be canceled and the new
-# queued job or workflow will take its place".
-#
-# So a third pull request silently cancelled the second one's build. #73 sat
-# BLOCKED on 17 passed and 0 failed because its Docs run was evicted before it
-# started, and `docs-shape-fixes` spent 33 minutes of wall clock waiting on a
-# build that takes 90 seconds. The deploy serialisation that comment was really
-# about now lives on the `deploy` job, which is the only thing that touches
-# Pages.
+# Per pull request, not per repository. GitHub keeps exactly one run pending
+# per group: "any existing `pending` job or workflow in the same concurrency
+# group will be canceled and the new queued job or workflow will take its
+# place". One group for the whole workflow would let a third pull request
+# silently cancel the second one's build. The deploy serialisation lives on the
+# `deploy` job, the only thing that touches Pages.
 #
 # Pushes get `github.run_id`, which is unique, so a run that publishes never
 # queues and never evicts. Only pull requests share a group, and there
@@ -43,8 +37,8 @@ jobs:
   #                       `./style-guide.md` href, and the build exits 0. This
   #                       was measured, not assumed.
   #   symlink check       runs BEFORE the build, and is the only thing that
-  #                       catches a dangling pointer at all. Every page here is
-  #                       a symlink into skill/ or the repository root.
+  #                       catches a dangling pointer at all. Most pages here
+  #                       are symlinks into skill/ or the repository root.
   #   nav-page check      runs AFTER, and closes the gap between the two: if a
   #                       page in the nav produced no HTML, the site would ship
   #                       a 404 in its own sidebar.
@@ -56,11 +50,9 @@ jobs:
   build:
     name: The site builds in strict mode
     runs-on: ubuntu-latest
-    # 5, down from 15. The 15 was sized around the apt call inside
-    # `--with-deps`, which is gone: this job now runs in 52 seconds with the
-    # browser cache warm and 77 with it cold. Fifteen minutes is what a stalled
-    # mirror cost three times on 2026-08-17, all of it yellow, and the bound is
-    # the thing that decides how long a stall is allowed to look like progress.
+    # 5. This job runs in 52 seconds with the browser cache warm and 77 with it
+    # cold, and the bound decides how long a stall is allowed to look like
+    # progress.
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,7 +61,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # Every page under docs/ is a symlink into skill/ or the repository root.
+      # Most pages under docs/ are symlinks into skill/ or the repository root.
       # actions/checkout restores them as symlinks, so this is a cheap way to
       # find out that it did before the build reports a confusing missing-file.
       - name: Every docs/ symlink resolves in a fresh checkout
@@ -85,14 +77,9 @@ jobs:
               sys.exit(f"dangling symlinks under docs/: {dangling}")
           PY
 
-      # `--only-group docs`, not `--no-project --with "zensical..."`. The
-      # `--with` form spelled the version range a second time, in a file nothing
-      # resolves against `pyproject.toml`, and it was correct only for as long
-      # as the two lists happened to agree. They stopped agreeing the first time
-      # the build needed a package one of them did not name: the group gained
-      # `mkdocstrings-python` for the API page, this line did not, and the build
-      # failed with `No module named 'mkdocstrings'` after the same build passed
-      # locally in a project environment that had it. One list now, in
+      # `--only-group docs`, not `--no-project --with "zensical..."`: the
+      # `--with` form spells the package list a second time, in a file nothing
+      # resolves against `pyproject.toml`, and the two lists drift. One list, in
       # `pyproject.toml`; `test_docs_site.py` fails if a second one appears.
       #
       # `--only`, because the group comment claims the docs build needs nothing
@@ -144,8 +131,8 @@ jobs:
           PY
 
       # The browser download, not the apt half of the install below. The
-      # tarball is the part that stalls: on #74 that step held this job for
-      # over eight of its fifteen minutes with nothing after it.
+      # tarball is the part that stalls: on #74 it held this job for over eight
+      # minutes with nothing after it.
       #
       # `~/.cache/ms-playwright` is Playwright's documented Linux path and this
       # job is ubuntu-only. On a hit the install is a no-op -- measured at 1.3
@@ -175,14 +162,13 @@ jobs:
       # On pull requests too, like the rest of this job. A contrast regression
       # should fail before it is published, not after.
       #
-      # No `--with-deps`. It stalled this job for its whole fifteen minutes
-      # three times on 2026-08-17, and it never reached the browser: uv had
-      # installed all 50 packages in 59ms, and the last line before thirteen
-      # minutes and thirty-nine seconds of silence was
+      # No `--with-deps`. On 2026-08-17 it held this job for fifteen minutes
+      # three times; the last line before thirteen minutes and thirty-nine
+      # seconds of silence was
       #
       #     Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease
       #
-      # which is `apt-get update`. `--with-deps` runs that unconditionally --
+      # which is `apt-get update`, and `--with-deps` runs that unconditionally --
       # `installDependenciesLinux`, in the driver bundled with the playwright
       # `uv.lock` pins, pushes `apt-get update` onto the command list before it
       # has looked at whether even one package is missing -- and a stalled
@@ -190,8 +176,7 @@ jobs:
       # actions/runner-images has been collecting reports of this since 2020 and
       # ships no supported way to swap the mirror.
       #
-      # What that apt call was buying was then measured on a runner rather than
-      # argued about, with `playwright install-deps --dry-run chromium`, which
+      # What that apt call buys was measured on a runner, with `playwright install-deps --dry-run chromium`, which
       # simulates the install with `apt-get install -s` and names what apt would
       # have had to fetch. Run 32099469230 answered: of the twenty-one packages
       # in Playwright's `chromium` group, **none** were missing. ubuntu-latest
@@ -218,9 +203,9 @@ jobs:
       - name: Install the browser the contrast gate renders in
         run: uv run --group docs-test playwright install chromium
 
-      # The claim above, kept honest, and a hole closed on the way.
+      # The claim above, kept honest.
       #
-      # `--with-deps` succeeding was never evidence that Chromium could start,
+      # An install that succeeds is not evidence that Chromium can start,
       # and when it cannot, `test_docs_render.py`'s `browser` fixture calls
       # `pytest.skip` rather than failing -- deliberately, so the figure gates do
       # not require a 150MB browser on a contributor's laptop. In this job that
@@ -266,8 +251,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The serialisation the workflow-level block used to claim, on the one job
-    # that earns it. A second push while a deploy is in flight waits rather than
+    # Serialised on the one job that touches Pages. A second push while a deploy is in flight waits rather than
     # cancelling it mid-upload, which would leave Pages serving a partial site.
     # Eviction of a pending run is correct here for the same reason it was wrong
     # above: two queued deploys means publishing the older tree, and this job is

@@ -33,9 +33,11 @@ import contextlib
 import doctest
 import inspect
 import io
+import json
 import pathlib
 import re
 import subprocess
+import sys
 import textwrap
 
 import numpy
@@ -66,17 +68,12 @@ MODULES = {"check_figure.py": cf, "check_palette.py": cp}
 
 
 # --- the corpus, derived rather than listed -----------------------------------
-# This file swept four documents for its first two releases: the guide, the
-# forms reference, SKILL.md and the README. The repository had eleven, and
-# nothing anywhere said which seven were unswept. `CONTRIBUTING.md`,
-# `SECURITY.md`, `conda/README.md` and both site-only pages could say anything
-# they liked about the code and the suite stayed green, which is the same defect
-# one level out: an unchecked claim, invisible because nobody enumerated the
-# place it could hide.
-#
-# So the corpus is read out of git. A new document is swept the day it is
-# committed, or else it fails until `_is_historical` catches it and the tests
-# below record the reason it should not be.
+# The corpus is read out of git, not listed by hand. A hand-listed corpus of
+# four documents left seven unswept, and nothing said which: an unchecked
+# claim, invisible because nobody enumerated the place it could hide. A new
+# document is swept the day it is committed, or else it fails until
+# `_is_historical` catches it and the tests below record the reason it should
+# not be.
 #
 # `git ls-files` rather than a glob over the tree, for two reasons. A scratch
 # note left in the working directory is not documentation and should not fail
@@ -334,8 +331,12 @@ MPL_NAMES = _matplotlib_names()
 # Words the prose uses as vocabulary in a code span rather than as a reference
 # to a symbol: gate verdicts, colormap kind names, Python literals. They are
 # spans because they are terms of art, not because they name code.
+# `"warn"` stays, with the quotes: it is the Python string the tuple API's
+# `status` holds. Bare `warn` is absent: it is the JSON spelling of that
+# status, a real value the serialiser writes, and `JSON_KEYS` resolves it
+# against the document rather than excusing it.
 VOCABULARY = {"misc", "sequential", "diverging", "cyclic", "qualitative",
-              "warn", '"warn"', "True", "False", "None", "ggplot2",
+              '"warn"', "True", "False", "None", "ggplot2",
               "facet_wrap", "n"}
 
 
@@ -421,6 +422,37 @@ METADATA_KEYS = set(cf.ALT_TEXT_KEY_BY_SUFFIX.values()) | {
     cf.ALT_TEXT_KEY_DEFAULT}
 
 
+def _json_document_keys():
+    """Every key of the audit document, read off a document the code emitted.
+
+    `schema`, `tool`, `inputs`, `rows` and the row fields are the wire format a
+    build reads, so prose naming one is a claim the serialiser settles. Settled
+    by calling it rather than by listing the keys here: a second list would be
+    the thing that goes stale, and the CI-facing contract is what the function
+    actually writes.
+
+    The palette document, because it costs nothing -- `check_palette` imports
+    only the standard library and needs no figure. `check_figure.audit_json`
+    emits the same top level and the same row fields; the keys it has and this
+    one does not are all under `inputs`, and none of them is written in prose. A
+    document-level key that appeared in only one of the two would fail here,
+    which is the right outcome: it would mean the two checkers had stopped
+    agreeing on the format the docs describe as one.
+    """
+    document = json.loads(cp.check_json(["#E69F00", "#56B4E9", "#009E73"]))
+    keys = set(document) | set(document["inputs"])
+    for row in document["rows"]:
+        keys |= set(row)
+    return keys
+
+
+# The wire format's own vocabulary: its keys, and the three words `status` takes.
+# `pass` and `fail` are spelled out in JSON where the tuple API carries `True`
+# and `False`, so they are not the report's `PASS`/`FAIL` and do not resolve
+# through `STATUS_WORDS`.
+JSON_KEYS = _json_document_keys() | set(cp._STATUS_JSON.values())
+
+
 def _appendix_definitions():
     """Helpers the guide defines in its own appendix rather than shipping.
 
@@ -491,11 +523,11 @@ def _is_colormap(name):
 
 
 # --- what the wider repository has a name for ---------------------------------
-# Four documents could be resolved against two modules and matplotlib. Eleven
-# cannot: `CONTRIBUTING.md` names workflows and dependency groups, `conda/
-# README.md` names recipe keys, and the pages name scripts that live outside
-# `skill/`. Each of the domains below is a real place a name can be checked
-# against, so a typo in one of them fails rather than landing in the ledger.
+# Two modules and matplotlib cannot resolve every document in the corpus:
+# `CONTRIBUTING.md` names workflows and dependency groups, `conda/README.md`
+# names recipe keys, and the pages name scripts that live outside `skill/`. Each
+# of the domains below is a real place a name can be checked against, so a typo
+# in one of them fails rather than landing in the ledger.
 
 
 def _tracked_files():
@@ -701,6 +733,15 @@ def resolve(span):
         return "latex"                        # a control sequence, not a symbol
     if span in METADATA_KEYS:
         return "metadata-key"
+    if span in JSON_KEYS:
+        return "json-key"
+    # A bare standard-library module name. `sys.stdlib_module_names` rather than
+    # `find_spec`, which would also resolve anything installed in the test
+    # environment and quietly turn this branch into "importable here" -- a much
+    # weaker claim than the prose makes, and one that would pass on a developer's
+    # machine and fail on a bare runner.
+    if span in sys.stdlib_module_names:
+        return "stdlib-module"
     if span in CONSOLE_SCRIPTS:
         return "console-script"
     if span in PROCESS_HEADINGS:
@@ -750,9 +791,12 @@ def resolve(span):
     # name nothing, one shipped for PEP 561 and one the fifth version site the
     # bump rewrites. Both resolve against the tree like every other file span,
     # by full name because ".typed" and ".lock" are not kinds with a second.
+    # `.cff` is in the tuple rather than here: it names the Citation File
+    # Format, so the suffix is the kind, and a second one would resolve the same
+    # way this one does.
     if span in {"py.typed", "uv.lock"} or span.endswith(
             (".py", ".mplstyle", ".md", ".toml",
-             ".yml", ".yaml", ".css", ".json")):
+             ".yml", ".yaml", ".css", ".json", ".cff")):
         if span in TRACKED_FILES:
             return "file"
         for base in ("", "scripts", "assets", "references"):
@@ -847,6 +891,13 @@ UNRESOLVED_SPANS = {
                                "the runtime the skill ships into",
     "loss.py": "the file the tutorial tells the reader to create; it exists "
                "in the reader's working directory, not in this repository",
+    "figure-gate.toml": "a file in the reader's project, named by the string "
+                        "CONFIG_FILENAMES holds; the resolvers read names in "
+                        "these modules, not the literals inside them",
+    "did not run:": "the prefix DID_NOT_RUN holds, quoted so the page shows "
+                    "what a detail actually reads; a string, not a name",
+    "[tool.figure-gate]": "the TOML table the same keys live under in a "
+                          "pyproject.toml; a table header, not a Python name",
     "geometry": "a LaTeX package, named where the guide explains how to read a "
                 "text width out of a document",
     "fontmath.ltx": "the LaTeX2e kernel file carrying the DeclareMathSizes "
@@ -1122,11 +1173,11 @@ def _style_sheet_hexes():
 # Okabe-Ito in publication order. matplotlib ships it as a colormap from 3.11,
 # and this project floors at matplotlib 3.8, so a module that reads
 # `colormaps["okabe_ito"]` at import fails collection on every older matplotlib
-# rather than failing one test. Raising the Python floor to 3.11 does not
-# change that: the matplotlib floor is separate and deliberately lower. `test_palette.py` and `test_example.py` both
-# guard the same lookup with a skip; this needs the colours themselves, so it
-# carries them and checks the copy against matplotlib wherever matplotlib has
-# them.
+# rather than failing one test. The Python floor of 3.11 does not change that:
+# the matplotlib floor is separate and lower. `test_palette.py` and
+# `test_example.py` both guard the same lookup with a skip; this needs the
+# colours themselves, so it carries them and checks the copy against matplotlib
+# wherever matplotlib has them.
 OKABE_ITO = ("#000000", "#e69f00", "#56b4e9", "#009e73",
              "#f0e442", "#0072b2", "#d55e00", "#cc79a7")
 
@@ -1181,11 +1232,8 @@ KNOWN_HEXES |= {h.lower() for h in
 COUNTEREXAMPLE_HEXES = {
     # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
     # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    #
-    # It used to be #288ac6/#fd00db, at 8.4 and 7.9 against a floor of 8. Those
-    # two straddled the OKLab floor and sit either side of the CAM02-UCS one by
-    # 0.03 dE, which is a fixture that demonstrates nothing once rounded. The
-    # replacement clears dichromacy by 8.7 and misses the worst severity by 2.2.
+    # It clears dichromacy by 8.7 and misses the worst severity by 2.2, so the
+    # demonstration survives rounding.
     "#8e4dc7", "#1402ef",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
@@ -1341,6 +1389,21 @@ RETRACTED_CLAIMS = {
                "EXTERNAL_CLAIMS under 'journal type floors'",
         "retracted": "2026-08-17",
     },
+    "page_scale returning a length per authored inch": {
+        "pattern": r"points?[^.]{0,40}per authored inch",
+        "instead": "page_scale returns placed size over authored size: a "
+                   "ratio, not a length, and 1.0 for a figure measured as "
+                   "authored",
+        "why": "page_scale divides a width in points by a width in points, "
+               "`width * placed_frac / (fig.get_size_inches()[0] * 72)`, so "
+               "the number is dimensionless. Naming a length overstates it "
+               "by 72, and a reader who set `scale=` from that sentence "
+               "would certify every figure at 72x the size it prints at. "
+               "The sentence reached three `Args:` lines and the `Returns:` "
+               "of page_scale itself, while audit_json's own paragraph two "
+               "lines above said the opposite",
+        "retracted": "2026-09-24",
+    },
     "PNAS requiring 2mm on top of its point floor": {
         "pattern": r"PNAS[^.]{0,60}(2\s*mm[^.]{0,30}(and|plus)|"
                    r"(and|with)[^.]{0,30}2\s*mm)",
@@ -1401,6 +1464,26 @@ def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
         "replacement as well as the claim")
 
 
+def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
+    """Same check for the second retraction, whose surviving copies were in
+    `check_figure.py` rather than in a document. This is the `Args:` line as
+    0.9.0 shipped it, and the `Returns:` sentence it was copied from."""
+    shipped = ("scale: Points per authored inch, overriding `page_scale` "
+               "outright.",
+               "Points on the page per authored inch. `1.0` when no content "
+               "width is set")
+    pattern = RETRACTED_CLAIMS[
+        "page_scale returning a length per authored inch"]["pattern"]
+    for sentence in shipped:
+        assert re.search(pattern, sentence, re.I), (
+            f"the pattern no longer matches {sentence!r}, which is what it "
+            "was written to retire")
+    corrected = " ".join(inspect.getdoc(cf.page_scale).split())
+    assert not re.search(pattern, corrected, re.I), (
+        "the pattern matches the corrected docstring too, so it forbids the "
+        "replacement as well as the claim")
+
+
 # --- claims about the world carry a source and a recorded verification -------
 # No test reads a journal's instructions to authors. What this ledger does is
 # make the human verification enumerable and dated, so a reviewer can audit the
@@ -1411,6 +1494,8 @@ EXTERNAL_CLAIMS = {
         "document": "style-guide.md",
         "anchor": "lines one point or thicker",
         "source": "SIAM instructions for authors, epubs.siam.org",
+        "no_doi": "a publisher's instructions-for-authors page, which is not a "
+                  "deposited work",
         "verified": "2026-07-29",
         "quote": "Illustrations must use lines one point or thicker; thinner "
                  "lines may break up or disappear when printed.",
@@ -1423,6 +1508,7 @@ EXTERNAL_CLAIMS = {
                   "figure panels; PNAS, pnas.org/author-center/"
                   "submitting-your-manuscript; Science instructions for "
                   "preparing an initial manuscript, science.org",
+        "no_doi": "three publishers' author-guidance pages, none deposited",
         "verified": "2026-08-17",
         "quote": 'Nature: "Maximum text size: 7pt", "Minimum text size: 5pt". '
                  'PNAS: "Ensure that all numbers, letters, and symbols are no '
@@ -1438,6 +1524,7 @@ EXTERNAL_CLAIMS = {
                   "at the final reduced size for line widths",
         "source": "Science instructions for preparing an initial manuscript, "
                   "science.org",
+        "no_doi": "the same author-guidance page as 'journal type floors'",
         "verified": "2026-08-17",
         "quote": 'Science on line widths: "minimum of 0.5 point at the final '
                  'reduced size". The same page is the source for the 6 point '
@@ -1452,6 +1539,8 @@ EXTERNAL_CLAIMS = {
         "source": "LaTeX2e kernel, fontmath.ltx, the DeclareMathSizes table, "
                   "read at texmf-dist/tex/latex/base/fontmath.ltx; LaTeX2e "
                   "font selection guide on math styles",
+        "no_doi": "a source file in the LaTeX2e kernel, read from the local "
+                  "texmf tree",
         "verified": "2026-09-07",
         "quote": 'fontmath.ltx declares {text}{text}{script}{scriptscript} as '
                  '5->{5}{5}, 6->{5}{5}, 7->{5}{5}, 8->{6}{5}, 9->{6}{5}, '
@@ -1468,6 +1557,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "0.7 of the level above",
         "source": "matplotlib._mathtext, SHRINK_FACTOR and NUM_SIZE_LEVELS, "
                   "read from the installed package",
+        "no_doi": "a module in an installed dependency, not a published work",
         "verified": "2026-09-07",
         "quote": "SHRINK_FACTOR = 0.7 and NUM_SIZE_LEVELS = 6 in "
                  "matplotlib/_mathtext.py, applied per nesting level with no "
@@ -1482,6 +1572,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "does not accept Type 3",
         "source": "IEEE PDF eXpress author requirements; ACM TAPS LaTeX best "
                   "practices",
+        "no_doi": "two publishers' author-requirement pages, neither deposited",
         "verified": "2026-07-29",
         "quote": "Embedded Type 1 or TrueType fonts are required as subset "
                  "fonts. Type 3 fonts (bitmaps) will not be accepted.",
@@ -1491,6 +1582,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "99.81% of programmatically",
         "source": "Potluri, Singanamalla, Tieanklin & Mankoff, ASSETS '23, "
                   "arXiv:2308.03241",
+        "doi": "10.1145/3597638.3608417",
         "verified": "2026-07-29",
         "quote": "The vast majority of the programmatically generated images "
                  "(N=342102 (99.81%)) do not have associated alternative text.",
@@ -1500,6 +1592,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "not the data-ink ratio",
         "source": "Bateman, Mandryk, Gutwin, Genest, McDine & Brooks, CHI '10, "
                   "2573-2582",
+        "doi": "10.1145/1753326.1753716",
         "verified": "2026-07-29",
         "quote": "We found that people's accuracy in describing the "
                  "embellished charts was no worse than for plain charts, and "
@@ -1510,7 +1603,8 @@ EXTERNAL_CLAIMS = {
         "document": "style-guide.md",
         "anchor": "Why there is still no size-weighted gate",
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
-                  "2014(1), 253-258",
+                  "22(1), 253-258",
+        "doi": "10.2352/CIC.2014.22.1.art00045",
         "verified": "2026-07-31",
         "quote": "In the paper, we describe a way to model discriminability as "
                  "a function of size for target sizes ranging from 6 degrees "
@@ -1527,6 +1621,7 @@ EXTERNAL_CLAIMS = {
         "source": "Machado, Oliveira & Fernandes, IEEE TVCG 15(6), 2009, "
                   "Table 1; coefficients read from the authors' page at "
                   "inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/",
+        "doi": "10.1109/TVCG.2009.113",
         "verified": "2026-07-31",
         # What was checked is the table, cell by cell, not a sentence about it:
         # four matrices were read off the authors' page and asserted against the
@@ -1536,10 +1631,22 @@ EXTERNAL_CLAIMS = {
         "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
                  "-0.038205.",
     },
+    "red-green prevalence": {
+        "document": "style-guide.md",
+        "anchor": "European men and 4-6.5% of Chinese and Japanese men",
+        "source": "Birch, JOSA A 29(3), 313-320, 2012",
+        "doi": "10.1364/JOSAA.29.000313",
+        "verified": "2026-09-28",
+        "quote": "Large random population surveys show that the prevalence of "
+                 "deficiency in European Caucasians is about 8% in men and "
+                 "about 0.4% in women and between 4% and 6.5% in men of "
+                 "Chinese and Japanese ethnicity.",
+    },
     "graphical perception ordering": {
         "document": "choosing-a-form.md",
         "anchor": "six ranks and not",
         "source": "Cleveland & McGill, JASA 79(387), 1984",
+        "doi": "10.1080/01621459.1984.10478080",
         "verified": "2026-07-29",
         "quote": "The ordering is position along a common scale; position "
                  "along non-aligned scales; length, direction, angle; area; "
@@ -1551,6 +1658,7 @@ EXTERNAL_CLAIMS = {
         "anchor": "Cleveland's banking to 45 degrees",
         "source": "Cleveland, McGill & McGill, JASA 83(402), 1988, as "
                   "surveyed by Heer & Agrawala 2006",
+        "doi": "10.1080/01621459.1988.10478598",
         "verified": "2026-08-01",
         "quote": "Cleveland et al. conducted human-subject experiments showing "
                  "that viewers judge the ratio of the slopes of two adjacent "
@@ -1562,7 +1670,8 @@ EXTERNAL_CLAIMS = {
     "slopeless lines culling": {
         "document": "choosing-a-form.md",
         "anchor": "after Heer and Agrawala's \"slopeless lines\"",
-        "source": "Heer & Agrawala, IEEE TVCG 12(4), 2006, section 2.7",
+        "source": "Heer & Agrawala, IEEE TVCG 12(5), 2006, section 2.7",
+        "doi": "10.1109/TVCG.2006.163",
         "verified": "2026-08-01",
         "quote": "an additional modification is to cull \"slopeless\" lines -- "
                  "those with either zero or infinite slope. Horizontal and "
@@ -1644,6 +1753,62 @@ def test_an_external_source_is_named_in_the_references(claim):
     assert surname in text or surname.lower() in text.lower(), (
         f"{claim} cites {entry['source']}, and {surname} appears nowhere in "
         f"{entry['document']}. A source the reader cannot see is not a source")
+
+
+# A surname in the document proves a citation exists. It does not prove the
+# citation is right, and the gap has a shipped example: `choosing-a-form.md`
+# gave Heer & Agrawala as IEEE TVCG 12(4) for as long as the entry existed. The
+# paper is 12(5), and "Heer" was in the document either way, so every gate above
+# passed. It was the one reference in either section carrying no DOI.
+#
+# So a deposited work is cited by identifier, and the identifier is printed
+# where the reader is. Resolving it is what catches a wrong volume, issue, page
+# or year, and it is the reader's lookup rather than the suite's: nothing here
+# reaches the network.
+DOI = re.compile(r"10\.\d{4,9}/\S+")
+
+
+@pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
+def test_every_external_claim_carries_a_doi_or_says_why_it_cannot(claim):
+    """An absent identifier is a decision or an oversight, and a ledger that
+    cannot tell them apart is how the oversight survives."""
+    entry = EXTERNAL_CLAIMS[claim]
+    doi, why = entry.get("doi"), entry.get("no_doi")
+    assert bool(doi) != bool(why), (
+        f"{claim} records doi={doi!r} and no_doi={why!r}. Exactly one of them: "
+        "the identifier, or the reason the source has none")
+    if doi:
+        assert DOI.fullmatch(doi), f"{claim} records {doi!r} as a DOI"
+    else:
+        assert len(why) > 20, (
+            f"{claim} excuses its missing DOI with {why!r}, which does not say "
+            "what kind of source it is")
+
+
+@pytest.mark.parametrize("claim", sorted(EXTERNAL_CLAIMS))
+def test_a_cited_doi_is_printed_where_the_reader_is(claim):
+    """The identifier only settles anything if the reader has it."""
+    entry = EXTERNAL_CLAIMS[claim]
+    if not entry.get("doi"):
+        return
+    text = document(entry["document"]).read_text(encoding="utf-8").lower()
+    assert entry["doi"].lower() in text, (
+        f"{claim} cites {entry['doi']}, which appears nowhere in "
+        f"{entry['document']}. Case-insensitively, because a DOI is")
+
+
+def test_no_two_claims_cite_the_same_doi():
+    """The wrong-volume defect came from copying a neighbouring entry. Copying
+    the identifier too is the same slip, one field further along."""
+    seen: dict[str, str] = {}
+    for claim in sorted(EXTERNAL_CLAIMS):
+        doi = EXTERNAL_CLAIMS[claim].get("doi")
+        if not doi:
+            continue
+        assert doi.lower() not in seen, (
+            f"{claim} and {seen[doi.lower()]} both cite {doi}. Two claims "
+            "about one paper belong in one entry")
+        seen[doi.lower()] = claim
 
 
 # --- gate behaviour the prose describes, executed --------------------------
@@ -1785,12 +1950,17 @@ def test_the_two_entry_points_return_the_same_shape():
     assert all(len(row) == 3 for row in audit_rows + check_rows), (
         "the (label, status, detail) triple is the other half of the shape "
         "both entry points promise")
+    # `docs/compatibility.md` names the three statuses as part of the public
+    # API; a fourth, or a truthy string other than "warn", is a break.
+    statuses = [row[1] for row in audit_rows + check_rows]
+    assert all(s is True or s is False or s == "warn" for s in statuses), (
+        f"a row status outside True, False, 'warn': {set(map(repr, statuses))}")
 
 
 def test_both_entry_points_are_documented():
-    """`audit` and `check` are the whole public surface. Both had no docstring
-    while private helpers carried paragraphs, which is the wrong way round for
-    anyone reading the module rather than the guide."""
+    """`audit` and `check` are the two entry points, and a reader of the
+    module starts there. `test_api_reference.py` holds every other public
+    callable to a docstring."""
     for name, func in (("check_figure.audit", cf.audit),
                        ("check_palette.check", cp.check)):
         assert (func.__doc__ or "").strip(), f"{name} has no docstring"
@@ -1800,28 +1970,14 @@ def test_both_entry_points_are_documented():
 # clause, so the guide's premise - that a gate's own message routes the reader -
 # holds for all but the one named here.
 #
-# The set was five. Four of those did route the reader and were misfiled: they
-# wrote the fix as prose without adopting the marker, and a test reading for
-# the marker reported "no remediation" when the remediation was right there.
-# `check_contour_dash` was the sharpest case, exempted as "advisory" while
-# naming an exact call. Rather than teach the detector to sniff prose for
-# imperatives, which is a guess about intent that rots, those four adopted the
-# marker. What is left is the gate that genuinely says nothing.
-#
-# The opposite error followed, and cost the marker its meaning: six clauses wore
-# the remediation marker while naming no action, only the reason the row fired.
-# `check_banking` said "Cleveland banks to 45 degrees", `check_line_weight`
-# cited SIAM, the normal-vision floor said "hard to tell apart in full color".
-# True, and not a fix, and the detector counted every one of them as one.
-#
-# So the one marker became two, and both are named rather than drawn. The old
-# `  <- ` said nothing about which of the two things it introduced, and a split
-# that turned on one glyph - an arrow against a tilde - would have been a
-# distinction no reader scanning a wall of detail text could hold. `[FIX]` and
-# `[WHY]` say it, and read against the `[PASS]`/`[FAIL]` the report already
-# prints. A message may hold both, in that order.
-# `test_a_reason_clause_never_stands_in_for_a_fix` stops the reasons drifting
-# back into the fix mark.
+# A fix written as prose without the marker reads as no fix, so a message that
+# names an action carries `[FIX]` rather than the detector sniffing prose for
+# imperatives. A reason is not a fix: "Cleveland banks to 45 degrees" is true
+# and names no action, so it carries `[WHY]`. A message may hold both, in that
+# order. The marks are words, not glyphs, so a reader scanning detail text can
+# tell them apart, and they read against the `[PASS]`/`[FAIL]` the report
+# already prints. `test_a_reason_clause_never_stands_in_for_a_fix` stops the
+# reasons drifting back into the fix mark.
 FIX_MARK, WHY_MARK = "  [FIX] ", "  [WHY] "
 
 MESSAGES_WITHOUT_A_FIX_CLAUSE = {
@@ -1982,3 +2138,117 @@ def test_the_clipping_message_sends_the_reader_to_the_documented_fix():
     assert "constrained_layout" in detail and "widen" in detail, (
         f"the clipping message is now {detail!r}, which no longer names the "
         "fix the guide's section is built on")
+
+
+# --- examples/demo.py's case for ink labels ----------------------------------
+# The comment above demo.py's direct labels argues from two measured colour
+# differences against `NORMAL_FLOOR`. These re-derive both, so a metric or
+# floor change that moves them fails here.
+
+def _darkened_to_text_contrast(hex_color):
+    """`hex_color` with OKLab lightness lowered, hue kept, until 4.5:1 on white."""
+    L, a, b = cp.linear_to_oklab(cp.hex_to_linear(hex_color))
+
+    def lin(lightness):
+        l_ = lightness + 0.3963377774 * a + 0.2158037573 * b
+        m_ = lightness - 0.1055613458 * a - 0.0638541728 * b
+        s_ = lightness - 0.0894841775 * a - 1.2914855480 * b
+        l, m, s = l_ ** 3, m_ ** 3, s_ ** 3
+        return (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+
+    def to_hex(rgb):
+        out = []
+        for c in rgb:
+            c = min(1.0, max(0.0, c))
+            v = 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+            out.append(round(v * 255))
+        return "#{:02x}{:02x}{:02x}".format(*out)
+
+    while cp.contrast(to_hex(lin(L)), "#ffffff") < 4.5:
+        L -= 0.001
+    return to_hex(lin(L))
+
+
+@pytest.mark.parametrize("series,darkened,de,past_floor", [
+    ("#e69f00", "#aa6700", 21.7, True),
+    ("#56b4e9", "#107eb0", 20.5, False),
+])
+def test_demo_states_the_darkened_label_colours(series, darkened, de,
+                                                past_floor):
+    text = (ROOT / "examples" / "demo.py").read_text(encoding="utf-8")
+    got = _darkened_to_text_contrast(series)
+    measured = cp.delta_e(cp.hex_to_linear(series), cp.hex_to_linear(got))
+    assert got == darkened, f"{series} now darkens to {got}"
+    assert round(measured, 1) == de, f"{series} is now dE {measured:.1f}"
+    assert (measured >= cp.NORMAL_FLOOR) is past_floor
+    assert darkened in text and f"dE {de}" in text, (
+        f"demo.py no longer states {darkened} at dE {de}")
+    assert f"of {cp.NORMAL_FLOOR}" in text, "demo.py states a stale NORMAL_FLOOR"
+
+
+# The comment above test_figure.py's module-level numpy import says every test
+# before it imports numpy for itself. The module-level name is bound before any
+# test runs, so a test that leans on it passes and the comment goes false
+# silently.
+
+def test_figure_tests_above_the_shared_numpy_import_import_their_own():
+    source = (ROOT / "tests" / "test_figure.py").read_text(encoding="utf-8")
+    assert "every test above imports numpy inside" in source
+    tree = ast.parse(source)
+    shared = next(node.lineno for node in tree.body
+                  if isinstance(node, ast.Import)
+                  and any(a.asname == "np" for a in node.names))
+
+    def binds_np(fn):
+        return any(isinstance(n, ast.Import) and any(a.asname == "np"
+                                                     for a in n.names)
+                   for n in ast.walk(fn))
+
+    leaning = [fn.name for fn in tree.body
+               if isinstance(fn, ast.FunctionDef) and fn.lineno < shared
+               and not binds_np(fn)
+               and any(isinstance(n, ast.Name) and n.id == "np"
+                       for n in ast.walk(fn))]
+    assert not leaning, f"use the module-level np: {leaning}"
+
+
+# Test docstrings that count the gallery. Read against `BUILDERS`, parsed out
+# of gallery.py rather than imported, so the count is the script's.
+
+def _gallery_builder_count():
+    tree = ast.parse((ROOT / "examples" / "gallery.py").read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.Assign)
+                and any(getattr(t, "id", None) == "BUILDERS" for t in n.targets))
+    return len(node.value.elts)
+
+
+@pytest.mark.parametrize("path,pattern", [
+    ("tests/test_external_style_corpus.py", r"against the ([\w-]+) figures in"),
+    ("tests/test_docs_match_code.py", r"([\w-]+) figures, \1 descriptions"),
+])
+def test_test_docstrings_count_the_gallery_it_has(path, pattern):
+    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22}
+    text = " ".join((ROOT / path).read_text(encoding="utf-8").split())
+    stated = re.search(pattern, text, re.I)
+    assert stated, f"{path} no longer counts the gallery in the form read here"
+    assert words.get(stated.group(1).lower()) == _gallery_builder_count(), (
+        f"{path} says {stated.group(1)} figures; gallery.py builds "
+        f"{_gallery_builder_count()}")
+
+
+# The severity sweep's result is quoted in the guide and above `MACHADO` in
+# check_palette.py. Nothing recomputes it here (the sweep takes minutes), so
+# the two copies are held to each other.
+
+def test_the_severity_sweep_is_quoted_the_same_in_the_guide_and_the_module():
+    def figures(text):
+        text = " ".join(text.split()).replace("244 650", "244650")
+        return (re.search(r"over (\d+) pairs", text).group(1),
+                re.search(r"([\d.]+)% clear", text).group(1),
+                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1))
+
+    guide = (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8")
+    module = (SKILL / "scripts" / "check_palette.py").read_text(encoding="utf-8")
+    assert figures(guide) == figures(module)

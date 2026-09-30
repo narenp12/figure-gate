@@ -1,11 +1,10 @@
-"""The example in the README has to actually run.
+"""The examples have to run, on every matplotlib the project supports.
 
-Added after CI caught what local testing could not: `examples/demo.py` reached
-for `colormaps["okabe_ito"]` unconditionally, which needs matplotlib 3.11. On
-Python 3.9 the newest installable matplotlib is 3.9, so the example could never
-have worked there -- while the whole suite stayed green, because no test ran the
-example. A README whose first code block crashes on a supported version is worse
-than no README.
+A README whose first code block crashes on a supported version is worse than
+no README. `examples/demo.py` reads `colormaps["okabe_ito"]`, which exists from
+matplotlib 3.11, so it carries a fallback for older versions, and these tests
+run the example and pin the fallback to the builtin. Without them a crash on
+an older matplotlib leaves the rest of the suite green.
 """
 
 import subprocess
@@ -71,10 +70,9 @@ def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     assert result.stdout.count("PASS  gallery-") == 20, result.stdout[-4000:]
     assert len(list(tmp_path.glob("gallery-*.png"))) == 20, result.stdout[-4000:]
     # An advisory row does not fail the run, so a gate that over-fires here
-    # would be invisible to the assertions above. Banking is the newest and the
-    # loosest, and the corpus is the only evidence that its band is not a
-    # nuisance: the 9 line panels it reads across these figures report typical
-    # segments from 20 to 63 degrees, well inside the band the row accepts.
+    # would be invisible to the assertions above. Banking's band is the
+    # loosest, and the corpus is the only evidence that it is not a nuisance:
+    # a WARN on any line panel in these figures fails here.
     assert "[WARN] Banking" not in result.stdout, result.stdout[-4000:]
 
 

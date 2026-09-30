@@ -2,9 +2,9 @@
 
 A change that makes a gate fire more often has to be measured before it ships,
 and the measurement is always the same: run the corpus on the commit before,
-run it after, diff the rows. That procedure has been reconstructed from memory
-every round it was needed, which is the failure this file exists to stop, and
-the same one the `Makefile` header describes.
+run it after, diff the rows. This file is that procedure written down, so it
+is not reconstructed from memory each time; `make sweep` runs its first step,
+for the reason the `Makefile` header gives.
 
 Usage:
 
@@ -65,7 +65,7 @@ def sweep() -> dict:
                           for row, status, detail in rows]
         return ok
 
-    # Both modules did `import check_figure as cf` at their own module scope,
+    # Both modules do `import check_figure as cf` at their own module scope,
     # so patching the attribute on `cf` alone would leave their bound names
     # pointing at the real `report`.
     real = cf.report

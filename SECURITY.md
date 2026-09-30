@@ -16,8 +16,8 @@ one within 30. You will be credited in the advisory unless you ask not to be.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | yes |
-| < 0.1   | no |
+| latest release | yes |
+| anything older | no |
 
 Only the latest release gets fixes. The project is small enough that a patch
 release is cheap and a backport branch would not be maintained.
@@ -26,27 +26,27 @@ release is cheap and a backport branch would not be maintained.
 
 This is not a service and holds no data. It is three scripts that run inside
 someone else's test suite or build, usually on figures that project wrote
-itself. That narrows what a vulnerability actually looks like:
+itself. That narrows what a vulnerability looks like:
 
 **In scope**
 
 - Code execution, file writes or network access triggered by a palette string,
   a figure, or a command-line argument. Nothing here should reach outside the
   process, and `check_palette.py` imports nothing outside the standard library
-  precisely so that claim stays checkable.
-- Anything that makes an installed artifact differ from the tagged source — a
-  compromised release workflow, a wheel whose contents do not match the tag, a
-  broken PEP 740 attestation.
+  so that claim stays checkable.
+- Anything that makes an installed artifact differ from the tagged source: a
+  compromised release workflow, a wheel whose contents do not match the tag, or
+  a broken PEP 740 attestation.
 - A path traversal or unexpected write in the report and figure-saving helpers.
 - Denial of service that is disproportionate to the input: a palette of a dozen
   colors or a normal figure that hangs or exhausts memory. The `O(n^2)` fallback
-  in `check_overplotting` on a genuinely enormous scatter is a documented
-  trade-off, not a vulnerability.
+  in `check_overplotting` on an enormous scatter is a documented trade-off, not
+  a vulnerability.
 
 **Out of scope**
 
 - A gate that passes a figure it should fail, or fails one it should pass. That
-  is a correctness bug and belongs in a public issue — it is the kind of report
+  is a correctness bug and belongs in a public issue. It is the kind of report
   the project most wants, just not through this channel.
 - Vulnerabilities in matplotlib, NumPy or SciPy. Report those upstream; if one
   needs a version floor raised here, open an issue and say so.
@@ -58,4 +58,5 @@ itself. That narrows what a vulnerability actually looks like:
 - Release workflows pin their actions by commit, not by tag, and publish through
   PyPI trusted publishing with attestations.
 - CodeQL runs on every change to `main` and weekly.
-- Dependabot proposes action and dev-dependency updates weekly.
+- Dependabot proposes GitHub Actions updates weekly. Python dependencies are
+  left out on purpose; `.github/dependabot.yml` says why.

@@ -2,8 +2,8 @@
 states: the behaviour behind the recipes is gate-side already, and asserting it
 twice is what `test_suite_balance.py` catches.
 
-The pages split by Diataxis mode, so what this file reads is now spread over
-three of them: `how-to.md` holds the recipes and the values they quote,
+The pages split by Diataxis mode, so what this file reads is spread over three
+of them: `how-to.md` holds the recipes and the values they quote,
 `gates.md` holds the every-row remedy table, and `cli.md` holds the venue count.
 One file still, because the three claims are one claim about `suggest_fixes.py`
 and `VENUE_WIDTH_PT` and splitting the test would let a page drop its half
@@ -29,7 +29,8 @@ GATES_TEXT = (DOCS / "gates.md").read_text(encoding="utf-8")
 CLI_TEXT = (DOCS / "cli.md").read_text(encoding="utf-8")
 
 # Counts the pages write in words. A `KeyError` is one that moved.
-WORDS = {8: "eight", 10: "ten", 11: "Eleven", 12: "twelve"}
+WORDS = {8: "eight", 9: "nine", 10: "ten", 11: "Eleven", 12: "twelve",
+         18: "eighteen"}
 
 
 def table_rows():
@@ -60,8 +61,13 @@ def test_the_prose_counts_the_remedies_it_marks():
     assert (f"{WORDS[with_remedy]} rows carry a remedy" in GATES_TEXT
             and f"{WORDS[sum(1 for r in sf.REMEDIES if r.code)]} of those"
             in GATES_TEXT)
-    assert (f"The other {WORDS[len(cf.GATES) - with_remedy]} name their fix"
-            in GATES_TEXT)
+    # One of the rest, `check_collisions`, names the two strings and no fix,
+    # so the page's count of the others excludes it.
+    other = len(cf.GATES) - with_remedy
+    assert (f"{WORDS[other - 1].capitalize()} of the other {WORDS[other]} "
+            "name their fix" in " ".join(GATES_TEXT.split()))
+    assert "Text collision names the two strings and no fix" in \
+        " ".join(GATES_TEXT.split())
 
 
 def quoted_from_code():
@@ -95,3 +101,33 @@ def quoted_from_code():
                          ids=lambda q: q[:40] if isinstance(q, str) else q)
 def test_the_page_quotes_what_the_code_returns(page, quoted):
     assert quoted in {"how-to.md": TEXT, "cli.md": CLI_TEXT}[page]
+
+
+# --- the venue table ---------------------------------------------------------
+# The count above says the table has as many rows as the dict, not what the
+# numbers in them are. Each width is read off a LaTeX log, and each is a chance
+# to transpose a digit between the log and the page. A width that
+# disagrees with the dict certifies type against a width nothing measures.
+
+def cli_venue_table():
+    """`{venue: points}` parsed out of cli.md's venue table."""
+    rows = {}
+    for line in CLI_TEXT.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 4 and cells[0] in cf.VENUE_WIDTH_PT:
+            rows[cells[0]] = float(cells[1])
+    return rows
+
+
+def test_the_venue_table_states_the_widths_the_dict_holds():
+    assert cli_venue_table() == pytest.approx(dict(cf.VENUE_WIDTH_PT))
+
+
+def test_the_venue_table_states_each_width_in_inches():
+    """The second column, at the same two decimals `--venues` prints."""
+    for venue, pt in cli_venue_table().items():
+        cells = next(
+            [c.strip() for c in line.strip().strip("|").split("|")]
+            for line in CLI_TEXT.splitlines()
+            if line.startswith(f"| {venue} |"))
+        assert float(cells[2]) == round(pt / 72, 2), venue

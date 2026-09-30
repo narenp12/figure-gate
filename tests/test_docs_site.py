@@ -75,11 +75,9 @@ NAV_ENTRY = re.compile(r'^\s*\{\s*"[^"]+"\s*=\s*"([^"]+\.md)"\s*\},?\s*$')
 # `skill/scripts/` at build time, so the single copy it serves is the code.
 # `tests/test_api_reference.py` holds the directives to the modules.
 #
-# `gates.md` and `getting-started.md` are site-only in the same sense
-# `gallery.md` is: they are the one copy of what they say. Both came out of the
-# README, which was carrying the threshold tables, the install routes and the
-# usage examples for a project that has a docs site. Nothing was duplicated in
-# the move, which is what keeps this set honest rather than a growing exemption.
+# The other pages are site-only in the same sense `gallery.md` is: each is the
+# one copy of what it says, and no symlinked document repeats it. That is what
+# keeps this set honest rather than a growing exemption.
 # `how-to.md` is site-only for the third reason: it is task recipes, and a
 # recipe is a claim about what the code does when you type it. `test_how_to.py`
 # runs the commands, recomputes the numbers and re-derives the row table from
@@ -169,6 +167,53 @@ def test_no_page_has_become_a_copy():
         "single copy, or added to AUTHORED if they are genuinely site-only")
 
 
+# --- a page's name in a browser tab is the page's name ------------------------
+# Zensical titles a page from its filename. Not from its `# heading`, and not
+# from the nav label: `cli.md` shipped as "Cli - figure-gate" with `# Commands`
+# at the top of it and "Commands" in the nav. That string is the browser tab,
+# the search result and the link card, so it is the one place a page's own name
+# has to be written down rather than derived from a slug.
+#
+# `title:` front matter is what the theme reads, and only the authored pages can
+# carry it: the rest are symlinks, and front matter in their targets would show
+# up in the README on PyPI and in the style guide a reader vendors. So the gate
+# is scoped to `AUTHORED`.
+
+FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
+DECLARED_TITLE = re.compile(r'^title:\s*"([^"]+)"\s*$', re.M)
+
+
+def authored_nav_pages():
+    return sorted(set(nav_targets()) & AUTHORED)
+
+
+def declared_title(page):
+    block = FRONT_MATTER.match((DOCS / page).read_text(encoding="utf-8"))
+    if not block:
+        return None
+    found = DECLARED_TITLE.search(block.group(1))
+    return found.group(1) if found else None
+
+
+def test_the_authored_pages_are_reachable_from_the_nav():
+    """The parametrize below is derived, so an empty list would delete the
+    gate rather than fail it. Nine of the ten names in `AUTHORED` are nav
+    entries; `abbreviations.md` is the glossary `snippets` appends and is not
+    a page."""
+    assert len(authored_nav_pages()) == 9, (
+        f"{authored_nav_pages()} is what the nav and AUTHORED have in common, "
+        "expected 9 - one of the two lists moved and this number goes with it")
+
+
+@pytest.mark.parametrize("page", authored_nav_pages())
+def test_an_authored_page_writes_down_its_own_title(page):
+    title = declared_title(page)
+    assert title, (
+        f"docs/{page} declares no `title:` in its front matter, so the site "
+        f"will title it from its filename: {page[:-3].capitalize()!r}. Write "
+        "the name the page should be known by")
+
+
 # --- a `#` in column one is a heading, whatever it was meant to be ------------
 # Python-Markdown splits blocks before it parses inline spans, so a line that
 # begins with `#` becomes an ATX heading even when it is plainly the middle of a
@@ -217,14 +262,10 @@ def test_no_line_becomes_a_heading_by_accident(page, target):
 
 
 # --- one list of build dependencies, in pyproject.toml ------------------------
-# The build step used to read `uv run --no-project --with "zensical>=0.0.51,<0.1"`,
-# which is the `docs` dependency group spelled out a second time in a file
-# nothing resolves against `pyproject.toml`. It was correct for exactly as long
-# as the two lists happened to agree, and they stopped agreeing the first time
-# the build needed a package only one of them named: the group gained
-# `mkdocstrings-python` for the API page, the workflow line did not, and CI
-# failed with `No module named 'mkdocstrings'` after the same build passed
-# locally in a project environment that had it. `--group docs` leaves one list.
+# The build step installs `--group docs`, so the docs dependencies are listed
+# once. A `--with` list in the workflow is a second copy that drifts: when the
+# group gained `mkdocstrings-python` and the workflow line did not, CI failed
+# with `No module named 'mkdocstrings'` on a build that passed locally.
 
 WORKFLOW = ROOT / ".github" / "workflows" / "docs.yml"
 PYPROJECT = ROOT / "pyproject.toml"
@@ -449,9 +490,10 @@ def test_the_two_schemes_do_not_share_one_color():
         "override it exists to justify is no longer needed")
 
 
-# Seven were configured that no page used, and `pymdownx.emoji` was not inert:
-# it read the `:::` of a prose mkdocstrings mention as a shortcode and ate the
-# line. None = nothing to grep, so the entry says which test holds it instead.
+# Each configured extension maps to the syntax that shows a page uses it. An
+# unused extension is not inert: `pymdownx.emoji` read the `:::` of a prose
+# mkdocstrings mention as a shortcode and ate the line. None = nothing to grep,
+# so the entry says which test holds it instead.
 EXTENSION_SYNTAX = {
     "admonition": r"^\s*(!!!|\?\?\?\+?) \w", "attr_list": r"\{ *[.#][A-Za-z]",
     "md_in_html": r"markdown=[\"']?(span|block|1)", "tables": r"^\s*\|.*\|",
@@ -486,25 +528,12 @@ def test_every_configured_extension_is_used_by_a_page():
                         "site serves uses their syntax. Drop them.")
 
 
-# Each of these emits markup. The two view-time features are in
-# test_docs_render.py, and `navigation.indexes` is not set: it measured as a
-# no-op, because no section in the nav points at a file.
-NAVIGATION_MARKUP = {
-    "navigation.tabs": "md-tabs",
-    "navigation.sections": "md-nav__item--section",
-    "navigation.path": "md-path",
-    "navigation.footer": "md-footer__link",
-}
-
-
-@pytest.mark.parametrize("feature,marker", sorted(NAVIGATION_MARKUP.items()))
-def test_a_configured_navigation_feature_reaches_the_built_page(feature, marker):
-    """The silent-typo guard, as an assertion."""
-    built = ROOT / "site" / "gates" / "index.html"
-    if not built.is_file():
-        pytest.skip("no built site - run `zensical build` first")
-    assert f'"{feature}"' in CONFIG.read_text(encoding="utf-8"), (
-        f"{feature} left the features list; drop this row with it")
-    assert marker in built.read_text(encoding="utf-8"), (
-        f"{feature} is configured and `{marker}` is absent from the built "
-        "page, so the name is doing nothing - check it against the theme's")
+# `NAVIGATION_MARKUP` and the test that reads it are in test_docs_render.py,
+# with the other features whose evidence is markup rather than a file. This file
+# reads `docs/` and `zensical.toml`, which are inputs and are always there; that
+# one reads `site/`, which exists only after a build. Keeping the two apart is
+# what stops a test from opening a directory another test is rewriting: `site/`
+# has one copy per checkout and `built_site` cleans it, so a reader that does not
+# take that fixture is racing it. Here it did, and skipped about half of
+# `-n auto` runs on "no built site" while the build it was waiting for was
+# already finished.
