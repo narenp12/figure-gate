@@ -28,8 +28,8 @@ jobs:
       - run: uv python install 3.13
       - run: uv build
       # Same uploader as the real release. A rehearsal on a different mechanism
-      # rehearses the wrong thing -- the missing attestations on 0.1.0 went
-      # unnoticed here for exactly that reason.
+      # rehearses the wrong thing: attestations, for one, come from the
+      # uploader.
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/

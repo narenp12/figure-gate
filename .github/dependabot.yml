@@ -11,19 +11,17 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci"
-    # Ungrouped, deliberately. The first grouped run (PR #10) proposed one
-    # major number across three unrelated actions and moved setup-uv from the
-    # v9.0.0 pinned in release.yml down to v7.6.0 -- a downgrade, on the
-    # workflow that publishes to PyPI, under twelve green checks. One action
-    # per pull request makes that visible in the title.
+    # Ungrouped, deliberately: one action per pull request puts each version
+    # change in the title. A grouped run (PR #10) hid a setup-uv downgrade,
+    # v9.0.0 to v7.6.0 on the workflow that publishes to PyPI, under twelve
+    # green checks.
     #
     # One exception, and only where the coupling is the action's own. The
     # codeql-action directories are one action released under one tag: a run
     # whose init and analyze disagree fails in the analyze post-action with
     # "Loaded a configuration file for version X, but running version Y". Split
-    # across two pull requests (#52 and #54) neither half could go green, and
-    # merging either would have left main in the state that produces that
-    # error. The group is the narrowest one that covers it -- the pattern
+    # across two pull requests (#52 and #54) neither half can go green, and
+    # merging either leaves main in the state that produces that error. The group is the narrowest one that covers it -- the pattern
     # matches nothing but codeql-action, so the visibility the ungrouped
     # default buys for unrelated actions is untouched.
     groups:
@@ -31,14 +29,11 @@ updates:
         patterns:
           - "github/codeql-action*"
 
-# Still no Python entry, and the reason has changed. It used to be that
-# uv.lock was gitignored, so there was nothing pinned for Dependabot to raise:
-# every dependency is a floor (`matplotlib>=3.8`, `pytest>=7.0`) and a floor
-# already admits the newest release.
-#
-# The lock is committed now, so a `uv` entry would have something to bump --
-# and it is left off deliberately rather than forgotten. The lock governs the
-# `uv run` and `uv sync` jobs only: lint, api, and the docs build. The test
+# No Python entry, deliberately. Every dependency is a floor
+# (`matplotlib>=3.8`, `pytest>=7.0`), and a floor already admits the newest
+# release. The committed uv.lock would give a `uv` entry something to bump, but
+# the lock governs the `uv run` and `uv sync` jobs only: lint, api, and the docs
+# build. The test
 # matrix installs through `uv pip install --system`, which does not read the
 # lock at all -- checked, not assumed: against a lock pinning packaging 21.3,
 # `uv pip install "packaging>=21"` resolves 26.3 while `uv sync` gives 21.3.

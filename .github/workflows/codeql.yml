@@ -29,7 +29,7 @@ jobs:
   analyze:
     name: Analyze ${{ matrix.language }}
     runs-on: ubuntu-latest
-    # 10, down from 30. Measured across three runs: `python` peaks at 1m13s
+    # 10. Measured across three runs: `python` peaks at 1m13s
     # and `actions` at 48s, both including the query pack download. Ten leaves
     # room for a cold pack and for `security-and-quality` growing, without
     # leaving half an hour on the clock for a job that takes one minute.
@@ -53,11 +53,8 @@ jobs:
       # init and analyze move together, always. They are one action published
       # under one tag, and a run that mixes two versions dies in the analyze
       # post-action with "Loaded a configuration file for version X, but
-      # running version Y". Dependabot raised them as PR #52 and PR #54, one
-      # line each, and both failed for that reason; neither could have gone
-      # green alone, and merging either would have broken CodeQL on main until
-      # the other landed. The group in dependabot.yml now keeps them in one
-      # pull request.
+      # running version Y". The group in dependabot.yml keeps them in one pull
+      # request.
       - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
