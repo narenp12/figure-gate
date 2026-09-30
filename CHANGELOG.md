@@ -72,6 +72,8 @@ behind a threshold this project enforces.
 
 #### Fixed
 
+- `release.yml`'s TeX install retries at `timeout 60` and `timeout 240`, down
+  from 300 and 600, and no longer sleeps after its last attempt.
 - `check_style_sheet` warns on a key the sheet names that matplotlib dropped
   while parsing, such as `grid.color: #e1e0d9`. It returned True for one.
 - The `scale` argument of `audit`, `report` and `audit_json`, and the return of
@@ -149,6 +151,15 @@ behind a threshold this project enforces.
   `tests/test_palette.py`.
 
 ### Why it changed
+
+#### A release retry loop longer than its job
+
+`release.yml`'s `test` job is bounded at 20 minutes, and its TeX retry loop
+could take 3 x (300 + 600) seconds plus 90 of sleeps, 2790 in all. A stalled
+mirror would have been cancelled mid-loop, before the loop's `::error::`
+line ran: the defect `pgf` in `ci.yml` was already fixed for. The loop now
+uses `pgf`'s budget, 945 seconds, and
+`test_a_retry_loop_fits_inside_its_job` holds every retry loop to its job.
 
 #### A hashed colour the style-sheet row could not see
 

@@ -29,9 +29,11 @@ jobs:
       # `timeout` because a mirror that stalls returns no error for a retry
       # loop to catch, the loop because the next mirror usually answers, and
       # the output left visible because a silent step tells a reader nothing
-      # about where it stopped. The same install as ci.yml's `pgf` job, for the
-      # same test, on a looser per-attempt budget because this job has no
-      # 18 minute bound to fit inside.
+      # about where it stopped. The same install and budget as ci.yml's `pgf`
+      # job, for the same test: 3 x (60 + 240) seconds plus sleeps of 15 and 30
+      # is 945 seconds, inside this job's 20 minutes, so the loop's own
+      # `::error::` line runs before the job bound does.
+      # `tests/test_workflow_timeouts.py` holds every retry loop to its job.
       - name: Install xelatex for PGF backend test
         run: |
           # The runner ships third-party apt sources this job never fetches
@@ -49,12 +51,14 @@ jobs:
                  ! -name 'ubuntu.sources' -delete
           fi
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get update -qq \
-               && timeout 600 sudo apt-get install -y --no-install-recommends texlive-xetex; then
+            if timeout 60 sudo apt-get update -qq \
+               && timeout 240 sudo apt-get install -y --no-install-recommends texlive-xetex; then
               exit 0
             fi
             echo "::warning::apt-get failed or stalled on attempt $attempt"
-            sleep $((attempt * 15))
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 15))
+            fi
           done
           echo "::error::could not install texlive-xetex in three attempts"
           exit 1

@@ -78,3 +78,46 @@ def test_a_job_is_bounded(workflow, job_id, body):
         f"{workflow}'s `{job_id}` job is bounded at {minutes} minutes. "
         "Nothing in this repository takes an hour; a bound that loose is the "
         "six-hour cap with extra steps.")
+
+
+def _retry_budget(body):
+    """Worst-case seconds of a job's `for attempt in ...` apt retry loop.
+
+    Every `timeout N` inside the loop runs once per attempt, and
+    `sleep $((attempt * K))` sleeps K, 2K, ... after each failed attempt except
+    the last when the loop guards it with `-lt`. `None` when the job has no
+    such loop.
+    """
+    loop = re.search(r"for attempt in ([\d ]+); do\n(.*?)\n\s*done", body, re.S)
+    if not loop:
+        return None
+    attempts = [int(a) for a in loop.group(1).split()]
+    per_attempt = sum(int(n) for n in re.findall(r"timeout (\d+)", loop.group(2)))
+    sleep = re.search(r"sleep \$\(\(attempt \* (\d+)\)\)", loop.group(2))
+    slept = attempts[:-1] if "-lt" in loop.group(2) else attempts
+    return (len(attempts) * per_attempt
+            + (int(sleep.group(1)) * sum(slept) if sleep else 0))
+
+
+RETRYING = [(name, job_id, body) for name, job_id, body in ALL_JOBS
+            if _retry_budget(body) is not None]
+
+
+def test_the_retry_scan_found_the_apt_loops():
+    """`pgf` in ci.yml and `test` in release.yml each install TeX in a loop."""
+    assert {(name, job_id) for name, job_id, _ in RETRYING} >= {
+        ("ci.yml", "pgf"), ("release.yml", "test")}
+
+
+@pytest.mark.parametrize(
+    "workflow,job_id,body",
+    RETRYING,
+    ids=[f"{name}:{job_id}" for name, job_id, _ in RETRYING])
+def test_a_retry_loop_fits_inside_its_job(workflow, job_id, body):
+    """A job bound that fires mid-loop kills the loop before its `::error::`
+    line runs, so the log says "canceled" and not what failed."""
+    minutes = int(re.search(r"^    timeout-minutes: (\d+)$", body, re.M).group(1))
+    budget = _retry_budget(body)
+    assert budget < minutes * 60, (
+        f"{workflow}'s `{job_id}` retry loop can take {budget}s, and the job "
+        f"is bounded at {minutes} minutes ({minutes * 60}s)")
