@@ -1835,6 +1835,7 @@ def test_equal_length_rectangles_on_a_baseline_encode_nothing():
     """A rug and a single-row heatmap both stand on one edge. Neither uses
     length to say anything, which is what a bar does and the whole reason a
     truncated baseline lies."""
+    import numpy as np
     from matplotlib.patches import Rectangle
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [101, 109], color=OKABE[0])
@@ -2626,6 +2627,7 @@ def test_a_scatter_spelled_edgecolors_none_is_not_widened_by_its_linewidth():
     `get_linewidths()` still reports the `patch.linewidth` default, so a width
     read on its own widens the mark by a stroke that is never laid down. This
     is how `gallery-parity` is spelled."""
+    import numpy as np
     fig, ax = plt.subplots()
     coll = ax.scatter([0.0, 1.0], [0.0, 1.0], s=18.0, edgecolors="none")
     plt.close(fig)
@@ -2648,6 +2650,7 @@ def test_counting_the_stroke_does_not_fire_on_a_parity_style_scatter():
     """The corpus figure the question reaches. Taking its reported 0.70pt as
     drawn carries it past `OVERPLOT_THRESHOLD`; reading whether the edge is
     drawn at all leaves it where the render puts it."""
+    import numpy as np
     rng = np.random.default_rng(19)
     observed = rng.uniform(0.6, 9.2, 84)
     predicted = observed + rng.normal(0.0, 0.55, observed.size) + 0.1

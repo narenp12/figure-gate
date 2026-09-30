@@ -79,14 +79,14 @@ def line_panel():
 def scatter_panel():
     rng = np.random.default_rng(3)
     fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    # Twenty-five marks along a line, not a Gaussian blob. Any cluster dense
+    # enough to look like real data overplots under every style including this
+    # project's own, so a blob measures the data and not the sheet.
     x = np.linspace(0, 10, 25)
     for k in range(3):
         ax.scatter(x, 0.8 * x + 3 * k + rng.normal(0, 0.4, 25), label=f"g{k}")
     ax.set_xlabel("Predicted")
     ax.set_ylabel("Observed")
-    # Twenty-five marks along a line, not a Gaussian blob. Any cluster dense
-    # enough to look like real data overplots under every style including this
-    # project's own, so the blob measured the data and not the sheet.
     ax.legend(ncols=3, loc="lower center", bbox_to_anchor=(0.5, 1.0),
               frameon=False)
     return fig

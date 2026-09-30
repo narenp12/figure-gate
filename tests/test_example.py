@@ -71,10 +71,9 @@ def test_the_gallery_runs_and_every_figure_passes(tmp_path):
     assert result.stdout.count("PASS  gallery-") == 20, result.stdout[-4000:]
     assert len(list(tmp_path.glob("gallery-*.png"))) == 20, result.stdout[-4000:]
     # An advisory row does not fail the run, so a gate that over-fires here
-    # would be invisible to the assertions above. Banking is the newest and the
-    # loosest, and the corpus is the only evidence that its band is not a
-    # nuisance: the 9 line panels it reads across these figures report typical
-    # segments from 20 to 63 degrees, well inside the band the row accepts.
+    # would be invisible to the assertions above. Banking's band is the
+    # loosest, and the corpus is the only evidence that it is not a nuisance:
+    # a WARN on any line panel in these figures fails here.
     assert "[WARN] Banking" not in result.stdout, result.stdout[-4000:]
 
 

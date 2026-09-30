@@ -449,13 +449,11 @@ def test_no_advisory_gate_ever_returns_false():
 
 # --- the threshold column ----------------------------------------------------
 # Four rosters are held to `audit()`: the module docstring, the gate table's
-# first column, SKILL.md's sentence, and the advisory tags. The numbers beside
-# them were held to nothing. Eleven of the twenty rows name a constant and quote
-# its value, and every one of them agreed on the day this was written - which is
-# the argument for writing it, not against. `#fcfcfb` was the surface the
-# contrast table really had been computed against; `#898781` really was in the
-# style sheet; the test count really was 171. Each was right when it was typed.
-# This column is eleven claims of that shape with no machinery under them.
+# first column, SKILL.md's sentence, and the advisory tags. The threshold column
+# is a claim per row: every row outside `PROSE_THRESHOLDS` names a constant and
+# quotes its value. A quoted number is right when typed and nothing keeps it
+# right: `#fcfcfb` was the surface the contrast table had been computed against,
+# `#898781` was in the style sheet, and the test count was 171.
 
 THRESHOLD_CONST = re.compile(
     r"`([A-Z][A-Z0-9_]*(?:\s*,\s*[A-Z][A-Z0-9_]*)*)\s*=\s*([^`]+)`")
@@ -837,8 +835,8 @@ def test_the_three_sources_agree_on_the_defect_count():
 #
 # Prose does not use the gate's label, so the join has to be written down. It is
 # asserted complete against `audit` rather than trusted, which is what stops a
-# twentieth gate from being added to the code and to two rosters but not this
-# one - the map goes stale loudly.
+# new gate from being added to the code and to two rosters but not this one -
+# the map goes stale loudly.
 
 SKILL_MD = SKILL / "SKILL.md"
 
@@ -1262,11 +1260,10 @@ def test_the_colormaps_the_guide_condemns_do_fail(name):
 
 
 # --- constants quoted in the reference material ------------------------------
-# The README's threshold column is checked above. The guide quotes constants
-# too, now that it explains how the kind is measured, and a guide that names a
-# threshold is making the same executable claim a table cell does. One pattern,
-# both documents, so a constant renamed in code cannot be left standing in
-# either.
+# The gate table's threshold column is checked above. The guide and SKILL.md
+# quote constants too, and a document that names a threshold makes the same
+# executable claim a table cell does. One pattern, both documents, so a constant
+# renamed in code cannot be left standing in either.
 
 CONSTANT_DOCS = [GUIDE, SKILL_MD]
 
@@ -1410,8 +1407,9 @@ def test_every_source_states_the_real_gallery_count(label):
 
 
 # --- how many defects the gallery found ---------------------------------------
-# Two copies of one number; the README and the page's lead stopped stating it. `docs/gallery.md` numbers the list, so the list is
-# the count and every sentence is read against it.
+# Two copies of one number: the gallery page's heading and gallery.py's
+# docstring. `docs/gallery.md` numbers the list, so the list is the count and
+# both are read against it.
 
 GALLERY_DEFECT_CLAIMS = {
     "the gallery page's heading": (DOCS_GALLERY, r"## The (\w+) defects in the checks"),
@@ -1448,8 +1446,8 @@ def test_every_source_states_the_real_defect_count(label):
 # and no explanation anywhere a reader would look. The suite was green.
 #
 # Prose does not use the gate's label, so the join is written down, the same way
-# `FIGURE_PROSE` is. Asserted complete against `audit()`, so a twenty-first gate
-# goes stale loudly instead of quietly having no guidance.
+# `FIGURE_PROSE` is. Asserted complete against `audit()`, so a new gate goes
+# stale loudly instead of quietly having no guidance.
 
 GUIDE_FILES = {
     "style-guide.md": GUIDE,
@@ -1500,8 +1498,8 @@ GUIDANCE_ANCHORS = {
 # is not and is anti-correlated with under the edit that reading suggests.
 #
 # Kept rather than deleted. It is the union with `GUIDANCE_ANCHORS` that makes
-# the completeness assertion below mean anything, and a twenty-first gate
-# arriving unexplained needs an honest place to sit while its guidance is
+# the completeness assertion below mean anything, and a new gate arriving
+# unexplained needs an honest place to sit while its guidance is
 # written. `test_the_exemption_set_is_empty` is what keeps that temporary.
 NO_GUIDANCE: set[str] = set()
 

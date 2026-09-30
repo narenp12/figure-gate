@@ -528,10 +528,9 @@ def _is_colormap(name):
 
 
 # --- what the wider repository has a name for ---------------------------------
-# Four documents could be resolved against two modules and matplotlib. Eleven
-# cannot: `CONTRIBUTING.md` names workflows and dependency groups, `conda/
-# README.md` names recipe keys, and the pages name scripts that live outside
-# `skill/`. Each of the domains below is a real place a name can be checked
+# Two modules and matplotlib cannot resolve every document in the corpus:
+# `CONTRIBUTING.md` names workflows and dependency groups, `conda/README.md`
+# names recipe keys, and the pages name scripts that live outside `skill/`. Each of the domains below is a real place a name can be checked
 # against, so a typo in one of them fails rather than landing in the ledger.
 
 
@@ -1178,11 +1177,11 @@ def _style_sheet_hexes():
 # Okabe-Ito in publication order. matplotlib ships it as a colormap from 3.11,
 # and this project floors at matplotlib 3.8, so a module that reads
 # `colormaps["okabe_ito"]` at import fails collection on every older matplotlib
-# rather than failing one test. Raising the Python floor to 3.11 does not
-# change that: the matplotlib floor is separate and deliberately lower. `test_palette.py` and `test_example.py` both
-# guard the same lookup with a skip; this needs the colours themselves, so it
-# carries them and checks the copy against matplotlib wherever matplotlib has
-# them.
+# rather than failing one test. The Python floor of 3.11 does not change that:
+# the matplotlib floor is separate and lower. `test_palette.py` and
+# `test_example.py` both guard the same lookup with a skip; this needs the
+# colours themselves, so it carries them and checks the copy against matplotlib
+# wherever matplotlib has them.
 OKABE_ITO = ("#000000", "#e69f00", "#56b4e9", "#009e73",
              "#f0e442", "#0072b2", "#d55e00", "#cc79a7")
 
@@ -2208,3 +2207,29 @@ def test_demo_states_the_darkened_label_colours(series, darkened, de,
     assert darkened in text and f"dE {de}" in text, (
         f"demo.py no longer states {darkened} at dE {de}")
     assert f"of {cp.NORMAL_FLOOR}" in text, "demo.py states a stale NORMAL_FLOOR"
+
+
+# The comment above test_figure.py's module-level numpy import says every test
+# before it imports numpy for itself. The module-level name is bound before any
+# test runs, so a test that leans on it passes and the comment goes false
+# silently.
+
+def test_figure_tests_above_the_shared_numpy_import_import_their_own():
+    source = (ROOT / "tests" / "test_figure.py").read_text(encoding="utf-8")
+    assert "every test above imports numpy inside" in source
+    tree = ast.parse(source)
+    shared = next(node.lineno for node in tree.body
+                  if isinstance(node, ast.Import)
+                  and any(a.asname == "np" for a in node.names))
+
+    def binds_np(fn):
+        return any(isinstance(n, ast.Import) and any(a.asname == "np"
+                                                     for a in n.names)
+                   for n in ast.walk(fn))
+
+    leaning = [fn.name for fn in tree.body
+               if isinstance(fn, ast.FunctionDef) and fn.lineno < shared
+               and not binds_np(fn)
+               and any(isinstance(n, ast.Name) and n.id == "np"
+                       for n in ast.walk(fn))]
+    assert not leaning, f"use the module-level np: {leaning}"

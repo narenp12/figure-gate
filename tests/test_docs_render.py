@@ -169,9 +169,8 @@ def built_site(tmp_path_factory, worker_id):
     for the build rather than repeat it.
     """
     # Before the `master` branch below, not inside the worker path that needs
-    # it: this is the fixture's declaration of what it costs to use, and every
-    # test that asks for a built site now inherits the skip from one place.
-    # Asking after the branch is what shipped -- see `file_lock()`.
+    # it, so every test that asks for a built site skips the same way under
+    # `pytest` and `pytest -n auto`. `file_lock()` says why that matters.
     FileLock = file_lock()
 
     if worker_id == "master":
@@ -245,8 +244,8 @@ def page(browser, server):
 #
 # `--md-typeset-a-color` is read off `<body>`, not `<html>`, because that is
 # where the scheme attribute lives and therefore where the custom properties
-# this site sets actually resolve. Reading it at the root is what made the
-# original defect invisible to inspection.
+# this site sets actually resolve. Read at the root, it hides the `:root`-
+# prefixed selectors the module docstring describes.
 PROBE = r"""
 () => {
   const parse = c => { const m = (c || '').match(/[\d.]+/g);
@@ -378,9 +377,10 @@ def rendered(browser, server):
 
 
 # --- the selectors reach the page ---------------------------------------------
-# The direct guard on the original defect. If `palette.css` stops applying,
-# these fail before any contrast question is asked, and the failure names the
-# cause instead of leaving someone to infer it from a ratio.
+# The direct guard on the `:root` selectors in the module docstring. If
+# `palette.css` stops applying, these fail before any contrast question is
+# asked, and the failure names the cause instead of leaving someone to infer it
+# from a ratio.
 
 @pytest.mark.parametrize("mode,scheme", sorted(SCHEMES.items()))
 def test_the_theme_selected_the_scheme_we_think_it_did(rendered, mode, scheme):
