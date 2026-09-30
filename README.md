@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/figure-gate)](https://pypi.org/project/figure-gate/)
 [![conda-forge](https://img.shields.io/conda/vn/conda-forge/figure-gate)](https://anaconda.org/conda-forge/figure-gate)
 [![Docs](https://img.shields.io/badge/docs-narenp12.github.io-0072B2)](https://narenp12.github.io/figure-gate/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21784217.svg)](https://doi.org/10.5281/zenodo.21784217)
 
 figure-gate reads a matplotlib figure you have already built and tells you which
 publication requirements it fails. It checks colorblind-safe color, composition,
@@ -147,6 +148,17 @@ New gates are welcome at the bar the project holds itself to:
 
 See [CONTRIBUTING.md](https://github.com/narenp12/figure-gate/blob/main/CONTRIBUTING.md)
 and [SECURITY.md](https://github.com/narenp12/figure-gate/blob/main/SECURITY.md).
+
+## Citing
+
+```bibtex
+@software{prakash_figure_gate,
+  author = {Prakash, Naren},
+  title  = {figure-gate},
+  doi    = {10.5281/zenodo.21784217},
+  url    = {https://github.com/narenp12/figure-gate}
+}
+```
 
 ## License
 

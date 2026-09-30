@@ -1,46 +1,12 @@
-# Citation File Format 1.2.0. GitHub reads this file and offers a "Cite this
-# repository" button from it; `cffconvert` turns it into BibTeX or APA.
-# Reference: https://citation-file-format.github.io
-#
-# `doi` is the concept DOI, which Zenodo mints once per deposition and resolves
-# to whichever version is newest. The per-version DOI of 0.8.0 is
-# 10.5281/zenodo.21997390, and a citation carrying that sends a reader to 0.8.0
-# no matter what they ran. Neither is derivable from the version, so the
-# per-version one cannot be a bump site the way `version` below is: Zenodo mints
-# a fresh number on each deposit. The concept DOI needs no maintenance, which is
-# the whole reason to prefer it here.
-#
-# `date-released` is deliberately absent. It would be a second thing the release
-# bump has to rewrite, and it is the kind of field that goes stale silently.
-# `version` below is a version site listed in `[tool.bumpversion.files]`, so it
-# moves with every bump and
-# `test_each_configured_pattern_is_in_the_file_it_points_at` fails if this file
-# ever stops carrying it in the shape the bump expects. The release date a
-# citation needs is on the tag and in CHANGELOG.md, both of which are gated; a
-# copy here would be a third claim with nothing checking it.
 cff-version: 1.2.0
 message: "If you use figure-gate in published work, please cite it as below."
 title: figure-gate
-abstract: >-
-  Mechanical gates for publication figures: colorblind-safe color, composition,
-  and type legibility at print size. Every check reads the rendered figure's own
-  artists, so a verdict is a measurement rather than a design opinion.
 type: software
 authors:
   - family-names: Prakash
     given-names: Naren
-    email: 146764727+narenp12@users.noreply.github.com
+    orcid: "https://orcid.org/0009-0006-6399-6935"
 version: 0.10.0
 doi: 10.5281/zenodo.21784217
 license: MIT
 repository-code: "https://github.com/narenp12/figure-gate"
-url: "https://narenp12.github.io/figure-gate/"
-keywords:
-  - matplotlib
-  - figures
-  - accessibility
-  - colorblind
-  - okabe-ito
-  - viridis
-  - data-visualization
-  - publishing
