@@ -168,9 +168,9 @@ logo = "lucide/fence"
 permalink = true
 # The contents sidebar stops at h3. Only the changelog goes deeper: each release
 # there is an h2 carrying a "What changed" and a "Why it changed" h3, and the
-# topical headings inside the second one are h4. Listing those put 28 entries
-# three levels deep in the sidebar of a 2400-line page, which is a worse index
-# than none. Every other document in the project has no h4 at all, and the API
+# topical headings inside the second one are h4. Listing those puts every
+# topical heading three levels deep in the sidebar of the longest page, which
+# is a worse index than none. Every other document in the project has no h4 at all, and the API
 # page's symbol headings are h3 -- checked in the built HTML, not assumed, since
 # mkdocstrings chooses that level rather than the source doing it -- so nothing
 # else loses an entry to this.
@@ -207,8 +207,8 @@ auto_append = ["includes/abbreviations.md"]
 # MkDocs configuration, and the comment at the top of this file is about what
 # Zensical silently ignores from one. The extension is what it actually runs.
 [project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python]
-# The scripts are three loose files meant to be vendored, not a package, so
-# there is no import path to walk -- the handler is pointed at the directory.
+# The package is named `figure_gate` only in the wheel. In the repository the
+# modules sit in `skill/scripts`, so the handler is pointed at that directory.
 paths = ["skill/scripts"]
 
 [project.markdown_extensions."zensical.extensions.mkdocstrings".handlers.python.options]
@@ -225,8 +225,8 @@ docstring_style = "google"
 docstring_section_style = "table"
 show_symbol_type_heading = true
 show_symbol_type_toc = true
-# `brief` over `full`: these are loose files, so a fully qualified annotation
-# path names a module the reader would import as a single file anyway.
+# `brief` over `full`: vendored, each file is imported on its own, so the
+# module prefix a full annotation path adds names nothing the reader imports.
 annotations_path = "brief"
 # On, and this is what makes the page a reference rather than an essay. Each
 # `:::` here names one function, so the root heading is that function's name

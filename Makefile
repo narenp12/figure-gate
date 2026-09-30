@@ -70,6 +70,7 @@ coverage:
 # sweep on its own says nothing, and the answer is the diff between two. A gate
 # change that fires more often is adjudicated against this before it ships, and
 # reconstructing the procedure from memory each round is how a sweep ends up
-# measuring the wrong route. See the docstring for the two-commit workflow.
+# measuring the wrong route. See `examples/corpus_sweep.py`'s docstring for the
+# two-commit workflow.
 sweep:
 	uv run python examples/corpus_sweep.py sweep.json
