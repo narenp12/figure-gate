@@ -62,7 +62,9 @@ exposed defects in the checks themselves, listed on the
 The [documentation site](https://narenp12.github.io/figure-gate/) is organised
 by what you came to do.
 
-**Learning.** Start here if you have not run the checkers before:
+### Learning
+
+Start here if you have not run the checkers before:
 
 <div class="grid cards">
 <ul>
@@ -70,7 +72,9 @@ by what you came to do.
 </ul>
 </div>
 
-**Doing a task.** Step-by-step directions for a goal you already have:
+### Doing a task
+
+Step-by-step directions for a goal you already have:
 
 <div class="grid cards">
 <ul>
@@ -79,7 +83,9 @@ by what you came to do.
 </ul>
 </div>
 
-**Looking something up.** What each check measures and what each function takes:
+### Looking something up
+
+What each check measures and what each function takes:
 
 <div class="grid cards">
 <ul>
@@ -90,7 +96,9 @@ by what you came to do.
 </ul>
 </div>
 
-**Understanding why.** Background, evidence, and the decisions behind the thresholds:
+### Understanding why
+
+Background, evidence, and the decisions behind the thresholds:
 
 <div class="grid cards">
 <ul>
@@ -104,14 +112,8 @@ by what you came to do.
 ## Use it with Claude Code
 
 This repository is also a plugin marketplace, so Claude Code applies the same
-checks when it builds a figure for you:
-
-```bash
-/plugin marketplace add narenp12/figure-gate
-```
-
-Then run `/plugin install figure-gate@figure-gate`. The skill is invoked as
-`figure-gate:research-figures`.
+checks when it builds a figure for you. See
+[Install it as a Claude Code skill](https://narenp12.github.io/figure-gate/install/#install-it-as-a-claude-code-skill).
 
 ## Where this sits
 
@@ -129,16 +131,11 @@ verify them with the other.
 
 ## Stability
 
-The public API is every name without a leading underscore in `check_figure.py`,
-`check_palette.py`, and `suggest_fixes.py`. Below version 1.0, a minor release
-may break it. Every break is named in
-[the changelog](https://github.com/narenp12/figure-gate/blob/main/CHANGELOG.md)
-under its release heading, and CI fails a pull request whose `## Unreleased`
-section does not name a symbol that moved.
-
-A row's shape is part of the public API, so a change to it is named in the
-changelog. The number of rows is not. For the full statement, see
-[the version policy](https://narenp12.github.io/figure-gate/compatibility/#version-policy).
+Below version 1.0, a minor release may break the public API, and every break is
+named in
+[the changelog](https://github.com/narenp12/figure-gate/blob/main/CHANGELOG.md).
+[The version policy](https://narenp12.github.io/figure-gate/compatibility/#version-policy)
+says what the public API covers.
 
 ## Contributing
 

@@ -333,9 +333,9 @@ def test_the_page_states_the_advisory_count_it_marks():
     written twice, which is how one of them came to be wrong."""
     import check_figure as cf
 
-    claimed = re.search(r'note "WARN is not FAIL"\s+\n\s*(\w+)',
-                        DESIGN.read_text(encoding="utf-8"))
-    assert claimed, ("docs/design.md no longer states an advisory count in the "
+    claimed = re.search(r"(\w+) of the \d+ rows are advisory",
+                        GATES.read_text(encoding="utf-8"))
+    assert claimed, ("docs/gates.md no longer states an advisory count in the "
                      "form this test reads")
     word = claimed.group(1).lower()
     assert word in WORD_NUMBERS, f"unreadable advisory count {word!r}"
@@ -345,7 +345,7 @@ def test_the_page_states_the_advisory_count_it_marks():
 def test_the_readme_states_the_split_it_promises():
     """The landing page's own count of what can fail, in words.
 
-    `docs/design.md` states the advisory count; the README states both halves,
+    `docs/gates.md` states the advisory count; the README states both halves,
     which is two numbers derived from one list and no machinery under either.
     A gate added as advisory moves both.
     """
@@ -1335,7 +1335,7 @@ ROSTER_COUNT_CLAIMS = {
     "the gate table lead-in": (GATES, r"`audit\(\)` returns these (\d+) rows"),
     "the elimination-gate claim": (DESIGN, r"(\d+) passing rows means the"),
     "the named-defect count": (DESIGN, r"figure avoids (\d+) named defects"),
-    "the advisory paragraph": (DESIGN, r"of the (\d+) rows are advisory"),
+    "the advisory paragraph": (GATES, r"of the (\d+) rows are advisory"),
 }
 
 
@@ -1702,3 +1702,24 @@ def test_a_source_the_style_guide_names_is_in_its_references(surname):
     assert surname in body, f"{surname} is no longer cited; drop it here"
     assert re.search(rf"^- {surname}, ", refs, re.M), (
         f"the style guide cites {surname} and its References do not list them")
+
+
+def test_an_audited_figure_is_left_on_an_agg_canvas():
+    """`docs/gates.md` says drawing on Agg rebinds `fig.canvas`, so an audited
+    figure no longer shows in a GUI window. A GUI canvas cannot be built in CI,
+    so an SVG canvas stands in for any canvas that is not Agg."""
+    import matplotlib
+    matplotlib.use("agg")
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.backends.backend_svg import FigureCanvasSVG
+    from matplotlib.figure import Figure
+
+    import check_figure as cf
+
+    assert "rebinds `fig.canvas`" in GATES.read_text(encoding="utf-8"), (
+        "docs/gates.md no longer makes the claim; drop this test with it")
+    fig = Figure()
+    FigureCanvasSVG(fig)
+    fig.add_subplot().plot([0, 1], [0, 1])
+    cf.audit(fig)
+    assert type(fig.canvas) is FigureCanvasAgg

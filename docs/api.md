@@ -8,24 +8,9 @@ description: "Signatures and docstrings for the three modules, read out of the s
 Signatures and docstrings are read out of `skill/scripts/` when this page
 builds, so what is shown is what the code has.
 
-Installed, the three modules are a package:
-
-```python
-from figure_gate import check_figure as cf     # needs matplotlib
-from figure_gate import check_palette as cp    # standard library only
-from figure_gate import suggest_fixes as sf
-```
-
-Vendoring copies the files into your own project. They are then whatever you
-named them, imported flat:
-
-```python
-import check_figure as cf
-import check_palette as cp
-import suggest_fixes as sf
-```
-
-Same modules, same signatures; only the import line differs.
+Installed and vendored copies have the same signatures. Only the import line
+differs, and [Choose your import line](install.md#choose-your-import-line)
+gives it.
 
 Not on this page: **the thresholds**. They are module-level constants, one
 table per module on [the gates](gates.md), with the measurement behind each on

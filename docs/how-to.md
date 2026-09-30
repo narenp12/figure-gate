@@ -215,6 +215,10 @@ Two limits apply when you call a gate directly:
 Gates that take no renderer argument and use no pixel threshold, such as
 `check_form` and `check_dual_axis`, are the ones this is safe for.
 
+`audit` rebinds `fig.canvas` to Agg, so the figure no longer shows in a GUI
+window. Call `plt.show()` before auditing, or audit a figure you rebuild for
+the purpose.
+
 ## Change a threshold
 
 If you vendored the checkers, edit the constant at the top of the file. If you

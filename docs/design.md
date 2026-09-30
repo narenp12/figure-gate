@@ -89,7 +89,9 @@ curve it belongs to.
 
 ## What a passing run does not mean
 
-**A row can be reporting the checker rather than the figure.** Every gate runs
+### A row can report the checker rather than the figure
+
+Every gate runs
 inside its own exception handler. A gate that raises keeps its row and puts the
 exception in the detail, marked as a defect in the checker rather than in the
 figure. It takes its own severity: an advisory that crashed warns, a hard gate
@@ -100,12 +102,19 @@ No gate is known to raise. Twenty adversarial figures, including 3D, polar,
 all-NaN, infinite, and zero-sized ones, found none. The handler is there anyway,
 because these gates read matplotlib internals that are free to move.
 
-**A passing row looks the same as an absent one.** The colormap gate reads a `Colormap`'s name to tell an encoding from a
-hand-set list of colors, so a map matplotlib left unnamed is skipped rather than
-judged. This is deliberate.
+### A passing row looks the same as an absent one
 
-**The rules do not transfer to interactive web charts**, where hover, responsive
-reflow, and dark mode change most of the constraints.
+The colormap gate reads a `Colormap`'s name to tell an encoding from a
+hand-set list of colors. A map matplotlib left unnamed is skipped, and the row
+passes without judging it. `contour(colors=[...])` builds such a map from three
+levels of one hue; classified as qualitative, it would fail the all-pairs
+separation floor it was never meant to meet.
+
+### The rules do not transfer to interactive web charts
+
+Hover, responsive reflow, and dark mode change the constraints: type has no
+fixed printed size to hold a floor against, and the ground color is the
+reader's to switch.
 
 ## What the evidence is
 
@@ -131,22 +140,15 @@ are advisory, and neither is evidence of anything about a figure.
 
 ## What the API promises
 
-The public API is every name without a leading underscore in `check_figure.py`,
-`check_palette.py`, and `suggest_fixes.py`. That is broader than the handful you
-would guess, and it is deliberately the same set the release gate compares, so
-the statement and the enforcement cannot drift apart.
-
-Below 1.0, a minor release may break it. No change reaches `main` whose
-`## Unreleased` section fails to name what moved: CI runs
+[The version policy](compatibility.md#version-policy) defines the public API as
+every name without a leading underscore. That is the same set
 [`audit_api.py`](https://github.com/narenp12/figure-gate/blob/main/skill/scripts/audit_api.py)
-against the last tag on every pull request, and a symbol that changed without
-being written down fails the build.
+compares against the last tag on every pull request, so the statement and the
+enforcement cannot drift apart.
 
 What is not enforced is the sentence rather than the symbol. The gate checks
 that a changed name appears in `## Unreleased` next to a word admitting a
 change. It cannot check that the sentence describes the change accurately.
-
-For the version table, see [Compatibility](compatibility.md).
 
 ## Design decisions
 
@@ -178,16 +180,12 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "WARN is not FAIL"
 
-    Eight of the 21 rows are advisory: they can return `"warn"` but never
-    `False`. A sub-3:1 hue is legal when it carries a direct label, and a
-    heatmap panel legitimately measures 0.98 ink coverage. Failing those would
-    train people to ignore the row.
+    A sub-3:1 hue is legal when it carries a direct label, and a heatmap panel
+    legitimately measures 0.98 ink coverage. Failing those would train people
+    to ignore the row, so [the advisory rows](gates.md#advisory-rows) can
+    return `"warn"` but never `False`.
 
-    Three rows do both. Type size fails under the floor and warns on a figure
-    placed under 35% of the content width. Series color and Colormap kind fail
-    on what they measure and warn when `check_palette.py` is not importable
-    beside `check_figure.py`: a row that could not run is not a row that
-    passed.
+    A row that could not run measured nothing, so it warns rather than passes.
 
 ???+ note "A detail string carries two marks, and they mean different things"
 
@@ -203,7 +201,7 @@ For the version table, see [Compatibility](compatibility.md).
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2282 tests, and each check has one asserting it catches a
+    The suite is 2277 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -233,10 +231,6 @@ either.
 CI could not have caught the bug. Every test and every example pins Agg, so
 nothing in the suite could construct the failing condition, and it stayed green
 across a release.
-
-One consequence remains: an audited figure is no
-longer attached to its GUI canvas and will not show in a window. Audit last, or
-audit a figure you rebuild for the purpose.
 
 ## Further reading
 

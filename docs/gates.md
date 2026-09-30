@@ -20,7 +20,8 @@ threshold sits where it does, see
 
 `check_figure.py` renders the figure through an Agg canvas at
 `MEASURE_DPI = 150`, measures the result, and hands the figure back on the dpi
-it arrived on. `audit()` returns these 21 rows in this order.
+it arrived on. Drawing on Agg rebinds `fig.canvas`, so an audited figure no
+longer shows in a GUI window. `audit()` returns these 21 rows in this order.
 
 Where a row below says *panel*, it means every axes on the figure, an
 `ax.inset_axes` or a `secondary_xaxis` included. Those are added through

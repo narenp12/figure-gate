@@ -60,11 +60,7 @@ Version 0.7.0 moved the modules into the `figure_gate` package. Through 0.6.0
 the wheel put them at the top level of site-packages, which is why an older
 install uses the same line as a vendored copy.
 
-To check which version you have:
-
-```bash
-uv pip show figure-gate      # or: conda list figure-gate
-```
+To check which version you have, see [Install](install.md).
 
 ## Version policy
 
