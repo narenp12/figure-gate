@@ -2,10 +2,10 @@
 
 Half of `check_figure`'s thresholds are pixel counts: `TEXT_EDGE_WINDOW`,
 `TEXT_FOOTPRINT_MIN_PX`, `INK_DELTA_MIN`, and the fractions built on top of them.
-A pixel count is a measurement only when the resolution is fixed, and until
-`MEASURE_DPI` existed it was not: the gates drew at `fig.dpi`, which is whatever
-the author set, whatever sheet is in effect, or the authored value times the
-device pixel ratio of a display that happened to be attached.
+A pixel count is a measurement only when the resolution is fixed, so the gates
+draw at `MEASURE_DPI` rather than at `fig.dpi`, which is whatever the author
+set, whatever sheet is in effect, or the authored value times the device pixel
+ratio of a display that happened to be attached.
 
 `test_figure.py` already held one instance of this: a Retina canvas must not
 move a verdict. That test was written as a HiDPI test. It was really a

@@ -2,8 +2,8 @@
 states: the behaviour behind the recipes is gate-side already, and asserting it
 twice is what `test_suite_balance.py` catches.
 
-The pages split by Diataxis mode, so what this file reads is now spread over
-three of them: `how-to.md` holds the recipes and the values they quote,
+The pages split by Diataxis mode, so what this file reads is spread over three
+of them: `how-to.md` holds the recipes and the values they quote,
 `gates.md` holds the every-row remedy table, and `cli.md` holds the venue count.
 One file still, because the three claims are one claim about `suggest_fixes.py`
 and `VENUE_WIDTH_PT` and splitting the test would let a page drop its half

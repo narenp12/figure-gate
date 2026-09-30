@@ -1,17 +1,12 @@
 """The README's threshold claim, read off the modules instead of trusted.
 
 `README.md` says every threshold is a module-level constant you can read and
-change. It was true of the ones anybody had thought about and false of the rest:
-the prose audit found the ink-detection cutoff written as `> 24` inside
+change. A claim like that holds for the thresholds somebody thought about: the
+prose audit found the ink-detection cutoff written as `> 24` inside
 `check_ink`, the WCAG large-text sizes as `>= 18.0` and `>= 14.0` inside
 `check_text_readability`, the placement warning as `< 0.35`, the opaque-mark
 definition as `>= 0.99`, and all three ordinal rows of `check_palette` as
 literals while every categorical threshold sat at module level.
-
-Two of those had already been promoted for this exact reason, each with a
-comment saying so -- `OVERPLOT_THRESHOLD` and `ADVISORY_GATES` both cite the
-README. Promoting them one at a time as somebody notices is what this file
-replaces.
 
 The sweep runs both ways.
 
@@ -21,14 +16,11 @@ verdict falls, so they are recognised by shape rather than listed. What is left
 is a number somebody chose, and it either names a constant or it appears below
 with the reason it is not one.
 
-Inward: every module-level constant has to be read by something. That direction
-was missing until `SURFACE_MIN_FRAC` turned up in the SVG substrate, declared in
-the commit that created its module under four lines of comment about telling a
-panel background from a filled mark, and consulted by no gate, ever. That
-substrate is archived at `archive/r-svg-substrate` rather than merged, so the
-constant itself never reached these two modules. The missing direction is what
-carried over: 52 constants here, and nothing asserted that any of them moved a
-verdict.
+Inward: every module-level constant has to be read by something. A constant no
+gate consults is a number a reader can change with no effect. The case that
+showed it is `SURFACE_MIN_FRAC` in the SVG substrate, archived at
+`archive/r-svg-substrate`: declared under four lines of comment about telling a
+panel background from a filled mark, and read by no gate.
 """
 
 import ast

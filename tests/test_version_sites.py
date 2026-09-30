@@ -23,13 +23,12 @@ the repository and present only once notes have been written for the next
 release. A test asserting it exists would fail on every clean checkout; the
 bump failing when it is missing is the intended behaviour, not a defect.
 
-That is true of the release bump only, and the config said it of every bump
-until 0.8.0. The cycle-opening bump runs immediately after a release, when the
-heading has just been consumed and the next one is unwritten, so it failed on a
-missing `## Unreleased` every time -- which is why 0.7.0 left the tree reading
-`0.7.0` rather than `0.8.0.dev0`, and why 0.8.0 could not be cut with the
-documented command. The entry excludes those parts now, and
-`test_the_changelog_is_left_alone_by_the_cycle_opening_bump` is that exclusion.
+That holds for the release bump only. The cycle-opening bump runs immediately
+after a release, when the heading has just been consumed and the next one is
+unwritten, so the CHANGELOG entry excludes those parts;
+`test_the_changelog_is_left_alone_by_the_cycle_opening_bump` holds the
+exclusion. Without it, 0.7.0 left the tree reading `0.7.0` rather than
+`0.8.0.dev0`.
 """
 
 import pytest

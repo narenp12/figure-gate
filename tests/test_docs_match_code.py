@@ -1,16 +1,13 @@
 """The guide quotes numbers. The code computes them. They have to agree.
 
-This exists because they did not. Every contrast ratio in the palette table was
-computed against a surface (`#fcfcfb`) that no figure in this project ever
-rendered - `figure.mplstyle` has always drawn on white. The numbers were all
-slightly wrong, and one of them was wrong in a way that changed a rule: reddish
-purple was marked as needing a mandatory direct label at 2.98, when against the
-surface actually used it clears 3:1 at 3.06.
+A number in prose is not executable, so each one is read out of the document
+and recomputed: every row of the palette table against `contrast()`, and the
+rosters, counts and constants the pages quote against the code that defines
+them. A quoted measurement that drifts from the code is a test failure.
 
-Nothing caught it, because a number in prose is not executable. So: read the
-table out of the guide and check every row against `contrast()`. A quoted
-measurement that drifts from the code is now a test failure rather than a thing
-someone notices in a year.
+The table once held every contrast ratio against `#fcfcfb`, a surface no figure
+here renders. One of them changed a rule: reddish purple was marked as needing
+a direct label at 2.98, and on white it clears 3:1 at 3.06.
 """
 
 import os

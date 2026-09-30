@@ -1,11 +1,10 @@
-"""The example in the README has to actually run.
+"""The examples have to run, on every matplotlib the project supports.
 
-Added after CI caught what local testing could not: `examples/demo.py` reached
-for `colormaps["okabe_ito"]` unconditionally, which needs matplotlib 3.11. On
-Python 3.9 the newest installable matplotlib is 3.9, so the example could never
-have worked there -- while the whole suite stayed green, because no test ran the
-example. A README whose first code block crashes on a supported version is worse
-than no README.
+A README whose first code block crashes on a supported version is worse than
+no README. `examples/demo.py` reads `colormaps["okabe_ito"]`, which exists from
+matplotlib 3.11, so it carries a fallback for older versions, and these tests
+run the example and pin the fallback to the builtin. Without them a crash on
+an older matplotlib leaves the rest of the suite green.
 """
 
 import subprocess
