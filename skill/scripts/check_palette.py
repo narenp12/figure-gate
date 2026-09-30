@@ -717,11 +717,7 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Gate a palette. Returns `(ok, rows)`.
 
-    The order matches `check_figure.audit`. It did not until 0.4.0: this
-    returned `(rows, ok)` and the README carried a paragraph warning about the
-    difference, which is documentation standing in for a fix. Unpacking either
-    one the wrong way binds a bool to the rows and raises nothing, so the two
-    were made the same rather than described.
+    `check_figure.audit` returns the same shape.
 
     `rows` are `(name, status, detail)`, one per gate. `status` is True,
     False, or the string "warn" for the advisory contrast row, and only a

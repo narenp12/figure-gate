@@ -4962,10 +4962,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
           ) -> tuple[bool, list[tuple[str, bool | str, str]]]:
     """Run every gate over a figure. Returns `(ok, rows)`.
 
-    `check_palette.check` returns the same shape. It returned `(rows, ok)`
-    until 0.4.0, and unpacking either one the wrong way binds a bool to the
-    rows and raises nothing at the call site, which is why they were made to
-    agree rather than documented as differing.
+    `check_palette.check` returns the same shape.
 
     `rows` are `(label, status, detail)`, one per gate, in the order the report
     prints them. `status` is True, False, or the string "warn"; only a hard
@@ -4980,12 +4977,9 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
     surface rather than data ink, which is what stops a filled contourf panel
     reading as saturated.
 
-    `context_axes` and `venue` are keyword-only. They were positional until
-    0.9.0, and a `venue` passed in the `context_axes` slot was iterated into a
-    frozenset of axes ids rather than raising, because a string is iterable.
-    The venue was discarded and the figure was measured at the wrong width: a
-    wrong verdict, reported green, from an argument order. Keyword-only is the
-    only shape in which that call cannot be written.
+    `context_axes` and `venue` are keyword-only. `context_axes` is iterated and
+    a string is iterable, so a venue in that slot would be read as axes rather
+    than raise, and the figure measured at the wrong width.
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
@@ -5073,13 +5067,8 @@ def report(fig: Figure, name: str = "", scale: float | None = None,
     This is what the examples and the CLI call. Use `audit()` when the rows
     themselves are wanted rather than a printed table.
 
-    `context_axes`, `venue` and `suggest` are keyword-only, matching `audit`.
-    They were positional until 0.9.0, and a `venue` passed in the
-    `context_axes` slot was iterated into a frozenset of axes ids rather than
-    raising, because a string is iterable. The venue was discarded and the
-    figure was measured at the wrong width: a wrong verdict, reported green,
-    from an argument order. Keyword-only is the only shape in which that call
-    cannot be written.
+    `context_axes`, `venue` and `suggest` are keyword-only, for the reason
+    `audit` gives.
 
     Args:
         fig: The built figure.
