@@ -240,19 +240,16 @@ INK_MIN, INK_MAX = 0.02, 0.55   # fraction of the axes area carrying data ink
 # Summed per-channel distance from the page color at which a pixel counts as
 # ink, in 0-255 RGB. Above antialiasing and JPEG-grade noise, below any mark a
 # reader can see. The measurement `check_ink` reports is a count of pixels over
-# this line, so it is the gate's other threshold and was written inline.
+# this line, so it is the gate's other threshold.
 INK_DELTA_MIN = 24
 # Share of a scatter's points whose nearest neighbour sits close enough for the
 # two marks to touch on the page before the cloud is called an unreadable mass.
-# Touching, not centre-inside-mark: see `check_overplotting`. Up here with its
-# siblings rather than inside `check_overplotting`, because the README's claim
-# is that every threshold is a module-level constant you can read and change,
-# and this was the one that was not.
+# Touching, not centre-inside-mark: see `check_overplotting`.
 OVERPLOT_THRESHOLD = 0.5
 
 # The theme has six categorical slots and the guide's claim is that there is no
 # seventh: a generated hue is indistinguishable from an existing slot under
-# simulated color blindness. Until now that claim was prose only.
+# simulated color blindness.
 MAX_SERIES_HUES = 6
 
 # Rows `audit` can return "warn" for and never False. They are the checks whose
@@ -345,8 +342,7 @@ TEXT_FOOTPRINT_MIN_PX = 60
 TEXT_CONTRAST_MIN = 4.5
 TEXT_CONTRAST_MIN_LARGE = 3.0
 # The sizes at which WCAG calls text large, ON PAGE. They select which of the
-# two floors above applies, so they are thresholds in their own right and were
-# the last two in this gate still written as literals inside it.
+# two floors above applies, so they are thresholds in their own right.
 LARGE_TEXT_PT = 18.0
 LARGE_TEXT_BOLD_PT = 14.0
 # Numeric font weight at which CSS, and matplotlib after it, calls a face bold.
@@ -1584,9 +1580,9 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
     H, W = backdrop.shape[:2]
     furniture = _furniture(fig)
     # Ticks that exist on the axes but never reach the page — a hidden axes, a
-    # location outside the view. `check_clipping` learned about these the same
-    # way this did: by reporting a defect on a schematic that draws no axes and
-    # still carries the tick Text objects matplotlib made for it.
+    # location outside the view, or a schematic that draws no axes but still
+    # carries the tick Text objects matplotlib made for it. `check_clipping`
+    # and `check_type_size` skip the same set.
     ghosts = _ghost_ticks(fig)
     radial = _polar_radial_ticks(fig)
     cluttered, faint, checked, unjudged = [], [], 0, 0
@@ -1765,27 +1761,24 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     """A figure where nothing is at full opacity has no focal point, and a long
     tail of alpha values reads as haze rather than hierarchy.
 
-    Both halves used to over-fire, and on the two forms where alpha is doing
-    real work rather than decorating.
+    Neither half fires on the two forms where alpha is doing real work rather
+    than decorating.
 
-    **A graded run of one colour is one decision, not one per band.** The
-    per-point branch below has always said so: an alpha array on a single
-    artist counts once, because "a continuous encoding is a single decision". A
-    fan chart is that same encoding spelled across separate artists, and it was
-    counted once per band. With `ALPHA_LEVELS_MAX` at 3 and the opaque median
-    line the row itself demands taking one of the three slots, a fan chart was
-    allowed **two** bands before it failed, and the row's advice was to draw
-    fewer prediction intervals. Non-opaque alphas on artists sharing a colour
-    now collapse to one level once there are `ALPHA_RAMP_MIN_STEPS` of them.
+    **A graded run of one colour is one decision, not one per band.** An alpha
+    array on a single artist counts once, because "a continuous encoding is a
+    single decision", and a fan chart is that same encoding spelled across
+    separate artists. So non-opaque alphas on artists sharing a colour collapse
+    to one level once there are `ALPHA_RAMP_MIN_STEPS` of them. Counted per
+    band, `ALPHA_LEVELS_MAX` of 3, less the opaque median line the row itself
+    demands, would allow a fan chart two bands.
     Artists of different colours never collapse, so five series at five alphas
     still reads as five decisions, which is the case this half is for.
 
     **A single alpha is not a stack.** "Nothing is opaque, so the figure has no
     focal point" presupposes something to focus on among alternatives. A
     density scatter drawn wholly at `alpha=0.3` asserts no hierarchy and has no
-    ranking to top out, and the remedy the row printed - raise the artist that
-    carries the point to alpha 1 - destroys the encoding it is aimed at, the
-    same defect `check_mark_ratio`'s clip remedy carried. The opacity test now
+    ranking to top out, and raising the artist that carries the point to
+    alpha 1 destroys the encoding it is aimed at. The opacity test
     applies only where there is more than one level, which is where an author
     has built a hierarchy and left it headless. Two levels with nothing opaque
     still fail.
@@ -1797,14 +1790,14 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     at `alpha=0.02` reach 1% and `Ink coverage` warns. Alpha alone cannot tell
     those apart and the render can.
 
-    A contrast floor was tried here first and is the wrong tool. Compositing
+    A contrast floor is the wrong tool. Compositing
     each artist over its panel and requiring WCAG 2.1's 3:1 non-text ratio
     sounds principled and condemns the project's own palette: Okabe-Ito orange
     `#E69F00` measures **2.25:1 on white at full opacity** and can never clear
     the floor at any alpha, and the green needs 0.9. That floor is also one
     this project deliberately keeps advisory, in `check_palette`, where a
     sub-3:1 hue is legal and merely obligates a second channel. Borrowing it as
-    a hard gate here would have been the same category error as judging a
+    a hard gate here would be the same category error as judging a
     mathtext script against the body type floor.
     """
     import numpy as np
@@ -2097,9 +2090,7 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     bar thirty times another bar is the encoding working, not a defect.
 
     **The bar exemption is about the channel, not about whether size carries a
-    value.** This docstring used to end "this gate is about marks whose size is
-    not carrying the value", which reads as an exemption for a size-encoded
-    scatter and is not one. Cleveland and McGill ranked the elementary
+    value.** A size-encoded scatter is not exempt. Cleveland and McGill ranked the elementary
     perceptual tasks and put position and length near the top and area near the
     bottom; `references/choosing-a-form.md` states it and cites them. A bar
     thirty times another bar is read as thirty because length is judged well. A
@@ -2108,18 +2099,12 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     case where the reader is asked to decode a number off the weak channel, so
     it is the last figure that should be exempt.
 
-    The row's own how-to, its remedy and
-    `test_mark_ratio_measures_a_size_encoded_scatter_inside_an_inset` all
-    already judged size-encoded scatters. That one sentence was the only thing
-    saying otherwise, and it is now gone.
-
     What the size distribution does change is the *advice*. When the largest
     mark exceeds the next largest by `MARK_ORNAMENT_GAP` it is one ornament
     stuck on top of a plot, and capping the size range is the fix. When the
     sizes are graded the figure is encoding something, and clipping the array
     silently flattens the values it encodes: measured on a 60-mark bubble
-    chart, the snippet this project used to print unconditionally collapsed 52
-    of the 60 onto one size, drew every value from 5.8 to 39.9 identically, and
+    chart, capping the size range collapsed 52 of the 60 onto one size, drew every value from 5.8 to 39.9 identically, and
     turned the row green. There the fix is the form, not the numbers.
 
     Both operands go through one conversion because the two APIs take different
@@ -2128,10 +2113,7 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     documentation calls it - see `scatter_diameter_pt`. Converting one side and
     not the other leaves a standing 4/pi = 1.27x error on any figure mixing
     `scatter` with `plot(marker=...)`, which is enough against a 5.0 threshold
-    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x. That
-    error was fixed on the `markersize` side first and survived on the `s` side
-    until this change, where two marks of measurably identical drawn area -
-    741 pixels each - still reported 1.3x.
+    to fail a legal figure at a true 3.9x and pass a bad one at 6.4x.
     """
     worst = None
     for ax in _all_axes(fig):
@@ -2426,10 +2408,7 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     `scatter` spelled `edgecolors="none"` keeps reporting a `patch.linewidth`
     of 0.70 for a stroke it never lays down.
 
-    This was left undone for a round on a stated cost that measurement did not
-    support - `gallery-parity` moving from 49% to 55% and flipping. Parity is
-    spelled `edgecolors="none"`, so the 55% was that phantom 0.70pt and the
-    figure does not move. What the corpus actually holds, every mark-drawing
+    What the corpus holds, every mark-drawing
     artist on all 21 figures:
 
     ```text
@@ -2443,13 +2422,9 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     correctness one and its exposure is honestly near zero; the figure that
     would have moved is the one that proves the naive version wrong.
 
-    Two separate errors used to make this roughly 1.8x too lenient, and a
-    scatter of 64 discs each overlapping its neighbours by a quarter of their
-    diameter rendered as one solid square while the gate returned clean. The
-    radius came from `sqrt(s / pi)`, treating `s` as an area it is not (see
-    `scatter_diameter_pt`), which is 12.8% too large; and the comparison was
-    against one radius rather than two, which is the condition for a mark's
-    *centre* to be swallowed rather than for the two marks to touch.
+    Two marks touch when their centres are closer than the sum of their two
+    radii. One radius would test whether a mark's *centre* is swallowed. Each
+    radius comes from `scatter_diameter_pt`, because `s` is not an area.
 
     Nearest is the wrong neighbour to ask about once radii vary. Contact is
     `d < r_i + r_j`, and the `j` that minimises `d` need not be the `j` that
@@ -2690,10 +2665,9 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     """Every rendered string clears the legibility floor once the figure is
     scaled into the document.
 
-    This used to be a regex over the source file hunting for `fontsize=`, which
-    missed anything set through rcParams, anything computed, and anything set by
-    a helper. Reading `get_fontsize()` off the artists that actually rendered
-    reports what is on the page instead of what is in the source.
+    Reads `get_fontsize()` off the artists that actually rendered, so a size
+    set through rcParams, computed, or set by a helper is measured like one
+    written as `fontsize=`.
 
     Mathtext is measured rather than read, against its own floor. A script is
     drawn at 0.7 of the level above it, so the property is not the size on the
@@ -3936,15 +3910,6 @@ def _style_sheet() -> Path | None:
     A configured path is returned whether or not it exists: a sheet named and
     missing is a mistake worth a row, not a silent fall-through to a sheet the
     project did not ask for.
-
-    There were three candidates until 0.7.0, and the first was
-    `figure_gate_data/figure.mplstyle`, probed ahead of the rest. That
-    directory existed because the modules installed to the root of
-    `site-packages`, where a bare `figure.mplstyle` is a name any distribution
-    could claim, so the sheet needed somewhere namespaced to live and needed to
-    be found before a stray one. `here` is now the `figure_gate` package
-    directory, which is already namespaced, so the sheet sits beside this file
-    on both routes and one candidate covers what two did.
     """
     if STYLE_SHEET is not None:
         return Path(STYLE_SHEET)
@@ -4019,13 +3984,10 @@ def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
 
     Non-monochrome (colored) contours are always solid and unaffected.
 
-    The condition used to be that EVERY level was non-positive, which is the
-    one shape a genuinely signed field never has: `contour` over data spanning
-    zero draws levels either side of it, matplotlib dashes the negative half,
-    and the gate skipped the figure entirely. It fired only on data that is
-    non-positive throughout — which is what the original test drew, so the hole
-    was invisible from inside the suite. The rule is now "any negative level",
-    asked of the drawn strokes.
+    The rule is "any negative level", asked of the drawn strokes, not "every
+    level non-positive": `contour` over data spanning zero draws levels either
+    side of it and matplotlib dashes the negative half, and that signed field
+    is the case this gate is for.
     """
     from matplotlib.contour import ContourSet
 
@@ -4510,11 +4472,11 @@ def check_colormap(fig: Figure) -> tuple[bool | str, str]:
     rather than three categories, and classifying it qualitative would fail it.
 
     The other way was not. The row needs `check_palette.py` importable beside
-    this file, and without it there is nothing to classify with. That used to
-    report a pass carrying its own explanation, which is a green row for a gate
-    that never ran. It warns now. The warn cannot fail a build -- `ok` turns on
+    this file, and without it there is nothing to classify with, so the row
+    warns rather than passing a gate that never ran. The warn cannot fail a
+    build -- `ok` turns on
     hard `False` only -- so a vendored copy that deliberately left the palette
-    module out still audits, and now says which rows went unjudged.
+    module out still audits, and says which rows went unjudged.
     """
     cp = _sibling("check_palette")
     if cp is None:
@@ -4850,12 +4812,11 @@ def check_style_sheet(fig: Figure) -> tuple[bool | str, str]:
     inside an `rc_context` that has since exited reads as drift when it is not.
     Both make a hard failure the wrong instrument. The row names the keys.
 
-    Finding no sheet at all warns too, and used to pass. The two cases were
-    inconsistent: a `STYLE_SHEET` pointing at a file that is not there has
-    warned since 0.1.4, while no sheet anywhere passed, and the second is the
-    one that ships stock matplotlib for the figure this gate was written for.
-    Installed, the sheet is inside the package and is always found; the pass
-    was reachable only from a vendored copy that took the script without it.
+    Finding no sheet at all warns too, as a `STYLE_SHEET` pointing at a
+    missing file does: either way the figure may be stock matplotlib, the case
+    this gate was written for. Installed, the sheet is inside the package and
+    is always found; only a vendored copy that took the script without it
+    reaches this.
     """
     import matplotlib as mpl
     path = _style_sheet()
@@ -5227,8 +5188,7 @@ def main() -> None:
     so `check-figure` in a build verifies the checker itself is still working."""
     import sys
     # Before the matplotlib import, not after: `--venues` prints a dict of
-    # numbers and needs nothing installed to do it. Asking for it on a machine
-    # without matplotlib used to hit the install message instead.
+    # numbers and needs nothing installed to do it.
     if "--venues" in sys.argv:
         print("\nContent widths, in points. Pass one as venue= to audit().")
         print("Verify against `\\the\\textwidth` in your own document before "
