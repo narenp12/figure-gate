@@ -2768,8 +2768,9 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
             return check_ink(fig, context_axes, canvas)
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
+    # The page colour is read off the top-left pixel, which assumes nothing is
+    # drawn in that corner.
     bg = buf[0, 0]
-    # anything more than a few levels off the page color counts as ink
     ink_mask = (np.abs(buf - bg).sum(axis=2) > INK_DELTA_MIN)
 
     if context_axes is None:
@@ -2797,7 +2798,7 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
             sub_buf = buf[h - y1:h - y0, x0:x1].astype(float)
             flat = sub_buf.reshape(-1, 3)
             m1 = flat.mean(axis=0)
-            # init second centroid offset so they diverge
+            # Seeded apart from the mean: two equal centroids never split.
             m2 = m1 + 30.0
             for _ in range(12):
                 d1 = np.abs(flat - m1).sum(axis=1)
@@ -2814,7 +2815,6 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
                 m1, m2 = nm1, nm2
             surf = c1 if c1.sum() > c2.sum() else c2
             surf_mask = surf.reshape(sub.shape)
-            # Ink = pixels in the ink_mask AND not in the surface cluster
             frac = float((sub & ~surf_mask).mean())
         else:
             frac = float(sub.mean())
@@ -3376,8 +3376,12 @@ def _baselined_bars(ax: Axes) -> str | None:
 
 def check_form(fig: Figure) -> tuple[bool | str, str]:
     """The mechanical subset of form choice - the three cases where the form is
-    wrong no matter what the data is. `references/choosing-a-form.md` carries
-    the judgement calls this cannot make.
+    wrong no matter what the data is: a pie or donut (any `Wedge`), a 3D axes,
+    and bars standing on a shared baseline along a linear axis that starts above
+    zero. `references/choosing-a-form.md` carries the judgement calls this
+    cannot make.
+
+    Returns False naming each case found, else True.
     """
     from matplotlib.container import BarContainer
     from matplotlib.patches import Wedge
@@ -3979,7 +3983,7 @@ def _negative_levels_are_dashed(cs: Any) -> bool:
 
 
 def check_contour_dash(fig: Figure) -> tuple[bool | str, str]:
-    """Negative-level contours auto-dash via matplotlib default.
+    """Warns when a monochrome contour set draws its negative levels dashed.
 
     In a monochrome contour, `rcParams["contour.negative_linestyle"]` is
     "dashed" by default, so negative-Z contours ship dashed isolines nobody
@@ -4883,6 +4887,10 @@ GATE_INPUTS = ("r", "canvas", "scale", "placed_frac", "venue", "context_axes")
 
 class Gate(NamedTuple):
     """One row of the audit: what it is called, what runs it, what it needs.
+
+    `func(fig, **needs)` returns `(status, detail)`: `status` is True, False
+    or "warn", and a gate marked `advisory` never returns False. `detail` is
+    the text the report prints beside the row.
 
     `needs` is the part worth having. The gates do not take the same arguments
     - some want the renderer, some the already-drawn canvas, some the page

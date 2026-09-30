@@ -520,10 +520,10 @@ def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
 
 # --- colormap kind ----------------------------------------------------------
 
-CMAP_SAMPLES = 256
-CMAP_QUALITATIVE_N = 40
-CMAP_SPAN_MIN = 0.02
-CMAP_BACKTRAVEL_MAX = 0.02
+CMAP_SAMPLES = 256          # points `check_figure` samples a colormap at
+CMAP_QUALITATIVE_N = 40     # fewer entries than this is a category list, not a ramp
+CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat
+CMAP_BACKTRAVEL_MAX = 0.02  # backward lightness travel, as a fraction of the span
 # A ramp is cyclic when its two ends are the same colour, and "the same colour"
 # now has a definition instead of a tuning: CAM02-UCS is fitted so that a unit
 # of its distance is about one just-noticeable difference, so ends closer than
