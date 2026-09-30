@@ -292,3 +292,24 @@ def test_the_citation_carries_no_date_released():
     assert "date-released" not in citation(), (
         "CITATION.cff gained a `date-released`. Add a `[[tool.bumpversion.files]]`"
         " entry that rewrites it on the release bump, then delete this test")
+
+
+def test_the_citation_orcid_is_a_valid_identifier():
+    """ORCID's last character is an ISO 7064 MOD 11-2 check digit, so a
+    transposed digit fails here rather than linking a citation to a stranger."""
+    orcid = citation()["authors"][0]["orcid"]
+    prefix = "https://orcid.org/"
+    assert orcid.startswith(prefix), orcid
+    digits = orcid[len(prefix):].replace("-", "")
+    total = 0
+    for d in digits[:-1]:
+        total = (total + int(d)) * 2
+    check = (12 - total % 11) % 11
+    assert digits[-1] == ("X" if check == 10 else str(check)), orcid
+
+
+def test_the_readme_cites_what_the_citation_file_says():
+    """README.md repeats the DOI for readers who never open CITATION.cff. A
+    copy nothing checks is the one that goes stale."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert readme.count(citation()["doi"]) >= 3, "README's DOI badge or BibTeX drifted"
