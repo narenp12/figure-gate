@@ -686,7 +686,7 @@ def encoding():
     # Ticked at the wrap and at both ends, so the bar shows the reader that its
     # two ends are the same angle. A bar whose ends match is the visible claim
     # that the colormap closes the loop -- exactly what `cmap_kind` measures as
-    # a wrap dE below 3.0.
+    # a wrap dE below `CMAP_WRAP_DE_MAX`.
     bar_c = fig.colorbar(phase, ax=c, pad=0.02,
                          ticks=[-np.pi, 0.0, np.pi])
     bar_c.set_ticklabels([r"$-\pi$", "$0$", r"$\pi$"])
@@ -868,12 +868,10 @@ def residual():
 
 
 # --- 11. marks, then bins ----------------------------------------------------
-# `check_overplotting` reads scatters, and the orbit diagram is not one: it is
-# `plot(marker=",")`, which the row skips because it has no offsets to measure.
-# So the gate had returned "no scatter overplotting" seven times without ever
-# building a tree. This figure gives it one, with mark area carrying a third
+# A true `scatter` for `check_overplotting`, with mark area carrying a third
 # variable so the radii vary and the octave path runs rather than the equal-radii
-# shortcut.
+# shortcut. The orbit diagram reaches the row too, as a marker-only `plot`, but
+# at one radius.
 #
 # Panel (b) is the answer the row's own message gives at 40000 points: past some
 # density a scatter is a silhouette of its own support, and the count per bin is
@@ -1360,19 +1358,16 @@ def trendmap():
 
 
 # --- 20. an inset that carries its own data ----------------------------------
-# The construct ten rows were taught to look inside and the corpus then had no
-# example of. `ax.inset_axes` is added through `add_child_axes` and never
-# reaches `fig.axes`, so a gate walking `fig.axes` audited the host panel and
-# skipped the child; the fix shipped with a sweep that could not move, because
-# every inset in the corpus was empty. This figure is the sweep's material.
+# `ax.inset_axes` is added through `add_child_axes` and never reaches
+# `fig.axes`, so a gate walking `fig.axes` audits the host panel and skips the
+# child. This is the corpus's inset with data in it.
 #
 # Three things at once, which is why it is one figure and not three. The inset
 # carries four curves of its own, so the child-axes traversal has artists to
 # find. Those four are drawn in colours sampled off `viridis` for an ordered
-# variable, which is the case `check_colormap_kind`'s sampled-ramp reader was
-# written for and was exposed to two panels of twenty. And the two panels are
-# stacked on one x, which is the direction `check_redundancy` could not measure
-# until this cycle and had one panel of twenty to measure it on.
+# variable, which is the case `check_colormap`'s sampled-ramp reader is for.
+# And the two panels are stacked on one x, the direction `check_redundancy`
+# compares same-column panels in.
 #
 # The zoom is the point of the form rather than decoration: the doublet is
 # 3.4 wavenumbers wide inside a 100-wavenumber window, so at the scale that

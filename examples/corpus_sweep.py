@@ -65,7 +65,7 @@ def sweep() -> dict:
                           for row, status, detail in rows]
         return ok
 
-    # Both modules did `import check_figure as cf` at their own module scope,
+    # Both modules do `import check_figure as cf` at their own module scope,
     # so patching the attribute on `cf` alone would leave their bound names
     # pointing at the real `report`.
     real = cf.report

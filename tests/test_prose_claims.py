@@ -2160,3 +2160,51 @@ def test_the_clipping_message_sends_the_reader_to_the_documented_fix():
     assert "constrained_layout" in detail and "widen" in detail, (
         f"the clipping message is now {detail!r}, which no longer names the "
         "fix the guide's section is built on")
+
+
+# --- examples/demo.py's case for ink labels ----------------------------------
+# The comment above demo.py's direct labels argues from two measured colour
+# differences. They were OKLab numbers against an OKLab floor, and the floor
+# moved to CAM02-UCS with nothing re-reading them.
+
+def _darkened_to_text_contrast(hex_color):
+    """`hex_color` with OKLab lightness lowered, hue kept, until 4.5:1 on white."""
+    L, a, b = cp.linear_to_oklab(cp.hex_to_linear(hex_color))
+
+    def lin(lightness):
+        l_ = lightness + 0.3963377774 * a + 0.2158037573 * b
+        m_ = lightness - 0.1055613458 * a - 0.0638541728 * b
+        s_ = lightness - 0.0894841775 * a - 1.2914855480 * b
+        l, m, s = l_ ** 3, m_ ** 3, s_ ** 3
+        return (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+
+    def to_hex(rgb):
+        out = []
+        for c in rgb:
+            c = min(1.0, max(0.0, c))
+            v = 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+            out.append(round(v * 255))
+        return "#{:02x}{:02x}{:02x}".format(*out)
+
+    while cp.contrast(to_hex(lin(L)), "#ffffff") < 4.5:
+        L -= 0.001
+    return to_hex(lin(L))
+
+
+@pytest.mark.parametrize("series,darkened,de,past_floor", [
+    ("#e69f00", "#aa6700", 21.7, True),
+    ("#56b4e9", "#107eb0", 20.5, False),
+])
+def test_demo_states_the_darkened_label_colours(series, darkened, de,
+                                                past_floor):
+    text = (ROOT / "examples" / "demo.py").read_text(encoding="utf-8")
+    got = _darkened_to_text_contrast(series)
+    measured = cp.delta_e(cp.hex_to_linear(series), cp.hex_to_linear(got))
+    assert got == darkened, f"{series} now darkens to {got}"
+    assert round(measured, 1) == de, f"{series} is now dE {measured:.1f}"
+    assert (measured >= cp.NORMAL_FLOOR) is past_floor
+    assert darkened in text and f"dE {de}" in text, (
+        f"demo.py no longer states {darkened} at dE {de}")
+    assert f"of {cp.NORMAL_FLOOR}" in text, "demo.py states a stale NORMAL_FLOOR"

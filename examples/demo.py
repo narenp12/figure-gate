@@ -137,13 +137,13 @@ def build(out=HERE):
         #
         # The label stays ink black rather than taking its series color, which is
         # the usual advice and was measured before being rejected. Text needs 4.5:1
-        # to be legible; darkening these hues far enough to reach it puts orange at
-        # dE 18.6 from its own line and sky blue at 17.1, both past the NORMAL_FLOOR
-        # of 15 that `check_palette` uses to call two colors different series. A
-        # label that reads as a fourth hue is worse than a black one. Below 15 the
-        # text is not legible. There is no setting that satisfies both, so identity
-        # rides on proximity alone -- which is why `check_label_attribution` exists
-        # and why it is a hard gate rather than a warning.
+        # to be legible. Darkening orange to reach it, lightness lowered and hue
+        # kept, gives #aa6700 at dE 21.7 from its own line, past the NORMAL_FLOOR
+        # of 21.0 at which `check_palette` calls two colors different series: the
+        # label would read as a fourth hue. Sky blue lands at #107eb0, dE 20.5,
+        # just under it. Ink keeps one rule for every label, so identity rides on
+        # proximity alone -- which is why `check_label_attribution` exists and why
+        # it is a hard gate rather than a warning.
         #
         # ALIGNMENT. These curves descend, so the ground above a curve is clear to
         # the RIGHT of any anchor and the ground below it is clear to the LEFT.
