@@ -175,6 +175,18 @@ def _post_adapt(rgb: Sequence[float], f_l: float) -> tuple[float, float, float]:
 
 def _viewing_conditions() -> tuple[tuple[float, float, float],
                                    float, float, float, float, float, float]:
+    """CIECAM02's viewing-condition terms for the sRGB environment above.
+
+    Names follow CIE 159:2004. Computed once, into the `_D_RGB` ... `_A_W`
+    module constants below.
+
+    Returns:
+        `(d_rgb, f_l, n, z, n_bb, n_cb, a_w)`: the per-channel CAT02
+        adaptation gains, the luminance-level adaptation factor F_L, the
+        background ratio Y_b / Y_w, the exponent base z, the brightness and
+        chromatic induction factors N_bb and N_cb (equal by definition), and
+        the achromatic response A_w of the white point.
+    """
     d = _SURROUND_F * (1 - (1 / 3.6) * math.exp((-_L_A - 42) / 92))
     d = min(1.0, max(0.0, d))
     rgb_w = _mul3(_M_CAT02, _XYZ_W)

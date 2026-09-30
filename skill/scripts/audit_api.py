@@ -64,6 +64,17 @@ def _notes(changelog: str) -> tuple[str, str]:
 
 
 def main() -> None:
+    """Compare each module's public API against the last tag; exit 0 or 1.
+
+    Run from the repository root: it reads `CHANGELOG.md` and `pyproject.toml`
+    from the working directory and needs `git` and `griffe` on the path.
+
+    Exits 0 when nothing broke, or when every broken name appears in the
+    notes section `_notes` picks, in a paragraph that also holds a `CHANGED`
+    verb. Exits 1, with the reason on stderr, when there is no tag, when
+    griffe is missing or fails without a finding, or when a broken name is
+    not written down.
+    """
     tag_result = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"],
         capture_output=True, text=True,
