@@ -47,6 +47,8 @@ from test_docs_site import (CONFIG, CSS, SLATES, authored_nav_pages, declared_ti
 
 ROOT = SKILL.parent
 SITE = ROOT / "site"
+# Beside zensical's own `.cache/`, which every run in this checkout shares.
+BUILD_LOCK = ROOT / ".cache" / "figure-gate-docs-build.lock"
 
 # Set by the nested run at the bottom of this file, and read by the test that
 # starts it, so that run does not start one of its own.
@@ -140,10 +142,12 @@ def _build_the_site():
     """
     if shutil.which("uv") is None:
         pytest.skip("uv is needed to build the site")
-    result = subprocess.run(
-        ["uv", "run", "--only-group", "docs",
-         "zensical", "build", "--strict"],
-        cwd=ROOT, capture_output=True, text=True)
+    BUILD_LOCK.parent.mkdir(exist_ok=True)
+    with file_lock()(str(BUILD_LOCK)):
+        result = subprocess.run(
+            ["uv", "run", "--only-group", "docs",
+             "zensical", "build", "--strict"],
+            cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, (
         "the site did not build, so there is nothing to measure:\n"
         f"{result.stdout}\n{result.stderr}")
@@ -166,7 +170,8 @@ def built_site(tmp_path_factory, worker_id):
     This is pytest-xdist's documented answer -- a lock on
     `tmp_path_factory.getbasetemp().parent`, which is the one directory every
     worker shares -- with a marker file so the workers that lose the race wait
-    for the build rather than repeat it.
+    for the build rather than repeat it. That lock is one run's; the build
+    itself also holds `BUILD_LOCK`, which every run in the checkout shares.
     """
     # Before the `master` branch below, not inside the worker path that needs
     # it, so every test that asks for a built site skips the same way under
@@ -184,6 +189,32 @@ def built_site(tmp_path_factory, worker_id):
             _build_the_site()
             marker.write_text("built", encoding="utf-8")
     return SITE
+
+
+def test_the_build_holds_a_lock_every_run_in_the_checkout_shares(monkeypatch):
+    """Two `zensical build`s at once corrupt the site and can still exit 0.
+
+    They share `.cache/`, so separate output directories do not help: two
+    concurrent builds into two directories left one with no nav markup and
+    25 links to `.md` files. `built_site`'s own lock lives in the run's temp
+    directory and serialises one run's workers, not two runs. So the build
+    takes `BUILD_LOCK` as well, and a second handle on it must wait.
+    """
+    FileLock = file_lock()
+    from filelock import Timeout
+    held = []
+
+    def fake_build(*args, **kwargs):
+        try:
+            with FileLock(str(BUILD_LOCK), timeout=0):
+                held.append(False)
+        except Timeout:
+            held.append(True)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_build)
+    _build_the_site()
+    assert held == [True], "zensical ran without BUILD_LOCK held"
 
 
 @pytest.fixture(scope="session")
