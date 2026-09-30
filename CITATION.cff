@@ -30,7 +30,7 @@ authors:
   - family-names: Prakash
     given-names: Naren
     email: 146764727+narenp12@users.noreply.github.com
-version: 0.10.0.dev0
+version: 0.10.0
 doi: 10.5281/zenodo.21784217
 license: MIT
 repository-code: "https://github.com/narenp12/figure-gate"
