@@ -115,14 +115,9 @@ def _sibling(name: str) -> Any:
     vendored, where they are loose files beside each other. `__package__` is
     empty in the second, which is what distinguishes them.
 
-    One helper, rather than the two-step written out at each call site. It was
-    written out, and when the package layout arrived one of the three sites was
-    missed -- `check_colormap`, whose fallback returned True. So on the install
-    path that gate reported a pass and the words "not importable beside this
-    file", and stopped classifying colormaps entirely. A guarded import whose
-    failure is a pass is exactly the kind that has to exist once, which is why
-    both callers now warn instead: a row that could not run is not a row that
-    passed.
+    Every cross-module import goes through here, so both layouts are handled
+    in one place. A caller that gets None must say what it skipped and must not
+    report a pass: a row that could not run is not a row that passed.
     """
     if __package__:
         try:
