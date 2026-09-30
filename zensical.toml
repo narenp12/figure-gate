@@ -50,7 +50,7 @@ extra_javascript = [
 # Grouped by what the reader came to do, after Diataxis: a tutorial teaches, a
 # how-to guide serves a goal the reader already has, reference states what is
 # true, and explanation gives the background. The four are kept apart on
-# purpose. The page that used to be "Getting started" was all four at once.
+# purpose.
 nav = [
   { "Home" = "index.md" },
   { "Tutorial" = "tutorial.md" },
@@ -147,12 +147,7 @@ logo = "lucide/fence"
 
 # Only what the pages actually use, and this list is checked: the extension
 # audit in `test_docs_site.py` greps every page the site serves for each
-# extension's own syntax and fails on one nothing uses. Seven were carried in
-# on the first build and removed once the audit was written -- `footnotes`,
-# `pymdownx.caret`, `keys`, `mark`, `tilde`, `inlinehilite` and `emoji`. The
-# emoji one had a comment claiming the home page's tiles were `:lucide-rocket:`
-# shortcodes; they became inline SVG when the grid moved to raw HTML, and the
-# comment outlived the syntax.
+# extension's own syntax and fails on one nothing uses.
 #
 # What is left, and where: the style guide is `tables` and `attr_list` colour
 # swatches, the gallery is `md_in_html` figures, gates is an `md_in_html` div

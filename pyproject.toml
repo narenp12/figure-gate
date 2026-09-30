@@ -54,19 +54,10 @@ requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 # `skill/scripts/` becomes the `figure_gate` package, rather than being emptied
-# onto the top level of `site-packages`.
-#
-# Until 0.7.0 `sources = ["skill/scripts"]` stripped the prefix and installed
-# `check_figure.py`, `check_palette.py` and `suggest_fixes.py` as top-level
-# modules: three of the most generic names a distribution could claim, sitting
-# next to `matplotlib` and `numpy`, and permanent the moment callers import
-# them. A distribution called figure-gate now installs something called
-# `figure_gate`.
-#
-# It also unblocks PEP 561. `py.typed` only carries types for a package, so
-# every annotation in these files -- all of them, as of the previous release --
-# resolved to `Any` in a caller's type checker for as long as the layout was
-# flat.
+# onto the top level of `site-packages`: `check_figure`, `check_palette` and
+# `suggest_fixes` are generic names any distribution could claim, and a name is
+# permanent once callers import it. A package is also what PEP 561 needs:
+# `py.typed` only carries types for a package.
 #
 # The vendored form is untouched: the files stay where they are in the
 # repository, still import nothing of each other at module scope, and are still
@@ -85,12 +76,8 @@ exclude = ["skill/scripts/audit_api.py"]
 # drawn on stock matplotlib -- the forgotten `plt.style.use` the gate exists to
 # catch -- from one drawn on the sheet.
 #
-# It sits inside the package, beside the module that reads it. It used to sit
-# in a `figure_gate_data/` directory at the wheel root, and that directory only
-# ever existed because the modules were at the wheel root too: a bare
-# `figure.mplstyle` dropped straight into `site-packages` is a generic name any
-# other distribution could also claim. Inside `figure_gate/` that cannot
-# happen, so the namespacing directory has no work left to do and is gone.
+# It sits inside the package, beside the module that reads it, where the
+# generic name `figure.mplstyle` cannot collide with another distribution's.
 #
 # The filename does not change: `tests/test_prose_claims.py` resolves
 # `figure.mplstyle` against the tracked `skill/assets/figure.mplstyle`, and a
@@ -101,17 +88,10 @@ exclude = ["skill/scripts/audit_api.py"]
 # Keeps the skill, the tests and the examples -- the tests are what make the
 # thresholds checkable by someone who did not write them.
 #
-# An allowlist, and it used to be a blacklist of agent-scratch paths. The
-# blacklist shipped: it named `/.claude` and `/.codebase-memory` but not
-# `.superpowers/`, which is neither tracked nor gitignored, so twelve files of
-# task briefs and review diffs went into the sdist along with whatever stray
-# untracked note was in the tree at build time. Releases come off a fresh
-# `actions/checkout` and so were never affected, but `make dist` on a working
-# machine was, and a blacklist only excludes the scratch directory whose name
-# somebody remembered.
-#
-# Listing what a source release IS cannot fail that way: a new directory is
-# absent until it is named, rather than present until it is excluded.
+# An allowlist, not a blacklist of scratch paths: a new directory is absent
+# until it is named, rather than present until it is excluded. A blacklist
+# excludes only the scratch directories somebody remembered, and `make dist` on
+# a working machine ships any untracked, unignored one, such as `.superpowers/`.
 [tool.hatch.build.targets.sdist]
 include = [
     "/skill",
@@ -133,15 +113,9 @@ include = [
 ]
 exclude = [".DS_Store"]
 
-# The version is written in six files and a tag, and nothing wrote them
-# together. 0.5.0 is what that costs: the bump moved pyproject.toml and
-# plugin.json, and all three pytest jobs failed on the release PR because
-# conda/recipe.yaml still said 0.4.0.
-#
-# The checks that caught it stay -- tests/test_conda_recipe.py and the
-# plugin.json step in ci.yml. What changes is their job. They stop being the
-# only thing between a half-finished bump and a release, and become the proof
-# that one command ran.
+# The version is written in six files and a tag, and one command writes them
+# together. tests/test_conda_recipe.py and the plugin.json step in ci.yml check
+# that it ran.
 #
 #     uv run bump-my-version bump dev
 #
@@ -181,14 +155,9 @@ tag = true
 tag_name = "v{new_version}"
 tag_message = "figure-gate {new_version}"
 
-# The version between releases says it is between releases.
-#
-# It did not until now: the tree carried the version of the release that had
-# already happened, so a checkout ahead of v0.6.0 still said `0.6.0` and
-# `uv build` on it produced `figure_gate-0.6.0-py3-none-any.whl` -- a file
-# named exactly like the 0.6.0 on PyPI and not the same code. Releases build
-# from a tag on a fresh checkout and were never affected; `make dist` on a
-# working machine was, and the artifact carries no hint of it.
+# The version between releases says it is between releases. A checkout ahead
+# of a release that still carried that release's number would build a wheel
+# named exactly like the one on PyPI and not the same code.
 #
 # So the development version is `X.Y.Z.devN` and the last step before tagging
 # drops the suffix:
@@ -214,11 +183,10 @@ serialize = [
 # The stock message is `Bump version: 0.5.0 → 0.6.0`. This one reads like the
 # release commits already in the log, and drops the arrow.
 #
-# It has to sit on `[tool.bumpversion]` itself. Written under
-# `[tool.bumpversion.parts.dev]`, which is where it was through 0.6.0, it is a
-# key on a part rather than on the config: bump-my-version reads no `message`
-# there, says nothing about the one it found, and commits the stock text. Both
-# releases cut with this config carried it.
+# It has to sit on `[tool.bumpversion]` itself. Under
+# `[tool.bumpversion.parts.dev]` it is a key on a part rather than on the
+# config: bump-my-version reads no `message` there, says nothing about the one
+# it found, and commits the stock text.
 message = "chore: release {new_version}"
 
 [tool.bumpversion.parts.dev]
@@ -232,18 +200,14 @@ values = ["0", "None"]
 # is a diff someone has to stop and think about.
 #
 # Anchored to a line of its own, because the changelog writes about its own
-# headings. `## Unreleased` unanchored replaced every mention of the string,
-# including the ones inside sentences, and 0.6.0 shipped with two: the notes
-# explaining the gate that requires an Unreleased section came out saying a
-# missing `## 0.6.0 — 2026-07-30` heading, which is not a thing that gate has
-# ever asked for. The heading is the only occurrence that starts a line.
+# headings: unanchored, `## Unreleased` is also replaced inside sentences that
+# mention it. The heading is the only occurrence that starts a line.
 #
 # `exclude_bumps` is what makes the two-command release run at all. The entry
 # above applies to every bump, and the cycle-opening one comes straight after a
 # release, when the heading it wants was consumed by that release and the next
-# one has not been written. So `bump minor` failed with `Did not find
-# '^## Unreleased$'`, which is why 0.7.0 left the tree reading `0.7.0` instead
-# of `0.8.0.dev0` and why 0.8.0 had to be cut with an explicit `--new-version`.
+# one has not been written. Without it `bump minor` fails with `Did not find
+# '^## Unreleased$'`.
 #
 # Naming the three cycle-opening parts here, rather than including `dev` alone,
 # keeps the failure for anything unlisted: a part added later is one nobody has
@@ -256,9 +220,10 @@ replace = "## {new_version} — {now:%Y-%m-%d}"
 exclude_bumps = ["major", "minor", "patch"]
 
 # Anchored for a different reason. The `current_version = "..."` line above
-# ends in `version = "..."`, so an unanchored search rewrites that line as well --
-# harmlessly today, since it wants the same new value and bump-my-version
-# maintains it anyway, but it is a second write to a line the tool owns.
+# ends in `version = "..."`, so an unanchored search rewrites that line as
+# well -- harmlessly today, since it wants the same new value and
+# bump-my-version maintains it anyway, but it is a second write to a line the
+# tool owns.
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
 regex = true
@@ -279,15 +244,9 @@ filename = "conda/recipe.yaml"
 search = '  version: "{current_version}"'
 replace = '  version: "{new_version}"'
 
-# The fifth site, and the one that was missed for four releases: uv.lock records
-# the project's own version and nothing wrote it, so it still read 0.7.0 after
-# 0.8.0 shipped.
-#
-# The cost is not a stale number in a file nobody reads. `uv run` without
-# `--no-sync` rewrites the line to match pyproject.toml, so the tree goes dirty
-# on its own, and bump-my-version refuses to start on an unclean tree. The
-# version site nobody was maintaining was blocking the command that maintains
-# the version sites.
+# The fifth site. uv.lock records the project's own version, and `uv run`
+# without `--no-sync` rewrites that line to match pyproject.toml. A stale one
+# dirties the tree, and bump-my-version refuses to start on an unclean tree.
 #
 # Anchored across two lines, because uv.lock holds a `version = ` line for every
 # package in the graph and the project's own is identified only by the `name`
@@ -344,9 +303,10 @@ per-file-target-version = { "skill/scripts/check_palette.py" = "py38" }
 # a surface no sweep over `*.md` reaches.
 #
 # Only the four `extraneous` rules. Their `missing` counterparts -- DOC201 alone
-# reported 91 in `skill/` on 2026-09-29 -- ask every function to carry a Returns section, which is a house
-# style this project does not write in and would not be improved by. Missing
-# prose is an editorial decision; prose that contradicts the code is a defect.
+# reported 91 in `skill/` on 2026-09-29 -- ask every function to carry a
+# Returns section, which is a house style this project does not write in and
+# would not be improved by. Missing prose is an editorial decision; prose that
+# contradicts the code is a defect.
 #
 # Both settings are load-bearing. `preview` because the pydoclint rules are not
 # stable yet, and `explicit-preview-rules` so that turning them on selects those
@@ -400,12 +360,8 @@ ignore-words-list = "vermillion,commun,theses,nd,trough"
 python_version = "3.11"
 files = ["conda", "examples", "skill", "tests"]
 
-# Every function in `skill/scripts` is annotated now, which the API page was
-# what finally paid for: the reference renders parameter and return types out
-# of the source, and an unannotated signature showed an empty Type column.
-# Annotating them turned two real contradictions into errors mypy could state
-# -- `Gate.func` declared `object` and then called, and a `check` row that
-# returns "warn" against a docstring promising True or False.
+# Every function in `skill/scripts` is annotated: the API page renders
+# parameter and return types out of the source.
 #
 # The strict flags stay off regardless. matplotlib and scipy ship incomplete
 # stubs and pytest plugins ship none, so `disallow_untyped_defs` and friends
@@ -417,9 +373,8 @@ ignore_missing_imports = true
 # statements, and mypy refuses to parse those when `python_version` is below
 # 3.12: it stops at the first one and reports "errors prevented further
 # checking", so the run says nothing about this project's code at all. CI builds
-# its venv on 3.13 and hit exactly that; a 3.11 venv happens to resolve an older
-# numpy and did not, which is why this passed locally and failed on the first
-# push.
+# its venv on 3.13, which resolves a numpy with those statements; a 3.11 venv
+# resolves an older one without them, so the failure is CI-only.
 #
 # The alternative was raising `python_version` to 3.13, which would have made
 # the stub parse and quietly stopped checking this code against the 3.11 floor
@@ -469,9 +424,8 @@ show_missing = true
 # figure without covering a line; leaving them in keeps the gap legible.
 # `exclude_also`, never `exclude_lines`. The latter REPLACES coverage's default
 # list rather than adding to it, which silently un-excludes `# pragma: no cover`
-# -- the first draft of this block did exactly that, and the
-# `PackageNotFoundError` fallback in skill/scripts/__init__.py went from excluded to reported as a miss while
-# the total barely moved. A rising statement count is the tell.
+# lines such as the `PackageNotFoundError` fallback in
+# skill/scripts/__init__.py. A rising statement count is the tell.
 exclude_also = [
     'if __name__ == "__main__":',
     # Never executed at runtime by construction: the imports exist so the
@@ -492,9 +446,8 @@ fail_under = 90
 # the wrong family.
 #
 # cmasher pulls colorspacious, numpy and matplotlib, none of which the shipped
-# scripts may import. It needed a `python_full_version >= '3.10'` marker while
-# this project supported 3.9; the floor is 3.11 now, so the marker is gone and
-# the oracle runs everywhere the tests do.
+# scripts may import. It carries no Python marker: cmasher needs 3.10, below
+# the 3.11 floor, so the oracle runs everywhere the tests do.
 [dependency-groups]
 dev = [
     "bump-my-version>=1.0",
@@ -504,12 +457,10 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
-    # No tool in this group needs it; `tests/test_version_sites.py` does, to
-    # read CITATION.cff. Declared rather than left to arrive with the `docs`
-    # group's MkDocs tree, which is where it came from until now: the six
-    # citation tests were behind a `pytest.importorskip` and skipped on every
-    # CI job, so the file the release bump rewrites had nothing checking it was
-    # still a citation. Same reason `api` names griffe outright.
+    # No tool in this group needs it; `tests/test_version_sites.py` imports it
+    # at module level to read CITATION.cff. Declared rather than left to arrive
+    # with the `docs` group's tree, so a `dev` install can collect that file.
+    # Same reason `api` names griffe outright.
     "pyyaml>=6.0.3",
     "ruff>=0.16",
     "scipy>=1.6",
@@ -522,12 +473,9 @@ dev = [
 # Pinned to a minor, not floored: Zensical is 0.0.x, so the usual reading of a
 # lower bound -- "anything newer is compatible" -- does not hold.
 #
-# The marker outlived its reason and is kept anyway. It was load-bearing while
-# `requires-python` was 3.9: Zensical needs 3.10, so without it uv resolved the
-# group across the project's full range and failed outright. The floor is 3.11
-# now, so it never excludes anything -- but `check_palette.py` is still claimed
-# to run on 3.8 when vendored, and a marker that documents a tool's own floor
-# costs nothing next to a resolution failure if that range ever widens again.
+# The markers exclude nothing at the 3.11 floor. They record Zensical's own
+# 3.10 floor, so widening `requires-python` below it cannot make uv resolve the
+# group across a range the tool does not support.
 docs = [
     "mkdocstrings-python>=1.10 ; python_full_version >= '3.10'",
     "zensical==0.0.54 ; python_version >= '3.10'",
