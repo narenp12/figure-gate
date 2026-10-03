@@ -579,9 +579,10 @@ def test_the_severity_matrices_belong_on_linear_light():
     """Which transfer function the published table wants, settled by
     measurement rather than by assumption.
 
-    The paper calibrates severity 1.0 against the same Brettel/Vienot
-    dichromacy `simulate` uses, so the domain that reproduces `simulate` is the
-    domain the matrices are written for. Applying them to gamma-encoded sRGB
+    The paper scales severity 1.0 to match Brettel, Vienot & Mollon (1997),
+    and `simulate`'s protan and deutan are the same authors' 1999 model, so the
+    domain that reproduces `simulate` is taken as the domain the matrices are
+    written for. Applying them to gamma-encoded sRGB
     instead is roughly twice as far off, which is the size of error that would
     have sat under every number this feature produces.
     """

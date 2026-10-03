@@ -794,8 +794,8 @@ kinds, and the reason `misc` fails, comes from this literature.
 - Nuñez, J. R., Anderton, C. R. & Renslow, R. S. (2018). Optimizing colormaps
   with consideration for color vision deficiency to enable accurate
   interpretation of scientific data. *PLoS ONE* 13(7), e0199239.
-  doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question, and
-  the argument the Okabe-Ito section above rests on.
+  doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question for
+  continuous maps: cividis, optimised in CAM02-UCS for deuteranomaly.
 - Okabe, M. & Ito, K. (2002, revised 2008). Color Universal Design (CUD): How
   to make figures and presentations that are friendly to colorblind people.
   jfly.uni-koeln.de/color/. The eight-colour set and its published order.
@@ -827,9 +827,9 @@ kinds, and the reason `misc` fails, comes from this literature.
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
   doi:10.1109/TVCG.2009.113. The severity model. Their Table 1 publishes a
-  simulation matrix at each severity from 0.0 to 1.0 in tenths, and severity 1.0
-  is calibrated against the same dichromacy model `simulate` uses, which is what
-  lets the two be read side by side.
+  simulation matrix at each severity from 0.0 to 1.0 in tenths. Severity 1.0 is
+  scaled to match Brettel, Viénot & Mollon (1997). `simulate` uses the same
+  authors' 1999 model for protan and deutan.
 
 Three more, for claims the sections above make outside colour.
 
@@ -842,7 +842,7 @@ Three more, for claims the sections above make outside colour.
   arXiv:2308.03241. The 99.81% is their measured figure: of the
   programmatically generated images across 100,000 notebooks, N=342102 carry no
   alternative text. They also identify matplotlib as the most-imported charting
-  library in the corpus, seaborn second and built on it.
+  library in the 39,540 notebooks with images, seaborn second and built on it.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.

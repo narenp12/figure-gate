@@ -1416,6 +1416,34 @@ RETRACTED_CLAIMS = {
                "minimum, and also states a maximum the guide never carried",
         "retracted": "2026-08-17",
     },
+    "Machado calibrating against the dichromacy simulate uses": {
+        "pattern": r"(calibrat\w*|scal\w*)[^.]{0,60}against the same[^.]{0,40}"
+                   r"(dichromacy|model)",
+        "instead": "Machado scales severity 1.0 to match Brettel, Vienot & "
+                   "Mollon (1997); `simulate`'s protan and deutan are the same "
+                   "authors' 1999 model",
+        "why": "the paper's 0.96 factor is fitted against 'Brettel et al.'s' "
+               "surface, reference [4], Brettel 1997. It does not cite Viénot "
+               "1999. The quote is in EXTERNAL_CLAIMS under 'cvd severity "
+               "matrices'",
+        "retracted": "2026-10-03",
+    },
+    "Machado's own reference implementation disclaiming tritanopia": {
+        "pattern": r"own reference implementation",
+        "instead": "DaltonLens 0.1.5's Simulator_Machado2009 notes the model "
+                   "does not work well for tritanopia",
+        "why": "DaltonLens is a third-party implementation. The paper says "
+               "tritanomaly 'can also be simulated' and states no limit",
+        "retracted": "2026-10-03",
+    },
+    "Nuñez 2018 backing the Okabe-Ito section": {
+        "pattern": r"Okabe-Ito section[^.]{0,30}rests on",
+        "instead": "Nuñez 2018 is the CVD-safe side for continuous maps: "
+                   "cividis, optimised in CAM02-UCS for deuteranomaly",
+        "why": "the paper's full text never mentions Okabe, Ito's colour set, "
+               "or categorical palettes. It optimises one continuous colormap",
+        "retracted": "2026-10-03",
+    },
 }
 
 
@@ -1628,8 +1656,24 @@ EXTERNAL_CLAIMS = {
         # shipped constants in `test_the_severity_table_is_the_one_the_paper_
         # publishes`. The first row of protanomaly at severity 0.1 is quoted
         # here as the sample a later reader can re-check in one lookup.
+        # The second sentence backs the guide's "scaled to match Brettel,
+        # Viénot & Mollon (1997)", read from the paper's full text 2026-10-03.
+        # Its only Viénot is the co-author of reference [4], Brettel 1997.
         "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
-                 "-0.038205.",
+                 "-0.038205. \"Such a scaling factor was used to improve the "
+                 "matching between the surfaces obtained when the entire RGB "
+                 "color space is simulated for dichromatic vision using "
+                 "Brettel et al.'s and our model (Fig. 6d).\"",
+    },
+    "cividis optimisation": {
+        "document": "style-guide.md",
+        "anchor": "cividis, optimised in CAM02-UCS for deuteranomaly",
+        "source": "Nuñez, Anderton & Renslow, PLoS ONE 13(7), e0199239, 2018",
+        "doi": "10.1371/journal.pone.0199239",
+        "verified": "2026-10-03",
+        "quote": "Specifically, CIECAM02-UCS was used for the colorspace for "
+                 "altering the colormap. Deuteranomaly was chosen as the CVD "
+                 "type",
     },
     "red-green prevalence": {
         "document": "style-guide.md",

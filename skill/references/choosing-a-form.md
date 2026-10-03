@@ -315,7 +315,8 @@ banked.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* The decomposition `ggplot2`
   implements.
 - Anscombe, F. J. (1973). Graphs in statistical analysis. *The American
-  Statistician* 27(1), 17-21.
+  Statistician* 27(1), 17-21. doi:10.1080/00031305.1973.10478966.
 - Schenker, N. & Gentleman, J. F. (2001). On judging the significance of
   differences by examining the overlap between confidence intervals. *The
-  American Statistician* 55(3), 182-186. The overlapping-intervals result.
+  American Statistician* 55(3), 182-186. doi:10.1198/000313001317097960. The
+  overlapping-intervals result.

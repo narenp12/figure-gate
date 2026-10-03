@@ -378,14 +378,15 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 # identity and needs no matrix.
 #
 # Protan and deutan only. The repository already reports tritan without gating
-# it, and this model's own reference implementation notes that it does not do
-# tritanopia well, so shipping a tritan severity table here would be spending
-# credibility on the one form neither model is validated for.
+# it, and DaltonLens 0.1.5's `Simulator_Machado2009` notes that the model "does
+# not work well for tritanopia", so shipping a tritan severity table here would
+# be spending credibility on the one form neither model is validated for.
 #
 # Applied on linear light, like `simulate`. The published table does not state a
 # transfer function, and the domain was settled by measurement rather than by
-# assumption: Machado calibrates severity 1.0 against the same Brettel/Vienot
-# dichromacy this file uses, and on 4000 random hues the severity-1.0 matrices
+# assumption. Machado scales severity 1.0 to match Brettel, Vienot & Mollon
+# (1997); this file's protan and deutan are the same authors' 1999 model, not
+# the 1997 one. On 4000 random hues the severity-1.0 matrices
 # reproduce it to a mean dE of 2.84 (protan) and 2.44 (deutan) when applied to
 # linear light, against 3.89 and 4.97 when applied to gamma-encoded sRGB.
 MACHADO = {
@@ -713,9 +714,10 @@ CHROMA_MIN = 0.10
 #
 # The anchor is Stone, Szafir & Setlur (2014), who measured the colour
 # difference half of observers notice as a function of target size, C + K/s with
-# s the visual angle in degrees, fitted from 0.333 to 6 degrees. At 0.333
-# degrees - the smallest size their fit covers, and the closest thing in the
-# literature to a hairline - that is 10.4 CIELAB dE*ab.
+# s the visual angle in degrees, fitted from 0.333 to 6 degrees, one fit per
+# axis of L*, a* and b*. At 0.333 degrees - the smallest size their fit covers,
+# and the closest thing in the literature to a hairline - the mean of the three
+# fits in their Table 3 is 10.4 CIELAB.
 #
 # Their number is in CIELAB and the gate measures in CAM02-UCS, so it needs a
 # bridge, and the bridge is population-dependent: one CAM02-UCS unit is a median

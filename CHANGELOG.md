@@ -19,6 +19,17 @@ behind a threshold this project enforces.
 
 - `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
   (1997). `CVD["tritan"]`, the Viénot 1999 matrix, is removed.
+- `style-guide.md` References: the Machado entry says severity 1.0 is scaled
+  to match Brettel 1997; the Nuñez entry names cividis.
+- The `MACHADO` comment in `check_palette.py` and the docstring of
+  `test_the_severity_matrices_belong_on_linear_light`: the same Machado
+  correction, and the tritan caveat is credited to DaltonLens 0.1.5.
+- The separation-floor comment in `check_palette.py`: 10.4 is the mean of
+  Stone et al.'s three per-axis fits.
+- `choosing-a-form.md` References: DOIs for Anscombe (1973) and Schenker &
+  Gentleman (2001).
+- `style-guide.md` References: the Potluri library ranking is scoped to the
+  39,540 notebooks with images.
 
 #### Added
 
@@ -27,6 +38,8 @@ behind a threshold this project enforces.
   `daltonlens` joins the `dev` group.
 - `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
   `tests/test_palette.py`.
+- `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
+  entries, in `tests/test_prose_claims.py`.
 
 ### Why it changed
 
@@ -44,6 +57,21 @@ against `#CC79A7`). Over matplotlib 3.11.1's style palettes, first 3, 4 and 6
 colours, 25 of 55 pass red-green; the gate would fail one more of those 25,
 `Solarize_Light2` at 5.0. It would fail the recommended palette to catch one
 style.
+
+Three citations were checked against the papers' full text and did not hold.
+Machado, Oliveira & Fernandes (2009) fit their 0.96 scale factor to "Brettel
+et al.'s" surface, reference [4], Brettel 1997; the paper does not cite Viénot
+1999, which `simulate` uses for protan and deutan. The tritan caveat came from
+DaltonLens's `Simulator_Machado2009`, not from the authors. Nuñez, Anderton &
+Renslow (2018) never mention Okabe-Ito or categorical palettes; the paper
+optimises one continuous map. The 2.84 and 2.44 dE measurements behind the
+linear-light choice are unchanged.
+
+The same check found three smaller gaps. The module comment called 10.4 the
+difference half of observers notice, without saying it averages one fit per
+axis; the style guide already did. Potluri et al. rank charting libraries over
+the 39,540 notebooks with images, not their 100,000-notebook corpus. The two
+DOIs resolve in Crossref to the volume, issue and pages already printed.
 
 ## 0.10.0 — 2026-09-30
 
