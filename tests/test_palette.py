@@ -8,6 +8,7 @@ trust anything else in it. Pinning them here means a change to the color math
 breaks a test instead of quietly making the prose wrong.
 """
 
+import itertools
 import math
 import random
 import re
@@ -679,6 +680,30 @@ def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
     assert 1.0 not in cp.ANOMALOUS_SEVERITIES
     assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
     assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)
+
+
+# --- the tritan gate that was measured and not shipped -----------------------
+
+def test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito():
+    """Why tritan is reported and not gated.
+
+    Okabe-Ito's six series slots, all pairs, pass red-green at 12.8 and read
+    tritan 10.1, orange against reddish purple: under `CVD_TARGET`. A floor
+    proposed for tritan has to answer this number first.
+    """
+    cycle = ["#e69f00", "#56b4e9", "#009e73", "#0072b2", "#d55e00", "#cc79a7"]
+    ok, rows = cp.check(cycle, all_pairs=True)
+    assert ok, rows
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert row[1] is True
+    tritan = float(re.search(r"tritan ([\d.]+)", row[2]).group(1))
+    assert tritan == pytest.approx(10.1, abs=0.05), row[2]
+    assert tritan < cp.CVD_TARGET
+
+    lin = {h: cp.hex_to_linear(h) for h in cycle}
+    worst = min(itertools.combinations(cycle, 2), key=lambda p: cp.delta_e(
+        cp.simulate(lin[p[0]], "tritan"), cp.simulate(lin[p[1]], "tritan")))
+    assert set(worst) == {"#e69f00", "#cc79a7"}
 
 
 # --- the size-weighted gate that was measured and not shipped ----------------

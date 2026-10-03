@@ -39,7 +39,8 @@ from collections.abc import Collection, Sequence
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
     "hex_to_linear", "linear_to_oklab", "linear_to_cam02ucs",
-    "relative_luminance", "contrast", "CVD", "simulate", "MACHADO",
+    "relative_luminance", "contrast", "CVD", "BRETTEL_TRITAN", "simulate",
+    "MACHADO",
     "ANOMALOUS_SEVERITIES", "simulate_anomalous", "delta_e", "oklab_distance",
     "CMAP_SAMPLES", "CMAP_QUALITATIVE_N", "CMAP_SPAN_MIN",
     "CMAP_BACKTRAVEL_MAX", "CMAP_WRAP_DE_MAX", "NOT_CONFIGURABLE",
@@ -304,18 +305,48 @@ CVD = {
     "deutan": ((0.29275, 0.70725, 0.0),
                (0.29275, 0.70725, 0.0),
                (-0.02234, 0.02234, 1.0)),
-    "tritan": ((1.0, 0.14461, -0.14461),
-               (0.0, 0.85659, 0.14341),
-               (0.0, 0.85659, 0.14341)),
 }
+
+# --- tritanopia (Brettel, Vienot & Mollon 1997, on linear RGB) --------------
+#
+# Vienot 1999 covers protanopia and deuteranopia only. Tritanopia needs Brettel
+# 1997's two half-planes, anchored at 485 and 660 nm. Values are DaltonLens-
+# Python 0.1.5's `Simulator_Brettel1997` defaults: Smith & Pokorny 1975 LMS,
+# sRGB white as the neutral axis. `tests/test_cvd_oracle.py` checks them
+# against that package.
+BRETTEL_TRITAN: dict[str, tuple] = {
+    "lms_from_rgb": ((1.7885955810e-01, 4.3997116990e-01, 3.5965767024e-02),
+                     (3.3803935020e-02, 2.7515242401e-01, 3.6206345976e-02),
+                     (3.1087464000e-04, 1.9166073600e-03, 1.5280889928e-02)),
+    "rgb_from_lms": ((8.0053285960e+00, -1.2881954499e+01, 1.1680649429e+01),
+                     (-9.7821149060e-01, 5.2694490342e+00, -1.0183004327e+01),
+                     (-4.0168230106e-02, -3.9885058156e-01, 6.6480787974e+01)),
+    # The S row of each half-plane's projection, and the normal that picks one.
+    "plane1": (-0.0021311449, 0.0547679048, 0.0),
+    "plane2": (-0.0619548325, 0.1682573994, 0.0),
+    "separation": (0.345162705, -0.654796495, 0.0),
+}
+
+
+def _brettel_tritan(rgb: Sequence[float]) -> tuple[float, float, float]:
+    t = BRETTEL_TRITAN
+    lms = [sum(t["lms_from_rgb"][i][j] * rgb[j] for j in range(3))
+           for i in range(3)]
+    side = sum(n * c for n, c in zip(t["separation"], lms))
+    row = t["plane1"] if side >= 0 else t["plane2"]
+    lms[2] = sum(h * c for h, c in zip(row, lms))
+    r, g, b = (max(0.0, min(1.0, sum(t["rgb_from_lms"][i][j] * lms[j]
+                                     for j in range(3))))
+               for i in range(3))
+    return r, g, b
 
 
 def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
     """Linear-light RGB as a `"protan"`, `"deutan"` or `"tritan"` viewer sees it.
 
-    Vienot, Brettel & Mollon (1999), applied on linear light. Protan and deutan
-    are what the gates decide on; the tritan matrix is validated only for the
-    red-green forms, so its distances are printed and never gated.
+    Protan and deutan use Vienot, Brettel & Mollon (1999); tritan uses Brettel,
+    Vienot & Mollon (1997). Both run on linear light. Protan and deutan are
+    what the gates decide on; tritan distances are printed and never gated.
 
     Args:
         rgb: Linear-light `(r, g, b)`, each channel in 0..1.
@@ -324,6 +355,8 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
     Returns:
         Linear-light `(r, g, b)` as that viewer sees it.
     """
+    if kind == "tritan":
+        return _brettel_tritan(rgb)
     m = CVD[kind]
     r, g, b = (max(0.0, min(1.0, sum(m[i][j] * rgb[j] for j in range(3))))
                for i in range(3))
@@ -806,9 +839,8 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     label = "all-pairs" if all_pairs else "adjacent"
 
     # Gate on protanopia and deuteranopia (~8% of males between them). Tritan is
-    # reported but not gated: it is ~0.01% prevalence, and the Vienot matrix used
-    # here is only validated for the red-green forms, so a tritan number is
-    # indicative rather than decisive.
+    # reported but not gated: it is ~0.01% prevalence, and no floor for it has
+    # been measured against the corpus.
     #
     # Swept over severity, not read at the endpoint: dichromacy is not the worst
     # case. MACHADO's comment has the measurement.

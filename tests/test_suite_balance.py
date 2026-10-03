@@ -44,6 +44,7 @@ GATE = {
     "test_palette",                   # every colour gate, against the floors
     "test_palette_oracle",            # cmap_kind against matplotlib's registry
     "test_colour_space_oracle",       # CIECAM02 against colorspacious
+    "test_cvd_oracle",                # Brettel tritan against daltonlens
     "test_renderer_invariance",       # every row, across five authored dpi
     "test_style_context_invariance",  # every row, in and out of the sheet
     "test_external_style_corpus",     # every gate, over 28 external styles

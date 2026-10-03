@@ -11,6 +11,40 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
+## Unreleased
+
+### What changed
+
+#### Changed
+
+- `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
+  (1997). `CVD["tritan"]`, the Viénot 1999 matrix, is removed.
+
+#### Added
+
+- `check_palette.BRETTEL_TRITAN`, the constants the tritan simulation reads.
+- `tests/test_cvd_oracle.py`, checking them against DaltonLens-Python 0.1.5.
+  `daltonlens` joins the `dev` group.
+- `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
+  `tests/test_palette.py`.
+
+### Why it changed
+
+Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
+open-source simulators calls Brettel 1997 "the most solid and basically only
+valid choice" for tritanopia. The oracle agrees to 4.7e-8 in linear RGB.
+
+The `tritan` figure in the CVD separation row moves: Okabe-Ito's first three
+slots read 12.2, not 12.5. `make sweep` over the 21 corpus figures records no
+verdict change.
+
+Tritan stays reported and ungated. Gating it at `CVD_TARGET` was measured and
+rejected: Okabe-Ito's six series slots, all pairs, read tritan 10.1 (`#E69F00`
+against `#CC79A7`). Over matplotlib 3.11.1's style palettes, first 3, 4 and 6
+colours, 25 of 55 pass red-green; the gate would fail one more of those 25,
+`Solarize_Light2` at 5.0. It would fail the recommended palette to catch one
+style.
+
 ## 0.10.0 — 2026-09-30
 
 ### What changed
