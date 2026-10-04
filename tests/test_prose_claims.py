@@ -1444,6 +1444,15 @@ RETRACTED_CLAIMS = {
                "or categorical palettes. It optimises one continuous colormap",
         "retracted": "2026-10-03",
     },
+    "no other tool reading the built figure": {
+        "pattern": r"none of (them|these|those) reads? the built",
+        "instead": "scope the claim to the tools named, and name "
+                   "vislint_mpl (McNutt & Kindlmann 2018)",
+        "why": "vislint_mpl linted built matplotlib figures in 2018. The "
+               "quote is in EXTERNAL_CLAIMS under 'vislint_mpl linting built "
+               "figures'",
+        "retracted": "2026-10-04",
+    },
 }
 
 
@@ -1490,6 +1499,17 @@ def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
         (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8").split()), re.I), (
         "the pattern matches the corrected sentence too, so it forbids the "
         "replacement as well as the claim")
+
+
+def test_the_built_figure_pattern_still_matches_the_readme_it_retired():
+    """The README sentence as 0.10.0 shipped it."""
+    shipped = ("Each of those acts before or beside the figure. None of them "
+               "reads the built result and reports what it fails.")
+    pattern = RETRACTED_CLAIMS[
+        "no other tool reading the built figure"]["pattern"]
+    assert re.search(pattern, shipped, re.I)
+    assert not re.search(pattern, " ".join(
+        document("README.md").read_text(encoding="utf-8").split()), re.I)
 
 
 def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
@@ -1722,6 +1742,21 @@ EXTERNAL_CLAIMS = {
                  "vertical lines remain unchanged by variations in aspect "
                  "ratio, yet contribute to the banking criteria.",
     },
+    "vislint_mpl linting built figures": {
+        "document": "README.md",
+        "anchor": "listed the rules they failed",
+        "source": "McNutt & Kindlmann, Linting for Visualization: Towards a "
+                  "Practical Automated Visualization Guidance System, "
+                  "VisGuides workshop at IEEE VIS 2018, section 3.1",
+        "no_doi": "a workshop paper hosted on the authors' pages; Crossref "
+                  "returned no DOI for its title on 2026-10-04",
+        "verified": "2026-10-04",
+        "quote": "After creating a matplotlib chart, the user passes the "
+                 "associated axes and figure objects, along with a "
+                 "configurable list of rules to be checked, to the "
+                 "vislint_mpl function. The user then receives a list of the "
+                 "rules that failed, along with an explanation of why.",
+    },
 }
 
 # Ledger entries name a document by its basename, which was unambiguous while
@@ -1736,6 +1771,10 @@ for _path in PROSE_DOCS:
 
 
 def document(name):
+    # A path from the root first, as the shared-basename assertion asks.
+    by_path = [p for p in PROSE_DOCS if doc_id(p) == name]
+    if by_path:
+        return by_path[0]
     found = DOCS_BY_NAME.get(name, [])
     assert found, (
         f"the ledger names {name}, which is not a document in the corpus "

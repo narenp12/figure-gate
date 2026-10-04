@@ -30,6 +30,9 @@ behind a threshold this project enforces.
   Gentleman (2001).
 - `style-guide.md` References: the Potluri library ranking is scoped to the
   39,540 notebooks with images.
+- README "Where this sits": names vislint_mpl (McNutt & Kindlmann 2018) as
+  prior art and drops "None of them reads the built result".
+- `document()` in `tests/test_prose_claims.py` accepts a path from the root.
 
 #### Added
 
@@ -40,6 +43,8 @@ behind a threshold this project enforces.
   `tests/test_palette.py`.
 - `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
   entries, in `tests/test_prose_claims.py`.
+- `EXTERNAL_CLAIMS["vislint_mpl linting built figures"]` and
+  `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
 
 ### Why it changed
 
@@ -72,6 +77,10 @@ difference half of observers notice, without saying it averages one fit per
 axis; the style guide already did. Potluri et al. rank charting libraries over
 the 39,540 notebooks with images, not their 100,000-notebook corpus. The two
 DOIs resolve in Crossref to the volume, issue and pages already printed.
+
+The README read as if figure-gate were the first linter of built matplotlib
+figures; vislint_mpl was, in 2018. Two tracked files are named `README.md`, and
+`document()`'s error message asked for a path it could not resolve.
 
 ## 0.10.0 — 2026-09-30
 
