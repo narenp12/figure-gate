@@ -32,6 +32,8 @@ behind a threshold this project enforces.
   39,540 notebooks with images.
 - README "Where this sits": names vislint_mpl (McNutt & Kindlmann 2018) as
   prior art and drops "None of them reads the built result".
+- `style-guide.md` "Describe the figure" cites Lundgard & Satyanarayan
+  (2022), added to its References.
 - `document()` in `tests/test_prose_claims.py` accepts a path from the root.
 
 #### Added
@@ -45,6 +47,8 @@ behind a threshold this project enforces.
   entries, in `tests/test_prose_claims.py`.
 - `EXTERNAL_CLAIMS["vislint_mpl linting built figures"]` and
   `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
+- `EXTERNAL_CLAIMS["alt text semantic levels"]`, and `Lundgard` in
+  `GUIDE_CITED`.
 
 ### Why it changed
 
@@ -81,6 +85,11 @@ DOIs resolve in Crossref to the volume, issue and pages already printed.
 The README read as if figure-gate were the first linter of built matplotlib
 figures; vislint_mpl was, in 2018. Two tracked files are named `README.md`, and
 `document()`'s error message asked for a path it could not resolve.
+
+The alt-text advice to give numbers and direction had no source. Lundgard &
+Satyanarayan's blind readers ranked statistics and trends most useful. No gate
+follows: `check_alt_text` checks presence and length, and a description's
+semantic level is not mechanically checkable.
 
 ## 0.10.0 — 2026-09-30
 

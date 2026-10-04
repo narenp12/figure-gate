@@ -1635,6 +1635,17 @@ EXTERNAL_CLAIMS = {
         "quote": "The vast majority of the programmatically generated images "
                  "(N=342102 (99.81%)) do not have associated alternative text.",
     },
+    "alt text semantic levels": {
+        "document": "style-guide.md",
+        "anchor": "Blind readers ranked statistics and trends",
+        "source": "Lundgard & Satyanarayan, IEEE TVCG 28(1), 1073-1083, "
+                  "arXiv:2110.04406, section 5.4",
+        "doi": "10.1109/TVCG.2021.3114770",
+        "verified": "2026-10-04",
+        "quote": "blind readers rank content and Levels 2 and 3 as most "
+                 "useful (Region 4 .C), and semantic content at Levels 1 and "
+                 "4 as least useful (Regions 4 .A and 4 .B).",
+    },
     "data-ink evidence": {
         "document": "style-guide.md",
         "anchor": "not the data-ink ratio",

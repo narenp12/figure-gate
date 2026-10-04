@@ -700,6 +700,9 @@ Call `describe(fig, ...)`, then
 time so the call can pick the key that format takes. Say what the reader would
 have taken from looking, meaning the numbers and the direction, rather than what
 the figure is made of. "A line chart with three lines" describes the file.
+Blind readers ranked statistics and trends the most useful content, and marks,
+encodings and social or political context the least (Lundgard & Satyanarayan,
+in the references).
 
 ---
 
@@ -831,7 +834,7 @@ kinds, and the reason `misc` fails, comes from this literature.
   scaled to match Brettel, Viénot & Mollon (1997). `simulate` uses the same
   authors' 1999 model for protan and deutan.
 
-Three more, for claims the sections above make outside colour.
+Four more, for claims the sections above make outside colour.
 
 - Tufte, E. R. (1983). *The Visual Display of Quantitative Information.*
   Graphics Press. The data-ink ratio that `check_ink` is not.
@@ -843,6 +846,13 @@ Three more, for claims the sections above make outside colour.
   programmatically generated images across 100,000 notebooks, N=342102 carry no
   alternative text. They also identify matplotlib as the most-imported charting
   library in the 39,540 notebooks with images, seaborn second and built on it.
+- Lundgard, A. & Satyanarayan, A. (2022). Accessible Visualization via Natural
+  Language Descriptions: A Four-Level Model of Semantic Content. *IEEE
+  Transactions on Visualization and Computer Graphics* 28(1), 1073-1083.
+  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. 30 blind readers ranked
+  Levels 2 and 3 (statistics, trends) most useful and Levels 1 and 4
+  (construction, context) least; 90 sighted readers ranked Levels 3 and 4
+  most useful.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.
