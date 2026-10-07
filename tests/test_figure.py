@@ -4437,6 +4437,127 @@ def test_line_weight_skips_ticks_that_draw_nothing():
     assert status is True, detail
 
 
+def _outline_fixture(**marker):
+    """One marked series with every other stroke well clear of both floors,
+    so the only stroke the check can fail is the marker outline."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 0], lw=1.5, label="series", **marker)
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    return fig
+
+
+@pytest.mark.parametrize("marker", [
+    dict(marker="o", mfc="white", mec="black", mew=0.3),   # hollow
+    dict(marker="s", mfc="none", mec="black", mew=0.3),    # unfilled face
+    dict(marker="+", mew=0.3),                             # unfilled marker
+    dict(marker="o", mfc="tab:blue", mec="black", mew=0.3),  # second colour
+])
+def test_line_weight_catches_a_thin_marker_outline(marker):
+    """An outline the reader needs, under Science's 0.5pt."""
+    fig = _outline_fixture(**marker)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series" in detail
+
+
+@pytest.mark.parametrize("marker", [
+    dict(marker="o", mfc="tab:blue", mec="tab:blue", mew=0.3),  # the face
+    dict(marker="o", mfc="tab:blue", mec="white", mew=0.3),     # a halo
+    dict(marker="o", mfc="white", mec="black", mew=0.6),        # clears 0.5
+])
+def test_line_weight_passes_an_outline_that_carries_nothing_or_clears(marker):
+    """seaborn's sheets draw 0.24 to 0.48pt edges in the face colour; dropping
+    out, they lose nothing."""
+    fig = _outline_fixture(**marker)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_catches_a_thin_hollow_scatter():
+    """The scatter route: `facecolors="none"` with a 0.3pt edge."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 0], facecolors="none", edgecolors="black",
+               linewidths=0.3, label="series")
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series" in detail
+
+
+def test_line_weight_skips_ticks_with_no_colour():
+    """`tick_params(color="none")` keeps the width and draws no ink."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=3.0)
+    ax.spines[:].set_linewidth(2.0)
+    ax.tick_params(color="none")
+    try:
+        status, detail = cf.check_line_weight(fig, scale=0.5)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+@pytest.mark.parametrize("hide", ["axis_off", "x_hidden"])
+def test_line_weight_skips_furniture_that_is_not_drawn(hide):
+    """`set_axis_off` drops the spines, ticks and grid from `Axes.draw`; a
+    hidden axis drops its own ticks and grid. An imshow panel with no axes is
+    the ordinary case."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.imshow([[0, 1], [1, 0]])
+    ax.grid(True, lw=0.2)
+    if hide == "axis_off":
+        ax.set_axis_off()
+    else:
+        ax.spines[:].set_linewidth(2.0)
+        ax.yaxis.set_tick_params(width=2.0)
+        ax.yaxis.grid(False)
+        ax.xaxis.set_visible(False)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=0.33)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_reads_a_transparent_axes_as_the_page_under_it():
+    """`set_facecolor("none")` is RGBA (0, 0, 0, 0). Its RGB is black, so a
+    black outline read against it looked like a halo and went unmeasured."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.set_facecolor("none")
+    ax.scatter([0, 1, 2], [0, 1, 0], edgecolors="k", linewidths=0.2,
+               label="series")
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series at 0.20pt" in detail
+
+
+def test_line_weight_names_an_unlabelled_outline_a_series():
+    fig = _outline_fixture(marker="+", mew=0.3)
+    fig.axes[0].lines[0].set_label("_child0")
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of a series" in detail
+
+
 # --- banking ---------------------------------------------------------------
 
 

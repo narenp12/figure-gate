@@ -679,8 +679,9 @@ or disappear in print. A 0.8pt stroke in a 9in figure placed at 5.5in prints at
 `page_scale`. Furniture is held to a lower floor than data deliberately: a
 gridline that drops out costs a reference, and a curve that drops out costs the
 finding. Science states the lower number, a minimum of 0.5 point at the final
-reduced size for line widths, and the axis rule, the ticks and the grid are
-measured against that rather than against the data floor.
+reduced size for line widths, and the axis rule, the ticks, the grid and any
+marker outline that carries the mark are measured against that rather than
+against the data floor.
 
 **Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress
 takes embedded Type 1 or TrueType and does not accept Type 3, so the upload is

@@ -4116,6 +4116,70 @@ def _collection_widths(artist: Any) -> list[float]:
         return [float(raw)]
 
 
+def _ground(ax: Axes) -> tuple[float, float, float, float]:
+    """The colour behind an axes' marks: its facecolor, else the figure's, else
+    white. `set_facecolor("none")` is RGBA (0, 0, 0, 0), and reading its RGB
+    would take the page under it for black."""
+    from matplotlib.colors import to_rgba
+
+    for colour in (ax.get_facecolor(), ax.figure.get_facecolor()):
+        rgba = to_rgba(colour)
+        if rgba[3] > 0.0:
+            return rgba
+    return (1.0, 1.0, 1.0, 1.0)
+
+
+def _marker_outline_pt(artist: Any, background: Any) -> float:
+    """The width of a marker outline the reader has to see, in points.
+
+    An outline carries the mark when the marker is unfilled (`+`, `x`) or
+    hollow, or when it is a second colour on the fill. It carries nothing when
+    it repeats the fill colour, which is matplotlib's `"face"` edge and every
+    seaborn sheet's, or when it is the axes background, which is a halo.
+
+    Args:
+        artist: A `Line2D` with markers or a `PathCollection` from `scatter`.
+        background: The colour behind the marks, from `_ground`.
+
+    Returns:
+        The outline width in points, or 0.0 if no outline carries the mark.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgba, to_rgba_array
+    from matplotlib.lines import Line2D
+    from matplotlib.markers import MarkerStyle
+
+    if isinstance(artist, Line2D):
+        if str(artist.get_marker()) in ("None", "none", "", " "):
+            return 0.0
+        width = marker_stroke_pt(artist)
+        if width <= 0.0:
+            return 0.0
+        style = MarkerStyle(artist.get_marker(), artist.get_fillstyle())
+        if not style.is_filled() or artist.get_fillstyle() == "none":
+            return width
+        edges = to_rgba_array(artist.get_markeredgecolor())
+        faces = to_rgba_array(artist.get_markerfacecolor())
+    else:
+        width = collection_stroke_pt(artist)
+        if width <= 0.0:
+            return 0.0
+        edges = np.asarray(artist.get_edgecolors(), dtype=float)
+        faces = np.asarray(artist.get_facecolors(), dtype=float)
+    if faces.size == 0 or faces[:, 3].max() <= 0.0:
+        return width                                   # hollow
+    n = max(len(edges), len(faces))
+    edges, faces = np.resize(edges, (n, 4)), np.resize(faces, (n, 4))
+    bg = np.asarray(to_rgba(background), dtype=float)[:3]
+    for edge, face in zip(edges, faces):
+        if edge[3] <= 0.0 or np.allclose(edge[:3], face[:3], atol=1e-3):
+            continue
+        if np.allclose(edge[:3], bg, atol=1e-3):
+            continue
+        return width
+    return 0.0
+
+
 def check_line_weight(fig: Figure, scale: float | None = None,
                       placed_frac: float = 1.0,
                       venue: str | None = None) -> tuple[bool | str, str]:
@@ -4130,7 +4194,9 @@ def check_line_weight(fig: Figure, scale: float | None = None,
     Data strokes are held to `LINE_FLOOR_PT`: lines, line collections, unfilled
     contour sets, stroked patch edges and annotation arrows. Furniture is held
     to the lower `FURNITURE_FLOOR_PT`: spines, the major and minor gridlines
-    and the major and minor tick marks. A gridline that drops out costs the
+    and the major and minor tick marks. So are marker outlines that carry the
+    mark (see `_marker_outline_pt`): an outline is not a line, and Science's
+    0.5pt minimum covers every line width. A gridline that drops out costs the
     reader a reference; a data curve that drops out costs them the finding.
 
     Not measured: colorbar axes, whose dividers are matplotlib's and not the
@@ -4144,18 +4210,19 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
     Returns:
-        `(False, detail)` naming up to four strokes under a floor, data before
-        furniture. Otherwise `(True, detail)` with the thinnest width of each
+        `(False, detail)` naming up to four strokes under a floor, data
+        first, then marker outlines, then furniture. Otherwise `(True, detail)` with the thinnest width of each
         kind measured.
     """
     from matplotlib.lines import Line2D
-    from matplotlib.collections import LineCollection
+    from matplotlib.collections import LineCollection, PathCollection
 
     if scale is None:
         scale = page_scale(fig, placed_frac, venue)
 
     thin: list[str] = []          # data strokes under LINE_FLOOR_PT
     thin_furniture: list[str] = []   # furniture under FURNITURE_FLOOR_PT
+    thin_outline: list[str] = []     # marker outlines under FURNITURE_FLOOR_PT
     widths: list[float] = []
     furniture_widths: list[float] = []
 
@@ -4176,6 +4243,16 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         furniture_widths.append(on_page)
         if on_page < FURNITURE_FLOOR_PT:
             thin_furniture.append(f"{name} at {on_page:.2f}pt")
+
+    def measure_outline(width: float, name: str) -> None:
+        """A marker outline, against the furniture floor."""
+        on_page = width * scale
+        if on_page <= 0:
+            return
+        furniture_widths.append(on_page)
+        if on_page < FURNITURE_FLOOR_PT:
+            thin_outline.append(f"the marker outlines of {name} at "
+                                f"{on_page:.2f}pt")
 
     def stroked(artist: Any) -> bool:
         """Whether this patch actually puts an edge on the page.
@@ -4206,6 +4283,12 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         for artist in list(ax.lines) + list(ax.collections):
             if not artist.get_visible() or id(artist) in gridlines:
                 continue
+            label = str(artist.get_label() or "")
+            named = label if label and not label.startswith("_") else None
+            if isinstance(artist, (Line2D, PathCollection)):
+                measure_outline(_marker_outline_pt(artist, _ground(ax)),
+                                named or "a series")
+            name = named or "a stroke"
             if isinstance(artist, Line2D):
                 stroke = str(artist.get_linestyle()).strip().lower()
                 if stroke in ("none", "", " "):
@@ -4220,8 +4303,6 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 raw = _collection_widths(artist)
             else:
                 continue
-            label = str(artist.get_label() or "")
-            name = label if label and not label.startswith("_") else "a stroke"
             for w in raw:
                 measure(w, name)
 
@@ -4237,11 +4318,16 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
         # Furniture: the axis rule, the ticks and the grid, against the lower
-        # floor.
+        # floor. `set_axis_off` stops `Axes.draw` drawing any of it, and a
+        # hidden axis draws neither its ticks nor its grid.
+        if not ax.axison:
+            continue
         for side, spine in ax.spines.items():
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
         for axis_name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
+            if not axis.get_visible():
+                continue
             # Both grids. `get_gridlines` is the major one only, and a minor
             # grid is authored the same way and drops out the same way, so
             # reading only the majors would leave the second half of the grid
@@ -4257,8 +4343,9 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                         continue
                     measure_furniture(gridline.get_linewidth(),
                                       f"an {axis_name}{which} gridline")
-            # A tick mark is a marker: its width is `markeredgewidth`. Only
-            # the ticks at a located position are drawn; the rest of
+            # A tick mark is a marker: its width is the stroke
+            # `marker_stroke_pt` reads, zero for `color="none"`. Only the
+            # ticks at a located position are drawn; the rest of
             # `get_major_ticks()` is matplotlib's spare template.
             for which, locs, get in (
                     ("major", axis.get_majorticklocs(), axis.get_major_ticks),
@@ -4267,7 +4354,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                     for mark in (tick.tick1line, tick.tick2line):
                         if mark.get_visible() and mark.get_markersize() > 0:
                             measure_furniture(
-                                mark.get_markeredgewidth(),
+                                marker_stroke_pt(mark),
                                 f"the {axis_name} {which} tick marks")
 
     if not widths and not furniture_widths:
@@ -4280,6 +4367,13 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                        f"{LINE_FLOOR_PT / scale:.2f} at this scale"
                        "  [WHY] SIAM: lines thinner than one point break up or "
                        "disappear in print")
+    if thin_outline:
+        seen = list(dict.fromkeys(thin_outline))
+        return False, (f"under {FURNITURE_FLOOR_PT}pt on page at scale "
+                       f"{scale:.2f}: {seen[:4]}  [FIX] set markeredgewidth "
+                       f"to at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
+                       "scale  [WHY] Science: line widths have a minimum of "
+                       "0.5 point at the final reduced size")
     if thin_furniture:
         seen = list(dict.fromkeys(thin_furniture))
         how = ("linewidth, or `tick_params(which=\"both\", width=...)` for "

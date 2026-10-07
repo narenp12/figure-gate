@@ -53,12 +53,20 @@ behind a threshold this project enforces.
 - `check_line_weight` holds major and minor tick marks to
   `FURNITURE_FLOOR_PT`. `test_line_weight_still_does_not_measure_tick_marks`
   becomes `test_line_weight_measures_tick_marks`.
+- `check_line_weight` holds marker outlines to `FURNITURE_FLOOR_PT` when
+  `_marker_outline_pt` finds they carry the mark: unfilled or hollow markers,
+  or an edge colour that is neither the face nor the background. A
+  transparent axes background is read as the figure's, then white.
+- `check_line_weight` reads tick widths through `marker_stroke_pt`, so
+  `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
+  axes with `axison` false and ticks and gridlines on a hidden axis.
 
 #### Added
 
 - `check_palette.BRETTEL_TRITAN`, the constants the tritan simulation reads.
 - `tests/test_cvd_oracle.py`, checking them against DaltonLens-Python 0.1.5.
-  `daltonlens` joins the `dev` group.
+  `daltonlens==0.1.5` joins the `dev` group; the oracle calls a private
+  method.
 - `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
   `tests/test_palette.py`.
 - `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
@@ -119,6 +127,24 @@ Tick marks were skipped as matplotlib's defaults. A SkillsBench run printed
 and the gate passed it. Every tick on the 21 corpus figures and on 84 figures
 under matplotlib's 28 style sheets clears 0.5pt, so `make sweep` records no
 verdict change.
+
+A code review of the ceiling and stroke changes found defects in both. Under
+Nature's 7pt maximum a first-level mathtext script renders at 4.9pt, so
+matplotlib's default log ticks fail the 5pt script floor and the base cannot
+rise; `fontmath.ltx` sets 5pt scripts under a 7pt base, so `usetex` passes.
+Nature's guide asks for "8-pt bold, upright (not italic) and lowercase a, b,
+c" panel labels, which the 7pt ceiling failed. A `venue=` argument dropped a
+`TYPE_CEILING_PT` set as a house maximum, and a second `load_config` kept the
+first file's venue ceiling. Ticks drawn in `"none"`, furniture on an axes
+switched off, and black outlines on a `"none"` axes background were each
+misread.
+
+Marker outlines were never measured. Another run drew hollow markers with a
+1.0pt edge in the same 9in figure: 0.4pt printed. Against `LINE_FLOOR_PT` the
+outline floor would have failed `gallery-field`'s 0.8pt star edge, so it uses
+the 0.5pt floor. Five seaborn sheets draw 0.24 to 0.48pt edges in the face
+colour; those carry nothing and are skipped. The corpus records no verdict
+change, and none of the 84 style-sheet figures fails.
 
 ## 0.10.0 — 2026-09-30
 
