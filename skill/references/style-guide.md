@@ -610,8 +610,10 @@ The scale is per figure because the shrink differs. A 14in figure on a 750pt
 slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
 one and illegible in the other.
 
-**7.5pt is stricter than the Nature, PNAS and Science figure guides.** Nature
-sets a 5pt minimum and a 7pt maximum for text in figures. PNAS requires numbers,
+**7.5pt is above the minimum in the Nature, PNAS and Science figure guides.**
+Nature sets a 5pt minimum and a 7pt maximum for text in figures, so for Nature
+the gate's floor drops to 7pt (`VENUE_TYPE_CEILING_PT`). Its panel labels are
+the exception: 8pt bold, upright and lowercase (`VENUE_PANEL_LABEL_PT`). PNAS requires numbers,
 letters and symbols no smaller than 6pt after reduction, which is the same
 requirement its guidelines also state as 2mm. Science publishes no text floor at
 all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold

@@ -15,6 +15,21 @@ behind a threshold this project enforces.
 
 ### What changed
 
+#### Added
+
+- `check_figure.TYPE_CEILING_PT` (default `math.inf`), `VENUE_TYPE_CEILING_PT`
+  (`nature`, `nature-column`: 7.0), `VENUE_PANEL_LABEL_PT` (`nature`,
+  `nature-column`: 8.0) and `type_ceiling_pt(venue, *, panel_label=False)`,
+  the stricter of `TYPE_CEILING_PT` and the venue's row.
+- `check_type_size`: floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
+  ceiling fails. A bold, upright, one-lowercase-letter string is held to
+  `VENUE_PANEL_LABEL_PT` instead. The over-ceiling `[FIX]` gives the authored
+  size, `floor / scale`. Where no base under the ceiling lifts a script to
+  `MATH_SCRIPT_FLOOR_PT`, the script `[FIX]` names `LogFormatter()` and
+  `text.usetex` instead of raising the base.
+- `load_config`: `venue` selects the venue `type_ceiling_pt()` reads; a later
+  file setting `venue` or `CONTENT_WIDTH_PT` replaces it.
+
 #### Changed
 
 - `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
@@ -51,6 +66,11 @@ behind a threshold this project enforces.
   `GUIDE_CITED`.
 
 ### Why it changed
+
+`TYPE_FLOOR_PT = 7.5` sits above Nature's 7pt maximum, so no size passed both
+(#107). A SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, failed
+5 of 5 with-skill figures on text at 7.5 to 8.0pt. Capping the floor at the
+ceiling adds no number the guides do not publish.
 
 Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
 open-source simulators calls Brettel 1997 "the most solid and basically only

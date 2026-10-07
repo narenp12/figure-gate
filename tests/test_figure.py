@@ -3573,6 +3573,105 @@ def test_venue_and_placed_frac_compose():
     assert scale == pytest.approx(455.24 * 0.48 / (3.2 * 72), rel=1e-6)
 
 
+def _type_at(size_pt, width_pt):
+    """A figure authored at `width_pt`, so it places at scale 1, with every
+    string at `size_pt`."""
+    fig, ax = plt.subplots(figsize=(width_pt / 72, 2.4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.tick_params(labelsize=size_pt)
+    ax.set_xlabel("Dose (mg)", fontsize=size_pt)
+    return fig
+
+
+@pytest.mark.parametrize("size_pt, ok", [(6.5, False), (7.0, True), (7.5, False)])
+def test_nature_caps_the_floor_at_its_ceiling(size_pt, ok):
+    """Nature's 7pt maximum sits under the 7.5pt floor, so the floor drops to
+    7.0 and the band is one size. The SkillsBench A/B failed every with-skill
+    Nature figure that held 7.5pt (issue #107)."""
+    fig = _type_at(size_pt, cf.VENUE_WIDTH_PT["nature-column"])
+    verdict = gates(cf.audit(fig, venue="nature-column")[1])["Type size"]
+    plt.close(fig)
+    assert verdict is ok
+
+
+def test_a_venue_without_a_ceiling_drops_the_configured_one(monkeypatch):
+    """`venue=` replaces the configured venue the way it replaces
+    `CONTENT_WIDTH_PT`: a project written for Nature does not carry Nature's
+    ceiling into a call for NeurIPS."""
+    monkeypatch.setattr(cf, "_CONFIG_VENUE", "nature-column")
+    fig = _type_at(9.0, cf.VENUE_WIDTH_PT["neurips"])
+    assert gates(cf.audit(fig, venue="neurips")[1])["Type size"] is True
+    assert gates(cf.audit(fig, scale=1.0)[1])["Type size"] is False
+    plt.close(fig)
+
+
+def test_a_house_ceiling_holds_under_any_venue(monkeypatch):
+    """`TYPE_CEILING_PT` is the project's own maximum, so `venue=` does not
+    lift it."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 8.0)
+    assert cf.type_ceiling_pt("ieee") == 8.0
+    assert cf.type_ceiling_pt("nature") == 7.0
+    fig = _type_at(9.0, cf.VENUE_WIDTH_PT["ieee"])
+    assert gates(cf.audit(fig, venue="ieee")[1])["Type size"] is False
+    plt.close(fig)
+
+
+def _nature_with(text, **style):
+    fig = _type_at(7.0, cf.VENUE_WIDTH_PT["nature-column"])
+    fig.axes[0].set_title(text, loc="left", fontsize=8.0, **style)
+    return fig
+
+
+@pytest.mark.parametrize("text, style, ok", [
+    ("a", dict(fontweight="bold"), True),
+    ("a", {}, False),                                   # not bold
+    ("A", dict(fontweight="bold"), False),              # not lowercase
+    ("a", dict(fontweight="bold", fontstyle="italic"), False),
+    ("Dose", dict(fontweight="bold"), False),           # not a letter
+])
+def test_nature_panel_labels_may_be_8pt_bold_lowercase(text, style, ok):
+    """Nature: "8-pt bold, upright (not italic) and lowercase a, b, c". The
+    rest of its text stays at 7pt."""
+    fig = _nature_with(text, **style)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is ok, detail
+
+
+def test_the_ceiling_fix_names_the_authored_size():
+    """At scale 0.5 the page size and the authored size differ twofold, and
+    the fix has to say the one the author types."""
+    fig = _type_at(7.0, 2 * cf.VENUE_WIDTH_PT["nature-column"])
+    fig.axes[0].set_title("Title", fontsize=20.0)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is False
+    assert "set text at 14.0pt as authored, 7.0pt on the page" in detail
+
+
+def test_nature_log_ticks_fail_with_a_fix_that_works():
+    """Under a 7pt maximum a first-level script is 4.9pt, under the 5pt floor,
+    and raising the base would breach the maximum. The fix has to name a route
+    out, and the route has to pass."""
+    import matplotlib.ticker as mticker
+    fig = _type_at(7.0, cf.VENUE_WIDTH_PT["nature-column"])
+    ax = fig.axes[0]
+    ax.set_xscale("log")
+    ax.set_xlim(1, 1000)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    assert status is False
+    assert "raise the base size" not in detail
+    assert "LogFormatter()" in detail
+    ax.xaxis.set_major_formatter(mticker.LogFormatter())
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is True, detail
+
+
 def test_placed_frac_without_any_width_still_refuses():
     """The guard that predates the venue table has to keep holding: a
     fractional placement with no width to measure against is a contradiction,

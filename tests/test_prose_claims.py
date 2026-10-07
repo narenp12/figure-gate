@@ -1566,6 +1566,19 @@ EXTERNAL_CLAIMS = {
                  'figure is reduced (6 point minimum)" and "minimum of 0.5 '
                  'point at the final reduced size" for line widths.',
     },
+    "Nature panel labels": {
+        "document": "style-guide.md",
+        "anchor": "8pt bold, upright and lowercase",
+        "source": "Nature research figure guide, "
+                  "research-figure-guide.nature.com, preparing figures: our "
+                  "specifications",
+        "no_doi": "a publisher's author-guidance page, not deposited",
+        "verified": "2026-10-17",
+        "quote": '"Separate panels in multi-panelled figures should be '
+                 'labelled with 8-pt bold, upright (not italic) and lowercase '
+                 'a, b, c, etc." and "Maximum text size for all other text is '
+                 '7-pt and the minimum is 5-pt."',
+    },
     "Science line width floor": {
         "document": "style-guide.md",
         "anchor": "Science states the lower number, a minimum of 0.5 point "

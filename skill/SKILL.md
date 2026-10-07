@@ -402,9 +402,16 @@ Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-7.5pt is stricter than the Nature, PNAS and Science figure guides, which
+7.5pt is above the minimum in the Nature, PNAS and Science figure guides, which
 `references/style-guide.md` quotes. It is cheap to hold, because the fix is
 nearly always cutting words.
+
+Nature also caps figure text at 7pt. With a venue in `VENUE_TYPE_CEILING_PT`,
+the gate holds text at exactly 7pt: the floor drops to the ceiling, and text
+over it fails. Panel labels are the exception Nature publishes: one lowercase
+letter, bold and upright, at up to 8pt (`VENUE_PANEL_LABEL_PT`). At 7pt a
+mathtext superscript is 4.9pt, under the 5pt script floor, so log ticks need
+`LogFormatter()` or `text.usetex`.
 
 **Strokes have a floor too, and it is 1pt on the page.** SIAM states it in its
 instructions for authors: lines thinner than one point break up or disappear in

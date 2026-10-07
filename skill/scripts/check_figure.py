@@ -82,10 +82,12 @@ __all__ = [
     "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
     "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
-    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "MATH_SCRIPT_FLOOR_PT",
+    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
-    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
+    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
+    "VENUE_PANEL_LABEL_PT",
+    "content_width_pt", "type_ceiling_pt",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
     "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
@@ -351,15 +353,28 @@ BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 #
-# Stricter than every journal that publishes a number: Nature sets a 5pt
-# minimum and a 7pt maximum, and PNAS requires nothing smaller than 6pt after
-# reduction, which its guidelines also state as 2mm. Science publishes no text
-# floor at all, only a 6pt minimum on symbols. Those are the sizes at which a
-# string is still *possible* to read. 7.5 is the size at which it is
-# comfortable, and it is cheap to hold because the fix is nearly always cutting
-# words rather than shrinking type. Verified 2026-08-17; the quotes are in
-# `EXTERNAL_CLAIMS` in tests/test_prose_claims.py.
+# Above every journal's published minimum: Nature sets 5pt, and PNAS requires
+# nothing smaller than 6pt after reduction, which its guidelines also state as
+# 2mm. Science publishes no text floor at all, only a 6pt minimum on symbols.
+# Those are the sizes at which a string is still *possible* to read. 7.5 is the
+# size at which it is comfortable, and it is cheap to hold because the fix is
+# nearly always cutting words rather than shrinking type. Nature also sets a
+# 7pt maximum, under this floor; `TYPE_CEILING_PT` below is how the two meet.
+# Verified 2026-08-17; the quotes are in `EXTERNAL_CLAIMS` in
+# tests/test_prose_claims.py.
 TYPE_FLOOR_PT = 7.5
+
+# Type ceiling, in points on the page: a house maximum, infinite by default. A
+# venue's published maximum (`VENUE_TYPE_CEILING_PT`) applies on top of it and
+# the stricter wins; see `type_ceiling_pt`. The floor in force is
+# `min(TYPE_FLOOR_PT, ceiling)`: Nature's 7pt maximum sits under 7.5, and no
+# size clears a floor above its ceiling.
+TYPE_CEILING_PT = math.inf
+
+# The `venue` the last configuration file named, or `None`. `load_config` sets
+# it; `type_ceiling_pt(None)` reads the venue's maxima through it. Private, so
+# a file cannot set it except by writing `venue`.
+_CONFIG_VENUE: str | None = None
 
 # Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
 # `TYPE_FLOOR_PT`.
@@ -376,7 +391,7 @@ TYPE_FLOOR_PT = 7.5
 # matplotlib's own log-axis tick label and which no author wrote. Setting a
 # script smaller than its base is not a defect, it is how mathematics has been
 # typeset for a century, and `TYPE_FLOOR_PT` is a *comfort* floor deliberately
-# stricter than any journal's.
+# above any journal's minimum.
 #
 # 5.0 is where two independent sources agree the floor actually is. LaTeX's own
 # table in `fontmath.ltx` maps every body size to a script and a scriptscript
@@ -520,6 +535,18 @@ VENUE_WIDTH_PT = {
     "beamer-169": 398.34,          # \textwidth, same class [aspectratio=169]
 }
 
+# Published maxima for text in a figure, by `VENUE_WIDTH_PT` key. Nature:
+# "Maximum text size: 7pt"; the quote is in `EXTERNAL_CLAIMS` in
+# tests/test_prose_claims.py. A venue absent here publishes no maximum.
+VENUE_TYPE_CEILING_PT = {"nature": 7.0, "nature-column": 7.0}
+
+# Published sizes for panel labels where a venue sets them apart from the
+# ceiling above. Nature: "Separate panels in multi-panelled figures should be
+# labelled with 8-pt bold, upright (not italic) and lowercase a, b, c, etc."
+# A string `_is_panel_label` accepts is capped here instead of at
+# `VENUE_TYPE_CEILING_PT`.
+VENUE_PANEL_LABEL_PT = {"nature": 8.0, "nature-column": 8.0}
+
 
 def content_width_pt(venue: str | None = None) -> float | None:
     """The usable page width to measure against, in points.
@@ -543,6 +570,33 @@ def content_width_pt(venue: str | None = None) -> float | None:
             f"{', '.join(sorted(VENUE_WIDTH_PT))}. For anything else, put "
             "\\the\\textwidth in the document, read the log, and set "
             "CONTENT_WIDTH_PT to what it says.") from None
+
+
+def type_ceiling_pt(venue: str | None = None, *,
+                    panel_label: bool = False) -> float:
+    """The largest text size, in points on the page, in force for `venue`.
+
+    The stricter of `TYPE_CEILING_PT` and the venue's published maximum. A
+    `venue` passed here replaces the one a configuration file named, the way
+    it replaces `CONTENT_WIDTH_PT`; `TYPE_CEILING_PT` holds for both.
+
+    Args:
+        venue: A key of `VENUE_WIDTH_PT`. `None` uses the `venue` the last
+            `load_config` read, if any.
+        panel_label: Use the venue's `VENUE_PANEL_LABEL_PT` row, where it has
+            one, in place of its `VENUE_TYPE_CEILING_PT` row.
+
+    Returns:
+        The ceiling in points, `math.inf` when nothing sets one.
+    """
+    if venue is None:
+        venue = _CONFIG_VENUE
+    elif venue not in VENUE_WIDTH_PT:
+        content_width_pt(venue)  # raises, naming the known venues
+    published = VENUE_TYPE_CEILING_PT.get(venue or "", math.inf)
+    if panel_label:
+        published = VENUE_PANEL_LABEL_PT.get(venue or "", published)
+    return min(TYPE_CEILING_PT, published)
 
 
 def page_scale(fig: Figure, placed_frac: float = 1.0,
@@ -690,7 +744,7 @@ def config_keys() -> list[str]:
     """Every key a configuration file may set, sorted.
 
     `venue` is in the list and is not a constant: it sets `CONTENT_WIDTH_PT`
-    from `VENUE_WIDTH_PT`.
+    from `VENUE_WIDTH_PT`, and `type_ceiling_pt` reads the venue's maxima.
 
     A palette key is only here when `check_palette.py` is importable. Naming one
     without it raises rather than being ignored.
@@ -832,6 +886,13 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     for key, value in planned.items():
         setattr(targets.get(key, sys.modules[__name__]), key, value)
+    # A file that sets the width names the document, so the venue's maxima
+    # follow it: `venue = "science"` after `venue = "nature"` drops Nature's.
+    global _CONFIG_VENUE
+    if "venue" in table:
+        _CONFIG_VENUE = table["venue"]
+    elif "CONTENT_WIDTH_PT" in table:
+        _CONFIG_VENUE = None
     return planned
 
 
@@ -1625,10 +1686,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
                    if halo_color else " and wears no casing"))
 
         pt = t.get_fontsize() * scale
-        weight = t.get_fontweight()
-        bold = (weight in ("bold", "heavy", "black", "extra bold", "semibold")
-                or (isinstance(weight, (int, float))
-                    and weight >= BOLD_WEIGHT_MIN))
+        bold = _is_bold(t)
         floor = (TEXT_CONTRAST_MIN_LARGE
                  if pt >= LARGE_TEXT_PT or (pt >= LARGE_TEXT_BOLD_PT and bold)
                  else TEXT_CONTRAST_MIN)
@@ -2652,6 +2710,22 @@ def _script_min_pt(t: Any) -> float | None:
     return min(shrunk) if shrunk else None
 
 
+def _is_bold(t: Any) -> bool:
+    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier."""
+    weight = t.get_fontweight()
+    return (weight in ("bold", "heavy", "black", "extra bold", "semibold")
+            or (isinstance(weight, (int, float))
+                and weight >= BOLD_WEIGHT_MIN))
+
+
+def _is_panel_label(t: Any) -> bool:
+    """Whether a `Text` is a panel label in the form `VENUE_PANEL_LABEL_PT`
+    quotes: one lowercase letter, bold, upright."""
+    s = str(t.get_text()).strip()
+    return (len(s) == 1 and "a" <= s <= "z" and _is_bold(t)
+            and t.get_fontstyle() == "normal")
+
+
 def check_type_size(fig: Figure, r: Any, scale: float | None = None,
                     placed_frac: float = 1.0,
                     venue: str | None = None) -> tuple[bool | str, str]:
@@ -2677,29 +2751,56 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     if not sizes:
         return True, "no text"
 
+    ceiling = type_ceiling_pt(venue)
+    label_ceiling = type_ceiling_pt(venue, panel_label=True)
+    floor = min(TYPE_FLOOR_PT, ceiling)
+
     scripts = []
+    can_raise = True
     for t in texts:
         pt = _script_min_pt(t)
         if pt is not None and pt * scale < MATH_SCRIPT_FLOOR_PT:
             scripts.append((round(pt * scale, 1), str(t.get_text())[:22]))
+            # The base on the page that lifts this script to the floor. Under
+            # Nature's 7pt maximum a first-level script tops out at 4.9pt.
+            base = float(t.get_fontsize()) * MATH_SCRIPT_FLOOR_PT / pt
+            can_raise = can_raise and base <= ceiling
 
-    small = sorted({(pt, s) for pt, s in sizes if pt < TYPE_FLOOR_PT})
+    small = sorted({(pt, s) for pt, s in sizes if pt < floor})
+    large = sorted({(pt, s) for t, (pt, s) in zip(texts, sizes)
+                    if pt > (label_ceiling if _is_panel_label(t) else ceiling)},
+                   reverse=True)
     mn = min(pt for pt, _ in sizes)
-    if small or scripts:
+    if small or large or scripts:
         bits = []
         if small:
-            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale:.2f}: "
+            bits.append(f"under {floor}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
+        if large:
+            fix = (f"set text at {floor / scale:.1f}pt as authored, {floor}pt "
+                   "on the page")
+            if label_ceiling > ceiling:
+                fix += (f"; a panel label may be {label_ceiling}pt, bold and "
+                        "one lowercase letter")
+            bits.append(f"over the {ceiling}pt maximum on page at scale "
+                        f"{scale:.2f}: {large[:4]}  [FIX] {fix}")
         if scripts:
+            fix = ("cut a level of nesting, or raise the base size" if can_raise
+                   else f"no base under the {ceiling}pt maximum lifts the "
+                   "script to the floor: cut the script, e.g. "
+                   "`set_major_formatter(LogFormatter())` for log ticks, or "
+                   "set `text.usetex`, whose scripts stop at 5pt")
             bits.append(
                 f"mathtext script under {MATH_SCRIPT_FLOOR_PT}pt on page at "
-                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
-                "of nesting, or raise the base size  [WHY] matplotlib shrinks "
-                "0.7 per script level with no floor. LaTeX stops at "
-                "scriptscript and never sets math type under 5pt")
+                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] {fix}"
+                "  [WHY] matplotlib shrinks 0.7 per script level with no "
+                "floor. LaTeX stops at scriptscript and never sets math type "
+                "under 5pt")
         return False, "; ".join(bits)
 
-    detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
+    detail = f"smallest {mn:.1f}pt on page (floor {floor})"
+    if ceiling < math.inf:
+        detail += f", largest {max(pt for pt, _ in sizes):.1f}pt (ceiling {ceiling})"
     if placed_frac < PLACED_FRAC_WARN:
         return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
                        " — labels may be too small to read; author at the"
