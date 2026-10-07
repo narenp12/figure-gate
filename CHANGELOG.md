@@ -50,6 +50,9 @@ behind a threshold this project enforces.
 - `style-guide.md` "Describe the figure" cites Lundgard & Satyanarayan
   (2022), added to its References.
 - `document()` in `tests/test_prose_claims.py` accepts a path from the root.
+- `check_line_weight` holds major and minor tick marks to
+  `FURNITURE_FLOOR_PT`. `test_line_weight_still_does_not_measure_tick_marks`
+  becomes `test_line_weight_measures_tick_marks`.
 
 #### Added
 
@@ -110,6 +113,12 @@ The alt-text advice to give numbers and direction had no source. Lundgard &
 Satyanarayan's blind readers ranked statistics and trends most useful. No gate
 follows: `check_alt_text` checks presence and length, and a description's
 semantic level is not mechanically checkable.
+
+Tick marks were skipped as matplotlib's defaults. A SkillsBench run printed
+1.2pt ticks from a 9in figure at 3.6in: 0.48pt, under Science's 0.5pt minimum,
+and the gate passed it. Every tick on the 21 corpus figures and on 84 figures
+under matplotlib's 28 style sheets clears 0.5pt, so `make sweep` records no
+verdict change.
 
 ## 0.10.0 — 2026-09-30
 

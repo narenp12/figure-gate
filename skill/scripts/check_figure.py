@@ -4129,14 +4129,13 @@ def check_line_weight(fig: Figure, scale: float | None = None,
 
     Data strokes are held to `LINE_FLOOR_PT`: lines, line collections, unfilled
     contour sets, stroked patch edges and annotation arrows. Furniture is held
-    to the lower `FURNITURE_FLOOR_PT`: spines and the major and minor
-    gridlines. A gridline that drops out costs the reader a reference; a data
-    curve that drops out costs them the finding.
+    to the lower `FURNITURE_FLOOR_PT`: spines, the major and minor gridlines
+    and the major and minor tick marks. A gridline that drops out costs the
+    reader a reference; a data curve that drops out costs them the finding.
 
-    Not measured: tick marks and colorbar axes, whose widths are matplotlib's
-    defaults rather than anything `figure.mplstyle` or the author set; filled
-    contour sets, whose linewidth is the seam between two fills; and any artist
-    that is invisible or draws no stroke.
+    Not measured: colorbar axes, whose dividers are matplotlib's and not the
+    author's; filled contour sets, whose linewidth is the seam between two
+    fills; and any artist that is invisible or draws no stroke.
 
     Args:
         fig: The figure to read strokes from.
@@ -4237,8 +4236,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             if arrow is not None and arrow.get_visible() and stroked(arrow):
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
-        # Furniture: the axis rule and the grid, against the lower floor. Tick
-        # marks stay out; see the docstring.
+        # Furniture: the axis rule, the ticks and the grid, against the lower
+        # floor.
         for side, spine in ax.spines.items():
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
@@ -4258,6 +4257,18 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                         continue
                     measure_furniture(gridline.get_linewidth(),
                                       f"an {axis_name}{which} gridline")
+            # A tick mark is a marker: its width is `markeredgewidth`. Only
+            # the ticks at a located position are drawn; the rest of
+            # `get_major_ticks()` is matplotlib's spare template.
+            for which, locs, get in (
+                    ("major", axis.get_majorticklocs(), axis.get_major_ticks),
+                    ("minor", axis.get_minorticklocs(), axis.get_minor_ticks)):
+                for tick in get(len(locs)):
+                    for mark in (tick.tick1line, tick.tick2line):
+                        if mark.get_visible() and mark.get_markersize() > 0:
+                            measure_furniture(
+                                mark.get_markeredgewidth(),
+                                f"the {axis_name} {which} tick marks")
 
     if not widths and not furniture_widths:
         return True, "no strokes to measure"
@@ -4271,8 +4282,11 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                        "disappear in print")
     if thin_furniture:
         seen = list(dict.fromkeys(thin_furniture))
+        how = ("linewidth, or `tick_params(which=\"both\", width=...)` for "
+               "ticks," if any("tick marks" in s for s in seen[:4])
+               else "linewidth")
         return False, (f"furniture under {FURNITURE_FLOOR_PT}pt on page at "
-                       f"scale {scale:.2f}: {seen[:4]}  [FIX] set linewidth to "
+                       f"scale {scale:.2f}: {seen[:4]}  [FIX] set {how} to "
                        f"at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
                        "scale  [WHY] Science: line widths have a minimum of "
                        "0.5 point at the final reduced size")

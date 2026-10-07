@@ -4237,10 +4237,11 @@ def test_a_bar_with_no_edge_is_not_a_hairline():
     ax.plot([1, 3], [1, 3], lw=3.0)
     # The half scale is what makes a miscounted 1.0pt patch edge land under the
     # data floor, so it has to stay. It also takes the default 0.8pt axis rule
-    # to 0.40pt, under `FURNITURE_FLOOR_PT`, which is a true fire about a
-    # different stroke and would mask the one this test is about.
+    # and ticks to 0.40pt, under `FURNITURE_FLOOR_PT`, which is a true fire
+    # about a different stroke and would mask the one this test is about.
     for spine in ax.spines.values():
         spine.set_linewidth(1.2)
+    ax.tick_params(width=1.2)
     from matplotlib.colors import to_rgba
     try:
         assert ax.patches, "the fixture needs bars to be about anything"
@@ -4378,38 +4379,57 @@ def test_line_weight_measures_furniture_at_the_placed_scale():
     assert "furniture" in detail
 
 
-def test_line_weight_still_does_not_measure_tick_marks():
-    """A decision, pinned, not an oversight -- and not the decision that used
-    to be written here.
+def test_line_weight_measures_tick_marks():
+    """Ticks are furniture and held to `FURNITURE_FLOOR_PT`. This reverses the
+    decision this test pinned before, which skipped them on two arguments.
 
-    The reason recorded until now was that measuring furniture would fail the
-    corpus outright. That turned out to be false, and measuring it is what
-    proved so: all 982 furniture strokes on the twenty-one figures clear
-    `FURNITURE_FLOOR_PT`, the thinnest at 0.63pt. Spines and gridlines are
-    measured as of this commit.
+    "Judging a default nobody chose reports the library." The printed tick is
+    ink whoever chose its width, and agents do choose it: in the SkillsBench
+    `worldphones-grayscale-implicit` runs one set `xtick.major.width: 2.0` and
+    another shipped 1.2pt ticks in a 9in figure printed at 3.6in, 0.48pt on the
+    page. Science's 0.5pt minimum applies to every line width.
 
-    Tick marks stay out on a different argument. `figure.mplstyle` sets
-    `axes.linewidth` and `grid.linewidth`, so those two widths are the sheet's
-    own decisions and judging them reports the figure. It sets no tick width at
-    all, so 0.8 major and 0.6 minor are matplotlib's untouched defaults, which
-    is the same class as the colorbar dividers `check_line_weight` already
-    skips for the same stated reason. Judging a default nobody chose reports
-    the library.
+    "The substrates disagree." `check_svg.py` (archived at
+    `archive/r-svg-substrate`) measures ticks. Measuring them here ends that
+    disagreement; its pinned 10/13 is untouched.
 
-    They carry a second reason besides, not visible from this checkout.
-    `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
-    of thirteen fixtures as firing on line weight largely because of it. Both
-    are archived at the `archive/r-svg-substrate` tag, not merged, so a reader
-    looking for them here will not find them; the point is that the two
-    substrates disagree about this stroke, and settling that by side effect
-    would overturn a measurement pinned on the archived substrate.
-
-    If a later round decides to measure them, this test is where that argument
-    has to be made rather than absorbed.
+    The corpus does not move: every tick clears 0.5pt on the 21 figures of
+    `examples/` and on 84 more, three builders under each of the 28 external
+    styles, `classic` at exactly 0.5.
     """
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1], lw=1.5)
     ax.tick_params(width=0.2)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "tick marks" in detail
+
+
+def test_line_weight_default_ticks_fail_only_when_shrunk():
+    """matplotlib's 0.8pt major ticks clear the floor at full size and fail
+    once the figure prints at under 0.5 / 0.8 of its authored width."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=3.0)
+    ax.spines[:].set_linewidth(2.0)
+    try:
+        full, _ = cf.check_line_weight(fig, scale=1.0)
+        shrunk, detail = cf.check_line_weight(fig, scale=0.4)
+    finally:
+        plt.close(fig)
+    assert full is True
+    assert shrunk is False
+    assert "tick marks" in detail
+    assert "tick_params" in detail, "the fix has to name the tick setter"
+
+
+def test_line_weight_skips_ticks_that_draw_nothing():
+    """A zero-length tick lays down no ink, whatever its width."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.tick_params(width=0.2, length=0)
     try:
         status, detail = cf.check_line_weight(fig, scale=1.0)
     finally:
