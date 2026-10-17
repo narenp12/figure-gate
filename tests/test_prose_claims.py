@@ -1444,6 +1444,16 @@ RETRACTED_CLAIMS = {
                "or categorical palettes. It optimises one continuous colormap",
         "retracted": "2026-10-03",
     },
+    "7.5pt as the size where text is comfortable": {
+        "pattern": r"7\.5[^.]{0,60}comfortable",
+        "instead": "the floor is an x-height of 4pt on the page, where Legge "
+                   "& Bigelow (2011) put the start of fluent reading",
+        "why": "7.5 shipped in the initial release with no source, and "
+               "'comfortable' was added two days later. In STIX Two Text, "
+               "the style sheet's font, 7.5pt is an x-height of 0.177 "
+               "degrees at 40cm, under the 0.2 where fluent reading starts",
+        "retracted": "2026-10-17",
+    },
     "no other tool reading the built figure": {
         "pattern": r"none of (them|these|those) reads? the built",
         "instead": "scope the claim to the tools named, and name "
@@ -1765,6 +1775,21 @@ EXTERNAL_CLAIMS = {
                  "those with either zero or infinite slope. Horizontal and "
                  "vertical lines remain unchanged by variations in aspect "
                  "ratio, yet contribute to the banking criteria.",
+    },
+    "fluent print size": {
+        "document": "style-guide.md",
+        "anchor": "put the start of the fluent range at an x-height of 0.2 "
+                  "degrees, 4pt at a 40cm reading distance",
+        "source": "Legge & Bigelow, Journal of Vision 11(5):8, 2011, abstract, "
+                  "Table 1 and section 'Print size'",
+        "doi": "10.1167/11.5.8",
+        "verified": "2026-10-17",
+        "quote": "The fluent range extends over a factor of 10 in angular "
+                 "print size (x-height) from approximately 0.2 to 2. "
+                 "Assuming a standard reading distance of 40 cm (16 inches), "
+                 "the corresponding physical x-heights are 1.4 mm (4 points) "
+                 "and 14 mm (40 points). [...] the x-height fraction of Times "
+                 "New Roman is 0.45, slightly less than half the body size",
     },
     "vislint_mpl linting built figures": {
         "document": "README.md",

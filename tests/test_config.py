@@ -294,7 +294,7 @@ def test_the_thresholds_the_docs_quote_are_all_settable():
 def test_nothing_is_read_on_import():
     """The file is read when something asks. A constant that moved because of a
     file the caller never named is worse than one they had to type."""
-    assert cf.TYPE_FLOOR_PT == 7.5
+    assert cf.TYPE_FLOOR_PT == 6.0
     assert cf.CONTENT_WIDTH_PT is None
 
 
@@ -337,7 +337,7 @@ def test_a_pinned_key_leaves_the_rest_of_the_file_unapplied(tmp_path):
     path = write(tmp_path, body="TYPE_FLOOR_PT = 9.0\nMEASURE_DPI = 300.0\n")
     with pytest.raises(ValueError, match="not a threshold"):
         cf.load_config(path)
-    assert cf.TYPE_FLOOR_PT == 7.5
+    assert cf.TYPE_FLOOR_PT == 6.0
 
 
 def test_every_pinned_constant_exists_and_records_why():

@@ -70,6 +70,14 @@ def test_the_prose_counts_the_remedies_it_marks():
         " ".join(GATES_TEXT.split())
 
 
+def dejavu_x_height(scale):
+    """The x-height a 10pt DejaVu Sans label lands at, on the page."""
+    from matplotlib import font_manager as fm
+    frac = cf.x_height_fraction(fm.findfont("DejaVu Sans",
+                                            fallback_to_default=False))
+    return 10 * scale * frac
+
+
 def quoted_from_code():
     """`(page text, string)` the pages state, computed from what each is about.
 
@@ -91,7 +99,9 @@ def quoted_from_code():
                             cwd=SCRIPTS, capture_output=True, text=True).stdout
     venues = len(re.findall(r"^\s+\S+\s+[\d.]+ pt", listed, re.M))
     return ([("how-to.md", q) for q in out]
-            + [("how-to.md", f"under the {cf.TYPE_FLOOR_PT}pt floor"),
+            + [("how-to.md", f"over the {cf.TYPE_FLOOR_PT:g}pt floor, but "
+                             "their DejaVu Sans x-height is "
+                             f"{dejavu_x_height(0.6624666666666666):.1f}pt"),
                ("how-to.md",
                 f"passes at {cf.ALT_TEXT_MIN_CHARS} characters or more"),
                ("cli.md", f"prints all {WORDS[venues]} widths")])

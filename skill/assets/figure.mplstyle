@@ -31,7 +31,8 @@ font.serif:         STIX Two Text, STIXGeneral, DejaVu Serif
 mathtext.fontset:   stix
 
 # --- type sizes -------------------------------------------------------------
-# On-page targets divided by the figure's scale. Nothing below 7.5pt on page.
+# On-page targets divided by the figure's scale. The floor is 6pt on page; the
+# x-height warning clears at 8.5pt (STIX Two Text) or 8.9pt (STIXGeneral).
 #
 # `axes.titlesize`/`titleweight` are for PANEL titles in a multi-panel figure -
 # the `(a)` `(b)` register. A single-panel figure carries no internal title:

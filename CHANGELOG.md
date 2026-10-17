@@ -35,15 +35,26 @@ behind a threshold this project enforces.
   `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
 - `EXTERNAL_CLAIMS["alt text semantic levels"]`, and `Lundgard` in
   `GUIDE_CITED`.
+- `check_figure.XHEIGHT_FLOOR_PT = 4.0` and `x_height_fraction(path)`.
+- `check_type_size` warns when a string with a lowercase letter has an x-height
+  under `XHEIGHT_FLOOR_PT` on the page, measured in the font that draws its
+  lowercase glyphs. The `[FIX]` names the size that clears it, or a face with a
+  taller x-height where the ceiling allows no larger. `usetex` text is not
+  measured.
+- `style-guide.md` References: Legge & Bigelow (2011).
+  `EXTERNAL_CLAIMS["fluent print size"]`,
+  `RETRACTED_CLAIMS["7.5pt as the size where text is comfortable"]`, and
+  `Legge` in `GUIDE_CITED`.
 
 #### Changed
 
-- `check_type_size`: floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
+- `check_type_size`: the floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
   ceiling fails. A bold, upright, one-lowercase-letter string is held to
   `VENUE_PANEL_LABEL_PT` instead. The over-ceiling `[FIX]` gives the authored
   size, `floor / scale`. Where no base under the ceiling lifts a script to
   `MATH_SCRIPT_FLOOR_PT`, the script `[FIX]` names `LogFormatter()` and
   `text.usetex` instead of raising the base.
+- `TYPE_FLOOR_PT` is 6.0, not 7.5.
 - `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
   (1997). `CVD["tritan"]`, the Viénot 1999 matrix, is removed.
 - `style-guide.md` References: the Machado entry says severity 1.0 is scaled
@@ -75,7 +86,27 @@ behind a threshold this project enforces.
 
 ### Why it changed
 
-`TYPE_FLOOR_PT = 7.5` sits above Nature's 7pt maximum, so no size passed both
+`TYPE_FLOOR_PT = 7.5` had no source. It shipped in the initial release, and
+"7.5 is where it is comfortable" was added two days later. 6.0 is the minimum
+PNAS and Science publish, already quoted in `EXTERNAL_CLAIMS["journal type
+floors"]`.
+
+An x-height gate was built and rejected. Legge & Bigelow (2011) put the start
+of fluent reading at an x-height of 0.2 degrees, 4.0pt at 40cm, but that
+consensus is for continuous reading, not glanced labels. Gated, it failed 15 of
+the 40 SkillsBench figures that passed 7.5pt, under the Linux fonts the bench
+ran with. In 8 of the 15 the smallest failing strings were numerals, which
+stand near cap height and which x-height does not describe. Its body floor
+also moved with the installed fonts: 8.5pt in STIX Two Text, 8.9pt in
+STIXGeneral. It ships as the warning, on lowercase only.
+
+Re-running the 66 SkillsBench scripts that reach a `report` or `audit` call,
+the 40 that passed 7.5pt now pass in 27 and warn in 13. Of the 26 that failed,
+23 still fail, every one on a venue ceiling, and 3 with text between 6 and
+7.5pt now pass or warn. `make sweep` over the 21 corpus figures records no
+verdict change; their smallest string is 9.0pt.
+
+`TYPE_FLOOR_PT = 7.5` sat above Nature's 7pt maximum, so no size passed both
 (#107). In a SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, all
 5 with-skill text-size failures were text at 7.5 to 8.0pt. Capping the floor at the
 ceiling adds no number the guides do not publish.

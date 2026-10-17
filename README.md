@@ -15,7 +15,7 @@ and whether your type is still legible at the size the figure prints.
 ```text
 Composition audit
   [FAIL] Clipping           clipped: ['x', 'y']  [FIX] add constrained_layout or widen the figure
-  [PASS] Type size          smallest 10.0pt on page (floor 7.5)
+  [PASS] Type size          smallest 10.0pt on page (floor 6.0)
   [WARN] Alt text           no description attached  [FIX] describe(fig, "...") ...
   ...
   -> FIX THE MARKED CHECKS

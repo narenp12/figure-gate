@@ -65,8 +65,8 @@ tuned = 0.9 * np.exp(-0.35 * epochs) + 0.02
 fig, ax = plt.subplots(figsize=(6, 3.5))
 ax.plot(epochs, baseline, label="baseline")
 ax.plot(epochs, tuned, label="tuned")
-ax.set_xlabel("Epoch", fontsize=6)
-ax.set_ylabel("Validation loss", fontsize=6)
+ax.set_xlabel("Epoch", fontsize=5)
+ax.set_ylabel("Validation loss", fontsize=5)
 ax.legend()
 
 report(fig, "loss")     # prints 21 rows, returns True if ok
@@ -89,7 +89,7 @@ Composition audit: loss
   [PASS] Mark ratio         fewer than two mark sizes
   [PASS] Overplotting       no scatter overplotting
   [PASS] Axis redundancy    axis furniture not duplicated
-  [FAIL] Type size          under 7.5pt on page at scale 1.0: [(6.0, 'Epoch'), (6.0, 'Validation loss')]  [FIX] cut words, do not shrink type
+  [FAIL] Type size          under 6.0pt on page at scale 1.00: [(5.0, 'Epoch'), (5.0, 'Validation loss')]  [FIX] cut words, do not shrink type
   [PASS] Line weight        2 strokes, thinnest 1.50pt on page (floor 1.0)
   [PASS] Banking            1 line panel, typical segment 12-12 deg
   [PASS] Ink coverage       ink fraction: ax0 0.04 (typical 0.02-0.55)
@@ -120,13 +120,13 @@ You have one `[FAIL]` and three `[WARN]` rows.
 Look at the row that failed:
 
 ```text
-[FAIL] Type size   under 7.5pt on page at scale 1.0: [(6.0, 'Epoch'), (6.0, 'Validation loss')]
+[FAIL] Type size   under 6.0pt on page at scale 1.00: [(5.0, 'Epoch'), (5.0, 'Validation loss')]
                    [FIX] cut words, do not shrink type
 ```
 
 Every detail string is built the same way. It names the measurement, the
 strings that produced it, and after `[FIX]`, the action to take. You set both
-axis labels to 6pt, and the floor is 7.5pt.
+axis labels to 5pt, and the floor is 6pt.
 
 ## Step 4: Apply the style sheet
 
@@ -164,7 +164,7 @@ report(fig, "loss")
 Run it again. Three rows change at once:
 
 ```text
-  [PASS] Type size          smallest 9.5pt on page (floor 7.5)
+  [PASS] Type size          smallest 9.5pt on page (floor 6.0)
   [PASS] Style sheet        all 40 keys match figure.mplstyle
   [PASS] Fonts              Type 42 embedding, serif face resolves within the list
   [WARN] Alt text           no description attached  [FIX] ...
@@ -218,7 +218,7 @@ report(fig, "loss", venue="neurips", placed_frac=0.48)
 Two rows that passed a moment ago now fail:
 
 ```text
-  [FAIL] Type size    under 7.5pt on page at scale 0.44: [(4.2, 'baseline'), (4.2, 'tuned'), (4.4, '0.0'), (4.4, '0.2')]
+  [FAIL] Type size    under 6.0pt on page at scale 0.44: [(4.2, 'baseline'), (4.2, 'tuned'), (4.4, '0.0'), (4.4, '0.2')]
                       [FIX] cut words, do not shrink type
   [FAIL] Line weight  under 1.0pt on page at scale 0.44: ['baseline at 0.71pt', 'tuned at 0.71pt']
                       [FIX] set linewidth to at least 2.26 at this scale
@@ -247,7 +247,7 @@ Run it once more:
 ```text
 Composition audit: loss
   ...
-  [PASS] Type size          smallest 9.5pt on page (floor 7.5)
+  [PASS] Type size          smallest 9.5pt on page (floor 6.0)
   [PASS] Line weight        2 strokes, thinnest 1.60pt on page (floor 1.0)
   ...
   -> COMPOSED

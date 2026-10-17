@@ -379,9 +379,9 @@ color. A colored mark *beside* text carries the identity.
 
 When you cannot, `check_figure.py` derives the scale per figure, from that
 figure's own width against `CONTENT_WIDTH_PT`, and fails any string landing
-under 7.5pt on the page. The scale is per figure because the shrink differs: a
+under 6pt on the page. The scale is per figure because the shrink differs: a
 14-inch figure on a 750pt slide shrinks to 0.74x, an 8.6-inch one is blown up to
-1.21x, and the same 10pt label is comfortable in one and unreadable in the other.
+1.21x, and the same 10pt label is legible in one and unreadable in the other.
 
 **A figure placed at a fraction of the content width must say so.** Otherwise it
 is measured as though it were full width, and certified at a type size it does
@@ -402,13 +402,17 @@ Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-7.5pt is above the minimum in the Nature, PNAS and Science figure guides, which
-`references/style-guide.md` quotes. It is cheap to hold, because the fix is
-nearly always cutting words.
+6pt is the minimum PNAS and Science publish. Under 4pt of x-height, where
+reading slows (Legge & Bigelow 2011, quoted in `references/style-guide.md`),
+the row warns. The body size that clears the warning depends on the font and
+on which fonts the machine has. With the style sheet, keep every string at
+9.5pt or more on the page, the sheet's smallest size: it clears every STIX
+face. The fix is nearly always cutting words.
 
-Nature also caps figure text at 7pt. With `venue="nature"`, the floor drops to
-that ceiling and text over it fails, so text must be exactly 7pt. Panel labels are the exception Nature publishes: one lowercase
-letter, bold and upright, at up to 8pt (`VENUE_PANEL_LABEL_PT`). At 7pt a
+Nature caps figure text at 7pt. With `venue="nature"`, text over it fails, so
+text sits between 6pt and 7pt. Panel labels are
+the exception Nature publishes: one lowercase letter, bold and upright, at up
+to 8pt (`VENUE_PANEL_LABEL_PT`). At 7pt a
 mathtext superscript is 4.9pt, under the 5pt script floor, so log ticks need
 `LogFormatter()` or `text.usetex`.
 

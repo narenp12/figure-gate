@@ -157,7 +157,8 @@ figure with 10pt labels:
 ```
 
 At full width the labels arrive at 13.8pt and pass. At `placed_frac=0.48` they
-arrive at 6.6pt, under the 7.5pt floor, and the row fails.
+arrive at 6.6pt, over the 6pt floor, but their DejaVu Sans x-height is 3.6pt,
+under 4pt, and the row warns.
 
 `float()` appears here because the scale comes back as a `numpy.float64`, which
 a REPL prints as `np.float64(1.38...)` on numpy 2. It compares and computes like
@@ -228,7 +229,7 @@ when they run:
 ```python
 import check_figure as cf
 
-cf.TYPE_FLOOR_PT = 9.0        # a venue whose floor is higher than SIAM's
+cf.TYPE_FLOOR_PT = 9.0        # a house minimum, in body points
 ok, rows = cf.audit(fig)
 ```
 
