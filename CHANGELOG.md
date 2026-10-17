@@ -11,6 +11,141 @@ break them should not have to read an essay to find out, and the essays are
 worth keeping: most of them record a measurement that is the only evidence
 behind a threshold this project enforces.
 
+## Unreleased
+
+### What changed
+
+#### Added
+
+- `check_figure.TYPE_CEILING_PT` (default `math.inf`), `VENUE_TYPE_CEILING_PT`
+  (`nature`, `nature-column`: 7.0), `VENUE_PANEL_LABEL_PT` (`nature`,
+  `nature-column`: 8.0) and `type_ceiling_pt(venue, *, panel_label=False)`,
+  the stricter of `TYPE_CEILING_PT` and the venue's row.
+- `check_type_size`: floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
+  ceiling fails. A bold, upright, one-lowercase-letter string is held to
+  `VENUE_PANEL_LABEL_PT` instead. The over-ceiling `[FIX]` gives the authored
+  size, `floor / scale`. Where no base under the ceiling lifts a script to
+  `MATH_SCRIPT_FLOOR_PT`, the script `[FIX]` names `LogFormatter()` and
+  `text.usetex` instead of raising the base.
+- `load_config`: `venue` selects the venue `type_ceiling_pt()` reads; a later
+  file setting `venue` or `CONTENT_WIDTH_PT` replaces it.
+
+#### Changed
+
+- `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
+  (1997). `CVD["tritan"]`, the Viénot 1999 matrix, is removed.
+- `style-guide.md` References: the Machado entry says severity 1.0 is scaled
+  to match Brettel 1997; the Nuñez entry names cividis.
+- The `MACHADO` comment in `check_palette.py` and the docstring of
+  `test_the_severity_matrices_belong_on_linear_light`: the same Machado
+  correction, and the tritan caveat is credited to DaltonLens 0.1.5.
+- The separation-floor comment in `check_palette.py`: 10.4 is the mean of
+  Stone et al.'s three per-axis fits.
+- `choosing-a-form.md` References: DOIs for Anscombe (1973) and Schenker &
+  Gentleman (2001).
+- `style-guide.md` References: the Potluri library ranking is scoped to the
+  39,540 notebooks with images.
+- README "Where this sits": names vislint_mpl (McNutt & Kindlmann 2018) as
+  prior art and drops "None of them reads the built result".
+- `style-guide.md` "Describe the figure" cites Lundgard & Satyanarayan
+  (2022), added to its References.
+- `document()` in `tests/test_prose_claims.py` accepts a path from the root.
+- `check_line_weight` holds major and minor tick marks to
+  `FURNITURE_FLOOR_PT`. `test_line_weight_still_does_not_measure_tick_marks`
+  becomes `test_line_weight_measures_tick_marks`.
+- `check_line_weight` holds marker outlines to `FURNITURE_FLOOR_PT` when
+  `_marker_outline_pt` finds they carry the mark: unfilled or hollow markers,
+  or an edge colour that is neither the face nor the background. A
+  transparent axes background is read as the figure's, then white.
+- `check_line_weight` reads tick widths through `marker_stroke_pt`, so
+  `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
+  axes with `axison` false and ticks and gridlines on a hidden axis.
+
+#### Added
+
+- `check_palette.BRETTEL_TRITAN`, the constants the tritan simulation reads.
+- `tests/test_cvd_oracle.py`, checking them against DaltonLens-Python 0.1.5.
+  `daltonlens==0.1.5` joins the `dev` group; the oracle calls a private
+  method.
+- `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
+  `tests/test_palette.py`.
+- `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
+  entries, in `tests/test_prose_claims.py`.
+- `EXTERNAL_CLAIMS["vislint_mpl linting built figures"]` and
+  `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
+- `EXTERNAL_CLAIMS["alt text semantic levels"]`, and `Lundgard` in
+  `GUIDE_CITED`.
+
+### Why it changed
+
+`TYPE_FLOOR_PT = 7.5` sits above Nature's 7pt maximum, so no size passed both
+(#107). A SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, failed
+5 of 5 with-skill figures on text at 7.5 to 8.0pt. Capping the floor at the
+ceiling adds no number the guides do not publish.
+
+Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
+open-source simulators calls Brettel 1997 "the most solid and basically only
+valid choice" for tritanopia. The oracle agrees to 4.7e-8 in linear RGB.
+
+The `tritan` figure in the CVD separation row moves: Okabe-Ito's first three
+slots read 12.2, not 12.5. `make sweep` over the 21 corpus figures records no
+verdict change.
+
+Tritan stays reported and ungated. Gating it at `CVD_TARGET` was measured and
+rejected: Okabe-Ito's six series slots, all pairs, read tritan 10.1 (`#E69F00`
+against `#CC79A7`). Over matplotlib 3.11.1's style palettes, first 3, 4 and 6
+colours, 25 of 55 pass red-green; the gate would fail one more of those 25,
+`Solarize_Light2` at 5.0. It would fail the recommended palette to catch one
+style.
+
+Three citations were checked against the papers' full text and did not hold.
+Machado, Oliveira & Fernandes (2009) fit their 0.96 scale factor to "Brettel
+et al.'s" surface, reference [4], Brettel 1997; the paper does not cite Viénot
+1999, which `simulate` uses for protan and deutan. The tritan caveat came from
+DaltonLens's `Simulator_Machado2009`, not from the authors. Nuñez, Anderton &
+Renslow (2018) never mention Okabe-Ito or categorical palettes; the paper
+optimises one continuous map. The 2.84 and 2.44 dE measurements behind the
+linear-light choice are unchanged.
+
+The same check found three smaller gaps. The module comment called 10.4 the
+difference half of observers notice, without saying it averages one fit per
+axis; the style guide already did. Potluri et al. rank charting libraries over
+the 39,540 notebooks with images, not their 100,000-notebook corpus. The two
+DOIs resolve in Crossref to the volume, issue and pages already printed.
+
+The README read as if figure-gate were the first linter of built matplotlib
+figures; vislint_mpl was, in 2018. Two tracked files are named `README.md`, and
+`document()`'s error message asked for a path it could not resolve.
+
+The alt-text advice to give numbers and direction had no source. Lundgard &
+Satyanarayan's blind readers ranked statistics and trends most useful. No gate
+follows: `check_alt_text` checks presence and length, and a description's
+semantic level is not mechanically checkable.
+
+Tick marks were skipped as matplotlib's defaults. A SkillsBench run printed
+1.2pt ticks from a 9in figure at 3.6in: 0.48pt, under Science's 0.5pt minimum,
+and the gate passed it. Every tick on the 21 corpus figures and on 84 figures
+under matplotlib's 28 style sheets clears 0.5pt, so `make sweep` records no
+verdict change.
+
+A code review of the ceiling and stroke changes found defects in both. Under
+Nature's 7pt maximum a first-level mathtext script renders at 4.9pt, so
+matplotlib's default log ticks fail the 5pt script floor and the base cannot
+rise; `fontmath.ltx` sets 5pt scripts under a 7pt base, so `usetex` passes.
+Nature's guide asks for "8-pt bold, upright (not italic) and lowercase a, b,
+c" panel labels, which the 7pt ceiling failed. A `venue=` argument dropped a
+`TYPE_CEILING_PT` set as a house maximum, and a second `load_config` kept the
+first file's venue ceiling. Ticks drawn in `"none"`, furniture on an axes
+switched off, and black outlines on a `"none"` axes background were each
+misread.
+
+Marker outlines were never measured. Another run drew hollow markers with a
+1.0pt edge in the same 9in figure: 0.4pt printed. Against `LINE_FLOOR_PT` the
+outline floor would have failed `gallery-field`'s 0.8pt star edge, so it uses
+the 0.5pt floor. Five seaborn sheets draw 0.24 to 0.48pt edges in the face
+colour; those carry nothing and are skipped. The corpus records no verdict
+change, and none of the 84 style-sheet figures fails.
+
 ## 0.10.0 — 2026-09-30
 
 ### What changed

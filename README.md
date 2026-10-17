@@ -118,17 +118,21 @@ checks when it builds a figure for you. See
 
 ## Where this sits
 
-Prescriptive style sheets already exist and are good:
+Style sheets set a figure's defaults before it is drawn:
 [SciencePlots](https://github.com/garrettj403/SciencePlots) and LovelyPlots for
 journal looks, [tueplots](https://github.com/pnkraemer/tueplots) and mpl_sizes
-for exact conference sizing. Accessibility tooling exists too:
-[matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text,
-[Chart4Blind](https://github.com/moured/chart4blind_code) converts a chart image into an accessible one, and contrast
-reporters check colors in isolation.
+for conference page sizes. Accessibility tools work from the finished chart:
+[matplotalt](https://github.com/KaiNylund/matplotalt) generates alt text, and
+[Chart4Blind](https://github.com/moured/chart4blind_code) converts a chart image
+into an accessible one. None of them reports which requirements a built figure
+fails.
 
-Each of those acts before or beside the figure. None of them reads the built
-result and reports what it fails. A style sheet and figure-gate are complementary: set your defaults with one,
-verify them with the other.
+[vislint_mpl](https://github.com/mcnuttandrew/vislint_mpl) did, in 2018
+([McNutt & Kindlmann](http://people.cs.uchicago.edu/~glk/pubs/pdf/McNutt-VisLint-C4PGV-2018.pdf)).
+It took the figure and axes objects and listed the rules they failed, each
+with a reason. It was a research prototype; its repository is archived.
+
+Set the defaults with a style sheet, then check the result with figure-gate.
 
 ## Stability
 

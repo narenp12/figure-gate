@@ -1416,6 +1416,43 @@ RETRACTED_CLAIMS = {
                "minimum, and also states a maximum the guide never carried",
         "retracted": "2026-08-17",
     },
+    "Machado calibrating against the dichromacy simulate uses": {
+        "pattern": r"(calibrat\w*|scal\w*)[^.]{0,60}against the same[^.]{0,40}"
+                   r"(dichromacy|model)",
+        "instead": "Machado scales severity 1.0 to match Brettel, Vienot & "
+                   "Mollon (1997); `simulate`'s protan and deutan are the same "
+                   "authors' 1999 model",
+        "why": "the paper's 0.96 factor is fitted against 'Brettel et al.'s' "
+               "surface, reference [4], Brettel 1997. It does not cite Viénot "
+               "1999. The quote is in EXTERNAL_CLAIMS under 'cvd severity "
+               "matrices'",
+        "retracted": "2026-10-03",
+    },
+    "Machado's own reference implementation disclaiming tritanopia": {
+        "pattern": r"own reference implementation",
+        "instead": "DaltonLens 0.1.5's Simulator_Machado2009 notes the model "
+                   "does not work well for tritanopia",
+        "why": "DaltonLens is a third-party implementation. The paper says "
+               "tritanomaly 'can also be simulated' and states no limit",
+        "retracted": "2026-10-03",
+    },
+    "Nuñez 2018 backing the Okabe-Ito section": {
+        "pattern": r"Okabe-Ito section[^.]{0,30}rests on",
+        "instead": "Nuñez 2018 is the CVD-safe side for continuous maps: "
+                   "cividis, optimised in CAM02-UCS for deuteranomaly",
+        "why": "the paper's full text never mentions Okabe, Ito's colour set, "
+               "or categorical palettes. It optimises one continuous colormap",
+        "retracted": "2026-10-03",
+    },
+    "no other tool reading the built figure": {
+        "pattern": r"none of (them|these|those) reads? the built",
+        "instead": "scope the claim to the tools named, and name "
+                   "vislint_mpl (McNutt & Kindlmann 2018)",
+        "why": "vislint_mpl linted built matplotlib figures in 2018. The "
+               "quote is in EXTERNAL_CLAIMS under 'vislint_mpl linting built "
+               "figures'",
+        "retracted": "2026-10-04",
+    },
 }
 
 
@@ -1462,6 +1499,17 @@ def test_the_retraction_pattern_still_matches_the_sentence_it_retired():
         (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8").split()), re.I), (
         "the pattern matches the corrected sentence too, so it forbids the "
         "replacement as well as the claim")
+
+
+def test_the_built_figure_pattern_still_matches_the_readme_it_retired():
+    """The README sentence as 0.10.0 shipped it."""
+    shipped = ("Each of those acts before or beside the figure. None of them "
+               "reads the built result and reports what it fails.")
+    pattern = RETRACTED_CLAIMS[
+        "no other tool reading the built figure"]["pattern"]
+    assert re.search(pattern, shipped, re.I)
+    assert not re.search(pattern, " ".join(
+        document("README.md").read_text(encoding="utf-8").split()), re.I)
 
 
 def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
@@ -1517,6 +1565,19 @@ EXTERNAL_CLAIMS = {
                  '"Size symbols so that they will be distinguishable when the '
                  'figure is reduced (6 point minimum)" and "minimum of 0.5 '
                  'point at the final reduced size" for line widths.',
+    },
+    "Nature panel labels": {
+        "document": "style-guide.md",
+        "anchor": "8pt bold, upright and lowercase",
+        "source": "Nature research figure guide, "
+                  "research-figure-guide.nature.com, preparing figures: our "
+                  "specifications",
+        "no_doi": "a publisher's author-guidance page, not deposited",
+        "verified": "2026-10-17",
+        "quote": '"Separate panels in multi-panelled figures should be '
+                 'labelled with 8-pt bold, upright (not italic) and lowercase '
+                 'a, b, c, etc." and "Maximum text size for all other text is '
+                 '7-pt and the minimum is 5-pt."',
     },
     "Science line width floor": {
         "document": "style-guide.md",
@@ -1587,6 +1648,17 @@ EXTERNAL_CLAIMS = {
         "quote": "The vast majority of the programmatically generated images "
                  "(N=342102 (99.81%)) do not have associated alternative text.",
     },
+    "alt text semantic levels": {
+        "document": "style-guide.md",
+        "anchor": "Blind readers ranked statistics and trends",
+        "source": "Lundgard & Satyanarayan, IEEE TVCG 28(1), 1073-1083, "
+                  "arXiv:2110.04406, section 5.4",
+        "doi": "10.1109/TVCG.2021.3114770",
+        "verified": "2026-10-04",
+        "quote": "blind readers rank content and Levels 2 and 3 as most "
+                 "useful (Region 4 .C), and semantic content at Levels 1 and "
+                 "4 as least useful (Regions 4 .A and 4 .B).",
+    },
     "data-ink evidence": {
         "document": "style-guide.md",
         "anchor": "not the data-ink ratio",
@@ -1628,8 +1700,24 @@ EXTERNAL_CLAIMS = {
         # shipped constants in `test_the_severity_table_is_the_one_the_paper_
         # publishes`. The first row of protanomaly at severity 0.1 is quoted
         # here as the sample a later reader can re-check in one lookup.
+        # The second sentence backs the guide's "scaled to match Brettel,
+        # Viénot & Mollon (1997)", read from the paper's full text 2026-10-03.
+        # Its only Viénot is the co-author of reference [4], Brettel 1997.
         "quote": "Protanomaly, severity 0.1, first row: 0.856167, 0.182038, "
-                 "-0.038205.",
+                 "-0.038205. \"Such a scaling factor was used to improve the "
+                 "matching between the surfaces obtained when the entire RGB "
+                 "color space is simulated for dichromatic vision using "
+                 "Brettel et al.'s and our model (Fig. 6d).\"",
+    },
+    "cividis optimisation": {
+        "document": "style-guide.md",
+        "anchor": "cividis, optimised in CAM02-UCS for deuteranomaly",
+        "source": "Nuñez, Anderton & Renslow, PLoS ONE 13(7), e0199239, 2018",
+        "doi": "10.1371/journal.pone.0199239",
+        "verified": "2026-10-03",
+        "quote": "Specifically, CIECAM02-UCS was used for the colorspace for "
+                 "altering the colormap. Deuteranomaly was chosen as the CVD "
+                 "type",
     },
     "red-green prevalence": {
         "document": "style-guide.md",
@@ -1678,6 +1766,21 @@ EXTERNAL_CLAIMS = {
                  "vertical lines remain unchanged by variations in aspect "
                  "ratio, yet contribute to the banking criteria.",
     },
+    "vislint_mpl linting built figures": {
+        "document": "README.md",
+        "anchor": "listed the rules they failed",
+        "source": "McNutt & Kindlmann, Linting for Visualization: Towards a "
+                  "Practical Automated Visualization Guidance System, "
+                  "VisGuides workshop at IEEE VIS 2018, section 3.1",
+        "no_doi": "a workshop paper hosted on the authors' pages; Crossref "
+                  "returned no DOI for its title on 2026-10-04",
+        "verified": "2026-10-04",
+        "quote": "After creating a matplotlib chart, the user passes the "
+                 "associated axes and figure objects, along with a "
+                 "configurable list of rules to be checked, to the "
+                 "vislint_mpl function. The user then receives a list of the "
+                 "rules that failed, along with an explanation of why.",
+    },
 }
 
 # Ledger entries name a document by its basename, which was unambiguous while
@@ -1692,6 +1795,10 @@ for _path in PROSE_DOCS:
 
 
 def document(name):
+    # A path from the root first, as the shared-basename assertion asks.
+    by_path = [p for p in PROSE_DOCS if doc_id(p) == name]
+    if by_path:
+        return by_path[0]
     found = DOCS_BY_NAME.get(name, [])
     assert found, (
         f"the ledger names {name}, which is not a document in the corpus "

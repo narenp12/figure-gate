@@ -9,6 +9,7 @@ figure that passes locally and fails in CI.
 tested here is the reading and the refusing, not a second way to measure.
 """
 
+import math
 import textwrap
 
 import pytest
@@ -19,8 +20,8 @@ import check_palette as cp
 # Constants the tests below move. Restored after each one, because `load_config`
 # writes module globals and the suite runs in one process per worker: a floor
 # left at 9.0 makes the next test's figure pass for the wrong reason.
-TOUCHED = ("TYPE_FLOOR_PT", "CONTENT_WIDTH_PT", "LINE_FLOOR_PT", "STYLE_SHEET",
-           "TEXT_EDGE_WINDOW")
+TOUCHED = ("TYPE_FLOOR_PT", "TYPE_CEILING_PT", "CONTENT_WIDTH_PT", "LINE_FLOOR_PT", "STYLE_SHEET",
+           "TEXT_EDGE_WINDOW", "_CONFIG_VENUE")
 
 
 @pytest.fixture(autouse=True)
@@ -60,6 +61,31 @@ def test_venue_sets_the_content_width(tmp_path):
     assert cf.load_config(path) == {
         "CONTENT_WIDTH_PT": cf.VENUE_WIDTH_PT["amsart"]}
     assert cf.CONTENT_WIDTH_PT == cf.VENUE_WIDTH_PT["amsart"]
+
+
+def test_venue_sets_the_type_ceiling_where_it_has_one(tmp_path):
+    path = write(tmp_path, body='venue = "nature-column"\n')
+    assert cf.load_config(path) == {
+        "CONTENT_WIDTH_PT": cf.VENUE_WIDTH_PT["nature-column"]}
+    assert cf.type_ceiling_pt() == 7.0
+    assert cf.TYPE_CEILING_PT == math.inf, "the house ceiling is untouched"
+
+
+@pytest.mark.parametrize("second", ['venue = "neurips"\n',
+                                    "CONTENT_WIDTH_PT = 500.0\n"])
+def test_a_second_file_drops_the_first_venues_ceiling(tmp_path, second):
+    """One process, two files: a sweep, or a test session. The width moves to
+    the second document and so does the ceiling."""
+    cf.load_config(write(tmp_path, "a.toml", 'venue = "nature-column"\n'))
+    cf.load_config(write(tmp_path, "b.toml", second))
+    assert cf.type_ceiling_pt() == math.inf
+
+
+def test_a_house_ceiling_and_a_venue_take_the_stricter(tmp_path):
+    path = write(tmp_path, body='venue = "nature"\nTYPE_CEILING_PT = 6.5\n')
+    cf.load_config(path)
+    assert cf.type_ceiling_pt() == 6.5
+    assert cf.type_ceiling_pt("ieee") == 6.5
 
 
 def test_a_none_valued_constant_takes_a_string(tmp_path):

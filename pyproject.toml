@@ -453,6 +453,9 @@ dev = [
     "bump-my-version>=1.0",
     "cmasher>=1.9",
     "codespell>=2.3",
+    # Pinned: tests/test_cvd_oracle.py calls the private
+    # `_simulate_dichromacy_linear_rgb` and checks constants from 0.1.5.
+    "daltonlens==0.1.5",
     "mypy>=1.11",
     "pytest>=7.0",
     "pytest-cov>=7.1.0",

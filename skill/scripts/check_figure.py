@@ -82,10 +82,12 @@ __all__ = [
     "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
     "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
-    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "MATH_SCRIPT_FLOOR_PT",
+    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
-    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "content_width_pt",
+    "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
+    "VENUE_PANEL_LABEL_PT",
+    "content_width_pt", "type_ceiling_pt",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
     "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
@@ -351,15 +353,28 @@ BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 #
-# Stricter than every journal that publishes a number: Nature sets a 5pt
-# minimum and a 7pt maximum, and PNAS requires nothing smaller than 6pt after
-# reduction, which its guidelines also state as 2mm. Science publishes no text
-# floor at all, only a 6pt minimum on symbols. Those are the sizes at which a
-# string is still *possible* to read. 7.5 is the size at which it is
-# comfortable, and it is cheap to hold because the fix is nearly always cutting
-# words rather than shrinking type. Verified 2026-08-17; the quotes are in
-# `EXTERNAL_CLAIMS` in tests/test_prose_claims.py.
+# Above every journal's published minimum: Nature sets 5pt, and PNAS requires
+# nothing smaller than 6pt after reduction, which its guidelines also state as
+# 2mm. Science publishes no text floor at all, only a 6pt minimum on symbols.
+# Those are the sizes at which a string is still *possible* to read. 7.5 is the
+# size at which it is comfortable, and it is cheap to hold because the fix is
+# nearly always cutting words rather than shrinking type. Nature also sets a
+# 7pt maximum, under this floor; `TYPE_CEILING_PT` below is how the two meet.
+# Verified 2026-08-17; the quotes are in `EXTERNAL_CLAIMS` in
+# tests/test_prose_claims.py.
 TYPE_FLOOR_PT = 7.5
+
+# Type ceiling, in points on the page: a house maximum, infinite by default. A
+# venue's published maximum (`VENUE_TYPE_CEILING_PT`) applies on top of it and
+# the stricter wins; see `type_ceiling_pt`. The floor in force is
+# `min(TYPE_FLOOR_PT, ceiling)`: Nature's 7pt maximum sits under 7.5, and no
+# size clears a floor above its ceiling.
+TYPE_CEILING_PT = math.inf
+
+# The `venue` the last configuration file named, or `None`. `load_config` sets
+# it; `type_ceiling_pt(None)` reads the venue's maxima through it. Private, so
+# a file cannot set it except by writing `venue`.
+_CONFIG_VENUE: str | None = None
 
 # Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
 # `TYPE_FLOOR_PT`.
@@ -376,7 +391,7 @@ TYPE_FLOOR_PT = 7.5
 # matplotlib's own log-axis tick label and which no author wrote. Setting a
 # script smaller than its base is not a defect, it is how mathematics has been
 # typeset for a century, and `TYPE_FLOOR_PT` is a *comfort* floor deliberately
-# stricter than any journal's.
+# above any journal's minimum.
 #
 # 5.0 is where two independent sources agree the floor actually is. LaTeX's own
 # table in `fontmath.ltx` maps every body size to a script and a scriptscript
@@ -520,6 +535,18 @@ VENUE_WIDTH_PT = {
     "beamer-169": 398.34,          # \textwidth, same class [aspectratio=169]
 }
 
+# Published maxima for text in a figure, by `VENUE_WIDTH_PT` key. Nature:
+# "Maximum text size: 7pt"; the quote is in `EXTERNAL_CLAIMS` in
+# tests/test_prose_claims.py. A venue absent here publishes no maximum.
+VENUE_TYPE_CEILING_PT = {"nature": 7.0, "nature-column": 7.0}
+
+# Published sizes for panel labels where a venue sets them apart from the
+# ceiling above. Nature: "Separate panels in multi-panelled figures should be
+# labelled with 8-pt bold, upright (not italic) and lowercase a, b, c, etc."
+# A string `_is_panel_label` accepts is capped here instead of at
+# `VENUE_TYPE_CEILING_PT`.
+VENUE_PANEL_LABEL_PT = {"nature": 8.0, "nature-column": 8.0}
+
 
 def content_width_pt(venue: str | None = None) -> float | None:
     """The usable page width to measure against, in points.
@@ -543,6 +570,33 @@ def content_width_pt(venue: str | None = None) -> float | None:
             f"{', '.join(sorted(VENUE_WIDTH_PT))}. For anything else, put "
             "\\the\\textwidth in the document, read the log, and set "
             "CONTENT_WIDTH_PT to what it says.") from None
+
+
+def type_ceiling_pt(venue: str | None = None, *,
+                    panel_label: bool = False) -> float:
+    """The largest text size, in points on the page, in force for `venue`.
+
+    The stricter of `TYPE_CEILING_PT` and the venue's published maximum. A
+    `venue` passed here replaces the one a configuration file named, the way
+    it replaces `CONTENT_WIDTH_PT`; `TYPE_CEILING_PT` holds for both.
+
+    Args:
+        venue: A key of `VENUE_WIDTH_PT`. `None` uses the `venue` the last
+            `load_config` read, if any.
+        panel_label: Use the venue's `VENUE_PANEL_LABEL_PT` row, where it has
+            one, in place of its `VENUE_TYPE_CEILING_PT` row.
+
+    Returns:
+        The ceiling in points, `math.inf` when nothing sets one.
+    """
+    if venue is None:
+        venue = _CONFIG_VENUE
+    elif venue not in VENUE_WIDTH_PT:
+        content_width_pt(venue)  # raises, naming the known venues
+    published = VENUE_TYPE_CEILING_PT.get(venue or "", math.inf)
+    if panel_label:
+        published = VENUE_PANEL_LABEL_PT.get(venue or "", published)
+    return min(TYPE_CEILING_PT, published)
 
 
 def page_scale(fig: Figure, placed_frac: float = 1.0,
@@ -690,7 +744,7 @@ def config_keys() -> list[str]:
     """Every key a configuration file may set, sorted.
 
     `venue` is in the list and is not a constant: it sets `CONTENT_WIDTH_PT`
-    from `VENUE_WIDTH_PT`.
+    from `VENUE_WIDTH_PT`, and `type_ceiling_pt` reads the venue's maxima.
 
     A palette key is only here when `check_palette.py` is importable. Naming one
     without it raises rather than being ignored.
@@ -832,6 +886,13 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     for key, value in planned.items():
         setattr(targets.get(key, sys.modules[__name__]), key, value)
+    # A file that sets the width names the document, so the venue's maxima
+    # follow it: `venue = "science"` after `venue = "nature"` drops Nature's.
+    global _CONFIG_VENUE
+    if "venue" in table:
+        _CONFIG_VENUE = table["venue"]
+    elif "CONTENT_WIDTH_PT" in table:
+        _CONFIG_VENUE = None
     return planned
 
 
@@ -1625,10 +1686,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
                    if halo_color else " and wears no casing"))
 
         pt = t.get_fontsize() * scale
-        weight = t.get_fontweight()
-        bold = (weight in ("bold", "heavy", "black", "extra bold", "semibold")
-                or (isinstance(weight, (int, float))
-                    and weight >= BOLD_WEIGHT_MIN))
+        bold = _is_bold(t)
         floor = (TEXT_CONTRAST_MIN_LARGE
                  if pt >= LARGE_TEXT_PT or (pt >= LARGE_TEXT_BOLD_PT and bold)
                  else TEXT_CONTRAST_MIN)
@@ -2652,6 +2710,22 @@ def _script_min_pt(t: Any) -> float | None:
     return min(shrunk) if shrunk else None
 
 
+def _is_bold(t: Any) -> bool:
+    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier."""
+    weight = t.get_fontweight()
+    return (weight in ("bold", "heavy", "black", "extra bold", "semibold")
+            or (isinstance(weight, (int, float))
+                and weight >= BOLD_WEIGHT_MIN))
+
+
+def _is_panel_label(t: Any) -> bool:
+    """Whether a `Text` is a panel label in the form `VENUE_PANEL_LABEL_PT`
+    quotes: one lowercase letter, bold, upright."""
+    s = str(t.get_text()).strip()
+    return (len(s) == 1 and "a" <= s <= "z" and _is_bold(t)
+            and t.get_fontstyle() == "normal")
+
+
 def check_type_size(fig: Figure, r: Any, scale: float | None = None,
                     placed_frac: float = 1.0,
                     venue: str | None = None) -> tuple[bool | str, str]:
@@ -2677,29 +2751,56 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     if not sizes:
         return True, "no text"
 
+    ceiling = type_ceiling_pt(venue)
+    label_ceiling = type_ceiling_pt(venue, panel_label=True)
+    floor = min(TYPE_FLOOR_PT, ceiling)
+
     scripts = []
+    can_raise = True
     for t in texts:
         pt = _script_min_pt(t)
         if pt is not None and pt * scale < MATH_SCRIPT_FLOOR_PT:
             scripts.append((round(pt * scale, 1), str(t.get_text())[:22]))
+            # The base on the page that lifts this script to the floor. Under
+            # Nature's 7pt maximum a first-level script tops out at 4.9pt.
+            base = float(t.get_fontsize()) * MATH_SCRIPT_FLOOR_PT / pt
+            can_raise = can_raise and base <= ceiling
 
-    small = sorted({(pt, s) for pt, s in sizes if pt < TYPE_FLOOR_PT})
+    small = sorted({(pt, s) for pt, s in sizes if pt < floor})
+    large = sorted({(pt, s) for t, (pt, s) in zip(texts, sizes)
+                    if pt > (label_ceiling if _is_panel_label(t) else ceiling)},
+                   reverse=True)
     mn = min(pt for pt, _ in sizes)
-    if small or scripts:
+    if small or large or scripts:
         bits = []
         if small:
-            bits.append(f"under {TYPE_FLOOR_PT}pt on page at scale {scale:.2f}: "
+            bits.append(f"under {floor}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
+        if large:
+            fix = (f"set text at {floor / scale:.1f}pt as authored, {floor}pt "
+                   "on the page")
+            if label_ceiling > ceiling:
+                fix += (f"; a panel label may be {label_ceiling}pt, bold and "
+                        "one lowercase letter")
+            bits.append(f"over the {ceiling}pt maximum on page at scale "
+                        f"{scale:.2f}: {large[:4]}  [FIX] {fix}")
         if scripts:
+            fix = ("cut a level of nesting, or raise the base size" if can_raise
+                   else f"no base under the {ceiling}pt maximum lifts the "
+                   "script to the floor: cut the script, e.g. "
+                   "`set_major_formatter(LogFormatter())` for log ticks, or "
+                   "set `text.usetex`, whose scripts stop at 5pt")
             bits.append(
                 f"mathtext script under {MATH_SCRIPT_FLOOR_PT}pt on page at "
-                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] cut a level "
-                "of nesting, or raise the base size  [WHY] matplotlib shrinks "
-                "0.7 per script level with no floor. LaTeX stops at "
-                "scriptscript and never sets math type under 5pt")
+                f"scale {scale:.2f}: {sorted(set(scripts))[:4]}  [FIX] {fix}"
+                "  [WHY] matplotlib shrinks 0.7 per script level with no "
+                "floor. LaTeX stops at scriptscript and never sets math type "
+                "under 5pt")
         return False, "; ".join(bits)
 
-    detail = f"smallest {mn:.1f}pt on page (floor {TYPE_FLOOR_PT})"
+    detail = f"smallest {mn:.1f}pt on page (floor {floor})"
+    if ceiling < math.inf:
+        detail += f", largest {max(pt for pt, _ in sizes):.1f}pt (ceiling {ceiling})"
     if placed_frac < PLACED_FRAC_WARN:
         return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
                        " — labels may be too small to read; author at the"
@@ -4015,6 +4116,70 @@ def _collection_widths(artist: Any) -> list[float]:
         return [float(raw)]
 
 
+def _ground(ax: Axes) -> tuple[float, float, float, float]:
+    """The colour behind an axes' marks: its facecolor, else the figure's, else
+    white. `set_facecolor("none")` is RGBA (0, 0, 0, 0), and reading its RGB
+    would take the page under it for black."""
+    from matplotlib.colors import to_rgba
+
+    for colour in (ax.get_facecolor(), ax.figure.get_facecolor()):
+        rgba = to_rgba(colour)
+        if rgba[3] > 0.0:
+            return rgba
+    return (1.0, 1.0, 1.0, 1.0)
+
+
+def _marker_outline_pt(artist: Any, background: Any) -> float:
+    """The width of a marker outline the reader has to see, in points.
+
+    An outline carries the mark when the marker is unfilled (`+`, `x`) or
+    hollow, or when it is a second colour on the fill. It carries nothing when
+    it repeats the fill colour, which is matplotlib's `"face"` edge and every
+    seaborn sheet's, or when it is the axes background, which is a halo.
+
+    Args:
+        artist: A `Line2D` with markers or a `PathCollection` from `scatter`.
+        background: The colour behind the marks, from `_ground`.
+
+    Returns:
+        The outline width in points, or 0.0 if no outline carries the mark.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgba, to_rgba_array
+    from matplotlib.lines import Line2D
+    from matplotlib.markers import MarkerStyle
+
+    if isinstance(artist, Line2D):
+        if str(artist.get_marker()) in ("None", "none", "", " "):
+            return 0.0
+        width = marker_stroke_pt(artist)
+        if width <= 0.0:
+            return 0.0
+        style = MarkerStyle(artist.get_marker(), artist.get_fillstyle())
+        if not style.is_filled() or artist.get_fillstyle() == "none":
+            return width
+        edges = to_rgba_array(artist.get_markeredgecolor())
+        faces = to_rgba_array(artist.get_markerfacecolor())
+    else:
+        width = collection_stroke_pt(artist)
+        if width <= 0.0:
+            return 0.0
+        edges = np.asarray(artist.get_edgecolors(), dtype=float)
+        faces = np.asarray(artist.get_facecolors(), dtype=float)
+    if faces.size == 0 or faces[:, 3].max() <= 0.0:
+        return width                                   # hollow
+    n = max(len(edges), len(faces))
+    edges, faces = np.resize(edges, (n, 4)), np.resize(faces, (n, 4))
+    bg = np.asarray(to_rgba(background), dtype=float)[:3]
+    for edge, face in zip(edges, faces):
+        if edge[3] <= 0.0 or np.allclose(edge[:3], face[:3], atol=1e-3):
+            continue
+        if np.allclose(edge[:3], bg, atol=1e-3):
+            continue
+        return width
+    return 0.0
+
+
 def check_line_weight(fig: Figure, scale: float | None = None,
                       placed_frac: float = 1.0,
                       venue: str | None = None) -> tuple[bool | str, str]:
@@ -4028,14 +4193,15 @@ def check_line_weight(fig: Figure, scale: float | None = None,
 
     Data strokes are held to `LINE_FLOOR_PT`: lines, line collections, unfilled
     contour sets, stroked patch edges and annotation arrows. Furniture is held
-    to the lower `FURNITURE_FLOOR_PT`: spines and the major and minor
-    gridlines. A gridline that drops out costs the reader a reference; a data
-    curve that drops out costs them the finding.
+    to the lower `FURNITURE_FLOOR_PT`: spines, the major and minor gridlines
+    and the major and minor tick marks. So are marker outlines that carry the
+    mark (see `_marker_outline_pt`): an outline is not a line, and Science's
+    0.5pt minimum covers every line width. A gridline that drops out costs the
+    reader a reference; a data curve that drops out costs them the finding.
 
-    Not measured: tick marks and colorbar axes, whose widths are matplotlib's
-    defaults rather than anything `figure.mplstyle` or the author set; filled
-    contour sets, whose linewidth is the seam between two fills; and any artist
-    that is invisible or draws no stroke.
+    Not measured: colorbar axes, whose dividers are matplotlib's and not the
+    author's; filled contour sets, whose linewidth is the seam between two
+    fills; and any artist that is invisible or draws no stroke.
 
     Args:
         fig: The figure to read strokes from.
@@ -4044,18 +4210,19 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         venue: A key of `VENUE_WIDTH_PT`, overriding `CONTENT_WIDTH_PT`.
 
     Returns:
-        `(False, detail)` naming up to four strokes under a floor, data before
-        furniture. Otherwise `(True, detail)` with the thinnest width of each
+        `(False, detail)` naming up to four strokes under a floor, data
+        first, then marker outlines, then furniture. Otherwise `(True, detail)` with the thinnest width of each
         kind measured.
     """
     from matplotlib.lines import Line2D
-    from matplotlib.collections import LineCollection
+    from matplotlib.collections import LineCollection, PathCollection
 
     if scale is None:
         scale = page_scale(fig, placed_frac, venue)
 
     thin: list[str] = []          # data strokes under LINE_FLOOR_PT
     thin_furniture: list[str] = []   # furniture under FURNITURE_FLOOR_PT
+    thin_outline: list[str] = []     # marker outlines under FURNITURE_FLOOR_PT
     widths: list[float] = []
     furniture_widths: list[float] = []
 
@@ -4076,6 +4243,16 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         furniture_widths.append(on_page)
         if on_page < FURNITURE_FLOOR_PT:
             thin_furniture.append(f"{name} at {on_page:.2f}pt")
+
+    def measure_outline(width: float, name: str) -> None:
+        """A marker outline, against the furniture floor."""
+        on_page = width * scale
+        if on_page <= 0:
+            return
+        furniture_widths.append(on_page)
+        if on_page < FURNITURE_FLOOR_PT:
+            thin_outline.append(f"the marker outlines of {name} at "
+                                f"{on_page:.2f}pt")
 
     def stroked(artist: Any) -> bool:
         """Whether this patch actually puts an edge on the page.
@@ -4106,6 +4283,12 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         for artist in list(ax.lines) + list(ax.collections):
             if not artist.get_visible() or id(artist) in gridlines:
                 continue
+            label = str(artist.get_label() or "")
+            named = label if label and not label.startswith("_") else None
+            if isinstance(artist, (Line2D, PathCollection)):
+                measure_outline(_marker_outline_pt(artist, _ground(ax)),
+                                named or "a series")
+            name = named or "a stroke"
             if isinstance(artist, Line2D):
                 stroke = str(artist.get_linestyle()).strip().lower()
                 if stroke in ("none", "", " "):
@@ -4120,8 +4303,6 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                 raw = _collection_widths(artist)
             else:
                 continue
-            label = str(artist.get_label() or "")
-            name = label if label and not label.startswith("_") else "a stroke"
             for w in raw:
                 measure(w, name)
 
@@ -4136,12 +4317,17 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             if arrow is not None and arrow.get_visible() and stroked(arrow):
                 measure(arrow.get_linewidth(), "an annotation arrow")
 
-        # Furniture: the axis rule and the grid, against the lower floor. Tick
-        # marks stay out; see the docstring.
+        # Furniture: the axis rule, the ticks and the grid, against the lower
+        # floor. `set_axis_off` stops `Axes.draw` drawing any of it, and a
+        # hidden axis draws neither its ticks nor its grid.
+        if not ax.axison:
+            continue
         for side, spine in ax.spines.items():
             if spine.get_visible():
                 measure_furniture(spine.get_linewidth(), f"the {side} spine")
         for axis_name, axis in (("x", ax.xaxis), ("y", ax.yaxis)):
+            if not axis.get_visible():
+                continue
             # Both grids. `get_gridlines` is the major one only, and a minor
             # grid is authored the same way and drops out the same way, so
             # reading only the majors would leave the second half of the grid
@@ -4157,6 +4343,19 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                         continue
                     measure_furniture(gridline.get_linewidth(),
                                       f"an {axis_name}{which} gridline")
+            # A tick mark is a marker: its width is the stroke
+            # `marker_stroke_pt` reads, zero for `color="none"`. Only the
+            # ticks at a located position are drawn; the rest of
+            # `get_major_ticks()` is matplotlib's spare template.
+            for which, locs, get in (
+                    ("major", axis.get_majorticklocs(), axis.get_major_ticks),
+                    ("minor", axis.get_minorticklocs(), axis.get_minor_ticks)):
+                for tick in get(len(locs)):
+                    for mark in (tick.tick1line, tick.tick2line):
+                        if mark.get_visible() and mark.get_markersize() > 0:
+                            measure_furniture(
+                                marker_stroke_pt(mark),
+                                f"the {axis_name} {which} tick marks")
 
     if not widths and not furniture_widths:
         return True, "no strokes to measure"
@@ -4168,10 +4367,20 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                        f"{LINE_FLOOR_PT / scale:.2f} at this scale"
                        "  [WHY] SIAM: lines thinner than one point break up or "
                        "disappear in print")
+    if thin_outline:
+        seen = list(dict.fromkeys(thin_outline))
+        return False, (f"under {FURNITURE_FLOOR_PT}pt on page at scale "
+                       f"{scale:.2f}: {seen[:4]}  [FIX] set markeredgewidth "
+                       f"to at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
+                       "scale  [WHY] Science: line widths have a minimum of "
+                       "0.5 point at the final reduced size")
     if thin_furniture:
         seen = list(dict.fromkeys(thin_furniture))
+        how = ("linewidth, or `tick_params(which=\"both\", width=...)` for "
+               "ticks," if any("tick marks" in s for s in seen[:4])
+               else "linewidth")
         return False, (f"furniture under {FURNITURE_FLOOR_PT}pt on page at "
-                       f"scale {scale:.2f}: {seen[:4]}  [FIX] set linewidth to "
+                       f"scale {scale:.2f}: {seen[:4]}  [FIX] set {how} to "
                        f"at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
                        "scale  [WHY] Science: line widths have a minimum of "
                        "0.5 point at the final reduced size")

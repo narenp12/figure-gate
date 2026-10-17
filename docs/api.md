@@ -45,6 +45,8 @@ Composition. Takes a built figure, measures what it renders at print size.
 
 ::: check_figure.content_width_pt
 
+::: check_figure.type_ceiling_pt
+
 ::: check_figure.load_config
 
 ::: check_figure.find_config

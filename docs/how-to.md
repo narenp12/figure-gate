@@ -126,7 +126,7 @@ A `[WARN]` row still exits 0. Advisory rows report; they do not gate.
     Palette (categorical, surface #ffffff): 3 slots
       [PASS] Lightness band               all 3 inside L 0.43-0.77
       [PASS] Chroma floor                 all 3 >= 0.1
-      [PASS] CVD separation (all-pairs)   worst #E69F00 vs #009E73 dE 20.7 (protan at severity 1.0) - tritan 12.5
+      [PASS] CVD separation (all-pairs)   worst #E69F00 vs #009E73 dE 20.7 (protan at severity 1.0) - tritan 12.2
       [PASS] Normal-vision floor (all-pairs) worst #56B4E9 vs #009E73 dE 31.5
       [WARN] Contrast vs surface          under 3.0:1, each needs a visible direct label: [('#E69F00', 2.25), ('#56B4E9', 2.31)]
 

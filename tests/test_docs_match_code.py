@@ -1686,7 +1686,7 @@ def test_the_gates_page_names_only_publishers_with_a_type_minimum():
 # Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
 # from the References, which `CONTRIBUTING.md` says a cited work may not be.
 GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
-               "Potluri", "Bateman", "Tufte")
+               "Potluri", "Lundgard", "Bateman", "Tufte")
 
 
 @pytest.mark.parametrize("surname", GUIDE_CITED)

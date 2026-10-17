@@ -3573,6 +3573,105 @@ def test_venue_and_placed_frac_compose():
     assert scale == pytest.approx(455.24 * 0.48 / (3.2 * 72), rel=1e-6)
 
 
+def _type_at(size_pt, width_pt):
+    """A figure authored at `width_pt`, so it places at scale 1, with every
+    string at `size_pt`."""
+    fig, ax = plt.subplots(figsize=(width_pt / 72, 2.4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.tick_params(labelsize=size_pt)
+    ax.set_xlabel("Dose (mg)", fontsize=size_pt)
+    return fig
+
+
+@pytest.mark.parametrize("size_pt, ok", [(6.5, False), (7.0, True), (7.5, False)])
+def test_nature_caps_the_floor_at_its_ceiling(size_pt, ok):
+    """Nature's 7pt maximum sits under the 7.5pt floor, so the floor drops to
+    7.0 and the band is one size. The SkillsBench A/B failed every with-skill
+    Nature figure that held 7.5pt (issue #107)."""
+    fig = _type_at(size_pt, cf.VENUE_WIDTH_PT["nature-column"])
+    verdict = gates(cf.audit(fig, venue="nature-column")[1])["Type size"]
+    plt.close(fig)
+    assert verdict is ok
+
+
+def test_a_venue_without_a_ceiling_drops_the_configured_one(monkeypatch):
+    """`venue=` replaces the configured venue the way it replaces
+    `CONTENT_WIDTH_PT`: a project written for Nature does not carry Nature's
+    ceiling into a call for NeurIPS."""
+    monkeypatch.setattr(cf, "_CONFIG_VENUE", "nature-column")
+    fig = _type_at(9.0, cf.VENUE_WIDTH_PT["neurips"])
+    assert gates(cf.audit(fig, venue="neurips")[1])["Type size"] is True
+    assert gates(cf.audit(fig, scale=1.0)[1])["Type size"] is False
+    plt.close(fig)
+
+
+def test_a_house_ceiling_holds_under_any_venue(monkeypatch):
+    """`TYPE_CEILING_PT` is the project's own maximum, so `venue=` does not
+    lift it."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 8.0)
+    assert cf.type_ceiling_pt("ieee") == 8.0
+    assert cf.type_ceiling_pt("nature") == 7.0
+    fig = _type_at(9.0, cf.VENUE_WIDTH_PT["ieee"])
+    assert gates(cf.audit(fig, venue="ieee")[1])["Type size"] is False
+    plt.close(fig)
+
+
+def _nature_with(text, **style):
+    fig = _type_at(7.0, cf.VENUE_WIDTH_PT["nature-column"])
+    fig.axes[0].set_title(text, loc="left", fontsize=8.0, **style)
+    return fig
+
+
+@pytest.mark.parametrize("text, style, ok", [
+    ("a", dict(fontweight="bold"), True),
+    ("a", {}, False),                                   # not bold
+    ("A", dict(fontweight="bold"), False),              # not lowercase
+    ("a", dict(fontweight="bold", fontstyle="italic"), False),
+    ("Dose", dict(fontweight="bold"), False),           # not a letter
+])
+def test_nature_panel_labels_may_be_8pt_bold_lowercase(text, style, ok):
+    """Nature: "8-pt bold, upright (not italic) and lowercase a, b, c". The
+    rest of its text stays at 7pt."""
+    fig = _nature_with(text, **style)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is ok, detail
+
+
+def test_the_ceiling_fix_names_the_authored_size():
+    """At scale 0.5 the page size and the authored size differ twofold, and
+    the fix has to say the one the author types."""
+    fig = _type_at(7.0, 2 * cf.VENUE_WIDTH_PT["nature-column"])
+    fig.axes[0].set_title("Title", fontsize=20.0)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is False
+    assert "set text at 14.0pt as authored, 7.0pt on the page" in detail
+
+
+def test_nature_log_ticks_fail_with_a_fix_that_works():
+    """Under a 7pt maximum a first-level script is 4.9pt, under the 5pt floor,
+    and raising the base would breach the maximum. The fix has to name a route
+    out, and the route has to pass."""
+    import matplotlib.ticker as mticker
+    fig = _type_at(7.0, cf.VENUE_WIDTH_PT["nature-column"])
+    ax = fig.axes[0]
+    ax.set_xscale("log")
+    ax.set_xlim(1, 1000)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    assert status is False
+    assert "raise the base size" not in detail
+    assert "LogFormatter()" in detail
+    ax.xaxis.set_major_formatter(mticker.LogFormatter())
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                        venue="nature-column")
+    plt.close(fig)
+    assert status is True, detail
+
+
 def test_placed_frac_without_any_width_still_refuses():
     """The guard that predates the venue table has to keep holding: a
     fractional placement with no width to measure against is a contradiction,
@@ -4138,10 +4237,11 @@ def test_a_bar_with_no_edge_is_not_a_hairline():
     ax.plot([1, 3], [1, 3], lw=3.0)
     # The half scale is what makes a miscounted 1.0pt patch edge land under the
     # data floor, so it has to stay. It also takes the default 0.8pt axis rule
-    # to 0.40pt, under `FURNITURE_FLOOR_PT`, which is a true fire about a
-    # different stroke and would mask the one this test is about.
+    # and ticks to 0.40pt, under `FURNITURE_FLOOR_PT`, which is a true fire
+    # about a different stroke and would mask the one this test is about.
     for spine in ax.spines.values():
         spine.set_linewidth(1.2)
+    ax.tick_params(width=1.2)
     from matplotlib.colors import to_rgba
     try:
         assert ax.patches, "the fixture needs bars to be about anything"
@@ -4279,34 +4379,23 @@ def test_line_weight_measures_furniture_at_the_placed_scale():
     assert "furniture" in detail
 
 
-def test_line_weight_still_does_not_measure_tick_marks():
-    """A decision, pinned, not an oversight -- and not the decision that used
-    to be written here.
+def test_line_weight_measures_tick_marks():
+    """Ticks are furniture and held to `FURNITURE_FLOOR_PT`. This reverses the
+    decision this test pinned before, which skipped them on two arguments.
 
-    The reason recorded until now was that measuring furniture would fail the
-    corpus outright. That turned out to be false, and measuring it is what
-    proved so: all 982 furniture strokes on the twenty-one figures clear
-    `FURNITURE_FLOOR_PT`, the thinnest at 0.63pt. Spines and gridlines are
-    measured as of this commit.
+    "Judging a default nobody chose reports the library." The printed tick is
+    ink whoever chose its width, and agents do choose it: in the SkillsBench
+    `worldphones-grayscale-implicit` runs one set `xtick.major.width: 2.0` and
+    another shipped 1.2pt ticks in a 9in figure printed at 3.6in, 0.48pt on the
+    page. Science's 0.5pt minimum applies to every line width.
 
-    Tick marks stay out on a different argument. `figure.mplstyle` sets
-    `axes.linewidth` and `grid.linewidth`, so those two widths are the sheet's
-    own decisions and judging them reports the figure. It sets no tick width at
-    all, so 0.8 major and 0.6 minor are matplotlib's untouched defaults, which
-    is the same class as the colorbar dividers `check_line_weight` already
-    skips for the same stated reason. Judging a default nobody chose reports
-    the library.
+    "The substrates disagree." `check_svg.py` (archived at
+    `archive/r-svg-substrate`) measures ticks. Measuring them here ends that
+    disagreement; its pinned 10/13 is untouched.
 
-    They carry a second reason besides, not visible from this checkout.
-    `skill/scripts/check_svg.py` does measure them, and its own corpus pins ten
-    of thirteen fixtures as firing on line weight largely because of it. Both
-    are archived at the `archive/r-svg-substrate` tag, not merged, so a reader
-    looking for them here will not find them; the point is that the two
-    substrates disagree about this stroke, and settling that by side effect
-    would overturn a measurement pinned on the archived substrate.
-
-    If a later round decides to measure them, this test is where that argument
-    has to be made rather than absorbed.
+    The corpus does not move: every tick clears 0.5pt on the 21 figures of
+    `examples/` and on 84 more, three builders under each of the 28 external
+    styles, `classic` at exactly 0.5.
     """
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1], lw=1.5)
@@ -4315,7 +4404,158 @@ def test_line_weight_still_does_not_measure_tick_marks():
         status, detail = cf.check_line_weight(fig, scale=1.0)
     finally:
         plt.close(fig)
+    assert status is False
+    assert "tick marks" in detail
+
+
+def test_line_weight_default_ticks_fail_only_when_shrunk():
+    """matplotlib's 0.8pt major ticks clear the floor at full size and fail
+    once the figure prints at under 0.5 / 0.8 of its authored width."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=3.0)
+    ax.spines[:].set_linewidth(2.0)
+    try:
+        full, _ = cf.check_line_weight(fig, scale=1.0)
+        shrunk, detail = cf.check_line_weight(fig, scale=0.4)
+    finally:
+        plt.close(fig)
+    assert full is True
+    assert shrunk is False
+    assert "tick marks" in detail
+    assert "tick_params" in detail, "the fix has to name the tick setter"
+
+
+def test_line_weight_skips_ticks_that_draw_nothing():
+    """A zero-length tick lays down no ink, whatever its width."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=1.5)
+    ax.tick_params(width=0.2, length=0)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
     assert status is True, detail
+
+
+def _outline_fixture(**marker):
+    """One marked series with every other stroke well clear of both floors,
+    so the only stroke the check can fail is the marker outline."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 0], lw=1.5, label="series", **marker)
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    return fig
+
+
+@pytest.mark.parametrize("marker", [
+    dict(marker="o", mfc="white", mec="black", mew=0.3),   # hollow
+    dict(marker="s", mfc="none", mec="black", mew=0.3),    # unfilled face
+    dict(marker="+", mew=0.3),                             # unfilled marker
+    dict(marker="o", mfc="tab:blue", mec="black", mew=0.3),  # second colour
+])
+def test_line_weight_catches_a_thin_marker_outline(marker):
+    """An outline the reader needs, under Science's 0.5pt."""
+    fig = _outline_fixture(**marker)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series" in detail
+
+
+@pytest.mark.parametrize("marker", [
+    dict(marker="o", mfc="tab:blue", mec="tab:blue", mew=0.3),  # the face
+    dict(marker="o", mfc="tab:blue", mec="white", mew=0.3),     # a halo
+    dict(marker="o", mfc="white", mec="black", mew=0.6),        # clears 0.5
+])
+def test_line_weight_passes_an_outline_that_carries_nothing_or_clears(marker):
+    """seaborn's sheets draw 0.24 to 0.48pt edges in the face colour; dropping
+    out, they lose nothing."""
+    fig = _outline_fixture(**marker)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_catches_a_thin_hollow_scatter():
+    """The scatter route: `facecolors="none"` with a 0.3pt edge."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 0], facecolors="none", edgecolors="black",
+               linewidths=0.3, label="series")
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series" in detail
+
+
+def test_line_weight_skips_ticks_with_no_colour():
+    """`tick_params(color="none")` keeps the width and draws no ink."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=3.0)
+    ax.spines[:].set_linewidth(2.0)
+    ax.tick_params(color="none")
+    try:
+        status, detail = cf.check_line_weight(fig, scale=0.5)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+@pytest.mark.parametrize("hide", ["axis_off", "x_hidden"])
+def test_line_weight_skips_furniture_that_is_not_drawn(hide):
+    """`set_axis_off` drops the spines, ticks and grid from `Axes.draw`; a
+    hidden axis drops its own ticks and grid. An imshow panel with no axes is
+    the ordinary case."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.imshow([[0, 1], [1, 0]])
+    ax.grid(True, lw=0.2)
+    if hide == "axis_off":
+        ax.set_axis_off()
+    else:
+        ax.spines[:].set_linewidth(2.0)
+        ax.yaxis.set_tick_params(width=2.0)
+        ax.yaxis.grid(False)
+        ax.xaxis.set_visible(False)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=0.33)
+    finally:
+        plt.close(fig)
+    assert status is True, detail
+
+
+def test_line_weight_reads_a_transparent_axes_as_the_page_under_it():
+    """`set_facecolor("none")` is RGBA (0, 0, 0, 0). Its RGB is black, so a
+    black outline read against it looked like a halo and went unmeasured."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.set_facecolor("none")
+    ax.scatter([0, 1, 2], [0, 1, 0], edgecolors="k", linewidths=0.2,
+               label="series")
+    ax.spines[:].set_linewidth(1.0)
+    ax.tick_params(width=1.0)
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of series at 0.20pt" in detail
+
+
+def test_line_weight_names_an_unlabelled_outline_a_series():
+    fig = _outline_fixture(marker="+", mew=0.3)
+    fig.axes[0].lines[0].set_label("_child0")
+    try:
+        status, detail = cf.check_line_weight(fig, scale=1.0)
+    finally:
+        plt.close(fig)
+    assert status is False
+    assert "marker outlines of a series" in detail
 
 
 # --- banking ---------------------------------------------------------------

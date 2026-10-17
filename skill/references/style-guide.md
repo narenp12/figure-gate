@@ -610,8 +610,10 @@ The scale is per figure because the shrink differs. A 14in figure on a 750pt
 slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
 one and illegible in the other.
 
-**7.5pt is stricter than the Nature, PNAS and Science figure guides.** Nature
-sets a 5pt minimum and a 7pt maximum for text in figures. PNAS requires numbers,
+**7.5pt is above the minimum in the Nature, PNAS and Science figure guides.**
+Nature sets a 5pt minimum and a 7pt maximum for text in figures, so for Nature
+the gate's floor drops to 7pt (`VENUE_TYPE_CEILING_PT`). Its panel labels are
+the exception: 8pt bold, upright and lowercase (`VENUE_PANEL_LABEL_PT`). PNAS requires numbers,
 letters and symbols no smaller than 6pt after reduction, which is the same
 requirement its guidelines also state as 2mm. Science publishes no text floor at
 all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold
@@ -677,10 +679,9 @@ or disappear in print. A 0.8pt stroke in a 9in figure placed at 5.5in prints at
 `page_scale`. Furniture is held to a lower floor than data deliberately: a
 gridline that drops out costs a reference, and a curve that drops out costs the
 finding. Science states the lower number, a minimum of 0.5 point at the final
-reduced size for line widths, and the axis rule and the grid are measured
-against that rather than against the data floor. Tick marks are not measured at
-all, because the sheet sets no tick width and judging matplotlib's default
-reports the library rather than the figure.
+reduced size for line widths, and the axis rule, the ticks, the grid and any
+marker outline that carries the mark are measured against that rather than
+against the data floor.
 
 **Embed fonts as Type 42.** matplotlib defaults to Type 3. IEEE PDF eXpress
 takes embedded Type 1 or TrueType and does not accept Type 3, so the upload is
@@ -700,6 +701,9 @@ Call `describe(fig, ...)`, then
 time so the call can pick the key that format takes. Say what the reader would
 have taken from looking, meaning the numbers and the direction, rather than what
 the figure is made of. "A line chart with three lines" describes the file.
+Blind readers ranked statistics and trends the most useful content, and marks,
+encodings and social or political context the least (Lundgard & Satyanarayan,
+in the references).
 
 ---
 
@@ -794,8 +798,8 @@ kinds, and the reason `misc` fails, comes from this literature.
 - Nuñez, J. R., Anderton, C. R. & Renslow, R. S. (2018). Optimizing colormaps
   with consideration for color vision deficiency to enable accurate
   interpretation of scientific data. *PLoS ONE* 13(7), e0199239.
-  doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question, and
-  the argument the Okabe-Ito section above rests on.
+  doi:10.1371/journal.pone.0199239. The CVD-safe side of the same question for
+  continuous maps: cividis, optimised in CAM02-UCS for deuteranomaly.
 - Okabe, M. & Ito, K. (2002, revised 2008). Color Universal Design (CUD): How
   to make figures and presentations that are friendly to colorblind people.
   jfly.uni-koeln.de/color/. The eight-colour set and its published order.
@@ -827,11 +831,11 @@ kinds, and the reason `misc` fails, comes from this literature.
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
   doi:10.1109/TVCG.2009.113. The severity model. Their Table 1 publishes a
-  simulation matrix at each severity from 0.0 to 1.0 in tenths, and severity 1.0
-  is calibrated against the same dichromacy model `simulate` uses, which is what
-  lets the two be read side by side.
+  simulation matrix at each severity from 0.0 to 1.0 in tenths. Severity 1.0 is
+  scaled to match Brettel, Viénot & Mollon (1997). `simulate` uses the same
+  authors' 1999 model for protan and deutan.
 
-Three more, for claims the sections above make outside colour.
+Four more, for claims the sections above make outside colour.
 
 - Tufte, E. R. (1983). *The Visual Display of Quantitative Information.*
   Graphics Press. The data-ink ratio that `check_ink` is not.
@@ -842,7 +846,14 @@ Three more, for claims the sections above make outside colour.
   arXiv:2308.03241. The 99.81% is their measured figure: of the
   programmatically generated images across 100,000 notebooks, N=342102 carry no
   alternative text. They also identify matplotlib as the most-imported charting
-  library in the corpus, seaborn second and built on it.
+  library in the 39,540 notebooks with images, seaborn second and built on it.
+- Lundgard, A. & Satyanarayan, A. (2022). Accessible Visualization via Natural
+  Language Descriptions: A Four-Level Model of Semantic Content. *IEEE
+  Transactions on Visualization and Computer Graphics* 28(1), 1073-1083.
+  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. 30 blind readers ranked
+  Levels 2 and 3 (statistics, trends) most useful and Levels 1 and 4
+  (construction, context) least; 90 sighted readers ranked Levels 3 and 4
+  most useful.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.

@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -369,6 +369,20 @@ wheels = [
 ]
 
 [[package]]
+name = "daltonlens"
+version = "0.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/b3/beff9de96a0b68746507bc8a10ffb541e691c063b9a8675daaf4088a8c1c/daltonlens-0.1.5.tar.gz", hash = "sha256:4fb7d7951745b5c570e565113ea6610a6ba5522d599c27c25e070bb531de35ab", size = 293427, upload-time = "2021-11-22T09:32:04.919Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/65/e7/a6bea606f4e57fbfbbd5334e715be25c1d97d9018ff184ba5ec6e66c3b34/daltonlens-0.1.5-py3-none-any.whl", hash = "sha256:e66edeb4bb006579a60a9ed221a23a9493349b633cdf1c18133805f36d8ccd5f", size = 46367, upload-time = "2021-11-22T09:32:03.472Z" },
+]
+
+[[package]]
 name = "deepmerge"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -408,6 +422,7 @@ dev = [
     { name = "bump-my-version" },
     { name = "cmasher" },
     { name = "codespell" },
+    { name = "daltonlens" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -439,6 +454,7 @@ dev = [
     { name = "bump-my-version", specifier = ">=1.0" },
     { name = "cmasher", specifier = ">=1.9" },
     { name = "codespell", specifier = ">=2.3" },
+    { name = "daltonlens", specifier = "==0.1.5" },
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=7.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
