@@ -353,7 +353,7 @@ BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit.
 #
-# Above every journal's published minimum: Nature sets 5pt, and PNAS requires
+# Above the minimum of each journal named here: Nature sets 5pt, PNAS requires
 # nothing smaller than 6pt after reduction, which its guidelines also state as
 # 2mm. Science publishes no text floor at all, only a 6pt minimum on symbols.
 # Those are the sizes at which a string is still *possible* to read. 7.5 is the

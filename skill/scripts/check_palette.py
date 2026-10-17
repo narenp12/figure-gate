@@ -379,8 +379,8 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 #
 # Protan and deutan only. The repository already reports tritan without gating
 # it, and DaltonLens 0.1.5's `Simulator_Machado2009` notes that the model "does
-# not work well for tritanopia", so shipping a tritan severity table here would
-# be spending credibility on the one form neither model is validated for.
+# not work well for tritanopia", so a tritan severity table here would rest on
+# a model DaltonLens flags as unsound for it.
 #
 # Applied on linear light, like `simulate`. The published table does not state a
 # transfer function, and the domain was settled by measurement rather than by
@@ -715,8 +715,8 @@ CHROMA_MIN = 0.10
 # The anchor is Stone, Szafir & Setlur (2014), who measured the colour
 # difference half of observers notice as a function of target size, C + K/s with
 # s the visual angle in degrees, fitted from 0.333 to 6 degrees, one fit per
-# axis of L*, a* and b*. At 0.333 degrees - the smallest size their fit covers,
-# and the closest thing in the literature to a hairline - the mean of the three
+# axis of L*, a* and b*. At 0.333 degrees, the smallest size their fit covers
+# and the closest thing in the literature to a hairline, the mean of the three
 # fits in their Table 3 is 10.4 CIELAB.
 #
 # Their number is in CIELAB and the gate measures in CAM02-UCS, so it needs a

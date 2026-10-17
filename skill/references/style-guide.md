@@ -611,10 +611,10 @@ slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine i
 one and illegible in the other.
 
 **7.5pt is above the minimum in the Nature, PNAS and Science figure guides.**
-Nature sets a 5pt minimum and a 7pt maximum for text in figures, so for Nature
-the gate's floor drops to 7pt (`VENUE_TYPE_CEILING_PT`). Its panel labels are
-the exception: 8pt bold, upright and lowercase (`VENUE_PANEL_LABEL_PT`). PNAS requires numbers,
-letters and symbols no smaller than 6pt after reduction, which is the same
+Nature sets a 5pt minimum and a 7pt maximum for text in figures, so with a
+Nature venue the gate's floor drops to 7pt (`VENUE_TYPE_CEILING_PT`). Its panel
+labels are the exception: 8pt bold, upright and lowercase
+(`VENUE_PANEL_LABEL_PT`). PNAS requires numbers, letters and symbols no smaller than 6pt after reduction, which is the same
 requirement its guidelines also state as 2mm. Science publishes no text floor at
 all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold
 part labels. Those are the sizes at which a string is still *possible* to read.
@@ -850,10 +850,8 @@ Four more, for claims the sections above make outside colour.
 - Lundgard, A. & Satyanarayan, A. (2022). Accessible Visualization via Natural
   Language Descriptions: A Four-Level Model of Semantic Content. *IEEE
   Transactions on Visualization and Computer Graphics* 28(1), 1073-1083.
-  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. 30 blind readers ranked
-  Levels 2 and 3 (statistics, trends) most useful and Levels 1 and 4
-  (construction, context) least; 90 sighted readers ranked Levels 3 and 4
-  most useful.
+  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. The four-level model,
+  and the ranking above from 30 blind readers.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.
