@@ -6045,9 +6045,12 @@ def test_the_sizes_the_docs_quote(family, size):
     absent."""
     import math
     from matplotlib import font_manager as fm
+    path = None
     try:
         path = fm.findfont(family, fallback_to_default=False)
     except ValueError:
+        pass
+    if path is None:
         pytest.skip(f"{family} is not installed")
     frac = cf.x_height_fraction(path)
     assert math.ceil(round(cf.XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10 == size
