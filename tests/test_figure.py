@@ -6049,7 +6049,8 @@ def test_the_sizes_the_docs_quote(family, size):
     try:
         path = fm.findfont(family, fallback_to_default=False)
     except ValueError:
-        pass
+        # Family not available without fallback on this system; skip below.
+        path = None
     if path is None:
         pytest.skip(f"{family} is not installed")
     frac = cf.x_height_fraction(path)
