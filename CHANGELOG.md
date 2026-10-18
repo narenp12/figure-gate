@@ -19,19 +19,42 @@ behind a threshold this project enforces.
 
 - `check_figure.TYPE_CEILING_PT` (default `math.inf`), `VENUE_TYPE_CEILING_PT`
   (`nature`, `nature-column`: 7.0), `VENUE_PANEL_LABEL_PT` (`nature`,
-  `nature-column`: 8.0) and `type_ceiling_pt(venue, *, panel_label=False)`,
-  the stricter of `TYPE_CEILING_PT` and the venue's row.
-- `check_type_size`: floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
+  `nature-column`: 8.0) and
+  `type_ceiling_pt(venue=None, *, panel_label=False)`, the stricter of
+  `TYPE_CEILING_PT` and the venue's row.
+- `load_config`: `venue` selects the venue `type_ceiling_pt()` reads; a later
+  file setting `venue` or `CONTENT_WIDTH_PT` replaces it.
+- `check_palette.BRETTEL_TRITAN`, the constants the tritan simulation reads.
+- `tests/test_cvd_oracle.py`, checking them against DaltonLens-Python 0.1.5.
+  `daltonlens==0.1.5` joins the `dev` group.
+- `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
+  `tests/test_palette.py`.
+- `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
+  entries, in `tests/test_prose_claims.py`.
+- `EXTERNAL_CLAIMS["vislint_mpl linting built figures"]` and
+  `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
+- `EXTERNAL_CLAIMS["alt text semantic levels"]`, and `Lundgard` in
+  `GUIDE_CITED`.
+- `check_figure.XHEIGHT_FLOOR_PT = 4.0` and `x_height_fraction(path)`.
+- `check_type_size` warns when a string with a lowercase letter has an x-height
+  under `XHEIGHT_FLOOR_PT` on the page, measured in the font that draws its
+  lowercase glyphs. The `[FIX]` names the size that clears it, or a face with a
+  taller x-height where the ceiling allows no larger. `usetex` text is not
+  measured.
+- `style-guide.md` References: Legge & Bigelow (2011).
+  `EXTERNAL_CLAIMS["fluent print size"]`,
+  `RETRACTED_CLAIMS["7.5pt as the size where text is comfortable"]`, and
+  `Legge` in `GUIDE_CITED`.
+
+#### Changed
+
+- `check_type_size`: the floor is `min(TYPE_FLOOR_PT, ceiling)`; text over the
   ceiling fails. A bold, upright, one-lowercase-letter string is held to
   `VENUE_PANEL_LABEL_PT` instead. The over-ceiling `[FIX]` gives the authored
   size, `floor / scale`. Where no base under the ceiling lifts a script to
   `MATH_SCRIPT_FLOOR_PT`, the script `[FIX]` names `LogFormatter()` and
   `text.usetex` instead of raising the base.
-- `load_config`: `venue` selects the venue `type_ceiling_pt()` reads; a later
-  file setting `venue` or `CONTENT_WIDTH_PT` replaces it.
-
-#### Changed
-
+- `TYPE_FLOOR_PT` is 6.0, not 7.5.
 - `check_palette.simulate(rgb, "tritan")` uses Brettel, Viénot & Mollon
   (1997). `CVD["tritan"]`, the Viénot 1999 matrix, is removed.
 - `style-guide.md` References: the Machado entry says severity 1.0 is scaled
@@ -61,31 +84,37 @@ behind a threshold this project enforces.
   `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
   axes with `axison` false and ticks and gridlines on a hidden axis.
 
-#### Added
-
-- `check_palette.BRETTEL_TRITAN`, the constants the tritan simulation reads.
-- `tests/test_cvd_oracle.py`, checking them against DaltonLens-Python 0.1.5.
-  `daltonlens==0.1.5` joins the `dev` group; the oracle calls a private
-  method.
-- `test_a_tritan_gate_at_cvd_target_would_fail_okabe_ito` in
-  `tests/test_palette.py`.
-- `EXTERNAL_CLAIMS["cividis optimisation"]`, and three `RETRACTED_CLAIMS`
-  entries, in `tests/test_prose_claims.py`.
-- `EXTERNAL_CLAIMS["vislint_mpl linting built figures"]` and
-  `RETRACTED_CLAIMS["no other tool reading the built figure"]`.
-- `EXTERNAL_CLAIMS["alt text semantic levels"]`, and `Lundgard` in
-  `GUIDE_CITED`.
-
 ### Why it changed
 
-`TYPE_FLOOR_PT = 7.5` sits above Nature's 7pt maximum, so no size passed both
-(#107). A SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, failed
-5 of 5 with-skill figures on text at 7.5 to 8.0pt. Capping the floor at the
+`TYPE_FLOOR_PT = 7.5` had no source. It shipped in the initial release, and
+"7.5 is where it is comfortable" was added two days later. 6.0 is the minimum
+PNAS and Science publish, already quoted in `EXTERNAL_CLAIMS["journal type
+floors"]`.
+
+An x-height gate was built and rejected. Legge & Bigelow (2011) put the start
+of fluent reading at an x-height of 0.2 degrees, 4.0pt at 40cm, but that
+consensus is for continuous reading, not glanced labels. Gated, it failed 15 of
+the 40 SkillsBench figures that passed 7.5pt, under the Linux fonts the bench
+ran with. In 8 of the 15 the smallest failing strings were numerals, which
+stand near cap height and which x-height does not describe. Its body floor
+also moved with the installed fonts: 8.5pt in STIX Two Text, 8.9pt in
+STIXGeneral. It ships as the warning, on lowercase only.
+
+Re-running the 66 SkillsBench scripts that reach a `report` or `audit` call,
+the 40 that passed 7.5pt now pass in 27 and warn in 13. Of the 26 that failed,
+23 still fail, every one on a venue ceiling, and 3 with text between 6 and
+7.5pt now pass or warn. `make sweep` over the 21 corpus figures records no
+verdict change; their smallest string is 9.0pt.
+
+`TYPE_FLOOR_PT = 7.5` sat above Nature's 7pt maximum, so no size passed both
+(#107). In a SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, all
+5 with-skill text-size failures were text at 7.5 to 8.0pt. Capping the floor at the
 ceiling adds no number the guides do not publish.
 
 Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
 open-source simulators calls Brettel 1997 "the most solid and basically only
 valid choice" for tritanopia. The oracle agrees to 4.7e-8 in linear RGB.
+`daltonlens` is pinned exactly because the oracle calls a private method.
 
 The `tritan` figure in the CVD separation row moves: Okabe-Ito's first three
 slots read 12.2, not 12.5. `make sweep` over the 21 corpus figures records no
@@ -93,9 +122,9 @@ verdict change.
 
 Tritan stays reported and ungated. Gating it at `CVD_TARGET` was measured and
 rejected: Okabe-Ito's six series slots, all pairs, read tritan 10.1 (`#E69F00`
-against `#CC79A7`). Over matplotlib 3.11.1's style palettes, first 3, 4 and 6
-colours, 25 of 55 pass red-green; the gate would fail one more of those 25,
-`Solarize_Light2` at 5.0. It would fail the recommended palette to catch one
+against `#CC79A7`). Of matplotlib 3.11.1's 28 style cycles cut to their first
+3, 4 and 6 colours, 20 of 83 pass red-green on all pairs; a tritan gate would
+fail one of those 20, `Solarize_Light2` at 5.0. It would fail the recommended palette to catch one
 style.
 
 Three citations were checked against the papers' full text and did not hold.
@@ -139,10 +168,10 @@ first file's venue ceiling. Ticks drawn in `"none"`, furniture on an axes
 switched off, and black outlines on a `"none"` axes background were each
 misread.
 
-Marker outlines were never measured. Another run drew hollow markers with a
-1.0pt edge in the same 9in figure: 0.4pt printed. Against `LINE_FLOOR_PT` the
-outline floor would have failed `gallery-field`'s 0.8pt star edge, so it uses
-the 0.5pt floor. Five seaborn sheets draw 0.24 to 0.48pt edges in the face
+`check_line_weight` did not measure marker outlines. Another run drew filled
+markers with a 1.0pt black edge in the same 9in figure: 0.4pt printed. Held to
+`LINE_FLOOR_PT`, outlines would fail `gallery-field`'s 0.8pt star edge, so they
+are held to `FURNITURE_FLOOR_PT`. Five seaborn sheets draw 0.24 to 0.48pt edges in the face
 colour; those carry nothing and are skipped. The corpus records no verdict
 change, and none of the 84 style-sheet figures fails.
 

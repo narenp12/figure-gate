@@ -67,8 +67,8 @@ def audited(styled, figsize, ticks=False, described=False, **audit_kwargs):
                 ax.set_xlabel("Epoch")
                 ax.set_ylabel("Validation loss")
             else:
-                ax.set_xlabel("Epoch", fontsize=6)
-                ax.set_ylabel("Validation loss", fontsize=6)
+                ax.set_xlabel("Epoch", fontsize=5)
+                ax.set_ylabel("Validation loss", fontsize=5)
             if ticks:
                 ax.set_xticks([2, 4, 6, 8, 10, 12])
             ax.legend()
@@ -151,7 +151,7 @@ def test_the_page_prints_this_alt_text_and_its_length():
     "figsize=(2.65, 1.9)",
     'venue="neurips", placed_frac=0.48',
     "ax.set_xticks([2, 4, 6, 8, 10, 12])",
-    'ax.set_xlabel("Epoch", fontsize=6)',
+    'ax.set_xlabel("Epoch", fontsize=5)',
 ])
 def test_the_page_still_builds_the_figures_this_file_measures(quoted):
     """The fixtures above are a copy of the page's code, and a copy is a thing

@@ -51,7 +51,7 @@ COLOR:       categorical  Okabe-Ito, first N in order
 
 SIZE:        author at placed width → scale = 1.0, points are points
              otherwise check_figure.py derives scale from CONTENT_WIDTH_PT
-             type floor 7.5pt on page; cut words before shrinking
+             type floor 6pt on page; cut words before shrinking
 
 VALIDATE:    check_palette.py "<hexes>"  &&  report(fig)  &&  open PNG
 ```
@@ -603,23 +603,33 @@ Set `CONTENT_WIDTH_PT` once in `check_figure.py`, or pass `venue=` for one of
 the eighteen the table already knows (`python check_figure.py --venues`). A
 project with more than one author writes either one in a `figure-gate.toml` and
 calls `load_config` instead, so the build and every author read the same number.
-The script derives the scale per figure and fails any string under 7.5pt on the
-page.
+The script derives the scale per figure and fails any string that lands under
+6pt on the page.
 
 The scale is per figure because the shrink differs. A 14in figure on a 750pt
 slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
 one and illegible in the other.
 
-**7.5pt is above the minimum in the Nature, PNAS and Science figure guides.**
-Nature sets a 5pt minimum and a 7pt maximum for text in figures, so for Nature
-the gate's floor drops to 7pt (`VENUE_TYPE_CEILING_PT`). Its panel labels are
-the exception: 8pt bold, upright and lowercase (`VENUE_PANEL_LABEL_PT`). PNAS requires numbers,
-letters and symbols no smaller than 6pt after reduction, which is the same
-requirement its guidelines also state as 2mm. Science publishes no text floor at
-all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and 10pt bold
-part labels. Those are the sizes at which a string is still *possible* to read.
-7.5 is where it is comfortable, and it costs nothing to hold, because the fix is
-nearly always cutting words.
+**The floor is 6pt, the minimum PNAS and Science publish.** PNAS requires
+numbers, letters and symbols no smaller than 6pt after reduction, which is the
+same requirement its guidelines also state as 2mm. Science publishes no text
+floor at all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and
+10pt bold part labels. Nature sets a 5pt minimum and a 7pt maximum for text in
+figures, so with a Nature venue text over 7pt fails
+(`VENUE_TYPE_CEILING_PT`). Its panel labels are the exception: 8pt bold,
+upright and lowercase (`VENUE_PANEL_LABEL_PT`).
+
+**Under 4pt of x-height the row warns.** Legge & Bigelow (2011) put the start
+of the fluent range at an x-height of 0.2 degrees, 4pt at a 40cm reading
+distance. That consensus is for continuous reading, and a label is glanced at,
+so text under it is slower to read rather than illegible. Body size is a poor
+proxy for it: Times New Roman's x-height is 0.45 of its body and DejaVu Sans's
+0.547. The body size that clears 4pt is 7.4pt in DejaVu Sans, 8.5pt in STIX Two
+Text and 8.9pt in STIXGeneral, which is the STIX this sheet falls back to where
+STIX Two is not installed. Only strings with a lowercase letter are measured:
+digits and capitals stand taller than the x-height.
+
+The fix is nearly always cutting words.
 
 If text does not fit, cut it. "Acquisition function ranks the candidate
 molecules" becomes "Rank every candidate."
@@ -629,7 +639,7 @@ not render at the size you asked for: each nesting level is drawn at 0.7 of the
 level above, so `$x_{i_{j_{k}}}$` set at 11pt puts a `k` on the page at 3.77pt
 while `get_fontsize()` still reports 11.0.
 
-Holding those glyphs to 7.5pt would be wrong, and measuring it that way is what
+Holding those glyphs to the body floor would be wrong, and measuring it that way is what
 showed it. A first-level subscript at a 10pt base lands at 7.0pt, which is
 Nature's stated *maximum* for figure text and entirely publishable; failing it
 condemns every log axis, because `$\mathdefault{10^{-11}}$` is matplotlib's own
@@ -655,8 +665,8 @@ is nearly always better written as two symbols and a definition in the caption.
 fails when a string's bounding box crosses the canvas edge, and the cause is
 nearly always a figure authored at a size its labels do not fit in. Shrinking
 type until it fits pays for canvas space out of the legibility budget, and a
-string driven under 7.5pt on the page has bought a Clipping pass with a Type
-size failure.
+string driven under the floor has bought a Clipping pass with a Type size
+failure.
 
 `bbox_inches="tight"` is the one to watch, because it fails nothing. It
 trims the canvas to the drawn content, so the saved file is no longer the width
@@ -835,7 +845,12 @@ kinds, and the reason `misc` fails, comes from this literature.
   scaled to match Brettel, Viénot & Mollon (1997). `simulate` uses the same
   authors' 1999 model for protan and deutan.
 
-Four more, for claims the sections above make outside colour.
+Five more, for claims the sections above make outside colour.
+
+- Legge, G. E. & Bigelow, C. A. (2011). Does print size matter for reading? A
+  review of findings from vision science and typography. *Journal of Vision*
+  11(5):8. doi:10.1167/11.5.8. The 0.2 degree start of the fluent range, and
+  Times New Roman's 0.45 x-height fraction.
 
 - Tufte, E. R. (1983). *The Visual Display of Quantitative Information.*
   Graphics Press. The data-ink ratio that `check_ink` is not.
@@ -850,10 +865,8 @@ Four more, for claims the sections above make outside colour.
 - Lundgard, A. & Satyanarayan, A. (2022). Accessible Visualization via Natural
   Language Descriptions: A Four-Level Model of Semantic Content. *IEEE
   Transactions on Visualization and Computer Graphics* 28(1), 1073-1083.
-  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. 30 blind readers ranked
-  Levels 2 and 3 (statistics, trends) most useful and Levels 1 and 4
-  (construction, context) least; 90 sighted readers ranked Levels 3 and 4
-  most useful.
+  doi:10.1109/TVCG.2021.3114770, arXiv:2110.04406. The four-level model,
+  and the ranking above from 30 blind readers.
 - Bateman, S., Mandryk, R. L., Gutwin, C., Genest, A., McDine, D. & Brooks, C.
   (2010). Useful junk? The effects of visual embellishment on comprehension
   and memorability of charts. *CHI '10*, 2573-2582.

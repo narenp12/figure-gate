@@ -3583,15 +3583,15 @@ def _type_at(size_pt, width_pt):
     return fig
 
 
-@pytest.mark.parametrize("size_pt, ok", [(6.5, False), (7.0, True), (7.5, False)])
+@pytest.mark.parametrize("size_pt, ok", [(5.9, False), (7.0, True), (7.5, False)])
 def test_nature_caps_the_floor_at_its_ceiling(size_pt, ok):
-    """Nature's 7pt maximum sits under the 7.5pt floor, so the floor drops to
-    7.0 and the band is one size. The SkillsBench A/B failed every with-skill
-    Nature figure that held 7.5pt (issue #107)."""
+    """Under Nature the band is 6pt to its 7pt maximum. The old 7.5pt floor sat
+    above the maximum, and the SkillsBench A/B failed every with-skill Nature
+    figure that held 7.5pt (issue #107)."""
     fig = _type_at(size_pt, cf.VENUE_WIDTH_PT["nature-column"])
     verdict = gates(cf.audit(fig, venue="nature-column")[1])["Type size"]
     plt.close(fig)
-    assert verdict is ok
+    assert (verdict is not False) is ok
 
 
 def test_a_venue_without_a_ceiling_drops_the_configured_one(monkeypatch):
@@ -3636,7 +3636,7 @@ def test_nature_panel_labels_may_be_8pt_bold_lowercase(text, style, ok):
     status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
                                         venue="nature-column")
     plt.close(fig)
-    assert status is ok, detail
+    assert (status is not False) is ok, detail
 
 
 def test_the_ceiling_fix_names_the_authored_size():
@@ -3669,7 +3669,8 @@ def test_nature_log_ticks_fail_with_a_fix_that_works():
     status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
                                         venue="nature-column")
     plt.close(fig)
-    assert status is True, detail
+    assert status is not False, detail
+    assert "mathtext script" not in detail, detail
 
 
 def test_placed_frac_without_any_width_still_refuses():
@@ -3689,7 +3690,7 @@ def test_venue_cannot_be_passed_positionally():
     raises, and the venue is discarded: a failing figure reported green."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot([0, 1], [0, 1])
-    ax.set_xlabel("x", fontsize=8)
+    ax.set_xlabel("x", fontsize=6)
     with pytest.raises(TypeError):
         cf.audit(fig, None, 1.0, "neurips")
     assert gates(cf.audit(fig, venue="neurips")[1])["Type size"] is False
@@ -5926,3 +5927,131 @@ def test_audit_json_leaves_the_figure_on_its_authored_dpi(clean):
     authored = clean.get_dpi()
     cf.audit_json(clean)
     assert clean.get_dpi() == authored
+
+
+# --- a 6pt body floor, and an x-height advisory ----------------------------
+# The gate is PNAS's and Science's 6pt. Under it, Legge & Bigelow's 0.2 degree
+# start of fluent reading, an x-height of 4.0pt at 40cm, is a warning: body
+# size is x-height over the font's fraction, so 8pt is 4.38pt of x-height in
+# DejaVu Sans and 3.60pt in STIXGeneral. Both fonts ship with matplotlib.
+
+
+def _type_in(family, size_pt, label="Dose (mg)", **rc):
+    with plt.rc_context({"font.family": family, **rc}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.plot([0, 1], [0, 1])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel(label, fontsize=size_pt)
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            scale=1.0)
+    plt.close(fig)
+    return status, detail
+
+
+def test_the_x_height_fraction_is_read_off_the_font():
+    """The fractions the advisory divides by, measured from the `x` glyph."""
+    from matplotlib import font_manager as fm
+    dejavu = fm.findfont("DejaVu Sans", fallback_to_default=False)
+    stix = fm.findfont("STIXGeneral", fallback_to_default=False)
+    assert cf.x_height_fraction(dejavu) == pytest.approx(0.547, abs=1e-3)
+    assert cf.x_height_fraction(stix) == pytest.approx(0.450, abs=1e-3)
+
+
+def test_a_font_with_no_x_has_no_fraction():
+    """`cmex10` carries no `x`, so it says nothing about x-height."""
+    from matplotlib import font_manager as fm
+    assert cf.x_height_fraction(
+        fm.findfont("cmex10", fallback_to_default=False)) is None
+
+
+@pytest.mark.parametrize("size_pt, status", [
+    (5.9, False), (6.0, "warn"), (8.8, "warn"), (8.9, True)])
+def test_six_points_gate_and_the_x_height_warns(size_pt, status):
+    """In STIXGeneral 4.0 / 0.450 is 8.89pt: between 6pt and that, the row
+    warns rather than fails."""
+    assert _type_in("STIXGeneral", size_pt)[0] == status
+
+
+def test_the_warning_names_the_size_that_clears_it():
+    status, detail = _type_in("STIXGeneral", 8.0)
+    assert status == "warn", detail
+    assert "smallest 8.0pt on page (floor 6.0)" in detail, detail
+    assert "set it at 8.9pt as authored, 8.9pt on the page" in detail, detail
+
+
+def test_numerals_are_not_held_to_the_x_height():
+    """A digit stands near cap height, not x-height, so a string with no
+    lowercase letter gets the body floor alone."""
+    assert _type_in("STIXGeneral", 7.0, label="1800")[0] is True
+    assert _type_in("STIXGeneral", 7.0, label="DOSE (MG)")[0] is True
+    assert _type_in("STIXGeneral", 7.0, label="Dose")[0] == "warn"
+
+
+def test_a_house_type_floor_still_holds(monkeypatch):
+    monkeypatch.setattr(cf, "TYPE_FLOOR_PT", 9.0)
+    assert _type_in("DejaVu Sans", 8.0)[0] is False
+    assert _type_in("DejaVu Sans", 9.0)[0] is True
+
+
+def test_under_a_ceiling_the_warning_says_no_larger_size_exists():
+    """STIXGeneral's 8.9pt is over Nature's 7pt maximum. The row passes the
+    gate and warns, naming the face rather than a size it cannot have."""
+    with plt.rc_context({"font.family": "STIXGeneral"}):
+        fig = _type_at(7.0, cf.VENUE_WIDTH_PT["nature-column"])
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            venue="nature-column")
+    plt.close(fig)
+    assert status == "warn", detail
+    assert "the 7.0pt maximum allows no larger" in detail, detail
+
+
+def _math_fraction(label, fontset):
+    with plt.rc_context({"font.family": "DejaVu Sans",
+                         "mathtext.fontset": fontset}):
+        fig = plt.figure()
+        t = fig.text(0.1, 0.5, label, fontsize=10)
+        frac = cf._x_height_fraction_of(t)
+    plt.close(fig)
+    return frac
+
+
+def test_mathtext_is_measured_in_the_font_it_draws_lowercase_in():
+    assert _math_fraction(r"$x$", "dejavusans") == pytest.approx(0.547, abs=1e-3)
+    assert _math_fraction(r"$x$", "stix") < 0.46
+
+
+def test_a_symbol_glyph_does_not_set_the_fraction():
+    """`\\sum` is drawn from a font with no `x`. It used to drag the string to
+    a fallback fraction; it now counts for nothing."""
+    assert _math_fraction(r"$\sum x$", "dejavusans") == \
+        pytest.approx(0.547, abs=1e-3)
+    assert _math_fraction(r"$\sum$", "dejavusans") is None
+
+
+def test_usetex_text_is_not_measured():
+    fig = plt.figure()
+    t = fig.text(0.1, 0.5, "x", usetex=True)
+    assert cf._x_height_fraction_of(t) is None
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("family, size", [
+    ("DejaVu Sans", 7.4), ("STIXGeneral", 8.9), ("STIX Two Text", 8.5),
+    ("Helvetica", 7.7)])
+def test_the_sizes_the_docs_quote(family, size):
+    """The body size that clears the x-height advisory, as `gates.md` and the
+    style guide quote it. The last two are system fonts and skip where
+    absent."""
+    import math
+    from matplotlib import font_manager as fm
+    path = None
+    try:
+        path = fm.findfont(family, fallback_to_default=False)
+    except ValueError:
+        # Family not available without fallback on this system; skip below.
+        path = None
+    if path is None:
+        pytest.skip(f"{family} is not installed")
+    frac = cf.x_height_fraction(path)
+    assert math.ceil(round(cf.XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10 == size

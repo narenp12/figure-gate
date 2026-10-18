@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import functools
 import importlib
 import itertools
 import math
@@ -82,12 +83,12 @@ __all__ = [
     "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
     "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
-    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
+    "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "XHEIGHT_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
     "VENUE_PANEL_LABEL_PT",
-    "content_width_pt", "type_ceiling_pt",
+    "content_width_pt", "type_ceiling_pt", "x_height_fraction",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
     "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
@@ -351,24 +352,28 @@ LARGE_TEXT_BOLD_PT = 14.0
 # It decides which of the two sizes above applies.
 BOLD_WEIGHT_MIN = 600
 
-# Type floor, in points ON THE PAGE, after the figure is scaled to fit.
-#
-# Above every journal's published minimum: Nature sets 5pt, and PNAS requires
-# nothing smaller than 6pt after reduction, which its guidelines also state as
-# 2mm. Science publishes no text floor at all, only a 6pt minimum on symbols.
-# Those are the sizes at which a string is still *possible* to read. 7.5 is the
-# size at which it is comfortable, and it is cheap to hold because the fix is
-# nearly always cutting words rather than shrinking type. Nature also sets a
-# 7pt maximum, under this floor; `TYPE_CEILING_PT` below is how the two meet.
-# Verified 2026-08-17; the quotes are in `EXTERNAL_CLAIMS` in
-# tests/test_prose_claims.py.
-TYPE_FLOOR_PT = 7.5
+# Type floor, in points ON THE PAGE, after the figure is scaled to fit: the
+# minimum PNAS and Science publish. PNAS: "no smaller than 6 points after
+# reduction". Science: "6 point minimum" for symbols. Nature's minimum is
+# lower, 5pt. The quotes are in `EXTERNAL_CLAIMS` in
+# tests/test_prose_claims.py. A body size is what venues specify, so it is the
+# hard gate; the x-height floor below is advisory.
+TYPE_FLOOR_PT = 6.0
+
+# X-height floor, in points on the page: a warning, not a gate. Legge &
+# Bigelow (2011) put the start of the fluent range, the sizes read at full
+# speed, at an x-height of 0.2 degrees, 4.0pt at 40cm. Their consensus is for
+# continuous reading, and figure labels are glanced at, so text under it is
+# slower to read, not illegible. Body size is a poor proxy: Times New Roman's
+# x-height is 0.45 of its body and DejaVu Sans's 0.547. Only strings with a
+# lowercase letter are measured, since digits and capitals stand taller than
+# the x-height.
+XHEIGHT_FLOOR_PT = 4.0
 
 # Type ceiling, in points on the page: a house maximum, infinite by default. A
 # venue's published maximum (`VENUE_TYPE_CEILING_PT`) applies on top of it and
-# the stricter wins; see `type_ceiling_pt`. The floor in force is
-# `min(TYPE_FLOOR_PT, ceiling)`: Nature's 7pt maximum sits under 7.5, and no
-# size clears a floor above its ceiling.
+# the stricter wins; see `type_ceiling_pt`. The ceiling caps the floor, since
+# no size clears a floor above its ceiling.
 TYPE_CEILING_PT = math.inf
 
 # The `venue` the last configuration file named, or `None`. `load_config` sets
@@ -377,7 +382,7 @@ TYPE_CEILING_PT = math.inf
 _CONFIG_VENUE: str | None = None
 
 # Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
-# `TYPE_FLOOR_PT`.
+# the x-height floor.
 #
 # Mathtext does not render at the size the author asked for. Each nesting level
 # of a script is drawn at `SHRINK_FACTOR = 0.7` of the level above, so an 11pt
@@ -390,7 +395,7 @@ _CONFIG_VENUE: str | None = None
 # and two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
 # matplotlib's own log-axis tick label and which no author wrote. Setting a
 # script smaller than its base is not a defect, it is how mathematics has been
-# typeset for a century, and `TYPE_FLOOR_PT` is a *comfort* floor deliberately
+# typeset for a century, and the body floor is the start of fluent reading,
 # above any journal's minimum.
 #
 # 5.0 is where two independent sources agree the floor actually is. LaTeX's own
@@ -597,6 +602,59 @@ def type_ceiling_pt(venue: str | None = None, *,
     if panel_label:
         published = VENUE_PANEL_LABEL_PT.get(venue or "", published)
     return min(TYPE_CEILING_PT, published)
+
+
+@functools.cache
+def x_height_fraction(path: str) -> float | None:
+    """The height of a font's `x` over its em, read from the font file.
+
+    Args:
+        path: A font file, as `font_manager.findfont` returns.
+
+    Returns:
+        The fraction, or None when the font has no `x` or cannot be read.
+    """
+    from matplotlib import ft2font
+
+    no_scale = (ft2font.LoadFlags.NO_SCALE if hasattr(ft2font, "LoadFlags")
+                else ft2font.LOAD_NO_SCALE)
+    try:
+        font = ft2font.FT2Font(str(path))
+        if not font.get_char_index(ord("x")):
+            return None
+        top = font.load_char(ord("x"), flags=no_scale).bbox[3]
+    except Exception:                                            # noqa: BLE001
+        return None
+    return top / font.units_per_EM if top > 0 else None
+
+
+def _x_height_fraction_of(t: Any) -> float | None:
+    """The smallest x-height fraction among the fonts a `Text` draws its
+    lowercase letters in, or None when it draws none that can be measured.
+
+    Plain lines use the text's font. Mathtext lines are drawn in
+    `mathtext.fontset`, and the parser names the font and code point of every
+    glyph; only lowercase glyphs at the base size count, since scripts have
+    their own floor and a symbol font's `x` is not the letter. `usetex` text
+    is skipped: its font is the preamble's, which this cannot read.
+    """
+    from matplotlib import cbook, font_manager
+
+    if t.get_usetex():
+        return None
+    lines = str(t.get_text()).splitlines() or [""]
+    fractions: list[float | None] = []
+    if any(not cbook.is_math_text(line) and any(c.islower() for c in line)
+           for line in lines):
+        fractions.append(x_height_fraction(
+            font_manager.findfont(t.get_fontproperties())))
+    declared = float(t.get_fontsize())
+    for font, size, num, *_ in _math_glyphs(t) or []:
+        if (float(size) >= declared * 0.99 and chr(num).islower()
+                and getattr(font, "fname", None)):
+            fractions.append(x_height_fraction(font.fname))
+    measured = [f for f in fractions if f is not None]
+    return min(measured) if measured else None
 
 
 def page_scale(fig: Figure, placed_frac: float = 1.0,
@@ -2655,6 +2713,36 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
     return False, "; ".join(bits) + "  [FIX] use sharex/sharey"
 
 
+def _math_glyphs(t: Any) -> list | None:
+    """The mathtext parser's glyphs for a `Text`, each `(font, size, ...)`.
+
+    None when the string is empty, goes to a real LaTeX installation, or
+    mathtext cannot parse it. Lines with no math are not parsed.
+    """
+    s = str(t.get_text())
+    if not s or t.get_usetex():
+        return None
+
+    from matplotlib import cbook
+    from matplotlib.mathtext import MathTextParser
+
+    glyphs = []
+    try:
+        prop = t.get_fontproperties().copy()
+        prop.set_size(float(t.get_fontsize()))
+        parser = MathTextParser("path")
+        # Per line, the way `Text` lays one out. Handing the whole string over
+        # makes the parser warn that it has no glyph for U+000A and substitute
+        # a dummy, which is a warning printed at every audit of a figure whose
+        # only crime is a two-line axis label.
+        for line in s.splitlines() or [s]:
+            if line and cbook.is_math_text(line):
+                glyphs.extend(parser.parse(line, dpi=72, prop=prop).glyphs)
+    except Exception:                                            # noqa: BLE001
+        return None
+    return glyphs
+
+
 def _script_min_pt(t: Any) -> float | None:
     """The smallest size a *shrunk* mathtext glyph in this string renders at.
 
@@ -2678,30 +2766,10 @@ def _script_min_pt(t: Any) -> float | None:
     hard fail, and failing a figure because a label has an unbalanced brace is
     a defect in the checker reported as a defect in the figure.
     """
-    s = str(t.get_text())
-    if not s or t.get_usetex():
-        return None
-
-    from matplotlib import cbook
-    from matplotlib.mathtext import MathTextParser
-
-    declared = float(t.get_fontsize())
-    glyphs = []
-    try:
-        prop = t.get_fontproperties().copy()
-        prop.set_size(declared)
-        parser = MathTextParser("path")
-        # Per line, the way `Text` lays one out. Handing the whole string over
-        # makes the parser warn that it has no glyph for U+000A and substitute
-        # a dummy, which is a warning printed at every audit of a figure whose
-        # only crime is a two-line axis label.
-        for line in s.splitlines() or [s]:
-            if line and cbook.is_math_text(line):
-                glyphs.extend(parser.parse(line, dpi=72, prop=prop).glyphs)
-    except Exception:                                            # noqa: BLE001
-        return None
+    glyphs = _math_glyphs(t)
     if not glyphs:
         return None
+    declared = float(t.get_fontsize())
 
     # Anything at the base size is not a script. The margin absorbs the float
     # error in a chain of multiplications by 0.7 and nothing else; one shrink
@@ -2746,6 +2814,7 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     scale = page_scale(fig, placed_frac, venue) if scale is None else scale
     ghosts = _ghost_ticks(fig)
     texts = [t for t, _ in _texts(fig, r) if id(t) not in ghosts]
+    scale = float(scale)
     sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
              for t in texts]
     if not sizes:
@@ -2777,8 +2846,8 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
             bits.append(f"under {floor}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
         if large:
-            fix = (f"set text at {floor / scale:.1f}pt as authored, {floor}pt "
-                   "on the page")
+            fix = (f"set text at {ceiling / scale:.1f}pt as authored, "
+                   f"{ceiling}pt on the page")
             if label_ceiling > ceiling:
                 fix += (f"; a panel label may be {label_ceiling}pt, bold and "
                         "one lowercase letter")
@@ -2798,13 +2867,40 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
                 "under 5pt")
         return False, "; ".join(bits)
 
+    # The advisory: lowercase x-height against the start of fluent reading.
+    low = []
+    for t in texts:
+        frac = _x_height_fraction_of(t)
+        if frac is None:
+            continue
+        x_pt = float(t.get_fontsize()) * scale * frac
+        if x_pt < XHEIGHT_FLOOR_PT - 1e-9:
+            need = math.ceil(round(XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10
+            cap = label_ceiling if _is_panel_label(t) else ceiling
+            low.append((round(x_pt, 2), str(t.get_text())[:22], need, cap))
+
     detail = f"smallest {mn:.1f}pt on page (floor {floor})"
     if ceiling < math.inf:
         detail += f", largest {max(pt for pt, _ in sizes):.1f}pt (ceiling {ceiling})"
+    warnings = []
+    if low:
+        low.sort()
+        _, _, need, cap = low[0]
+        fix = (f"set it at {need / scale:.1f}pt as authored, {need}pt on the "
+               "page, or use a face with a taller x-height" if need <= cap
+               else f"the {cap}pt maximum allows no larger: use a face with a "
+               "taller x-height")
+        shown = [(s, x) for x, s, _, _ in low][:4]
+        warnings.append(
+            f"x-height under {XHEIGHT_FLOOR_PT}pt on page: {shown}  [FIX] {fix}"
+            "  [WHY] Legge & Bigelow (2011): fluent reading starts at an "
+            "x-height of 0.2 degrees, 4pt at 40cm")
     if placed_frac < PLACED_FRAC_WARN:
-        return "warn", (f"{detail}; placed at {placed_frac:.0%} of content width"
-                       " — labels may be too small to read; author at the"
-                       " width it ships at")
+        warnings.append(f"placed at {placed_frac:.0%} of content width"
+                        " — labels may be too small to read; author at the"
+                        " width it ships at")
+    if warnings:
+        return "warn", "; ".join([detail] + warnings)
     return True, detail
 
 

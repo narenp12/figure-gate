@@ -1464,7 +1464,7 @@ GUIDANCE_ANCHORS = {
     "Axis redundancy": ("style-guide.md",
                         "Give panels on a shared scale shared axis furniture"),
     "Type size": ("style-guide.md",
-                  "fails any string under 7.5pt on the"),
+                  "fails any string that lands under"),
     "Line weight": ("style-guide.md",
                     "Strokes have the same problem and the same arithmetic"),
     "Series color": ("style-guide.md", "### Categorical: Okabe-Ito"),
@@ -1686,7 +1686,7 @@ def test_the_gates_page_names_only_publishers_with_a_type_minimum():
 # Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
 # from the References, which `CONTRIBUTING.md` says a cited work may not be.
 GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
-               "Potluri", "Lundgard", "Bateman", "Tufte")
+               "Potluri", "Lundgard", "Bateman", "Tufte", "Legge")
 
 
 @pytest.mark.parametrize("surname", GUIDE_CITED)

@@ -61,7 +61,7 @@ Type size and line weight are measured where the figure prints, not on the
 canvas you drew it on.
 
 A figure authored at 14 inches (1008pt) and placed on a 750pt slide renders at
-750/1008 = 0.74x. A 9pt label arrives at 6.7pt, under the 7.5pt floor, and under
+750/1008 = 0.74x. An 8pt label arrives at 5.95pt, under the 6pt floor, and under
 it by an amount nobody notices on a monitor. `page_scale` derives that ratio per
 figure, so sizes set through rcParams or by a helper are caught along with the
 ones set inline.
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2375 tests, and each check has one asserting it catches a
+    The suite is 2404 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
