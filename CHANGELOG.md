@@ -55,6 +55,11 @@ behind a threshold this project enforces.
   `tests/test_figure.py`.
 - `RETRACTED_CLAIMS["autoscaled small multiples landing well inside a span
   ratio of 2"]`.
+- `examples/gallery.py`: `classifiers`, `abundance`, `dose_response` and
+  `interrupted`, with their PNGs and entries on the gallery page.
+- Four tests in `tests/test_figure.py` pinning the pair each one puts in front
+  of `check_series_color`, and seven `CHECKED` entries in
+  `tests/test_alt_text_numbers.py` for their alt text.
 
 #### Changed
 
@@ -151,6 +156,8 @@ behind a threshold this project enforces.
   the row prints, in `SKILL.md`, `design.md` and `check_series_color`.
 - The `SHARE_SPAN_RATIO_MAX` comment states the range the adversarial set
   allows, [1.6, 4.0), and its same-process miss count.
+- The gallery count is twenty-four in `gallery.py`, the README, `design.md`,
+  the gallery page and the tests that count it.
 
 ### Why it changed
 
@@ -336,6 +343,18 @@ seeded same-process small multiples (normal, lognormal on a log axis, Poisson;
 2 to 6 panels of 10 to 100 points), 3 join no pair at 2.0 and none at 2.5. The
 constant stays at 2.0: the cases between 2 and 3 have no right answer to test,
 and a miss leaves the row silent where a false fire fails the figure.
+
+The corpus could not see the series-colour changes above. 12 of its 16 panels
+that gate two or more hues compared one pair, orange against sky blue; none had
+a figure legend, a coloured reference line or a pair a second channel had to
+carry; `#0072B2`, `#D55E00` and `#CC79A7` were never drawn. The four new
+figures each reach one path, modelled on CC-BY figures in PLOS ONE, cited in
+each builder's comment. Swept with the checker from before
+this round, they move two verdicts: `gallery-dose-response` fails Series color
+without the second-channel excuse, and `gallery-interrupted` fails Label
+attribution while `axvline` is read at data y 0 to 1. The two legend figures
+move Series color detail from dE 15.1 and 39.5 to 12.8. Before the code-review
+round, one verdict moves. The 21 existing figures record no verdict change.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

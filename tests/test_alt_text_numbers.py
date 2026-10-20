@@ -595,6 +595,77 @@ def check_broadening_merge_temperature(fig):
     return float(merged[0])
 
 
+
+# --- the four series-colour figures ------------------------------------------
+# Read off what is drawn: the ROC curves' own vertices, the bars' heights, and
+# the fitted dose-response curves. The dose-response legend is built from
+# handles, so its curves carry no label and are found by their linestyle.
+
+def _roc_curves(fig):
+    """`{name: (false positive rate, true positive rate)}` for the labelled curves, AUC stripped."""
+    out = {}
+    for line in fig.axes[0].lines:
+        label = str(line.get_label())
+        if label.startswith("_"):
+            continue
+        out[label.rsplit(" (", 1)[0]] = (np.asarray(line.get_xdata()),
+                                         np.asarray(line.get_ydata()))
+    return out
+
+
+def _aucs(fig):
+    return [float(np.sum(np.diff(x) * (y[1:] + y[:-1]) / 2.0))
+            for x, y in _roc_curves(fig).values()]
+
+
+def check_classifiers_lowest_auc(fig):
+    return min(_aucs(fig))
+
+
+def check_classifiers_highest_auc(fig):
+    return max(_aucs(fig))
+
+
+def check_classifiers_leader_change(fig):
+    """The false positive rate past which the SVM no longer has the highest
+    true positive rate. All four curves share one grid, so they compare
+    vertex by vertex."""
+    curves = _roc_curves(fig)
+    names = list(curves)
+    x = curves[names[0]][0]
+    tpr = np.vstack([curves[n][1] for n in names])
+    leader = np.array(names)[np.argmax(tpr[:, 1:-1], axis=0)]
+    assert leader[0] == "SVM", f"{leader[0]} leads at the low end, not the SVM"
+    return float(x[1:-1][int(np.argmax(leader != "SVM"))])
+
+
+def check_abundance_tallest_lower_airway(fig):
+    return max(p.get_height() for p in fig.axes[1].patches)
+
+
+def _dose_curves(fig):
+    """The fitted curves, left to right by where they cross half maximum."""
+    halves = []
+    for line in fig.axes[0].lines:
+        if str(line.get_linestyle()) == "None":
+            continue
+        x, y = np.asarray(line.get_xdata()), np.asarray(line.get_ydata())
+        halves.append(float(10 ** np.interp(50.0, y, np.log10(x))))
+    return sorted(halves)
+
+
+def check_dose_response_agonist_count(fig):
+    return float(len(_dose_curves(fig)))
+
+
+def check_dose_response_a_half_max(fig):
+    return _dose_curves(fig)[0]
+
+
+def check_dose_response_b_half_max(fig):
+    return _dose_curves(fig)[1]
+
+
 CHECKED = {
     ("gallery-raster", "Two"): check_raster_stimulus_rules,
     ("gallery-rose", "16"): check_rose_bin_count,
@@ -632,6 +703,13 @@ CHECKED = {
     ("gallery-broadening", "1064"): check_broadening_band_centre,
     ("gallery-broadening", "two"): check_broadening_cold_peak_count,
     ("gallery-broadening", "300"): check_broadening_merge_temperature,
+    ("gallery-classifiers", "0.33"): check_classifiers_leader_change,
+    ("gallery-classifiers", "0.81"): check_classifiers_lowest_auc,
+    ("gallery-classifiers", "0.88"): check_classifiers_highest_auc,
+    ("gallery-abundance", "0.55"): check_abundance_tallest_lower_airway,
+    ("gallery-dose-response", "two"): check_dose_response_agonist_count,
+    ("gallery-dose-response", "0.4"): check_dose_response_a_half_max,
+    ("gallery-dose-response", "6"): check_dose_response_b_half_max,
 }
 
 # Numbers no resolver places, each with the reason. Anything here is a claim
@@ -679,8 +757,9 @@ def test_the_sweep_reads_every_described_figure():
     """Every assertion above is parametrized over the built figures. A capture
     that came back short would not fail them, it would delete them."""
     built = figures()
-    assert len(built) == 21, (
-        f"built {sorted(built)}, expected the demo and twenty gallery figures")
+    assert len(built) == 25, (
+        f"built {sorted(built)}, expected the demo and twenty-four gallery "
+        "figures")
     assert all(alt for _fig, alt in built.values()), (
         "a figure was built with no description attached")
 

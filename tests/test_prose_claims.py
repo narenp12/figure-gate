@@ -2417,7 +2417,8 @@ def _gallery_builder_count():
     ("tests/test_docs_match_code.py", r"([\w-]+) figures, \1 descriptions"),
 ])
 def test_test_docstrings_count_the_gallery_it_has(path, pattern):
-    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22}
+    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22,
+             "twenty-four": 24}
     text = " ".join((ROOT / path).read_text(encoding="utf-8").split())
     stated = re.search(pattern, text, re.I)
     assert stated, f"{path} no longer counts the gallery in the form read here"

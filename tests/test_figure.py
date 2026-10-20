@@ -6587,3 +6587,79 @@ def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
     finally:
         tracemalloc.stop()
     assert peak < 200 * 2**20, f"peak {peak / 2**20:.0f} MiB"
+
+
+# --- the gallery reaches each way a pair is chosen ---------------------------
+#
+# `check_series_color` picks the pairs it compares before it compares any:
+# every pair under a legend or a figure legend, otherwise draw-order
+# neighbours and lines that touch, and a pair under `CVD_TARGET` passes when a
+# second channel carries it. `gallery-classifiers`, `-abundance`,
+# `-dose-response` and `-interrupted` exist so the corpus sweep reaches each.
+# Each test names the pair and shows the path is what put it there.
+
+def _gallery_figure(name):
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+    import gallery
+    gallery.OUT = None
+    return getattr(gallery, name)()
+
+
+def _gated(ax):
+    distinct = list(dict.fromkeys(
+        h for h, _, _ in cf._data_colors_by_axes(ax.figure)[ax]))
+    pairs = cf._gated_pairs(ax, distinct, cf._data_artists(ax))
+    return {frozenset((distinct[i], distinct[j])) for i, j in pairs}
+
+
+def test_the_roc_legend_gates_both_pairs_stone_disagrees_on():
+    fig = _gallery_figure("classifiers")
+    ax = fig.axes[0]
+    gated = _gated(ax)
+    ax.get_legend().remove()
+    unkeyed = _gated(ax)
+    plt.close(fig)
+    for pair in ({"#0072b2", "#cc79a7"}, {"#009e73", "#cc79a7"}):
+        assert frozenset(pair) in gated, gated
+    # Without the legend every pair is still compared: every ROC curve runs
+    # from (0, 0) to (1, 1), so each touches every other. The legend is the
+    # deciding path in `abundance`, below, not here.
+    assert unkeyed == gated, unkeyed
+
+
+def test_the_figure_legend_is_what_compares_blue_with_purple():
+    fig = _gallery_figure("abundance")
+    pair = frozenset({"#0072b2", "#cc79a7"})
+    keyed = [_gated(ax) for ax in fig.axes]
+    fig.legends[0].remove()
+    unkeyed = [_gated(ax) for ax in fig.axes]
+    plt.close(fig)
+    assert all(pair in g for g in keyed), keyed
+    assert not any(pair in g for g in unkeyed), unkeyed
+
+
+def test_the_red_green_pair_passes_only_as_carried_by_a_second_channel():
+    fig = _gallery_figure("dose_response")
+    status, detail = cf.check_series_color(fig)
+    # Control: the same hues with the markers and dashes taken away.
+    for line in fig.axes[0].lines:
+        line.set_marker("None")
+        line.set_linestyle("-")
+    bare, bare_detail = cf.check_series_color(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert "dE 5.2 (deutan" in detail and "carried by a second channel" in detail
+    assert bare is False, bare_detail
+
+
+def test_only_the_contact_test_compares_the_rule_change_with_the_series():
+    fig = _gallery_figure("interrupted")
+    ax = fig.axes[0]
+    distinct = list(dict.fromkeys(
+        h for h, _, _ in cf._data_colors_by_axes(fig)[ax]))
+    observed, rule = distinct.index("#0072b2"), distinct.index("#cc79a7")
+    gated = _gated(ax)
+    plt.close(fig)
+    assert abs(observed - rule) > 1, distinct
+    assert frozenset({"#0072b2", "#cc79a7"}) in gated, gated

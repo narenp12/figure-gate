@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2474 tests, and each check has one asserting it catches a
+    The suite is 2502 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -239,5 +239,5 @@ across a release.
 - [Choosing a form](choosing-a-form.md) for the decision no styling rule
   rescues. Only its mechanical subset is gated: a script can rule out a pie or a
   truncated bar baseline, but it cannot tell you a box plot is hiding an n of 8.
-- [The gallery](gallery.md) for twenty audited figures, and the defects that
-  writing them exposed in the checks.
+- [The gallery](gallery.md) for twenty-four audited figures, and the defects
+  that writing them exposed in the checks.
