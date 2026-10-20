@@ -118,7 +118,7 @@ The lightness and chroma rows stay in OKLab.
 |---|---|---|
 | Lightness band | `L_MIN, L_MAX = 0.43, 0.77` | OKLab lightness outside the band |
 | Chroma floor | `CHROMA_MIN = 0.10` | OKLab chroma below it, so the color reads as gray |
-| CVD separation | `CVD_TARGET = 10.5` | two hues under 10.5 dE in protan or deutan simulation, at dichromacy or at any severity in `ANOMALOUS_SEVERITIES` |
+| CVD separation | `CVD_TARGET = 10.5` | two hues under 10.5 dE in protan or deutan simulation, at dichromacy under either Viénot's or Machado's model, or at any severity in `ANOMALOUS_SEVERITIES` |
 | Normal-vision floor | `NORMAL_FLOOR = 21.0` | two hues under 21 dE in full color |
 | Contrast vs surface | `CONTRAST_MIN = 3.0` | a hue under 3:1 on the page *(advisory)* |
 

@@ -618,33 +618,51 @@ def test_the_severity_matrices_belong_on_linear_light():
 
 
 def test_dichromacy_is_not_the_worst_case():
-    """The named failure. Two hues this file would accept as series slots that
-    clear `CVD_TARGET` under both dichromacy models and miss it at severity
-    0.9, where far more readers actually sit.
+    """The named failure. Two hues this file would accept as series slots,
+    54.1 dE apart in full colour, that clear `CVD_TARGET` under both dichromacy
+    models and miss it at protan severity 0.8.
 
-    Measured over 244650 such pairs in CAM02-UCS, 1.27% of them do this, and
-    dichromacy overstates separation by up to 12.7 dE. Both numbers grew when
-    the metric changed in 0.8.0 - they read 0.87% and 10.5 in OKLab - so the
-    sweep the gate does is doing more work now, not less.
+    Measured over 244650 such pairs in CAM02-UCS, 0.13% of them do this, and
+    dichromacy overstates separation by up to 10.7 dE.
     """
-    a, b = "#8e4dc7", "#1402ef"
+    a, b = "#1a80b8", "#fb00e4"
     la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
 
-    # Every dichromacy view, not just the one that crosses: the gate takes the
-    # worst of them, so the claim is that all of them clear the floor.
-    at_dichromacy = min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind))
-                        for kind in ("protan", "deutan"))
-    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.9),
-                             cp.simulate_anomalous(lb, "protan", 0.9))
+    # Every dichromacy view under both models: the gate takes the worst of
+    # them, so the claim is that all of them clear the floor.
+    at_dichromacy = min(
+        min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind)),
+            cp.delta_e(cp.simulate_anomalous(la, kind, 1.0),
+                       cp.simulate_anomalous(lb, kind, 1.0)))
+        for kind in ("protan", "deutan"))
+    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.8),
+                             cp.simulate_anomalous(lb, "protan", 0.8))
     assert at_dichromacy >= cp.CVD_TARGET > at_severity, (
         f"the fixture stopped crossing the floor: {at_dichromacy:.2f} at "
-        f"dichromacy, {at_severity:.2f} at severity 0.9")
+        f"dichromacy, {at_severity:.2f} at severity 0.8")
+    assert cp.delta_e(la, lb) >= cp.NORMAL_FLOOR
 
     ok, rows = cp.check([a, b])
     assert ok is False
     row = next(r for r in rows if r[0].startswith("CVD separation"))
     assert row[1] is False
-    assert "severity 0.9" in row[2], row[2]
+    assert "severity 0.8" in row[2], row[2]
+
+
+def test_the_retracted_fixture_was_the_two_models_disagreeing():
+    """`#8e4dc7` against `#1402ef` was the documented example until
+    2026-10-19: 19.2 under Vienot, 8.3 at severity 0.9. Under Machado's own
+    severity 1.0 it reads under 8.3, so within one model dichromacy was the
+    worst case all along, and the gate now says so."""
+    la, lb = cp.hex_to_linear("#8e4dc7"), cp.hex_to_linear("#1402ef")
+    machado_1 = cp.delta_e(cp.simulate_anomalous(la, "protan", 1.0),
+                           cp.simulate_anomalous(lb, "protan", 1.0))
+    machado_9 = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.9),
+                           cp.simulate_anomalous(lb, "protan", 0.9))
+    assert machado_1 < machado_9 < cp.CVD_TARGET
+    _, rows = cp.check(["#8e4dc7", "#1402ef"])
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert "severity 1.0, Machado" in row[2], row[2]
 
 
 def test_the_bundled_cycle_survives_the_severity_sweep():
@@ -674,13 +692,30 @@ def test_severity_zero_is_normal_vision_and_the_ends_are_rejected_cleanly():
         cp.simulate_anomalous(lin, "protan", 1.4)
 
 
-def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
-    """`ANOMALOUS_SEVERITIES` stops at 0.9 on purpose. Reading 1.0 under both
-    models would move every dichromacy number the style guide publishes, for a
-    view `simulate` already covers."""
+def test_the_sweep_reads_dichromacy_under_both_models():
+    """`ANOMALOUS_SEVERITIES` stops at 0.9, because 1.0 is dichromacy, and
+    `check` reads 1.0 under Vienot and under Machado. With Vienot alone the
+    sweep mixed two models and credited their disagreement to anomalous
+    trichromacy."""
     assert 1.0 not in cp.ANOMALOUS_SEVERITIES
     assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
     assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)
+    # A pair only Machado's dichromacy fails: Vienot and every anomalous
+    # severity clear the floor, 31.4 apart in full colour. Before, it passed.
+    a, b = "#e303a6", "#8306bb"
+    la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+    kinds = ("protan", "deutan")
+    vienot = min(cp.delta_e(cp.simulate(la, k), cp.simulate(lb, k))
+                 for k in kinds)
+    anomalous = min(cp.delta_e(cp.simulate_anomalous(la, k, s),
+                               cp.simulate_anomalous(lb, k, s))
+                    for k in kinds for s in cp.ANOMALOUS_SEVERITIES)
+    machado = min(cp.delta_e(cp.simulate_anomalous(la, k, 1.0),
+                             cp.simulate_anomalous(lb, k, 1.0)) for k in kinds)
+    assert min(vienot, anomalous) >= cp.CVD_TARGET > machado
+    ok, rows = cp.check([a, b])
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert row[1] is False and "severity 1.0, Machado" in row[2], row[2]
 
 
 # --- the tritan gate that was measured and not shipped -----------------------
