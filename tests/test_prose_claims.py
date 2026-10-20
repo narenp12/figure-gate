@@ -1389,6 +1389,16 @@ RETRACTED_CLAIMS = {
                "EXTERNAL_CLAIMS under 'journal type floors'",
         "retracted": "2026-08-17",
     },
+    "Science publishing a 6pt text minimum": {
+        "pattern": r"(PNAS and Science|Science and PNAS)[^.]{0,20}"
+                   r"(publish|set|require|minim)",
+        "instead": "6pt is the minimum PNAS publishes. Science's 6 point "
+                   "minimum is for symbols",
+        "why": "Science publishes no text floor, as EXTERNAL_CLAIMS under "
+               "'journal type floors' quotes. The 6pt floor shipped citing "
+               "both journals",
+        "retracted": "2026-10-19",
+    },
     "page_scale returning a length per authored inch": {
         "pattern": r"points?[^.]{0,40}per authored inch",
         "instead": "page_scale returns placed size over authored size: a "
@@ -1446,8 +1456,9 @@ RETRACTED_CLAIMS = {
     },
     "7.5pt as the size where text is comfortable": {
         "pattern": r"7\.5[^.]{0,60}comfortable",
-        "instead": "the floor is an x-height of 4pt on the page, where Legge "
-                   "& Bigelow (2011) put the start of fluent reading",
+        "instead": "the floor is 6pt on the page, the minimum PNAS "
+                   "publishes. Under a 4pt x-height, where Legge & Bigelow "
+                   "(2011) put the start of fluent reading, the row warns",
         "why": "7.5 shipped in the initial release with no source, and "
                "'comfortable' was added two days later. In STIX Two Text, "
                "the style sheet's font, 7.5pt is an x-height of 0.177 "
