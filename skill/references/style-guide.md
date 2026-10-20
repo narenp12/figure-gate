@@ -369,13 +369,11 @@ The measure works in three steps:
   lightness span spent moving against its own direction. Under
   `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential. Under it over
   both halves is diverging, or cyclic when the two ends are within
-  `CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, one just-noticeable
-  difference, which is what "the ends are the same colour" means once the metric
-  has a unit.
+  `CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, about 2 CIELAB.
 
 The 18 maps in the registry that reach that last branch wrap at 0.000 and 0.376,
-the two twilights, or at 27.963 and above, everything diverging. The threshold
-has two orders of magnitude of clearance either side.
+the two twilights, or at 27.963 and above, everything diverging. Any threshold
+between 0.4 and 27 sorts them the same way.
 
 Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
 `rainbow`, `hsv`, and `gist_ncar` land there. A reader cannot order two values in
