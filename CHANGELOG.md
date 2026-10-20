@@ -49,6 +49,12 @@ behind a threshold this project enforces.
 - `check_figure.SHARE_SPAN_RATIO_MAX = 2.0`.
 - Invariance tests in `tests/test_figure.py`: draw order, stroke contact,
   second channel, vertex density, and label redundancy across scales.
+- `SHARE_SPAN_CASES`,
+  `test_the_share_span_ratio_separates_the_adversarial_set` and
+  `test_same_process_small_multiples_mostly_share_at_the_ratio` in
+  `tests/test_figure.py`.
+- `RETRACTED_CLAIMS["autoscaled small multiples landing well inside a span
+  ratio of 2"]`.
 
 #### Changed
 
@@ -143,6 +149,8 @@ behind a threshold this project enforces.
   `SERIES_CONTACT_PX` and gains `SHARE_SPAN_RATIO_MAX`.
 - tab10's orange and green are quoted at dE 1.6 under protanopia, the number
   the row prints, in `SKILL.md`, `design.md` and `check_series_color`.
+- The `SHARE_SPAN_RATIO_MAX` comment states the range the adversarial set
+  allows, [1.6, 4.0), and its same-process miss count.
 
 ### Why it changed
 
@@ -318,6 +326,16 @@ read at data y 0 to 1 and never compared. A hidden legend switched the panel to
 all-pairs. The scipy-free contact test peaked at 784 MiB on two 100000-vertex
 rings; the grid peaks under 200 MiB and takes 1.07s where scipy takes 1.18s on
 three 20000-point lines. The corpus records no verdict change.
+
+`SHARE_SPAN_RATIO_MAX = 2.0` was a judgement the corpus cannot test: none of
+its 21 figures has two panels in a row or column naming one quantity. An
+adversarial set takes its place. Its panels that should share an axis reach
+1.60 and its panels that should not start at 4.00, so any factor in [1.6, 4.0)
+separates them. Moving the constant to 1.5 or 4.0 fails one case each. Of 900
+seeded same-process small multiples (normal, lognormal on a log axis, Poisson;
+2 to 6 panels of 10 to 100 points), 3 join no pair at 2.0 and none at 2.5. The
+constant stays at 2.0: the cases between 2 and 3 have no right answer to test,
+and a miss leaves the row silent where a false fire fails the figure.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

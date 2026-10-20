@@ -6408,6 +6408,76 @@ def test_autoscaled_panels_naming_one_quantity_are_still_redundant():
     assert status is False and "ylabel 'Accuracy'" in detail, detail
 
 
+# --- where SHARE_SPAN_RATIO_MAX sits ------------------------------------------
+#
+# The corpus cannot see this constant: no figure in it has two panels naming
+# one quantity in a row or column. These cases are the evidence instead. Each is
+# two autoscaled panels labelled "Value"; the number is the ratio
+# `_largest_sharable` compares. Cases between 1.6 and 4.0 (0-1 beside 0-2,
+# 0-2.5 or 0-3) are left out: whether `sharey` should take that much is the
+# judgement the constant makes.
+
+SHARE_SPAN_CASES = [
+    # (data spans, log, should fire)        ratio
+    (((0.10, 0.95), (0.12, 0.97)), False, True),    # 1.02, autoscale jitter
+    (((0.2, 1.0), (0.3, 1.2)), False, True),        # 1.23, two loss curves
+    (((1, 100), (10, 1000)), True, True),           # 1.45, a decade apart
+    (((0, 50), (0, 80)), False, True),              # 1.60, two regions
+    (((0, 1), (0, 4)), False, False),               # 4.00
+    (((0, 1), (0.4, 0.6)), False, False),           # 5.00, a zoomed panel
+    (((1, 10), (1, 1e6)), True, False),             # 6.00 decades
+    (((0, 1), (0, 10)), False, False),              # 10.0
+    (((20, 25), (80, 85)), False, False),           # 11.9, two regimes
+]
+
+
+@pytest.mark.parametrize("spans,log,fires", SHARE_SPAN_CASES)
+def test_the_share_span_ratio_separates_the_adversarial_set(spans, log, fires):
+    fig, axes = plt.subplots(1, 2, figsize=(4.4, 2.4), constrained_layout=True)
+    for ax, (lo, hi) in zip(axes, spans):
+        ax.plot([0, 1], [lo, hi])
+        if log:
+            ax.set_yscale("log")
+        ax.set_ylabel("Value")
+    (l1, h1), (l2, h2) = (sorted(ax.yaxis.get_transform().transform(
+        ax.get_ylim())) for ax in axes)
+    ratio = (max(h1, h2) - min(l1, l2)) / min(h1 - l1, h2 - l2)
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    plt.close(fig)
+    # The bracket the `SHARE_SPAN_RATIO_MAX` comment quotes.
+    assert ratio <= 1.6 + 1e-9 if fires else ratio >= 4.0 - 1e-9, ratio
+    assert ("ylabel 'Value'" in detail) is fires, detail
+
+
+def test_same_process_small_multiples_mostly_share_at_the_ratio():
+    """Panels drawn from one stationary process should share an axis. Across
+    900 seeded figures of 2 to 6 panels and 10 to 100 points, 3 join no pair
+    at 2.0, and none at 2.5. A random walk is not stationary and is not here:
+    its panels' ranges differ for real."""
+    import numpy as np
+    from matplotlib.figure import Figure
+    rng = np.random.default_rng(0)
+    draws = (lambda n: rng.normal(0, 1, n),
+             lambda n: rng.lognormal(0, 1, n),
+             lambda n: rng.poisson(40, n))
+    missed = {2.0: 0, 2.5: 0}
+    for i, draw in enumerate(draws):
+        for k in (2, 3, 4, 6):
+            for n in (10, 30, 100):
+                for _ in range(25):
+                    axes = Figure().subplots(1, k)
+                    for ax in axes:
+                        ax.plot(np.arange(n), draw(n))
+                        if i == 1:
+                            ax.set_yscale("log")
+                    for t in missed:
+                        with pytest.MonkeyPatch.context() as mp:
+                            mp.setattr(cf, "SHARE_SPAN_RATIO_MAX", t)
+                            missed[t] += cf._largest_sharable(list(axes), "y") < 2
+    assert missed == {2.0: 3, 2.5: 0}
+
+
 def test_the_same_circle_from_scatter_and_plot_is_one_marker():
     """`scatter(marker="o")` and `plot(..., "o")` draw the same circle. Read
     as two markers, they excused a dE 1.6 pair as carried by a second
