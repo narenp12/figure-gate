@@ -43,7 +43,7 @@ string counts the top-level panels first and the child axes after them.
 | Line weight | `LINE_FLOOR_PT = 1.0`, `FURNITURE_FLOOR_PT = 0.5` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Spines, gridlines and tick marks are furniture and are held to the lower floor, as are marker outlines unless they repeat the fill or the background |
 | Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
-| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
+| Series color | palette gates, `MAX_SERIES_HUES = 6`, `SERIES_CONTACT_PX = 2.0` | a gated pair of hues drawn fails normal-vision separation, or fails CVD separation with no second channel (mark type, dash, marker or hatch) between the two series, or one panel carries more than 6. A panel with a legend or a scatter gates every pair; otherwise neighbours in draw order and lines whose strokes meet |
 | Dual axis | none | a `twinx` second scale carries data of its own |
 | Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
@@ -126,8 +126,9 @@ Ink tokens passed through `ink=` are exempt from the lightness and chroma rows.
 
 The separation rows are named `CVD separation (adjacent)` or
 `CVD separation (all-pairs)` after the comparison they ran. `all_pairs=False` is
-the default and compares neighbours, which is what a line chart needs.
-`all_pairs=True` compares every pair, which is what a scatter needs.
+the default and compares neighbours. `all_pairs=True` compares every pair, which
+is what a legend or a scatter needs: the reader matches each mark against every
+other hue.
 
 Protanopia and deuteranopia are gated. Tritan separation is measured and printed
 in the detail string, but not gated.

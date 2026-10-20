@@ -270,14 +270,15 @@ The gate skips what banking does not apply to:
 Segments that render flat are culled, after Heer and Agrawala's "slopeless
 lines". A horizontal or vertical segment is unchanged by the aspect ratio, so it
 cannot help set one, and a tail of them drags the median that does. The rule is
-generalized from exactly zero or infinite slope to *drawn* flat: a segment whose
-rise is under `BANKING_FLAT_PX = 0.5` display pixels cannot be told from flat at
-any aspect a reader will see.
+generalized from exactly zero or infinite slope to a slope under
+`BANKING_FLAT_SLOPE = 0.01` on the page, or over its reciprocal. The cull is on
+the slope rather than the rise in pixels, because splitting a segment changes
+its rise and not its slope.
 
-A converged training run is mostly a flat tail, 92 near-flat segments out of
-119. Culling them is the difference between a median slope of 0.0006, which
-warns and asks for a panel sixteen hundred times taller, and 1.30, which is
-banked.
+A converged training run is mostly a flat tail, 76 segments out of 119 under
+the cull. Culling them is the difference between a median slope of 0.0006,
+which warns and asks for a panel sixteen hundred times taller, and 0.34, which
+is banked.
 
 ## The forms with no research-figure use
 

@@ -259,8 +259,10 @@ contour dash, colormap kind, font embedding, and alt text, in that order.
 `check_palette.py` gates lightness band, chroma floor, colorblind separation,
 normal-vision separation, and contrast against the surface.
 
-**Series color** runs the hues the figure drew through the palette gates,
-inferring adjacent versus all-pairs from whether the marks are scatter. Without
+**Series color** runs the hues the figure drew through the palette gates. A
+panel with a legend or a scatter gates every pair; otherwise neighbours in draw
+order and any two lines whose strokes meet. A pair under the CVD floor passes
+when a dash, marker, hatch or mark type also separates it. Without
 it, a figure on matplotlib's default `tab10` cycle passes every composition row
 while its orange and green sit at CAM02-UCS ΔE 2.4 under protanopia, against a
 floor of 10.5.

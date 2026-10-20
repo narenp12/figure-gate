@@ -33,14 +33,14 @@ that reader, against a floor of 10.5. The composition checker had no access to
 the colors it was drawing.
 
 `check_series_color` closes that gap. It reads the hues off the figure's own
-artists, decides from the mark types whether the figure needs adjacent
-separation (lines, bars) or all-pairs separation (scatter), and runs them through
-the palette gates. That is row 12 of the 21.
+artists, decides which pairs the reader compares, and runs them through the
+palette gates. A legend or a scatter puts every pair in play; otherwise it is
+neighbours in draw order and lines whose strokes meet. That is row 12 of the 21.
 
 ```mermaid
 flowchart TD
     figure["figure on its axis"] --> read["check_series_color"]
-    read -- "mark types" --> need{"adjacent or<br/>all-pairs?"}
+    read -- "legend, marks, contact" --> need{"which pairs?"}
     need --> gates["the palette gates"]
     gates --> verdict{"series colour row"}
     verdict -- "cleared" --> pass["the row clears with the figure"]
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2423 tests, and each check has one asserting it catches a
+    The suite is 2436 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

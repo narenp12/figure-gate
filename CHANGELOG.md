@@ -45,6 +45,9 @@ behind a threshold this project enforces.
   `EXTERNAL_CLAIMS["fluent print size"]`,
   `RETRACTED_CLAIMS["7.5pt as the size where text is comfortable"]`, and
   `Legge` in `GUIDE_CITED`.
+- `check_figure.SERIES_CONTACT_PX = 2.0`.
+- Invariance tests in `tests/test_figure.py`: draw order, stroke contact,
+  second channel, vertex density, and label redundancy across scales.
 
 #### Changed
 
@@ -95,6 +98,17 @@ behind a threshold this project enforces.
   0.01pt.
 - The ceiling `[FIX]` rounds the authored size down to 0.1pt, the x-height
   `[FIX]` rounds it up.
+- `check_series_color` gates every pair in a panel with a legend, as in one
+  with a scatter. Otherwise it gates neighbours in draw order and every pair
+  of line series whose strokes come within `SERIES_CONTACT_PX` of touching.
+- `check_series_color`: a pair under `CVD_TARGET` passes when a mark type,
+  dash, marker or hatch also separates the two series. `NORMAL_FLOOR` is not
+  excused.
+- `check_banking` culls segments by on-page slope, under
+  `BANKING_FLAT_SLOPE = 0.01` or over its reciprocal.
+  `BANKING_FLAT_PX` is removed.
+- `check_redundancy` counts a repeated axis title only among panels with the
+  same limits and scale, as it already did for tick labels.
 
 ### Why it changed
 
@@ -203,6 +217,28 @@ are held to `FURNITURE_FLOOR_PT`. Five seaborn sheets draw 0.24 to 0.48pt edges 
 colour; those carry nothing and are skipped. The corpus records no verdict
 change, and none of the 84 style-sheet figures fails.
 
+A review on 2026-10-19 found four rows whose verdict moved with something the
+reader never sees, or that failed a figure for doing what the row's `[FIX]`
+asks. Orange and green lines that cross passed when blue was plotted between
+them and failed with the calls reordered. The same pair drawn solid-and-circle
+against dashed-and-square, with a legend, failed and was told to add
+"direct labels/gaps/texture". `BANKING_FLAT_PX = 0.5` culled every segment of
+the saw wave once each was split into ten, so the panel the row exists for
+read "no line panel". And two panels titled "Accuracy" at 0 to 1 and 0 to
+1000 were told to `sharey`.
+
+A legend makes the reader identify each series against a swatch, the task the
+floors' multiples were chosen for, so every pair is compared. Measured
+over the first two to six colours of every registered qualitative colormap
+and the theme, 15 of 70 pass adjacent and fail all-pairs; these now fail as
+legended lines. Set1 (blue and purple, dE 4.6 under deuteranopia) and Paired
+(green and red, 5.6) are among them. So is matplotlib's `okabe_ito` from five
+colours, on orange `#e69f00` against yellow `#f0e442` at 20.8 against
+`NORMAL_FLOOR = 21.0`.
+
+The corpus records no verdict change. `gallery-broadening` reads three line
+panels for banking instead of one: the other two had been culled whole.
+`demo` with its legend now reports orange against green, dE 20.7.
 ## 0.10.0 — 2026-09-30
 
 ### What changed
