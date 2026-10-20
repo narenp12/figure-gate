@@ -125,6 +125,11 @@ behind a threshold this project enforces.
 - `style-guide.md` "What is evidence for them": Stone et al.'s per-axis model
   fails three Okabe-Ito pairs at `NORMAL_FLOOR`, not one. Pinned in
   `test_the_size_model_itself_fails_three_okabe_ito_pairs`.
+- `style-guide.md`: why the gate stays in CAM02-UCS, and the two shipped-cycle
+  pairs Stone et al.'s model fails at 2 ND(50) under simulation, pinned in
+  `test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation`.
+  Szafir (2017) joins the References, `EXTERNAL_CLAIMS["size model tested
+  range"]` and `GUIDE_CITED`.
 
 ### Why it changed
 
@@ -287,6 +292,13 @@ shipped cycle drops "the strongest argument these numbers have". In Stone et
 al.'s own model, at 4 ND(50) for a 0.333-degree target, sky blue against blue
 (3.42) and orange against vermillion (3.59) miss too, and the shipped cycle
 keeps both. The CAM02-UCS bridge is a median, and it is what passes them.
+
+The metric stays. The 4 ND(50) that fails those pairs is past the 2 ND(50)
+Szafir (2017) measured to. Switching would fail the shipped cycle on four pairs, and no
+in-band six-colour cycle drawn from Okabe-Ito and Tol's sets passes it (0 of
+38760). The two simulated pairs it fails at 2 ND(50), inside the measured
+range, are recorded rather than gated, because no study ties an ND(50)
+multiple to identifying a series.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

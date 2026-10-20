@@ -881,17 +881,42 @@ def test_the_separation_floors_reproduce_the_size_model_they_derive_from():
         "was not shipped")
 
 
+STONE_ND_THIRD_DEGREE = [c + k * 3 for c, k in (
+    (5.079, 0.751), (5.339, 1.541), (5.349, 2.871))]
+
+
+def _stone_nd(la, lb):
+    """Stone et al.'s per-axis distance at 0.333 degrees, in ND(50) units."""
+    return math.sqrt(sum(((x - y) / n) ** 2 for x, y, n in zip(
+        _cielab(la), _cielab(lb), STONE_ND_THIRD_DEGREE)))
+
+
+def test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation():
+    """`style-guide.md`: inside the 2 ND(50) the size model was measured to,
+    it fails two shipped-cycle pairs that CAM02-UCS passes over `CVD_TARGET`.
+    Kept as a measurement, not a gate."""
+    shipped = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00",
+               "#CC79A7"]
+    expected = {("#009E73", "#CC79A7", "deutan"): (1.54, 1.66, 14.76),
+                ("#0072B2", "#CC79A7", "protan"): (1.94, 2.10, 13.96)}
+    for (a, b, kind), (machado, vienot, ucs) in expected.items():
+        assert a in shipped and b in shipped
+        la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+        m = [cp.simulate_anomalous(v, kind, 1.0) for v in (la, lb)]
+        v = [cp.simulate(x, kind) for x in (la, lb)]
+        assert round(_stone_nd(*m), 2) == machado < 2
+        assert round(_stone_nd(*v), 2) == vienot
+        assert round(cp.delta_e(*m), 2) == ucs > cp.CVD_TARGET
+
+
 def test_the_size_model_itself_fails_three_okabe_ito_pairs():
     """`style-guide.md` says Stone et al.'s per-axis model at 0.333 degrees,
     floor 4 ND(50), fails three Okabe-Ito pairs where CAM02-UCS fails one.
     Coefficients are their Table 3, read from the paper 2026-10-20."""
-    nd = [c + k * 3 for c, k in ((5.079, 0.751), (5.339, 1.541),
-                                 (5.349, 2.871))]
     in_nd, in_ucs = {}, {}
     for a, b in itertools.combinations(OKABE_ITO, 2):
         la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
-        in_nd[a, b] = math.sqrt(sum(((x - y) / n) ** 2 for x, y, n
-                                    in zip(_cielab(la), _cielab(lb), nd)))
+        in_nd[a, b] = _stone_nd(la, lb)
         in_ucs[a, b] = cp.delta_e(la, lb)
     misses = {k: round(v, 2) for k, v in in_nd.items() if v < 4}
     assert misses == {
