@@ -2487,8 +2487,9 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     For each PathCollection with offsets (a scatter), the fraction of points
     whose nearest neighbour in display pixels sits closer than the two marks'
     radii summed - which is exactly when the two discs intersect on the page.
-    Above the threshold the marks merge into a blob — thin the count, use
-    hollow markers, add transparency, or switch to hexbin.
+    Above the threshold the marks merge into a blob: thin the count or switch
+    to hexbin. Fill and partial alpha are not read, so transparency and hollow
+    markers leave the number where it was.
 
     `ax.plot(x, y, "o")` draws the same cloud through a different API, and for
     seven releases this row could not see it: a marker-only `Line2D` has no
