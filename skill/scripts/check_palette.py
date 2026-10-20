@@ -368,10 +368,12 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 # The matrices above model dichromacy: a cone class absent. Most colour vision
 # deficiency is not that. Anomalous trichromacy - a cone whose peak sensitivity
 # is shifted rather than missing - is the more common form, and simulating only
-# the endpoint would be sound if the endpoint were the worst case. It is not.
-# Measured over 244650 pairs of hues this file would accept as series slots,
-# 1.27% clear CVD_TARGET under dichromacy and miss it at some lower severity,
-# and dichromacy overstates separation by up to 12.7 dE.
+# the endpoint would be sound if the endpoint were the worst case. It is not,
+# though by less than first measured. Measured over 244650 pairs of hues this
+# file would accept as series slots, 0.13% clear CVD_TARGET under both dichromacy models
+# and miss it at some lower severity, and dichromacy overstates separation
+# by up to 10.7 dE. Against Vienot alone the share is 1.35%: nine tenths of that
+# is the two models disagreeing at 1.0, not anomalous trichromacy.
 #
 # Published as Table 1 of Machado, Oliveira & Fernandes (2009), at severities in
 # tenths. Keyed by tenths so the lookup is an integer: severity 0.0 is the
@@ -457,10 +459,9 @@ MACHADO = {
 }
 
 
-# The severities the gates sweep. 1.0 is left out on purpose: it is dichromacy,
-# which `simulate` already covers with the matrices the documented numbers were
-# measured on, and reading it twice under two models would move every published
-# figure in the style guide for no coverage gained.
+# The anomalous severities the gates sweep. 1.0 is dichromacy, not anomalous, so
+# it is not listed; `check` reads it under both models, `simulate` and
+# `simulate_anomalous(..., 1.0)`.
 ANOMALOUS_SEVERITIES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
@@ -474,9 +475,10 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
     published matrices, because that is a modelling claim the paper does not
     make and this file would then be asserting.
 
-    `simulate` remains the dichromacy model and the anchor for every number the
-    style guide quotes. This is the range between the two ends, which is where
-    most colour vision deficiency actually sits.
+    `simulate` is the dichromacy model `check` reports as severity 1.0; this
+    function at 1.0 is the second one, reported as "1.0, Machado". Below 1.0
+    is the range between the two ends, which is where most colour vision
+    deficiency actually sits.
 
     Args:
         rgb: Linear-light `(r, g, b)`, each channel in 0..1.
@@ -845,15 +847,21 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     # been measured against the corpus.
     #
     # Swept over severity, not read at the endpoint: dichromacy is not the worst
-    # case. MACHADO's comment has the measurement.
+    # case. Dichromacy is read under both models, Vienot's and Machado's own
+    # severity 1.0, so the sweep has one model from end to end and the worst
+    # case covers the disagreement between the two. MACHADO's comment has the
+    # measurement.
     worst_cvd, worst_cvd_at = float("inf"), None
     for i, j in pairs:
         for kind in ("protan", "deutan"):
             views = [(delta_e(simulate(lin[i], kind), simulate(lin[j], kind)),
-                      1.0)]
+                      "1.0")]
             views += [(delta_e(simulate_anomalous(lin[i], kind, s),
-                               simulate_anomalous(lin[j], kind, s)), s)
+                               simulate_anomalous(lin[j], kind, s)), f"{s:.1f}")
                       for s in ANOMALOUS_SEVERITIES]
+            views.append((delta_e(simulate_anomalous(lin[i], kind, 1.0),
+                                  simulate_anomalous(lin[j], kind, 1.0)),
+                          "1.0, Machado"))
             d, at = min(views)
             if d < worst_cvd:
                 worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
@@ -864,7 +872,7 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
         good = worst_cvd >= CVD_TARGET
         rows.append((f"CVD separation ({label})", good,
                      f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind} at severity "
-                     f"{at:.1f}) - tritan {worst_tri:.1f}"
+                     f"{at}) - tritan {worst_tri:.1f}"
                      + ("" if good else "  [FIX] needs direct labels/gaps/texture, or re-step")))
 
     worst_n, worst_n_at = float("inf"), None

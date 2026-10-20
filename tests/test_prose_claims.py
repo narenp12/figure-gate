@@ -1230,11 +1230,11 @@ KNOWN_HEXES |= {h.lower() for h in
 # still has to be a real pair, or the demonstration is a story. Each of these
 # carries the measurement it appears with, and `test_palette.py` pins it.
 COUNTEREXAMPLE_HEXES = {
-    # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
-    # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    # It clears dichromacy by 8.7 and misses the worst severity by 2.2, so the
-    # demonstration survives rounding.
-    "#8e4dc7", "#1402ef",
+    # 14.0 and 12.4 dE under the two dichromacy models, 9.8 at protan severity
+    # 0.8: the pair that says dichromacy is not the worst case. See
+    # test_dichromacy_is_not_the_worst_case. Its margins are 1.9 and 0.7, so
+    # the demonstration survives rounding to the 0.1 the guide prints.
+    "#1a80b8", "#fb00e4",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
 
@@ -1367,6 +1367,17 @@ def test_the_rdbu_window_is_the_one_that_passes_the_palette_gates():
 # because that is where the surviving copy was.
 
 RETRACTED_CLAIMS = {
+    "anomalous trichromacy failing 1.27% of pairs dichromacy passes": {
+        "pattern": r"1\.27\s*%\s*clear|#8e4dc7",
+        "instead": "0.13% clear CVD_TARGET under both dichromacy models and "
+                   "miss it at some lower severity; #1a80b8 against #fb00e4 "
+                   "is one such pair",
+        "why": "the 1.27% compared Vienot at 1.0 with Machado below it, so "
+               "most of it was the two models disagreeing. #8e4dc7 against "
+               "#1402ef reads 7.97 under Machado's own severity 1.0, below "
+               "its 8.3 at 0.9",
+        "retracted": "2026-10-19",
+    },
     "ACM or Elsevier rejecting a submission for Type 3 fonts": {
         "pattern": r"(ACM|Elsevier)[^.]{0,80}reject[^.]{0,40}submission",
         "instead": "IEEE PDF eXpress does not accept Type 3 and refuses the "
@@ -2401,11 +2412,19 @@ def test_test_docstrings_count_the_gallery_it_has(path, pattern):
 # the two copies are held to each other.
 
 def test_the_severity_sweep_is_quoted_the_same_in_the_guide_and_the_module():
+    """The pair count, the share under both models, the overstatement, and
+    the share against Viénot alone with the part of it the models' own
+    disagreement at 1.0 accounts for."""
     def figures(text):
+        text = re.sub(r"^\s*#\s?", "", text, flags=re.M)    # comment wraps
         text = " ".join(text.split()).replace("244 650", "244650")
         return (re.search(r"over (\d+) pairs", text).group(1),
                 re.search(r"([\d.]+)% clear", text).group(1),
-                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1))
+                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1),
+                re.search(r"Vi[eé]not alone the share is ([\d.]+)%",
+                          text).group(1),
+                re.search(r"(\w+ tenths) of (?:that|it) is the two models "
+                          r"disagreeing", text).group(1))
 
     guide = (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8")
     module = (SKILL / "scripts" / "check_palette.py").read_text(encoding="utf-8")
