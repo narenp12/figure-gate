@@ -1685,7 +1685,7 @@ def test_the_gates_page_names_only_publishers_with_a_type_minimum():
 # --- sources the style guide cites in its body --------------------------------
 # Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
 # from the References, which `CONTRIBUTING.md` says a cited work may not be.
-GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
+GUIDE_CITED = ("Kovesi", "Stone", "Szafir", "Machado", "Okabe", "Viénot", "Luo",
                "Potluri", "Lundgard", "Bateman", "Tufte", "Legge")
 
 
