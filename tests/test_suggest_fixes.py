@@ -179,6 +179,17 @@ def test_the_overplotting_remedy_does_not_advise_transparency():
     assert "do not help" in text or "does not help" in text
 
 
+def test_the_overplotting_docstring_does_not_advise_what_its_message_rules_out():
+    """The gate's message says transparency and hollow markers do not move the
+    row, and the test below measures it. The docstring listed both as fixes."""
+    doc = " ".join(cf.check_overplotting.__doc__.split()).lower()
+    for advice in ("add transparency", "use hollow markers"):
+        assert advice not in doc, (
+            f"check_overplotting's docstring advises '{advice}', which its own "
+            "message and test_transparency_really_does_not_move_the_overplotting_gate "
+            "rule out")
+
+
 def test_the_mark_ratio_clip_says_what_it_costs():
     """The snippet is right for one ornament among alike marks and wrong for a
     size encoding, and the round trip above cannot tell the two apart: its

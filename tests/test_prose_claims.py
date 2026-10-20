@@ -2167,8 +2167,8 @@ def _message_strings(func):
 
     The docstring is excluded, and that exclusion is the point. It is the one
     string in a gate that nobody reading a failing build ever sees, and several
-    of them explain the fix at length: `check_overplotting`'s names alpha,
-    hexbin and hollow markers. Walking it would pass a gate whose actual
+    of them explain the fix at length: `check_overplotting`'s names hexbin.
+    Walking it would pass a gate whose actual
     message said nothing, which is the failure mode this detector exists to
     catch.
     """
