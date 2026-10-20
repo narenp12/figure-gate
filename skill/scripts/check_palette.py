@@ -479,8 +479,7 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
 
     `simulate` is the dichromacy model `check` reports as severity 1.0; this
     function at 1.0 is the second one, reported as "1.0, Machado". Below 1.0
-    is the range between the two ends, which is where most colour vision
-    deficiency actually sits.
+    is anomalous trichromacy.
 
     Args:
         rgb: Linear-light `(r, g, b)`, each channel in 0..1.

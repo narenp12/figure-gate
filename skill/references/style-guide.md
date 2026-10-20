@@ -444,7 +444,9 @@ tinted page.
 
 **Dichromacy is not the worst case, so the separation row is swept over
 severity.** Colour vision deficiency includes anomalous trichromacy, meaning a
-cone whose peak sensitivity is shifted rather than one that is missing.
+cone whose peak sensitivity is shifted rather than one that is missing. It is
+the commoner form: of the 7.99% of European men with a red-green deficiency in
+Sharpe et al.'s Table 1.6, 5.71% are anomalous trichromats and 2.28% dichromats.
 Simulating only the endpoint would be sound if the endpoint were the hardest
 view.
 
@@ -860,6 +862,11 @@ kinds, and the reason `misc` fails, comes from this literature.
   *Journal of the Optical Society of America A* 29(3), 313-320.
   doi:10.1364/JOSAA.29.000313. The prevalence figures the CVD gate is scoped
   by.
+- Sharpe, L. T., Stockman, A., Jägle, H. & Nathans, J. (1999). Opsin genes,
+  cone photopigments, color vision, and color blindness. In K. R. Gegenfurtner
+  & L. T. Sharpe (eds.), *Color Vision: From Genes to Perception*, 3-52.
+  Cambridge University Press. Table 1.6 splits the red-green deficiencies of
+  45 989 men into anomalous and dichromatic forms.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.
