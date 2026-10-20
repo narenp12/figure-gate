@@ -78,14 +78,14 @@ __all__ = [
     "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
     "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
     "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
-    "MAX_SERIES_HUES", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
+    "MAX_SERIES_HUES", "SERIES_CONTACT_PX", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
     "MARK_RIDE_TOL_PX", "MARK_RIDE_FRAC_MIN", "SERIES_ENCLOSED_FRAC",
     "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
     "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
     "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "XHEIGHT_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
-    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
+    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_SLOPE",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
     "VENUE_PANEL_LABEL_PT",
     "content_width_pt", "type_ceiling_pt", "x_height_fraction",
@@ -254,6 +254,12 @@ OVERPLOT_THRESHOLD = 0.5
 # seventh: a generated hue is indistinguishable from an existing slot under
 # simulated color blindness.
 MAX_SERIES_HUES = 6
+
+# Slack, in display pixels, beyond the two strokes' half-widths at which two
+# line series count as meeting on the page. It is the densifier's vertex
+# spacing: two strokes that cross between vertices are at most this far apart
+# at the nearest pair of vertices. See `_strokes_meet`.
+SERIES_CONTACT_PX = 2.0
 
 # Rows `audit` can return "warn" for and never False. They are the checks whose
 # verdict depends on something the script cannot see: whether the document's
@@ -464,14 +470,14 @@ BANKING_SLOPE_MAX = 10.0
 # leg of a schematic, the two points of an annotation leader. The corpus has 24
 # such strokes and none of them has a typical slope worth reporting.
 BANKING_MIN_POINTS = 8
-# A segment shorter than this in either axis, in display pixels, is drawn flat
-# or drawn upright and carries no orientation a reader can compare. Half a pixel
-# is the resolution the page has. Heer & Agrawala cull exactly-zero and
-# exactly-infinite slopes for the same reason - they are unchanged by the aspect
-# ratio and still move the median that sets it - and a segment that renders as
-# horizontal is the same case arrived at from the render instead of the
-# arithmetic. See `_banking_slopes`.
-BANKING_FLAT_PX = 0.5
+# A segment flatter than this on the page, or steeper than its reciprocal, is
+# culled before the median. Heer & Agrawala cull exactly-zero and
+# exactly-infinite slopes: they are unchanged by the aspect ratio and still
+# move the median that sets it. The cull has to sit below the gate's own flat
+# bound, `1 / BANKING_SLOPE_MAX`, or it removes the panels the gate reports on;
+# this is a factor of ten below it, the factor `BANKING_SLOPE_MAX` puts between
+# banked and reported, and that factor is a judgement. See `_banking_slopes`.
+BANKING_FLAT_SLOPE = 0.01
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -2657,13 +2663,18 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
         rows.setdefault(r_, []).append(ax)
         cols.setdefault(c_, []).append(ax)
 
+    # Keyed on limits and scale as well as the label, like the tick half below:
+    # the remedy is `sharey`, and two panels at 0-1 and 0-1000 that name the
+    # same quantity cannot share one without flattening a panel.
     dupes = []
-    for group, getter, axis in ((rows, "get_ylabel", "y"),
-                                (cols, "get_xlabel", "x")):
+    for group, getter, lim_of, scale_of, axis in (
+            (rows, "get_ylabel", "get_ylim", "get_yscale", "y"),
+            (cols, "get_xlabel", "get_xlim", "get_xscale", "x")):
         for _, axes in group.items():
-            vals = [getattr(a, getter)().strip() for a in axes]
-            vals = [v for v in vals if v]
-            for label, n in Counter(vals).items():
+            vals = [(getattr(a, getter)().strip(), getattr(a, lim_of)(),
+                     getattr(a, scale_of)()) for a in axes]
+            for (label, _lim, _scale), n in Counter(
+                    v for v in vals if v[0]).items():
                 if n > 1:
                     dupes.append(f"{axis}label {label!r} x{n}")
 
@@ -3228,37 +3239,46 @@ def _data_colors_by_axes(
       enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
-    from matplotlib.patches import ConnectionPatch
-
     out = {}
     for ax in _all_axes(fig):
-        items = []
-        for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
-            if not artist.get_visible():
-                continue
-            if isinstance(artist, ConnectionPatch):
-                continue
-            if getattr(artist, "get_array", lambda: None)() is not None:
-                continue
-            raw = str(artist.get_label() or "")
-            label = raw if raw and not raw.startswith("_") else None
-            kind = _artist_kind(artist)
-            seen = set()
-            for getter in ("get_color", "get_facecolor", "get_edgecolor"):
-                fn = getattr(artist, getter, None)
-                if fn is None:
-                    continue
-                try:
-                    value = fn()
-                except (ValueError, TypeError, AttributeError):
-                    continue
-                for c in _colors_of(value):
-                    h = _hex(c)
-                    if h and h not in INK_TOKENS and h not in seen:
-                        seen.add(h)
-                        items.append((h, label, kind))
+        items = [(h, label, kind)
+                 for _, label, kind, hexes in _data_artists(ax) for h in hexes]
         if items:
             out[ax] = items
+    return out
+
+
+def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
+    """`[(artist, label, kind, hexes)]` for one panel, harvested on the terms
+    `_data_colors_by_axes` documents. Kept per artist so the separation row can
+    ask where a series is drawn and what else tells it apart."""
+    from matplotlib.patches import ConnectionPatch
+
+    out = []
+    for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
+        if not artist.get_visible():
+            continue
+        if isinstance(artist, ConnectionPatch):
+            continue
+        if getattr(artist, "get_array", lambda: None)() is not None:
+            continue
+        raw = str(artist.get_label() or "")
+        label = raw if raw and not raw.startswith("_") else None
+        hexes: list[str] = []
+        for getter in ("get_color", "get_facecolor", "get_edgecolor"):
+            fn = getattr(artist, getter, None)
+            if fn is None:
+                continue
+            try:
+                value = fn()
+            except (ValueError, TypeError, AttributeError):
+                continue
+            for c in _colors_of(value):
+                h = _hex(c)
+                if h and h not in INK_TOKENS and h not in hexes:
+                    hexes.append(h)
+        if hexes:
+            out.append((artist, label, _artist_kind(artist), hexes))
     return out
 
 
@@ -3273,14 +3293,162 @@ def _axes_all_pairs(ax: Axes) -> bool:
     """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
     drawn as; a built figure does say. Scatter puts every series next to every
-    other, so every pair has to separate. Lines and bars only ever put
-    neighbours next to each other, and gating all pairs there would fail
-    palettes the guide explicitly sanctions.
+    other, so every pair has to separate. A legend does too, by another route:
+    it asks the reader to identify each series against a swatch, which is the
+    task `NORMAL_FLOOR`'s comment sets the floors for, and any line can be
+    mistaken for any swatch. Without either, `_gated_pairs` decides.
 
     Asked per axes, not per figure: a scatter in one panel does not make a
-    line-only panel two panels over answer to the stricter rule."""
+    line-only panel two panels over answer to the stricter rule. A figure
+    legend is the exception, since it keys every panel."""
     from matplotlib.collections import PathCollection
-    return any(isinstance(c, PathCollection) for c in ax.collections)
+    if any(isinstance(c, PathCollection) for c in ax.collections):
+        return True
+    if ax.get_legend() is not None:
+        return True
+    parent: Any = ax.figure
+    while parent is not None:
+        if getattr(parent, "legends", None):
+            return True
+        parent = getattr(parent, "_parent", None)
+    return False
+
+
+def _gated_pairs(ax: Axes, distinct: list[str],
+                 artists: list[tuple[Any, str | None, str, list[str]]]
+                 ) -> set[tuple[int, int]]:
+    """Index pairs into `distinct` that the separation rows compare.
+
+    Every pair where `_axes_all_pairs` says so. Otherwise neighbours in draw
+    order, which is what a stacked bar puts side by side, and every pair of
+    line series whose strokes meet on the page. Draw order alone is a list the
+    reader never sees: orange and green lines that cross were never compared
+    when blue was plotted between them, and the same figure failed with the
+    plot calls reordered."""
+    n = len(distinct)
+    if _axes_all_pairs(ax):
+        return set(itertools.combinations(range(n), 2))
+    pairs = {(i, i + 1) for i in range(n - 1)}
+    index = {h: i for i, h in enumerate(distinct)}
+    strokes = []
+    for artist, _, kind, hexes in artists:
+        if kind != "line":
+            continue
+        px = _polyline_px(artist, ax)
+        if px is not None and len(px):
+            strokes.append((artist, px, [index[h] for h in hexes]))
+    dpi = ax.figure.dpi
+    for (a, pa, ia), (b, pb, ib) in itertools.combinations(strokes, 2):
+        wanted = {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
+        if not wanted - pairs:
+            continue
+        tol = ((a.get_linewidth() + b.get_linewidth()) / 2.0 * dpi / 72.0
+               + SERIES_CONTACT_PX)
+        if _strokes_meet(pa, pb, tol):
+            pairs |= wanted
+    return pairs
+
+
+def _strokes_meet(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
+    """Whether any vertex of one densified stroke lies within `tol` pixels of
+    a vertex of the other. scipy when present, numpy in chunks otherwise."""
+    import numpy as np
+    lo = np.maximum(pa.min(axis=0), pb.min(axis=0)) - tol
+    hi = np.minimum(pa.max(axis=0), pb.max(axis=0)) + tol
+    if np.any(lo > hi):
+        return False
+    pa = pa[np.all((pa >= lo) & (pa <= hi), axis=1)]
+    pb = pb[np.all((pb >= lo) & (pb <= hi), axis=1)]
+    if not len(pa) or not len(pb):
+        return False
+    try:
+        from scipy.spatial import cKDTree
+    except ImportError:                      # optional, see `_box_blur`
+        for start in range(0, len(pa), 256):
+            d2 = ((pa[start:start + 256, None, :] - pb[None, :, :]) ** 2).sum(-1)
+            if (d2 <= tol * tol).any():
+                return True
+        return False
+    d, _ = cKDTree(pb).query(pa, k=1, distance_upper_bound=tol)
+    return bool(np.isfinite(d).any())
+
+
+def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
+    """What besides hue tells this artist's series apart: mark type, dash,
+    marker shape and hatch. Two series whose sets of these share no member are
+    separated without colour."""
+    import numpy as np
+    from matplotlib.lines import Line2D
+    hatch = getattr(artist, "get_hatch", lambda: None)() or None
+    if isinstance(artist, Line2D):
+        marker = artist.get_marker()
+        marker = (None if str(marker).strip().lower() in ("", "none")
+                  else str(marker))
+        dash = str(artist.get_linestyle()) if kind == "line" else None
+        return (kind, dash, marker, hatch)
+    if kind == "marks":
+        paths = artist.get_paths()
+        shape = (tuple(np.round(paths[0].vertices, 3).ravel())
+                 if len(paths) else None)
+        return (kind, None, shape, hatch)
+    return (kind, None, None, hatch)
+
+
+def _separation(cp: Any, ax: Axes,
+                distinct: list[str]) -> tuple[list[str], list[str]]:
+    """The two separation rows for one panel, as `(fails, notes)`.
+
+    Each gated pair goes through `check_palette.check` on its own, so the row
+    can say which pair a second channel carries. A pair under `CVD_TARGET` that
+    one carries is a note, not a failure: the constant's own comment makes
+    secondary encoding mandatory below it, and the row's [FIX] asks for it.
+    `NORMAL_FLOOR` is excused by nothing, as its comment says."""
+    import re
+    artists = _data_artists(ax)
+    channels: dict[str, set[tuple[Any, ...]]] = {}
+    for artist, _, kind, hexes in artists:
+        for h in hexes:
+            channels.setdefault(h, set()).add(_second_channel(artist, kind))
+    results: dict[str, list[tuple[float, bool, str, bool]]] = {
+        "CVD separation": [], "Normal-vision floor": []}
+    for i, j in sorted(_gated_pairs(ax, distinct, artists)):
+        a, b = distinct[i], distinct[j]
+        carried = channels.get(a, set()).isdisjoint(channels.get(b, set()))
+        for name, status, detail in cp.check([a, b])[1]:
+            for row, found in results.items():
+                if name.startswith(row):
+                    m = re.search(r"dE (\d+(?:\.\d+)?)", detail)
+                    found.append((float(m.group(1)) if m else math.inf,
+                                  status is not False, detail, carried))
+    # Tritan is printed, never gated, and the number printed is the panel's
+    # worst over the gated pairs, as one `check` call over the panel reported
+    # it, not the tritan distance of whichever pair is worst under protan or
+    # deutan.
+    tritans = [float(m.group(1)) for _, _, detail, _ in results["CVD separation"]
+               for m in [re.search(r"tritan (\d+(?:\.\d+)?)", detail)] if m]
+    tritan = f"tritan {min(tritans):.1f}" if tritans else None
+
+    def panel(detail: str) -> str:
+        if tritan is None:
+            return detail
+        return re.sub(r"tritan \d+(?:\.\d+)?", tritan, detail, count=1)
+
+    fails, notes = [], []
+    for row, found in results.items():
+        if not found:
+            continue
+        excusable = row == "CVD separation"
+        hard = [r for r in found if not r[1] and not (excusable and r[3])]
+        if hard:
+            fails.append(panel(min(hard, key=lambda r: r[0])[2]))
+            continue
+        _, passed, detail, _ = min(found, key=lambda r: r[0])
+        detail = panel(detail.split("  [FIX]")[0].strip())
+        if not passed:
+            detail += (" - carried by a second channel (mark type, dash, "
+                       "marker or hatch)")
+        notes.append(detail)
+    return fails, notes
 
 
 def check_series_color(fig: Figure) -> tuple[bool | str, str]:
@@ -3374,14 +3542,9 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
                              "  [WHY] the color cycle wrapped")
 
         if len(distinct) >= 2 and cp is not None:
-            _, rows = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
-            for name, status, detail in rows:
-                if not name.startswith(("CVD separation", "Normal-vision floor")):
-                    continue
-                if status is False:
-                    fails.append(detail)
-                else:
-                    notes.append(detail.split("  [FIX]")[0].strip())
+            fails_ax, notes_ax = _separation(cp, ax, distinct)
+            fails += fails_ax
+            notes += notes_ax
 
     max_per_panel = max(
         (len(list(dict.fromkeys(h for h, _, _ in items)))
@@ -4546,17 +4709,21 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     Segments that render flat or upright are culled. Heer & Agrawala cull
     "slopeless" lines - zero or infinite slope - because they are unchanged by
     the aspect ratio and still drag the median that sets it. Generalised here
-    from exactly horizontal to *drawn* horizontal, which is the same argument
-    against the page rather than against the arithmetic: a segment whose rise is
-    under `BANKING_FLAT_PX` cannot be told from flat at any aspect a reader
-    will see, and no rescaling of the panel makes it carry a rate.
+    from exactly zero to under `BANKING_FLAT_SLOPE` on the page, and its
+    reciprocal for upright.
+
+    The cull is on the slope, not on the rise in pixels. A rise cull depends on
+    how finely the stroke was sampled: splitting every segment of the saw wave
+    into 100 leaves the drawn stroke and its slopes unchanged, puts every rise
+    under half a pixel, and culled the whole panel the gate exists for. A slope
+    is unchanged by splitting the segment it belongs to, so the cull is too.
 
     That is not a nicety. A saturating curve - a converged training run, which
-    is about as common as figures get - is 92 near-flat segments out of 119, and
-    without the cull its median slope is 0.0006: the gate warned that a
-    perfectly ordinary figure needed to be sixteen hundred times taller. Culled, the
-    same panel reads 1.30, which is banked. The saw wave the gate exists to
-    catch has nothing culled and is unaffected.
+    is about as common as figures get - is 76 segments out of 119 flatter than
+    `BANKING_FLAT_SLOPE`, and without the cull its median slope is 0.0006: the
+    gate warned that a perfectly ordinary figure needed to be sixteen hundred
+    times taller. Culled, the same panel reads 0.34, which is banked. The saw
+    wave the gate exists to catch loses only its risers and still warns.
     """
     import numpy as np
     if ax.get_aspect() != "auto":
@@ -4578,10 +4745,12 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
         if not (np.all(dx > 0) or np.all(dx < 0)):
             continue
         dy = np.diff(pts[:, 1])
-        drawn = (np.abs(dy) >= BANKING_FLAT_PX) & (np.abs(dx) >= BANKING_FLAT_PX)
+        slopes = np.abs(dy / dx)
+        drawn = ((slopes >= BANKING_FLAT_SLOPE)
+                 & (slopes <= 1.0 / BANKING_FLAT_SLOPE))
         if not drawn.any():
             continue
-        runs.append(np.abs(dy[drawn] / dx[drawn]))
+        runs.append(slopes[drawn])
     if not runs:
         return None
     # Pooled across the panel's strokes, because the aspect is one choice made

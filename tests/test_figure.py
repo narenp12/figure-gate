@@ -4822,8 +4822,8 @@ def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
 
 
 def test_banking_culls_segments_that_render_flat():
-    """A saturating curve - a converged training run - is 92 near-flat
-    segments out of 119. Slope cannot tell the flat tail from flat at any
+    """A saturating curve - a converged training run - has 76 of its 119
+    segments under the cull. Slope cannot tell the flat tail from flat at any
     aspect, and banking a panel on it asks for something sixteen hundred times
     taller; the cull has to happen before the median, or the gate warns on
     the most ordinary figure there is."""
@@ -4837,7 +4837,8 @@ def test_banking_culls_segments_that_render_flat():
     p = ax.transData.transform(np.column_stack([x, y]))
     d = np.diff(p, axis=0)
     dx, dy = d[:, 0], d[:, 1]
-    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
+    slope = np.abs(dy / dx)
+    drawn = (slope >= cf.BANKING_FLAT_SLOPE) & (slope <= 1 / cf.BANKING_FLAT_SLOPE)
 
     # The docstring's numbers, measured rather than imported: most of the
     # stroke renders flat, and the raw (unculled) median is below the floor.
@@ -4859,19 +4860,24 @@ def test_banking_culls_segments_that_render_flat():
 
 def test_banking_leaves_the_saw_wave_alone():
     """The cull exists so that flat segments do not drown a real rate; it must
-    not have the side effect of swallowing the figure the gate exists for. The
-    saw wave renders nothing flat - every limb moves - so nothing is culled and
-    the failure still lands."""
+    not have the side effect of swallowing the figure the gate exists for. Every
+    decay limb - the rates the reader compares - is kept. The ten risers, each
+    one step wide and the full height of a tall panel, render upright and are
+    culled, as Heer & Agrawala cull infinite slopes, and the failure still
+    lands."""
     import numpy as np
     fig, x, y = _alternating_rates((2.4, 5.2))
     ax = fig.axes[0]
     p = ax.transData.transform(np.column_stack([x, y]))
     d = np.diff(p, axis=0)
     dx, dy = d[:, 0], d[:, 1]
-    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
-    assert drawn.all(), (
-        f"{int(drawn.sum())}/{len(dx)} segments drawn; the cull is eating the "
-        "figure the gate exists for")
+    slope = np.abs(dy / dx)
+    drawn = (slope >= cf.BANKING_FLAT_SLOPE) & (slope <= 1 / cf.BANKING_FLAT_SLOPE)
+    limbs = np.diff(y) < 0
+    assert drawn[limbs].all(), (
+        f"{int(drawn[limbs].sum())}/{int(limbs.sum())} decay limbs drawn; the "
+        "cull is eating the figure the gate exists for")
+    assert not drawn[~limbs].any(), "the risers stopped rendering upright"
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Banking"] == "warn"
@@ -6200,3 +6206,156 @@ def test_the_sizes_the_docs_quote(family, size):
         pytest.skip(f"{family} is not installed")
     frac = cf.x_height_fraction(path)
     assert math.ceil(round(cf.XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10 == size
+
+
+# --- invariances: a verdict is a property of the figure as drawn -------------
+#
+# Each test below pins a property the 2026-10-19 review found violated: the
+# verdict moved with something the reader never sees (draw order, vertex
+# density) or contradicted the remedy the row itself prints. Each comes with
+# the control that keeps the fix from passing by switching the gate off.
+
+# tab10's orange and green: dE 2.4 under protanopia, against `CVD_TARGET`.
+CVD_PAIR = ("#ff7f0e", "#2ca02c")
+# Okabe-Ito orange and yellow: clear `CVD_TARGET`, miss `NORMAL_FLOOR` at 20.8.
+NORMAL_PAIR = ("#e69f00", "#f0e442")
+
+
+def _three_lines(order, legend, crossing):
+    """Orange, blue and green lines, drawn in `order`. Orange and green are the
+    CVD failure and blue clears both; with `crossing` the lines meet, without
+    it they are parallel and far apart."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 50)
+    shapes = ({"#ff7f0e": x, "#1f77b4": 0.95 + 0 * x, "#2ca02c": 1.0 - x}
+              if crossing else
+              {"#ff7f0e": 0 * x, "#1f77b4": 1 + 0 * x, "#2ca02c": 2 + 0 * x})
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        ax.plot(x, shapes[c], color=c, label=c)
+    if legend:
+        ax.legend()
+    else:
+        for c in order:
+            ax.text(1.02, float(shapes[c][-1]), c, fontsize=8)
+    return fig
+
+
+def _series_color(fig):
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    return gates(rows)["Series color"]
+
+
+def test_a_legend_gates_every_pair_whatever_the_draw_order():
+    """A legend asks the reader to identify each line against a swatch, which
+    is every pair, not neighbours in a list the reader never sees. Before, the
+    same figure passed or failed depending on which series was plotted
+    second."""
+    import itertools
+    verdicts = {order: _series_color(_three_lines(order, legend=True,
+                                                  crossing=False))
+                for order in itertools.permutations(
+                    ("#ff7f0e", "#1f77b4", "#2ca02c"))}
+    assert set(verdicts.values()) == {False}, verdicts
+
+
+def test_crossing_lines_are_neighbours_on_the_page():
+    """Without a legend the reader still has to tell two strokes apart where
+    they meet. Orange and green cross here with blue drawn between them."""
+    fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=False,
+                       crossing=True)
+    assert _series_color(fig) is False
+
+
+def test_directly_labelled_lines_that_never_meet_keep_the_adjacent_rule():
+    """The control. No legend and no contact: the non-adjacent pair is never
+    compared, by swatch or on the page, so the adjacent rule still applies."""
+    fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=False,
+                       crossing=False)
+    assert _series_color(fig) is True
+
+
+def _two_lines(colors, styles):
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 12)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for k, (c, (ls, marker)) in enumerate(zip(colors, styles)):
+        ax.plot(x, x * (k + 1), color=c, ls=ls, marker=marker, label=c)
+    ax.legend()
+    return fig
+
+
+def test_a_second_channel_carries_a_pair_under_the_cvd_target():
+    """`CVD_TARGET`'s own comment: below it, secondary encoding is mandatory.
+    A pair that carries it - distinct dash and distinct marker - has done what
+    the row's [FIX] asks, and failing it anyway contradicts the row."""
+    ok = _series_color(_two_lines(CVD_PAIR, [("-", "o"), ("--", "s")]))
+    assert ok is True
+
+
+def test_the_same_pair_without_a_second_channel_still_fails():
+    ok = _series_color(_two_lines(CVD_PAIR, [("-", None), ("-", None)]))
+    assert ok is False
+
+
+def test_no_second_channel_excuses_the_normal_vision_floor():
+    """`NORMAL_FLOOR` is the hard floor: "no secondary encoding excuses it"."""
+    from check_palette import check
+    _, rows = check(list(NORMAL_PAIR))
+    status = gates(rows)
+    assert status["CVD separation (adjacent)"] is True
+    assert status["Normal-vision floor (adjacent)"] is False
+    ok = _series_color(_two_lines(NORMAL_PAIR, [("-", "o"), ("--", "s")]))
+    assert ok is False
+
+
+def _subdivided(x, y, k):
+    """The same polyline with every segment split into `k` equal pieces: the
+    stroke on the page is identical, only the vertex count changes."""
+    import numpy as np
+    t = np.linspace(0.0, 1.0, k, endpoint=False)
+    xs = np.concatenate([x[:-1, None] + np.diff(x)[:, None] * t, ], axis=None)
+    ys = np.concatenate([y[:-1, None] + np.diff(y)[:, None] * t, ], axis=None)
+    return np.append(xs, x[-1]), np.append(ys, y[-1])
+
+
+@pytest.mark.parametrize("k", [1, 10, 100])
+def test_banking_does_not_depend_on_how_finely_a_stroke_is_sampled(k):
+    """Splitting every segment into k equal pieces leaves the drawn stroke and
+    the multiset of segment slopes unchanged, so the verdict must not move.
+    A rise cull in pixels made it move: at k=100 every segment rose under
+    half a pixel, all were culled, and the panel the gate exists for read
+    "no line panel"."""
+    import numpy as np
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    plt.close(fig)
+    xs, ys = _subdivided(x, y, k)
+    fig, ax = plt.subplots(figsize=(2.4, 5.2), dpi=150)
+    ax.plot(xs, ys, lw=1.2)
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    slopes = cf._banking_slopes(ax)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert slopes is not None
+    base = _alternating_rates((2.4, 5.2))[0]
+    want = float(np.median(cf._banking_slopes(base.axes[0])))
+    plt.close(base)
+    assert float(np.median(slopes)) == pytest.approx(want, rel=1e-6)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_a_repeated_label_on_panels_that_cannot_share_a_scale_is_not_redundant():
+    """`sharey` on 0-1 and 0-1000 would flatten one panel to a line. The tick
+    half of the row already keys on limits and scale for this reason; the label
+    half has to as well, or it prints a remedy that destroys the figure."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 3), constrained_layout=True)
+    a.plot([0, 1], [0, 1])
+    b.plot([0, 1], [0, 1000])
+    for ax in (a, b):
+        ax.set_ylabel("Accuracy")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Axis redundancy"] is True
