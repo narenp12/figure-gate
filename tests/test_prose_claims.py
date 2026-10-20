@@ -1735,7 +1735,10 @@ EXTERNAL_CLAIMS = {
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
                   "22(1), 253-258",
         "doi": "10.2352/CIC.2014.22.1.art00045",
-        "verified": "2026-07-31",
+        # Re-read 2026-10-20 from graphics.cs.wisc.edu/Papers/2014/SAS14/
+        # 2014CIC_48_Stone_v3.pdf, with Table 3 (C and K per axis), which
+        # test_the_size_model_itself_fails_three_okabe_ito_pairs reads.
+        "verified": "2026-10-20",
         "quote": "In the paper, we describe a way to model discriminability as "
                  "a function of size for target sizes ranging from 6 degrees "
                  "to 1/3 of visual angle. ... A theoretical CIELAB JND, where "
