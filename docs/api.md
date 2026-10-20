@@ -74,6 +74,8 @@ the checks are reimplemented elsewhere.
 
 ::: check_palette.check_json
 
+::: check_palette.pair_separation
+
 ::: check_palette.cmap_kind
 
 ::: check_palette.cmap_kind_rgb

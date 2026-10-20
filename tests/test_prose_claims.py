@@ -2267,9 +2267,12 @@ def test_the_reason_marker_does_not_read_as_a_fix_marker():
 def test_the_palette_rows_split_their_markers_too():
     """`check_palette.check` writes rows that `check_colormap` splices
     into its own detail, so its clauses are read under the same convention and
-    are not reached by the gate-function walk above."""
-    tree = ast.parse(inspect.getsource(cp.check).lstrip())
-    strings = [node.value for node in ast.walk(tree)
+    are not reached by the gate-function walk above. The two separation rows'
+    details are written by `_cvd_detail` and `_normal_detail`, which
+    `check_series_color` shares."""
+    strings = [node.value
+               for fn in (cp.check, cp._cvd_detail, cp._normal_detail)
+               for node in ast.walk(ast.parse(inspect.getsource(fn).lstrip()))
                if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     reasons = [s for s in strings if WHY_MARK in s]
     assert reasons, (
