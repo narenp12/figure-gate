@@ -128,6 +128,8 @@ def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
 # OKLab stays for the two rows that ask about a *coordinate* rather than a
 # distance: the lightness band and the chroma floor. Those are design choices
 # about where in the space a series hue should sit, and they claim no calibration.
+# Two thresholds do gate on an OKLab lightness *difference*, `ORDINAL_DL_MIN` and
+# `CMAP_SPAN_MIN`; each states its CAM02-UCS J' equivalent where it is defined.
 #
 # The sRGB viewing environment, matching CIE 159:2004's worked conditions and
 # colorspacious's `CIECAM02Space.sRGB`: D65 at 100 cd/m^2, a 20% surround, and
@@ -558,18 +560,17 @@ def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
 
 CMAP_SAMPLES = 256          # points `check_figure` samples a colormap at
 CMAP_QUALITATIVE_N = 40     # fewer entries than this is a category list, not a ramp
-CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat
+CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat, ~2.3 J'
 CMAP_BACKTRAVEL_MAX = 0.02  # backward lightness travel, as a fraction of the span
-# A ramp is cyclic when its two ends are the same colour, and "the same colour"
-# now has a definition instead of a tuning: CAM02-UCS is fitted so that a unit
-# of its distance is about one just-noticeable difference, so ends closer than
-# 1.0 are ends a reader cannot tell apart. The OKLab 3.0 this replaces could not
-# be stated that way - it was a number between the two clusters and nothing more.
+# A ramp is cyclic when its two ends are the same colour. 1.0 CAM02-UCS is about
+# 2 CIELAB over the slot gamut (see the bridge at `CVD_TARGET`): twice the
+# theoretical 2-degree JND Stone et al. give, a third of their practical
+# ND(50,2) of 6. It is not a JND, and it does not need to be one.
 #
 # Measured over the 18 maps in matplotlib's registry that reach this branch:
 # twilight wraps at 0.000 and twilight_shifted at 0.376, and the nearest
-# diverging map, BrBG, wraps at 27.963. The threshold has two orders of
-# magnitude of clearance on either side, so it is a definition rather than a fit.
+# diverging map, BrBG, wraps at 27.963. Any value between 0.4 and 27 sorts the
+# registry the same way, so the number is a placement, not a fit.
 CMAP_WRAP_DE_MAX = 1.0
 
 # Uppercase numbers here that are not thresholds, and the reason each is not.
@@ -753,6 +754,13 @@ NORMAL_FLOOR = 21.0       # 4x Stone et al.; hard floor, no secondary encoding e
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 # The three ordinal rows. `--ordinal` swaps the categorical gates for these.
+#
+# `ORDINAL_DL_MIN` is an OKLab lightness gap, and OKLab has no published unit.
+# Along ten sequential maps one unit of OKLab L is a median 116 CAM02-UCS J'
+# (p5 93, p95 129), so the floor is about 7 J', against the 5.2 that Stone et
+# al.'s 0.333-degree mean reaches through the bridge above. That mean is over
+# all three CIELAB axes; their lightness-only fit was not checked, so this is a
+# comparison, not a derivation.
 ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
 ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest

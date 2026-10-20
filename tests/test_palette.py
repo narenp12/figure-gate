@@ -519,6 +519,48 @@ def test_the_cyclic_wrap_is_a_colour_distance_not_a_lightness_one():
     assert cp.cmap_kind(ends) == "diverging"
 
 
+def test_the_cyclic_wrap_threshold_sits_in_an_empty_band():
+    """`CMAP_WRAP_DE_MAX` says any value between 0.4 and 27 sorts the registry
+    the same way. Every map that reaches the wrap test, measured."""
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    wraps = {"cyclic": [], "diverging": []}
+    for name in colormaps:
+        if name.endswith("_r") or colormaps[name].N < cp.CMAP_QUALITATIVE_N:
+            continue
+        samples = cmap_samples(name)
+        kind = cp.cmap_kind(samples)
+        if kind in wraps:
+            wraps[kind].append(cp.delta_e(cp.hex_to_linear(samples[0]),
+                                          cp.hex_to_linear(samples[-1])))
+    assert wraps["cyclic"] and wraps["diverging"]
+    assert max(wraps["cyclic"]) < 0.4 <= cp.CMAP_WRAP_DE_MAX
+    assert cp.CMAP_WRAP_DE_MAX <= 27 < min(wraps["diverging"])
+
+
+J_PER_OKLAB_L_MAPS = ("viridis", "cividis", "plasma", "magma", "inferno",
+                      "Blues", "Greens", "Greys", "YlOrBr", "PuBu")
+
+
+def test_the_oklab_lightness_floors_state_their_j_prime_equivalent():
+    """`ORDINAL_DL_MIN` says one OKLab L is a median 116 J' (p5 93, p95 129)
+    along these maps, which puts it at about 7 J' against the 5.2 hairline
+    floor, half `CVD_TARGET`. `CMAP_SPAN_MIN` says ~2.3 J'."""
+    import statistics
+    ratios = []
+    for name in J_PER_OKLAB_L_MAPS:
+        lj = [(cp.linear_to_oklab(v)[0], cp.linear_to_cam02ucs(v)[0])
+              for v in map(cp.hex_to_linear, cmap_samples(name))]
+        ratios += [(j1 - j0) / (l1 - l0) for (l0, j0), (l1, j1)
+                   in zip(lj, lj[1:]) if abs(l1 - l0) > 1e-3]
+    ratios.sort()
+    median = statistics.median(ratios)
+    p5, p95 = (ratios[int(q * (len(ratios) - 1))] for q in (0.05, 0.95))
+    assert round(median) == 116
+    assert round(p5) == 93 and round(p95) == 129
+    assert round(cp.ORDINAL_DL_MIN * median) == 7 > cp.CVD_TARGET / 2
+    assert round(cp.CMAP_SPAN_MIN * median, 1) == 2.3
+
+
 def test_check_palette_still_imports_nothing_outside_the_standard_library():
     import ast
     from pathlib import Path
