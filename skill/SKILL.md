@@ -402,7 +402,7 @@ Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-6pt is the minimum PNAS and Science publish. Under 4pt of x-height, where
+6pt is the minimum PNAS publishes. Under 4pt of x-height, where
 reading slows (Legge & Bigelow 2011, quoted in `references/style-guide.md`),
 the row warns. The body size that clears the warning depends on the font and
 on which fonts the machine has. With the style sheet, keep every string at
