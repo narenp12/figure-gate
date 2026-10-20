@@ -3310,12 +3310,19 @@ def _data_colors_by_axes(
       enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
+    return {ax: [(h, label, kind)
+                 for _, label, kind, hexes in artists for h in hexes]
+            for ax, artists in _data_artists_by_axes(fig).items()}
+
+
+def _data_artists_by_axes(
+        fig: Figure) -> dict[Axes, list[tuple[Any, str | None, str, list[str]]]]:
+    """`_data_artists` for every panel that draws a categorical colour."""
     out = {}
     for ax in _all_axes(fig):
-        items = [(h, label, kind)
-                 for _, label, kind, hexes in _data_artists(ax) for h in hexes]
-        if items:
-            out[ax] = items
+        artists = _data_artists(ax)
+        if any(hexes for *_, hexes in artists):
+            out[ax] = artists
     return out
 
 
@@ -3518,67 +3525,59 @@ def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     return (kind, None, None, hatch)
 
 
-def _separation(cp: Any, ax: Axes,
-                distinct: list[str]) -> tuple[list[str], list[str]]:
+def _separation(cp: Any, ax: Axes, distinct: list[str],
+                artists: list[tuple[Any, str | None, str, list[str]]],
+                ) -> tuple[list[str], list[str]]:
     """The two separation rows for one panel, as `(fails, notes)`.
 
-    Each gated pair goes through `check_palette.check` on its own, so the row
-    can say which pair a second channel carries. A pair under `CVD_TARGET` that
-    one carries is a note, not a failure: the constant's own comment makes
-    secondary encoding mandatory below it, and the row's [FIX] asks for it.
-    `NORMAL_FLOOR` is excused by nothing, as its comment says."""
-    import re
-    artists = _data_artists(ax)
+    Each gated pair is measured on its own with `check_palette.pair_separation`,
+    so the row can say which pair a second channel carries. A pair under
+    `CVD_TARGET` that one carries is a note, not a failure: the constant's own
+    comment makes secondary encoding mandatory below it, and the row's [FIX]
+    asks for it. `NORMAL_FLOOR` is excused by nothing, as its comment says.
+    `artists` is `_data_artists(ax)`, harvested once by the caller."""
     channels: dict[str, set[tuple[Any, ...]]] = {}
     for artist, _, kind, hexes in artists:
         for h in hexes:
             channels.setdefault(h, set()).add(_second_channel(artist, kind))
-    results: dict[str, list[tuple[float, bool, str, bool]]] = {
-        "CVD separation": [], "Normal-vision floor": []}
+    measured = []
     for i, j in sorted(_gated_pairs(ax, distinct, artists)):
         a, b = distinct[i], distinct[j]
         carried = channels.get(a, set()).isdisjoint(channels.get(b, set()))
-        for name, status, detail in cp.check([a, b])[1]:
-            for row, found in results.items():
-                if name.startswith(row):
-                    m = re.search(r"dE (\d+(?:\.\d+)?)", detail)
-                    found.append((float(m.group(1)) if m else math.inf,
-                                  status is not False, detail, carried))
+        measured.append((a, b, cp.pair_separation(a, b), carried))
+    if not measured:
+        return [], []
     # Tritan is printed, never gated, and the number printed is the panel's
     # worst over the gated pairs, as one `check` call over the panel reported
     # it, not the tritan distance of whichever pair is worst under protan or
     # deutan.
-    tritans = [float(m.group(1)) for _, _, detail, _ in results["CVD separation"]
-               for m in [re.search(r"tritan (\d+(?:\.\d+)?)", detail)] if m]
-    tritan = f"tritan {min(tritans):.1f}" if tritans else None
+    tritan = min(sep["tritan"] for _, _, sep, _ in measured)
 
-    def panel(detail: str) -> str:
-        if tritan is None:
-            return detail
-        return re.sub(r"tritan \d+(?:\.\d+)?", tritan, detail, count=1)
+    def cvd(a: str, b: str, sep: dict[str, Any]) -> str:
+        return cp._cvd_detail(a, b, sep["cvd"], sep["cvd_kind"],
+                              sep["cvd_severity"], tritan, fix=False)
 
     fails, notes = [], []
-    for row, found in results.items():
-        if not found:
-            continue
-        excusable = row == "CVD separation"
-        hard = [r for r in found if not r[1] and not (excusable and r[3])]
-        if hard:
-            detail = panel(min(hard, key=lambda r: r[0])[2])
-            if excusable:
-                # `check_palette`'s remedy is for a list of hexes. Here the
-                # channels the row can see are the ones worth naming.
-                detail = (detail.split("  [FIX]")[0].strip()
-                          + "  [FIX] separate the pair by dash, marker, hatch "
-                            "or mark type as well as hue, or re-step")
-            fails.append(detail)
-            continue
-        _, passed, detail, _ = min(found, key=lambda r: r[0])
-        detail = panel(detail.split("  [FIX]")[0].strip())
-        if not passed:
+    # CVD: a pair under the target fails unless a second channel carries it.
+    hard = [m for m in measured if m[2]["cvd"] < cp.CVD_TARGET and not m[3]]
+    if hard:
+        a, b, sep, _ = min(hard, key=lambda m: m[2]["cvd"])
+        # `check_palette`'s remedy is for a list of hexes. Here the channels
+        # the row can see are the ones worth naming.
+        fails.append(cvd(a, b, sep)
+                     + "  [FIX] separate the pair by dash, marker, hatch "
+                       "or mark type as well as hue, or re-step")
+    else:
+        a, b, sep, _ = min(measured, key=lambda m: m[2]["cvd"])
+        detail = cvd(a, b, sep)
+        if sep["cvd"] < cp.CVD_TARGET:
             detail += (" - carried by a second channel (mark type, dash, "
                        "marker or hatch)")
         notes.append(detail)
+    # Normal vision: excused by nothing.
+    a, b, sep, _ = min(measured, key=lambda m: m[2]["normal"])
+    detail = cp._normal_detail(a, b, sep["normal"])
+    (fails if sep["normal"] < cp.NORMAL_FLOOR else notes).append(detail)
     return fails, notes
 
 
@@ -3637,7 +3636,10 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     the grain of truth in the complaint, and the answer to it is to step the
     ramp wider rather than to guess at intent from four hexes.
     """
-    by_ax = _data_colors_by_axes(fig)
+    artists_by_ax = _data_artists_by_axes(fig)
+    by_ax = {ax: [(h, label, kind) for _, label, kind, hexes in artists
+                  for h in hexes]
+             for ax, artists in artists_by_ax.items()}
     if not by_ax:
         return True, "no categorical series colors"
 
@@ -3673,7 +3675,8 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
                              "  [WHY] the color cycle wrapped")
 
         if len(distinct) >= 2 and cp is not None:
-            fails_ax, notes_ax = _separation(cp, ax, distinct)
+            fails_ax, notes_ax = _separation(cp, ax, distinct,
+                                             artists_by_ax[ax])
             fails += fails_ax
             notes += notes_ax
 

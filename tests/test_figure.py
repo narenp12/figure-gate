@@ -6737,3 +6737,42 @@ def test_only_the_contact_test_compares_the_rule_change_with_the_series():
     plt.close(fig)
     assert abs(observed - rule) > 1, distinct
     assert frozenset({"#0072b2", "#cc79a7"}) in gated, gated
+
+
+# --- the series-colour row reads numbers, not strings ------------------------
+
+def _two_series():
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.plot([0, 1], [0, 1], color=CVD_PAIR[0], label="a")
+    ax.plot([0, 1], [1, 0], color=CVD_PAIR[1], label="b")
+    ax.legend()
+    return fig
+
+
+def test_series_color_does_not_parse_check_palettes_detail_strings(monkeypatch):
+    """`_separation` regex-parsed dE and tritan out of `check`'s prose, so a
+    rewording of a detail string would have moved a verdict."""
+    cp = cf._sibling("check_palette")
+    fig = _two_series()
+    expected = cf.check_series_color(fig)
+
+    def no_check(*args, **kwargs):
+        raise AssertionError("check_series_color called check_palette.check")
+    monkeypatch.setattr(cp, "check", no_check)
+    got = cf.check_series_color(fig)
+    plt.close(fig)
+    assert got == expected
+
+
+def test_series_color_harvests_each_panel_once(monkeypatch):
+    fig, axes = plt.subplots(1, 2, figsize=(4, 2))
+    for ax in axes:
+        ax.plot([0, 1], [0, 1], color=CVD_PAIR[0])
+        ax.plot([0, 1], [1, 0], color=CVD_PAIR[1])
+    calls = []
+    real = cf._data_artists
+    monkeypatch.setattr(cf, "_data_artists",
+                        lambda ax: calls.append(ax) or real(ax))
+    cf.check_series_color(fig)
+    plt.close(fig)
+    assert len(calls) == len(axes), calls
