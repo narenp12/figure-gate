@@ -1590,6 +1590,21 @@ def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
 # claim without repeating the search, and so an uncited external number fails.
 
 EXTERNAL_CLAIMS = {
+    "anomalous trichromacy the commoner form": {
+        "document": "style-guide.md",
+        "anchor": "5.71% are anomalous trichromats and 2.28% dichromats",
+        "source": "Sharpe, Stockman, Jägle & Nathans, in Gegenfurtner & "
+                  "Sharpe (eds.), Color Vision: From Genes to Perception, "
+                  "Cambridge University Press, 1999, pp. 3-52, Table 1.6",
+        "no_doi": "a chapter in a 1999 Cambridge University Press edited "
+                  "volume, which carries an ISBN and no chapter DOI; read "
+                  "from the authors' PDF as archived by the Wayback Machine",
+        "verified": "2026-10-20",
+        "quote": "Gender No. Protan Deutan Anomaly Anopia Anomaly Anopia Male "
+                 "45,989 1.08 1.01 4.63 1.27 Female 30,711 0.03 0.02 0.36 0.01 "
+                 "Table 1.6: Incidences (in percent) for X-chromosome-linked "
+                 "color vision deficiencies in men and women.",
+    },
     "SIAM line weight": {
         "document": "style-guide.md",
         "anchor": "lines one point or thicker",
@@ -2444,3 +2459,19 @@ def test_the_severity_sweep_is_quoted_the_same_in_the_guide_and_the_module():
     guide = (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8")
     module = (SKILL / "scripts" / "check_palette.py").read_text(encoding="utf-8")
     assert figures(guide) == figures(module)
+
+
+def test_the_anomalous_share_is_the_sum_the_table_gives():
+    """The guide states sums of Sharpe et al.'s Table 1.6, not cells of it, so
+    the arithmetic is checked against the row the ledger quotes."""
+    entry = EXTERNAL_CLAIMS["anomalous trichromacy the commoner form"]
+    p_anomaly, p_anopia, d_anomaly, d_anopia = (
+        float(v) for v in re.search(r"Male 45,989 ([\d.]+) ([\d.]+) ([\d.]+) "
+                                    r"([\d.]+)", entry["quote"]).groups())
+    text = " ".join(document(entry["document"]).read_text(encoding="utf-8").split())
+    stated = re.search(r"of the ([\d.]+)% of European men .*? ([\d.]+)% are "
+                       r"anomalous trichromats and ([\d.]+)% dichromats", text)
+    total, anomalous, dichromat = (float(v) for v in stated.groups())
+    assert anomalous == pytest.approx(p_anomaly + d_anomaly)
+    assert dichromat == pytest.approx(p_anopia + d_anopia)
+    assert total == pytest.approx(anomalous + dichromat)

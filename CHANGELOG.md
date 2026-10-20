@@ -62,6 +62,9 @@ behind a threshold this project enforces.
   `tests/test_alt_text_numbers.py` for their alt text.
 - `check_palette.pair_separation(color_a, color_b)`: `cvd`, `cvd_kind`,
   `cvd_severity`, `tritan` and `normal` for one pair.
+- `EXTERNAL_CLAIMS["anomalous trichromacy the commoner form"]`,
+  `test_the_anomalous_share_is_the_sum_the_table_gives`, and `Sharpe` in
+  `GUIDE_CITED`.
 
 #### Changed
 
@@ -160,6 +163,11 @@ behind a threshold this project enforces.
   allows, [1.6, 4.0), and its same-process miss count.
 - The gallery count is twenty-four in `gallery.py`, the README, `design.md`,
   the gallery page and the tests that count it.
+- `style-guide.md`: anomalous trichromacy is 5.71% of European men and
+  dichromacy 2.28%, from Sharpe et al. (1999) Table 1.6, added to its
+  References.
+- `simulate_anomalous`'s docstring says below 1.0 is anomalous trichromacy,
+  and no longer says it is where most deficiency sits.
 - `check_figure._separation` takes the panel's `_data_artists` from
   `check_series_color` and measures each pair with `pair_separation`, not by
   calling `check_palette.check` and parsing its detail strings.
@@ -368,6 +376,13 @@ strings are now written once, in `check_palette`, for both callers. Verdicts
 and details did not move: the 25-figure sweep is byte-identical before and
 after, and so is `check_series_color` on 400 seeded random figures, 165 of them
 failing and 37 carried by a second channel.
+
+`simulate_anomalous` said severities below 1.0 are "where most colour vision
+deficiency actually sits", with no source. Birch (2012), already cited, gives
+totals only. Sharpe, Stockman, Jägle & Nathans (1999) Table 1.6 splits 45 989
+European men: 1.08% protanomaly, 4.63% deuteranomaly, 1.01% protanopia, 1.27%
+deuteranopia, so anomalous trichromats are 5.71 of the 7.99 points. The
+sourced claim lives in the style guide, where the ledger can hold it.
 ## 0.10.0 — 2026-09-30
 
 ### What changed
