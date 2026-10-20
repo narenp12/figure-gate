@@ -1123,12 +1123,12 @@ def site_alt_texts():
 
 
 def test_the_examples_still_describe_every_figure():
-    """Twenty figures, twenty descriptions, plus the demo. A refactor that
+    """Twenty-four figures, twenty-four descriptions, plus the demo. A refactor that
     changes the call shape would otherwise leave this file comparing the site
     against a shorter list and finding no disagreement."""
-    assert len(described_strings()) == 21, (
+    assert len(described_strings()) == 25, (
         f"read {len(described_strings())} descriptions out of demo.py and "
-        "gallery.py, expected 21 - the call shape changed and "
+        "gallery.py, expected 25 - the call shape changed and "
         "described_strings() needs updating with it")
 
 
@@ -1317,7 +1317,9 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                 "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
                 "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-                "eighteen": 18, "nineteen": 19, "twenty": 20}
+                "eighteen": 18, "nineteen": 19, "twenty": 20,
+                "twenty-one": 21, "twenty-two": 22, "twenty-three": 23,
+                "twenty-four": 24}
 
 ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
@@ -1364,9 +1366,10 @@ def test_the_docs_state_the_real_roster_count(label):
 GALLERY_PY = ROOT / "examples" / "gallery.py"
 
 GALLERY_COUNT_CLAIMS = {
-    "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
-    "the gallery page": (DOCS_GALLERY, r"builds these (\w+) figures and audits"),
-    "the README": (README, r"Writing those (\w+) exposed"),
+    "gallery.py's docstring": (GALLERY_PY, r"([\w-]+) figures hard enough"),
+    "the gallery page": (DOCS_GALLERY,
+                         r"builds these ([\w-]+) figures and audits"),
+    "the README": (README, r"Writing those ([\w-]+) exposed"),
 }
 
 
