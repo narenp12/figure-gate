@@ -1389,6 +1389,16 @@ RETRACTED_CLAIMS = {
                "EXTERNAL_CLAIMS under 'journal type floors'",
         "retracted": "2026-08-17",
     },
+    "Science publishing a 6pt text minimum": {
+        "pattern": r"(PNAS(?:'s)?,? (?:and )?Science|Science(?:'s)? and "
+                   r"PNAS)[^.]{0,20}(publish|set|require|minim|6 ?pt)",
+        "instead": "6pt is the minimum PNAS publishes. Science's 6 point "
+                   "minimum is for symbols",
+        "why": "Science publishes no text floor, as EXTERNAL_CLAIMS under "
+               "'journal type floors' quotes. The 6pt floor shipped citing "
+               "both journals",
+        "retracted": "2026-10-19",
+    },
     "page_scale returning a length per authored inch": {
         "pattern": r"points?[^.]{0,40}per authored inch",
         "instead": "page_scale returns placed size over authored size: a "
@@ -1446,8 +1456,9 @@ RETRACTED_CLAIMS = {
     },
     "7.5pt as the size where text is comfortable": {
         "pattern": r"7\.5[^.]{0,60}comfortable",
-        "instead": "the floor is an x-height of 4pt on the page, where Legge "
-                   "& Bigelow (2011) put the start of fluent reading",
+        "instead": "the floor is 6pt on the page, the minimum PNAS "
+                   "publishes. Under a 4pt x-height, where Legge & Bigelow "
+                   "(2011) put the start of fluent reading, the row warns",
         "why": "7.5 shipped in the initial release with no source, and "
                "'comfortable' was added two days later. In STIX Two Text, "
                "the style sheet's font, 7.5pt is an x-height of 0.177 "
@@ -1467,9 +1478,24 @@ RETRACTED_CLAIMS = {
 
 
 def _retraction_corpus():
-    """Documents and modules, because the claim survived in a module."""
+    """Documents, modules and tests, because the claim survived in a module
+    and then in a test comment. This file is left out: it holds the
+    patterns."""
+    tests = sorted(p for p in (ROOT / "tests").glob("*.py")
+                   if p.name != pathlib.Path(__file__).name)
     return PROSE_DOCS + [pathlib.Path(inspect.getfile(module))
-                         for module in MODULES.values()]
+                         for module in MODULES.values()] + tests
+
+
+def _retraction_text(path):
+    """A test's comments only. Its docstrings and fixtures may quote a
+    retracted claim to pin why it was retracted."""
+    text = path.read_text(encoding="utf-8")
+    if path.parent.name == "tests":
+        text = "\n".join(line.strip().lstrip("#")
+                         for line in text.splitlines()
+                         if line.strip().startswith("#"))
+    return " ".join(text.split())
 
 
 @pytest.mark.parametrize("claim", sorted(RETRACTED_CLAIMS))
@@ -1477,7 +1503,7 @@ def test_a_retracted_claim_is_written_nowhere(claim):
     entry = RETRACTED_CLAIMS[claim]
     found = []
     for path in _retraction_corpus():
-        text = " ".join(path.read_text(encoding="utf-8").split())
+        text = _retraction_text(path)
         if re.search(entry["pattern"], text, re.I):
             found.append(path.relative_to(ROOT).as_posix())
     assert not found, (

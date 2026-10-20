@@ -9,6 +9,7 @@ except one, which is close to what happened twice while the checker was written.
 
 import re
 import shutil
+import sys
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -3651,6 +3652,193 @@ def test_the_ceiling_fix_names_the_authored_size():
     assert "set text at 14.0pt as authored, 7.0pt on the page" in detail
 
 
+def _xlabel_type(size_pt, scale, **kw):
+    with plt.rc_context({"font.family": kw.pop("family", "DejaVu Sans")}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("dose", fontsize=size_pt)
+        result = cf.check_type_size(fig, cf._renderer(fig)[0], scale=scale,
+                                    **kw)
+    plt.close(fig)
+    return result
+
+
+def test_the_ceiling_fix_names_a_size_under_the_ceiling():
+    """7 / 0.745 is 9.396pt. Rounded to 9.4 it is 7.003pt on the page, over
+    Nature's 7pt maximum, so the fix rounds down to 9.3."""
+    status, detail = _xlabel_type(9.4, 0.745, venue="nature")
+    assert status is False, detail
+    assert "set text at 9.3pt as authored" in detail, detail
+    assert _xlabel_type(9.3, 0.745, venue="nature")[0] is not False
+
+
+def test_the_x_height_fix_names_a_size_that_clears_it():
+    """8.9 / 0.745 is 11.946pt. Rounded to 11.9 the x-height stays under
+    4pt, so the fix rounds up to 12.0."""
+    status, detail = _xlabel_type(10.0, 0.745, family="STIXGeneral")
+    assert status == "warn", detail
+    assert "set it at 12.0pt as authored" in detail, detail
+    assert _xlabel_type(11.9, 0.745, family="STIXGeneral")[0] == "warn"
+    assert _xlabel_type(12.0, 0.745, family="STIXGeneral")[0] is True
+
+
+def test_a_failing_size_never_prints_as_its_limit():
+    """5.996pt fails a 6pt floor and 7.003pt a 7pt maximum. Each is shown
+    rounded away from the limit, not onto it."""
+    status, detail = _xlabel_type(8.0, 0.7495)
+    assert status is False and "(5.99, 'dose')" in detail, detail
+    # Rounded to 0.1pt first, as before the fix, 5.95pt read as 6.0 and passed.
+    assert _xlabel_type(5.95, 1.0)[0] is False
+    status, detail = _xlabel_type(9.4, 0.745, venue="nature")
+    assert status is False and "(7.01, 'dose')" in detail, detail
+
+
+def test_a_size_failing_by_the_slack_prints_under_the_floor():
+    """2e-6pt under the floor is past `_PT_TOL` and fails. It prints under
+    6, not as 6."""
+    status, detail = _xlabel_type(8.0, (6.0 - 2e-6) / 8.0)
+    assert status is False and "(5.99, 'dose')" in detail, detail
+
+
+def test_the_slack_is_under_a_printer_dot_and_over_float_error():
+    """The numbers the `_PT_TOL` comment states, and the rounding it relies
+    on: a difference under 5e-9pt is absorbed, one past `_PT_TOL` is not."""
+    assert cf._PT_TOL < 72 / 2400
+    assert cf._PT_TOL > 10.0 * sys.float_info.epsilon
+    assert cf._round_down(6.0 - 4e-9, 2) == 6.0
+    assert cf._round_up(1.34 + 4e-9, 2) == 1.34
+    assert cf._round_down(6.0 - 1.1e-6, 2) == 5.99
+    assert cf._round_up(7.0 + 1.1e-6, 2) == 7.01
+
+
+def _x_height_type(x_pt, scale=1.0, monkeypatch=None, **kw):
+    """A 'dose' label whose x-height is `x_pt` on the page, DejaVu's
+    fraction pinned so the size is exact."""
+    monkeypatch.setattr(cf, "_x_height_fraction_of", lambda t: 0.5)
+    return _xlabel_type(2 * x_pt / scale, scale, **kw)
+
+
+def test_an_x_height_just_under_the_floor_prints_under_it(monkeypatch):
+    """An x-height 1.1e-6pt under 4pt warns as 3.99, not 4.0. One 1e-12pt
+    under is float error and passes."""
+    status, detail = _x_height_type(4.0 - 1.1e-6, monkeypatch=monkeypatch)
+    assert status == "warn" and "('dose', 3.99)" in detail, detail
+    assert _x_height_type(4.0 - 1e-12, monkeypatch=monkeypatch)[0] is True
+
+
+def test_the_x_height_fix_rounds_the_need_once(monkeypatch):
+    """DejaVu at 7pt and scale 0.93 needs 7.31pt on a 7.4pt maximum. Rounding
+    the need to 7.4 first advised 8.0pt, 7.44 on the page, and reported that
+    the maximum allows no larger. 7.9pt fits and clears."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 7.4)
+    status, detail = _xlabel_type(7.0, 0.93)
+    assert status == "warn", detail
+    assert "set it at 7.9pt as authored" in detail, detail
+    assert _xlabel_type(7.9, 0.93)[0] is True
+
+
+def test_the_x_height_fix_falls_back_to_hundredths(monkeypatch):
+    """A 7.35pt need at scale 0.93: 7.9pt lands at 7.347, under the need, and
+    8.0pt at 7.44, over a 7.4pt maximum. 7.91pt fits both."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 7.4)
+    monkeypatch.setattr(cf, "_x_height_fraction_of", lambda t: 4.0 / 7.35)
+    status, detail = _xlabel_type(7.0, 0.93)
+    assert status == "warn", detail
+    assert "set it at 7.91pt as authored, 7.35pt on the page" in detail, detail
+    assert "allows no larger" not in detail, detail
+
+
+def test_a_base_on_the_maximum_by_float_error_can_raise_a_script(monkeypatch):
+    """A 5.1pt base with a 0.7 script needs 5.1 * 5 / (5.1 * 0.7), which is
+    9e-16 over a 5 / 0.7 maximum in float. The fix still says to raise the
+    base."""
+    assert 5.1 * 5.0 / (5.1 * 0.7) > 5 / 0.7
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 5 / 0.7)
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: (
+        float(t.get_fontsize()) * 0.7 if "$" in t.get_text() else None))
+    fig = plt.figure()
+    fig.text(0.5, 0.5, r"$10^{2}$", fontsize=5.1)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0], scale=0.5)
+    plt.close(fig)
+    assert status is False, detail
+    assert "raise the base size" in detail, detail
+
+
+def test_the_line_weight_fix_names_a_width_that_clears_it():
+    """1 / 0.745 is 1.342. Printed to two places it was 1.34, 0.998pt on the
+    page and still failing; the fix rounds up to 1.35."""
+    def weight(lw):
+        fig, ax = plt.subplots(figsize=(3, 2))
+        ax.plot([0, 1], [0, 1], lw=lw)
+        result = cf.check_line_weight(fig, scale=0.745)
+        plt.close(fig)
+        return result
+    status, detail = weight(1.0)
+    assert status is False and "at least 1.35 at this scale" in detail, detail
+    assert weight(1.35)[0] is not False
+
+
+def test_float_error_does_not_fail_a_script(monkeypatch):
+    """The script floor takes the slack the body floor does, and shows a
+    failing script to 0.01pt."""
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: 5.0 - 1e-12)
+    assert _xlabel_type(8.0, 1.0)[0] is True
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: 4.996)
+    status, detail = _xlabel_type(8.0, 1.0)
+    assert status is False and "(4.99, 'dose')" in detail, detail
+
+
+def test_float_error_does_not_fail_a_stroke():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=cf.LINE_FLOOR_PT - 1e-12)
+    status, detail = cf.check_line_weight(fig, scale=1.0)
+    ax.lines[0].set_linewidth(cf.LINE_FLOOR_PT - 0.004)
+    thin_status, thin_detail = cf.check_line_weight(fig, scale=1.0)
+    plt.close(fig)
+    assert status is not False, detail
+    assert thin_status is False and "at 0.99pt" in thin_detail, thin_detail
+
+
+def test_float_error_does_not_fail_furniture_or_an_outline():
+    """The furniture and marker-outline floors take the same slack and
+    print a failing width to 0.01pt."""
+    def widths(w):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        ax.plot([0, 1], [0, 1], lw=2.0, marker="o", mfc="none", mew=w)
+        for spine in ax.spines.values():
+            spine.set_linewidth(w)
+        ax.tick_params(width=2.0)
+        result = cf.check_line_weight(fig, scale=1.0)
+        plt.close(fig)
+        return result
+    status, detail = widths(cf.FURNITURE_FLOOR_PT - 1e-12)
+    assert status is not False, detail
+    status, detail = widths(cf.FURNITURE_FLOOR_PT - 0.004)
+    assert status is False, detail
+    assert "at 0.49pt" in detail and "marker outlines" in detail, detail
+    assert "0.50pt" not in detail, detail
+
+
+def test_a_panel_label_need_is_not_advised_for_body_text(monkeypatch):
+    """Under Nature, body text needing 6.9pt and a label needing 7.6pt get a
+    size each. One size of 7.6pt would put body text over its 7pt maximum."""
+    fracs = {"dose": 4.0 / 6.9, "a": 4.0 / 7.6}
+    monkeypatch.setattr(cf, "_x_height_fraction_of",
+                        lambda t: fracs.get(t.get_text()))
+    fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("dose", fontsize=6.5)
+    ax.text(0, 1, "a", fontsize=7.0, fontweight="bold")
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0], scale=1.0,
+                                        venue="nature")
+    plt.close(fig)
+    assert status == "warn", detail
+    assert ("set it at 6.9pt as authored, 6.9pt on the page; set a panel "
+            "label at 7.6pt as authored, 7.6pt on the page") in detail, detail
+
+
 def test_nature_log_ticks_fail_with_a_fix_that_works():
     """Under a 7pt maximum a first-level script is 4.9pt, under the 5pt floor,
     and raising the base would breach the maximum. The fix has to name a route
@@ -5930,10 +6118,11 @@ def test_audit_json_leaves_the_figure_on_its_authored_dpi(clean):
 
 
 # --- a 6pt body floor, and an x-height advisory ----------------------------
-# The gate is PNAS's and Science's 6pt. Under it, Legge & Bigelow's 0.2 degree
-# start of fluent reading, an x-height of 4.0pt at 40cm, is a warning: body
-# size is x-height over the font's fraction, so 8pt is 4.38pt of x-height in
-# DejaVu Sans and 3.60pt in STIXGeneral. Both fonts ship with matplotlib.
+# The gate is 6pt, the minimum PNAS publishes. Under it, Legge & Bigelow's
+# 0.2 degree start of fluent reading, an x-height of 4.0pt at 40cm, is a
+# warning: body size is x-height over the font's fraction, so 8pt is 4.38pt
+# of x-height in DejaVu Sans and 3.60pt in STIXGeneral. Both fonts ship with
+# matplotlib.
 
 
 def _type_in(family, size_pt, label="Dose (mg)", **rc):
@@ -5978,6 +6167,36 @@ def test_the_warning_names_the_size_that_clears_it():
     assert status == "warn", detail
     assert "smallest 8.0pt on page (floor 6.0)" in detail, detail
     assert "set it at 8.9pt as authored, 8.9pt on the page" in detail, detail
+
+
+def test_the_floor_is_judged_before_rounding():
+    """docs/design.md's 8pt label at 750/1008 must still fail."""
+    with plt.rc_context({"font.family": "DejaVu Sans"}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("Dose (mg)", fontsize=8)
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            scale=750 / 1008)
+    plt.close(fig)
+    assert status is False, detail
+    assert "5.95" in detail, detail
+
+
+def test_the_warning_names_a_size_that_clears_every_string():
+    """'dose' at 6.5pt DejaVu Sans has the smaller x-height, but 'time' in
+    STIXGeneral needs 8.9pt. The fix names the larger need."""
+    with plt.rc_context({"font.family": "DejaVu Sans"}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("dose", fontsize=6.5)
+        ax.set_ylabel("time", fontsize=8.5, family="STIXGeneral")
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            scale=1.0)
+    plt.close(fig)
+    assert status == "warn", detail
+    assert "set it at 8.9pt as authored" in detail, detail
 
 
 def test_numerals_are_not_held_to_the_x_height():

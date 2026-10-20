@@ -353,9 +353,9 @@ LARGE_TEXT_BOLD_PT = 14.0
 BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit: the
-# minimum PNAS and Science publish. PNAS: "no smaller than 6 points after
-# reduction". Science: "6 point minimum" for symbols. Nature's minimum is
-# lower, 5pt. The quotes are in `EXTERNAL_CLAIMS` in
+# minimum PNAS publishes, "no smaller than 6 points (2 mm) ... after
+# reduction". Science publishes no text floor; its "6 point minimum" is for
+# symbols. Nature's minimum is lower, 5pt. The quotes are in `EXTERNAL_CLAIMS` in
 # tests/test_prose_claims.py. A body size is what venues specify, so it is the
 # hard gate; the x-height floor below is advisory.
 TYPE_FLOOR_PT = 6.0
@@ -382,7 +382,7 @@ TYPE_CEILING_PT = math.inf
 _CONFIG_VENUE: str | None = None
 
 # Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
-# the x-height floor.
+# the body floor.
 #
 # Mathtext does not render at the size the author asked for. Each nesting level
 # of a script is drawn at `SHRINK_FACTOR = 0.7` of the level above, so an 11pt
@@ -395,8 +395,7 @@ _CONFIG_VENUE: str | None = None
 # and two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
 # matplotlib's own log-axis tick label and which no author wrote. Setting a
 # script smaller than its base is not a defect, it is how mathematics has been
-# typeset for a century, and the body floor is the start of fluent reading,
-# above any journal's minimum.
+# typeset for a century.
 #
 # 5.0 is where two independent sources agree the floor actually is. LaTeX's own
 # table in `fontmath.ltx` maps every body size to a script and a scriptscript
@@ -2794,6 +2793,40 @@ def _is_panel_label(t: Any) -> bool:
             and t.get_fontstyle() == "normal")
 
 
+# The float slack every on-page size and width is judged with. 1e-6pt is under
+# a 2400dpi dot (72/2400 = 0.03pt) and over float64's error on a 10pt size
+# (about 2e-15pt). `_round_down` and `_round_up` at 0.01pt absorb differences
+# under 5e-9pt, so a value failing by more than 1e-6pt never prints as its limit.
+_PT_TOL = 1e-6
+
+
+def _round_down(x: float, places: int = 1) -> float:
+    return math.floor(round(x * 10 ** places, 6)) / 10 ** places
+
+
+def _round_up(x: float, places: int = 1) -> float:
+    return math.ceil(round(x * 10 ** places, 6)) / 10 ** places
+
+
+def _below_floor(x: float, floor: float) -> bool:
+    return x < floor - _PT_TOL
+
+
+def _above_ceiling(x: float, ceiling: float) -> bool:
+    return x > ceiling + _PT_TOL
+
+
+def _advise_at_least(floor: float, scale: float, places: int = 1) -> float:
+    """The authored size that lands on or over `floor` at `scale`. Up, or the
+    advised size fails the floor it names."""
+    return _round_up(floor / scale, places)
+
+
+def _advise_at_most(ceiling: float, scale: float, places: int = 1) -> float:
+    """The authored size that lands on or under `ceiling` at `scale`."""
+    return _round_down(ceiling / scale, places)
+
+
 def check_type_size(fig: Figure, r: Any, scale: float | None = None,
                     placed_frac: float = 1.0,
                     venue: str | None = None) -> tuple[bool | str, str]:
@@ -2815,7 +2848,8 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     ghosts = _ghost_ticks(fig)
     texts = [t for t, _ in _texts(fig, r) if id(t) not in ghosts]
     scale = float(scale)
-    sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
+    # Compared unrounded, the case docs/design.md gives.
+    sizes = [(float(t.get_fontsize()) * scale, str(t.get_text())[:22])
              for t in texts]
     if not sizes:
         return True, "no text"
@@ -2828,16 +2862,18 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     can_raise = True
     for t in texts:
         pt = _script_min_pt(t)
-        if pt is not None and pt * scale < MATH_SCRIPT_FLOOR_PT:
-            scripts.append((round(pt * scale, 1), str(t.get_text())[:22]))
+        if pt is not None and _below_floor(pt * scale, MATH_SCRIPT_FLOOR_PT):
+            scripts.append((_round_down(pt * scale, 2), str(t.get_text())[:22]))
             # The base on the page that lifts this script to the floor. Under
             # Nature's 7pt maximum a first-level script tops out at 4.9pt.
             base = float(t.get_fontsize()) * MATH_SCRIPT_FLOOR_PT / pt
-            can_raise = can_raise and base <= ceiling
+            can_raise = can_raise and not _above_ceiling(base, ceiling)
 
-    small = sorted({(pt, s) for pt, s in sizes if pt < floor})
-    large = sorted({(pt, s) for t, (pt, s) in zip(texts, sizes)
-                    if pt > (label_ceiling if _is_panel_label(t) else ceiling)},
+    small = sorted({(_round_down(pt, 2), s) for pt, s in sizes
+                    if _below_floor(pt, floor)})
+    large = sorted({(_round_up(pt, 2), s) for t, (pt, s) in zip(texts, sizes)
+                    if _above_ceiling(pt, label_ceiling if _is_panel_label(t)
+                                      else ceiling)},
                    reverse=True)
     mn = min(pt for pt, _ in sizes)
     if small or large or scripts:
@@ -2846,7 +2882,8 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
             bits.append(f"under {floor}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
         if large:
-            fix = (f"set text at {ceiling / scale:.1f}pt as authored, "
+            authored = _advise_at_most(ceiling, scale)
+            fix = (f"set text at {authored}pt as authored, "
                    f"{ceiling}pt on the page")
             if label_ceiling > ceiling:
                 fix += (f"; a panel label may be {label_ceiling}pt, bold and "
@@ -2874,10 +2911,10 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
         if frac is None:
             continue
         x_pt = float(t.get_fontsize()) * scale * frac
-        if x_pt < XHEIGHT_FLOOR_PT - 1e-9:
-            need = math.ceil(round(XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10
+        if _below_floor(x_pt, XHEIGHT_FLOOR_PT):
             cap = label_ceiling if _is_panel_label(t) else ceiling
-            low.append((round(x_pt, 2), str(t.get_text())[:22], need, cap))
+            low.append((_round_down(x_pt, 2), str(t.get_text())[:22],
+                        XHEIGHT_FLOOR_PT / frac, cap))
 
     detail = f"smallest {mn:.1f}pt on page (floor {floor})"
     if ceiling < math.inf:
@@ -2885,11 +2922,32 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     warnings = []
     if low:
         low.sort()
-        _, _, need, cap = low[0]
-        fix = (f"set it at {need / scale:.1f}pt as authored, {need}pt on the "
-               "page, or use a face with a taller x-height" if need <= cap
-               else f"the {cap}pt maximum allows no larger: use a face with a "
-               "taller x-height")
+        # One size per maximum: the largest need under it, not the need of
+        # the smallest x-height, since fonts differ in their fractions. Body
+        # text and panel labels are advised apart, so a label's need is not
+        # pushed onto body text over the body maximum.
+        parts = []
+        fits = True
+        for cap in sorted({c for _, _, _, c in low}):
+            need = max(n for _, _, n, c in low if c == cap)
+            label = cap > ceiling
+            # Rounded once, from the exact need. In 0.01pt where 0.1pt
+            # overshoots a maximum the exact size fits under.
+            authored = _advise_at_least(need, scale)
+            if _above_ceiling(authored * scale, cap):
+                authored = _advise_at_least(need, scale, 2)
+            if _above_ceiling(authored * scale, cap):
+                fits = False
+                parts.append(f"the {cap}pt {'panel-label ' * label}maximum "
+                             "allows no larger: use a face with a taller "
+                             "x-height")
+            else:
+                parts.append(f"set {'a panel label' if label else 'it'} at "
+                             f"{authored}pt as authored, "
+                             f"{_round_down(authored * scale, 2)}pt on the page")
+        fix = "; ".join(parts)
+        if fits:
+            fix += ", or use a face with a taller x-height"
         shown = [(s, x) for x, s, _, _ in low][:4]
         warnings.append(
             f"x-height under {XHEIGHT_FLOOR_PT}pt on page: {shown}  [FIX] {fix}"
@@ -4328,8 +4386,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         widths.append(on_page)
-        if on_page < LINE_FLOOR_PT:
-            thin.append(f"{name} at {on_page:.2f}pt")
+        if _below_floor(on_page, LINE_FLOOR_PT):
+            thin.append(f"{name} at {_round_down(on_page, 2):.2f}pt")
 
     def measure_furniture(width: Any, name: str) -> None:
         """The same, against the lower floor furniture is held to."""
@@ -4337,8 +4395,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         furniture_widths.append(on_page)
-        if on_page < FURNITURE_FLOOR_PT:
-            thin_furniture.append(f"{name} at {on_page:.2f}pt")
+        if _below_floor(on_page, FURNITURE_FLOOR_PT):
+            thin_furniture.append(f"{name} at {_round_down(on_page, 2):.2f}pt")
 
     def measure_outline(width: float, name: str) -> None:
         """A marker outline, against the furniture floor."""
@@ -4346,9 +4404,9 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         furniture_widths.append(on_page)
-        if on_page < FURNITURE_FLOOR_PT:
+        if _below_floor(on_page, FURNITURE_FLOOR_PT):
             thin_outline.append(f"the marker outlines of {name} at "
-                                f"{on_page:.2f}pt")
+                                f"{_round_down(on_page, 2):.2f}pt")
 
     def stroked(artist: Any) -> bool:
         """Whether this patch actually puts an edge on the page.
@@ -4460,16 +4518,18 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         seen = list(dict.fromkeys(thin))
         return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
                        f"{seen[:4]}  [FIX] set linewidth to at least "
-                       f"{LINE_FLOOR_PT / scale:.2f} at this scale"
+                       f"{_advise_at_least(LINE_FLOOR_PT, scale, 2):.2f} at "
+                       "this scale"
                        "  [WHY] SIAM: lines thinner than one point break up or "
                        "disappear in print")
     if thin_outline:
         seen = list(dict.fromkeys(thin_outline))
         return False, (f"under {FURNITURE_FLOOR_PT}pt on page at scale "
                        f"{scale:.2f}: {seen[:4]}  [FIX] set markeredgewidth "
-                       f"to at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
-                       "scale  [WHY] Science: line widths have a minimum of "
-                       "0.5 point at the final reduced size")
+                       "to at least "
+                       f"{_advise_at_least(FURNITURE_FLOOR_PT, scale, 2):.2f} "
+                       "at this scale  [WHY] Science: line widths have a "
+                       "minimum of 0.5 point at the final reduced size")
     if thin_furniture:
         seen = list(dict.fromkeys(thin_furniture))
         how = ("linewidth, or `tick_params(which=\"both\", width=...)` for "
@@ -4477,9 +4537,10 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                else "linewidth")
         return False, (f"furniture under {FURNITURE_FLOOR_PT}pt on page at "
                        f"scale {scale:.2f}: {seen[:4]}  [FIX] set {how} to "
-                       f"at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
-                       "scale  [WHY] Science: line widths have a minimum of "
-                       "0.5 point at the final reduced size")
+                       "at least "
+                       f"{_advise_at_least(FURNITURE_FLOOR_PT, scale, 2):.2f} "
+                       "at this scale  [WHY] Science: line widths have a "
+                       "minimum of 0.5 point at the final reduced size")
 
     data = (f"{len(widths)} strokes, thinnest {min(widths):.2f}pt on page "
             f"(floor {LINE_FLOOR_PT})" if widths else

@@ -83,12 +83,24 @@ behind a threshold this project enforces.
 - `check_line_weight` reads tick widths through `marker_stroke_pt`, so
   `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
   axes with `axison` false and ticks and gridlines on a hidden axis.
+- `check_type_size` compares on-page sizes to the floor and ceiling before
+  rounding, with `_PT_TOL = 1e-6` of slack, as do the mathtext script floor
+  and `check_line_weight`'s three floors. Failing sizes and widths print to
+  0.01pt, rounded away from the limit.
+- The x-height `[FIX]` names the largest size any low string needs under
+  each maximum, body text and panel labels apart.
+- The x-height `[FIX]` divides the unrounded need by the scale, advises to
+  0.01pt where 0.1pt lands over the maximum, and prints the page size the
+  advised size gives. `check_line_weight`'s three `[FIX]`s round widths up to
+  0.01pt.
+- The ceiling `[FIX]` rounds the authored size down to 0.1pt, the x-height
+  `[FIX]` rounds it up.
 
 ### Why it changed
 
 `TYPE_FLOOR_PT = 7.5` had no source. It shipped in the initial release, and
 "7.5 is where it is comfortable" was added two days later. 6.0 is the minimum
-PNAS and Science publish, already quoted in `EXTERNAL_CLAIMS["journal type
+PNAS publishes, already quoted in `EXTERNAL_CLAIMS["journal type
 floors"]`.
 
 An x-height gate was built and rejected. Legge & Bigelow (2011) put the start
@@ -110,6 +122,22 @@ verdict change; their smallest string is 9.0pt.
 (#107). In a SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, all
 5 with-skill text-size failures were text at 7.5 to 8.0pt. Capping the floor at the
 ceiling adds no number the guides do not publish.
+
+Rounding first passed docs/design.md's own failing case. The x-height `[FIX]` read the string
+with the smallest x-height, so with 'dose' at 6.5pt in DejaVu Sans and 'time'
+at 8.5pt in STIXGeneral it named 7.4pt, which 'time' already exceeds.
+Rounded to the nearest 0.1pt, each `[FIX]` could name a size that fails its
+own check: under Nature at scale 0.745 the ceiling fix named 9.4pt, 7.003pt on
+the page, and a STIXGeneral string set at the advised 11.9pt still warned.
+The x-height need was rounded before the scale divided it: DejaVu Sans at
+scale 0.93 needs 7.31pt, rounded to 7.4, advised 8.0pt, 7.44pt on the page,
+over a 7.4pt maximum, so the `[FIX]` said none fits; 7.9pt does.
+`check_line_weight` printed its advice with `:.2f`, 1.34 at scale 0.745, which
+is 0.998pt on the page. Sizes were rounded to 0.1pt before the compare, so
+5.95pt passed a 6pt floor.
+One x-height size for every string could advise a panel label's need for
+body text over Nature's 7pt body maximum. No face bundled with matplotlib
+reaches that case; the test fakes the fractions.
 
 Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
 open-source simulators calls Brettel 1997 "the most solid and basically only
