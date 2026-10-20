@@ -1,11 +1,12 @@
 ---
 title: "Gallery"
-description: "Twenty audited figures covering the forms that are hard to check, and the defects that writing them found."
+description: "Twenty-four audited figures covering the forms that are hard to check, and the defects that writing them found."
 ---
 
 # Gallery
 
-`python examples/gallery.py` builds these twenty figures and audits each one.
+`python examples/gallery.py` builds these twenty-four figures and audits each
+one.
 The script exits non-zero if any figure fails, so they are regression tests with
 pictures attached rather than decoration.
 
@@ -162,6 +163,34 @@ Every alt text here is the string the figure itself carries, passed to
   <figcaption>Ten rows were taught to look inside <code>ax.inset_axes</code> and the corpus had no figure with one carrying data, so the sweep that shipped the fix had nothing it could move. This is that figure. The inset holds four curves of its own, they are sampled off an ordered ramp rather than taken from the categorical cycle, and the two panels are stacked on one x scale: the three things measured at two, two and one panel of twenty when the fixes went in.</figcaption>
 </figure>
 
+## Curves crossing under a legend
+
+<figure markdown="span">
+  ![ROC curves for four classifiers, true positive rate against false positive rate, with the chance diagonal dashed. The curves cross: the SVM has the highest true positive rate up to a false positive rate of about 0.33 and the random forest beyond it. Areas under the curve, 0.81 to 0.88, are given in the legend.](images/gallery-classifiers.png)
+  <figcaption>A legend asks the reader to match every curve to every swatch, so the series-colour row compares every pair in a panel that has one, not only the neighbours in draw order. ROC curves all run from (0, 0) to (1, 1), so these four also touch pairwise. The four hues include both pairs where Stone et al.'s size model and CAM02-UCS disagree.</figcaption>
+</figure>
+
+## One legend for three panels
+
+<figure markdown="span">
+  ![Relative abundance of three bacterial phyla in control and asthma samples at three body sites, as grouped bars. Proteobacteria rise with asthma in both airway sites, to 0.55 in the lower airway, while Firmicutes fall at every site.](images/gallery-abundance.png)
+  <figcaption>A figure legend keys every panel, so each panel is held to the all-pairs rule though none has a legend of its own. Bars never meet as strokes, so without the key the first and third phylum would never be compared.</figcaption>
+</figure>
+
+## A pair hue alone cannot carry
+
+<figure markdown="span">
+  ![Response against dose on a log axis for two agonists, measured points with fitted Hill curves. Agonist A, circles and a solid curve, reaches half its maximum near 0.4 µM; agonist B, squares and a dashed curve, near 6 µM.](images/gallery-dose-response.png)
+  <figcaption>Red against green fails CVD separation, at dE 5.2 under deuteranopia. Marker shape and dash carry the pair instead, on the panel and in the key, and the row passes it as carried by a second channel. The normal-vision floor is not excused, and the pair clears it.</figcaption>
+</figure>
+
+## A reference line across a series
+
+<figure markdown="span">
+  ![Possessions per game by season, 2005 to 2025, with a segmented linear fit either side of a rule change in 2018. Pace rises about half a possession a season before the change, jumps to near 100 after it, and then drifts down.](images/gallery-interrupted.png)
+  <figcaption>No legend, so the series-colour row compares neighbours in draw order and every pair of lines that touch. The rule-change line is drawn third and crosses the observed series, drawn first: only the contact test compares those two. <code>axvline</code> draws in a blended transform, and read through <code>transData</code> the line would sit at data y 0 to 1, below this panel.</figcaption>
+</figure>
+
 ---
 
 ## Why figures eight to eleven exist
@@ -190,6 +219,21 @@ evidence about anything. They took the 281 down to 239, and two of them found
 defects in the checker on the way in. `main` also audits the sheet's own
 palette with `check_palette`, which no figure exercises: that took the second
 module from 74% to 82% on the same measurement.
+
+## Why figures twenty-one to twenty-four exist
+
+The series-colour row decides which pairs to compare before it compares any,
+and the corpus barely reached that decision. Before these four, 12 of the 16
+panels that gate two or more hues compared one pair, orange against sky blue. No figure had a
+figure legend, a coloured reference line or a pair that a second channel had to
+carry, and the sheet's last three hues were never drawn.
+
+Each of the four reaches one of those. Against the commit before the
+invariance round, two verdicts move: the red-green pair fails without its
+second channel, and the rule-change line is read at data y 0 to 1. The two
+legend figures, whose legends gate a pair draw order skipped, move only their
+Series color detail. Against the one before its code-review fixes, one verdict
+moves.
 
 ## The nine defects in the checks
 

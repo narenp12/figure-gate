@@ -1,4 +1,4 @@
-"""Twenty figures hard enough to be worth checking.
+"""Twenty-four figures hard enough to be worth checking.
 
     python examples/gallery.py [output-directory]
 
@@ -27,6 +27,10 @@ compositions where the checks have somewhere to hide:
     gallery-phase.png             boundaries named by labels set along them
     gallery-trendmap.png          a field with its own significance faded out
     gallery-broadening.png        an inset carrying its own four curves
+    gallery-classifiers.png       crossing ROC curves keyed by a legend
+    gallery-abundance.png         grouped bars keyed by one figure legend
+    gallery-dose-response.png     a red-green pair carried by marker and dash
+    gallery-interrupted.png       a coloured rule-change line across a series
 
 Figures eight to eleven exist because measuring the first seven against every
 gate found rows that had never seen anything: no figure drew a band, a bar, a
@@ -37,6 +41,11 @@ gate that passes by having seen nothing looks exactly like a gate that passed.
 The twentieth is there for a construct rather than a form. Ten rows were taught
 to look inside `ax.inset_axes` and the corpus had no figure with one carrying
 data, so the sweep that shipped that fix had nothing it could move.
+
+The last four are there for the series-colour row, whose pair selection the
+corpus barely reached: most panels compared one pair, orange against sky blue.
+Each draws one way a pair comes in front of the gates: a legend, a figure
+legend, a second channel, and a reference line crossing a series.
 
 Figures fourteen to nineteen answer the same question asked mechanically rather
 than by eye. Run under coverage, the thirteen never reached a rotated label's
@@ -53,8 +62,9 @@ runs `check_palette` over the sheet's own palette, which no figure exercises:
 the composition gates read hues off the artists, which is a different question
 from whether the palette was sound before anything was drawn with it.
 
-Importing this file builds nothing. The twenty builders are importable and each
-returns its figure, so a change to a gate can be measured against the corpus:
+Importing this file builds nothing. The twenty-four builders are importable and
+each returns its figure, so a change to a gate can be measured against the
+corpus:
 
     import gallery
     gallery.OUT = None                  # build, audit, write nothing
@@ -1478,10 +1488,187 @@ def broadening():
            "broadening at constant line strength looks like.")
 
 
+
+# --- 21. classifiers compared on one ROC -------------------------------------
+# A legend asks the reader to match every curve against every swatch, so
+# `check_series_color` gates every pair in a panel that carries one, not only
+# neighbours in draw order. Here the curves also gate every pair by touching:
+# each runs from (0, 0) to (1, 1). The four colours are the sheet's blue,
+# orange, green and purple, which puts both pairs Stone et al.'s model
+# disagrees with CAM02-UCS on (#0072b2/#cc79a7 and #009e73/#cc79a7) side by
+# side. After Fig 4 of doi:10.1371/journal.pone.0330044.
+
+@styled
+def classifiers():
+    from statistics import NormalDist
+    normal = NormalDist()
+    false_pos = np.linspace(0.0, 1.0, 400)[1:-1]
+    threshold = np.array([normal.inv_cdf(1.0 - f) for f in false_pos])
+
+    fig, ax = plt.subplots(figsize=(3.4, 3.3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], color=MUTED, lw=1.0, ls=(0, (4, 3)))
+    # Binormal ROC curves, TPR = Phi(a - b z). Unequal slopes `b` are what
+    # make two curves cross.
+    for name, a, b, color in (("logistic", 1.55, 1.00, SERIES[3]),
+                              ("random forest", 1.75, 1.45, SERIES[0]),
+                              ("SVM", 1.45, 0.75, SERIES[2]),
+                              ("naive Bayes", 1.30, 1.10, SERIES[5])):
+        tpr = np.array([normal.cdf(a - b * z) for z in threshold])
+        x, y = np.r_[0.0, false_pos, 1.0], np.r_[0.0, tpr, 1.0]
+        auc = float(np.sum(np.diff(x) * (y[1:] + y[:-1]) / 2.0))
+        ax.plot(x, y, color=color, lw=1.4, label=f"{name} ({auc:.2f})")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect("equal")
+    ax.set_xlabel("False positive rate")
+    ax.set_ylabel("True positive rate")
+    ax.legend(title="Model (AUC)", loc="lower right")
+    return finish(fig, "gallery-classifiers",
+           "ROC curves for four classifiers, true positive rate against false "
+           "positive rate, with the chance diagonal dashed. The curves cross: "
+           "the SVM has the highest true positive rate up to a false positive "
+           "rate of about 0.33 and the random forest beyond it. Areas under "
+           "the curve, 0.81 to 0.88, are given in the legend.")
+
+
+# --- 22. grouped bars keyed by one figure legend -----------------------------
+# A figure legend keys every panel, so each panel answers to the all-pairs rule
+# though none carries a legend of its own. Bars never touch as strokes, so in
+# a bar panel without a legend only neighbours in draw order are compared:
+# here blue and purple are drawn first and third and meet only through the key.
+# After Fig 2D-E of doi:10.1371/journal.pone.0358560.
+
+@styled
+def abundance():
+    sites = ("Upper airway", "Lower airway", "Gut")
+    phyla = ("Firmicutes", "Proteobacteria", "Bacteroidota")
+    colors = (SERIES[3], SERIES[0], SERIES[5])
+    # Mean relative abundance per (control, asthma), by phylum.
+    share = {"Upper airway": ((0.42, 0.36), (0.31, 0.40), (0.12, 0.09)),
+             "Lower airway": ((0.30, 0.22), (0.44, 0.55), (0.10, 0.08)),
+             "Gut": ((0.48, 0.40), (0.06, 0.14), (0.38, 0.33))}
+
+    fig, axes = plt.subplots(1, 3, figsize=(6.4, 2.6), sharey=True,
+                             constrained_layout=True)
+    x, width = np.arange(2), 0.26
+    for ax, site in zip(axes, sites):
+        for k, (phylum, color) in enumerate(zip(phyla, colors)):
+            ax.bar(x + (k - 1) * width, share[site][k], width, color=color,
+                   label=phylum if ax is axes[0] else None)
+        ax.set_xticks(x, ["Control", "Asthma"])
+        ax.set_title(site)
+    axes[0].set_ylabel("Relative abundance")
+    axes[0].set_ylim(0, 0.6)
+    fig.legend(loc="outside upper center", ncols=3)
+    return finish(fig, "gallery-abundance",
+           "Relative abundance of three bacterial phyla in control and asthma "
+           "samples at three body sites, as grouped bars. Proteobacteria rise "
+           "with asthma in both airway sites, to 0.55 in the lower airway, "
+           "while Firmicutes fall at every site.")
+
+
+# --- 23. a pair that hue alone cannot carry ----------------------------------
+# Red against green is dE 5.2 under deuteranopia, under `CVD_TARGET`, and the
+# constant's comment makes secondary encoding mandatory below it. Here it is
+# given: circles and a solid curve against squares and a dashed one, in the
+# legend as on the panel. `check_series_color` passes the pair as carried by a
+# second channel and still holds it to `NORMAL_FLOOR`, which it clears. The
+# design is Fig 16 of doi:10.1371/journal.pone.0280576, two reds told apart by
+# circles and triangles, drawn here as a dose-response plot.
+
+@styled
+def dose_response():
+    from matplotlib.lines import Line2D
+    red, green = "#d62728", "#2ca02c"
+    dose = np.logspace(-2, 2, 9)
+    fine = np.logspace(-2.2, 2.2, 200)
+    rng = np.random.default_rng(4)
+
+    def hill(d, ec50, n):
+        return 100.0 / (1.0 + (ec50 / d) ** n)
+
+    fig, ax = plt.subplots(figsize=(3.6, 2.8), constrained_layout=True)
+    handles = []
+    for name, ec50, n, color, marker, ls in (
+            ("agonist A", 0.4, 1.2, red, "o", "-"),
+            ("agonist B", 6.0, 1.6, green, "s", (0, (4, 2)))):
+        measured = hill(dose, ec50, n) + rng.normal(0.0, 3.0, dose.size)
+        ax.plot(dose, measured, linestyle="none", marker=marker, markersize=4,
+                color=color)
+        ax.plot(fine, hill(fine, ec50, n), color=color, lw=1.3, linestyle=ls)
+        # One handle drawing both channels. Labelling the points alone put a
+        # marker in the key and no dash, so the key carried half the encoding.
+        handles.append(Line2D([], [], color=color, lw=1.3, linestyle=ls,
+                              marker=marker, markersize=4, label=name))
+    ax.set_xscale("log")
+    ax.set_xlabel("Dose (µM)")
+    ax.set_ylabel("Response (% of max)")
+    ax.set_ylim(-10, 110)
+    ax.legend(handles=handles, loc="upper left")
+    return finish(fig, "gallery-dose-response",
+           "Response against dose on a log axis for two agonists, measured "
+           "points with fitted Hill curves. Agonist A, circles and a solid "
+           "curve, reaches half its maximum near 0.4 µM; agonist B, squares "
+           "and a dashed curve, near 6 µM.")
+
+
+# --- 24. an interrupted time series ------------------------------------------
+# No legend, so the series-colour row compares neighbours in draw order and
+# every pair of lines whose strokes meet. The rule-change line is drawn third
+# and crosses the observed series, which is drawn first: only the contact test
+# puts that pair, blue against purple, in front of the gates. `axvline` draws
+# in a blended transform, so the test has to read it through that transform;
+# through `transData` it spans data y 0 to 1, far below these values. After
+# Fig 4 of doi:10.1371/journal.pone.0358360.
+
+@styled
+def interrupted():
+    rng = np.random.default_rng(7)
+    season = np.arange(2005, 2026)
+    cut = 2018.5
+    pre, post = season < cut, season > cut
+    pace = np.where(pre, 90.2 + 0.47 * (season - 2005),
+                    99.9 - 0.25 * (season - 2019))
+    pace = pace + rng.normal(0.0, 0.6, season.size)
+
+    fig, ax = plt.subplots(figsize=(4.4, 2.8), constrained_layout=True)
+    ax.plot(season, pace, color=SERIES[3], lw=1.0, marker="o", markersize=3.5,
+            label="observed")
+    fits = [np.poly1d(np.polyfit(season[m], pace[m], 1)) for m in (pre, post)]
+    for m, fit in zip((pre, post), fits):
+        ax.plot(season[m], fit(season[m]), color=SERIES[4], lw=1.4,
+                label="segmented fit" if m is pre else None)
+    ax.axvline(cut, color=SERIES[5], lw=1.2, label="rule change")
+
+    ax.annotate("rule change", (cut, 91), textcoords="offset points",
+                xytext=(5, 0), ha="left", va="center", color=INK)
+    # Observed and fitted run within a possession of each other the whole way,
+    # so neither label has ground beside its own curve that is not also beside
+    # the other. Both are set in the empty page above the early seasons and led
+    # down to a season where the curve they name is the upper one, so the
+    # leader meets it before the other.
+    lead = dict(arrowstyle="-", lw=1.0, color=MUTED)
+    ax.annotate("observed", xy=(2012, pace[season == 2012][0]),
+                xytext=(2014.5, 98.6), ha="center", va="bottom", color=INK,
+                arrowprops=lead)
+    ax.annotate("segmented fit", xy=(2010, fits[0](2010)),
+                xytext=(2008, 96.6), ha="center", va="bottom", color=INK,
+                arrowprops=lead)
+    ax.set_xticks(range(2005, 2026, 5))
+    ax.set_xlabel("Season")
+    ax.set_ylabel("Possessions per game")
+    ax.set_xlim(2004.5, 2025.5)
+    ax.set_ylim(89, 101.5)
+    return finish(fig, "gallery-interrupted",
+           "Possessions per game by season, 2005 to 2025, with a segmented "
+           "linear fit either side of a rule change in 2018. Pace rises about "
+           "half a possession a season before the change, jumps to near 100 "
+           "after it, and then drifts down.")
+
 BUILDERS = (small_multiples, field, schematic, forms, convergence, orbit,
             encoding, uncertainty, counts, residual, density, callout,
             secondary_scale, survival, raster, rose, parity, phase, trendmap,
-            broadening)
+            broadening, classifiers, abundance, dose_response, interrupted)
 
 
 # --- the palette these figures are drawn with --------------------------------
@@ -1557,7 +1744,7 @@ def palettes():
 
 
 def main(argv=None):
-    """Build all twenty, audit each, and report. Returns a process exit code.
+    """Build all twenty-four, audit each, and report. Returns a process exit code.
 
     Called only under `if __name__ == "__main__"`, so that importing this file
     builds nothing, writes no PNG, reads no `sys.argv` and does not exit the
