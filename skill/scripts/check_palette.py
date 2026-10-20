@@ -129,7 +129,7 @@ def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
 # distance: the lightness band and the chroma floor. Those are design choices
 # about where in the space a series hue should sit, and they claim no calibration.
 # Two thresholds do gate on an OKLab lightness *difference*, `ORDINAL_DL_MIN` and
-# `CMAP_SPAN_MIN`; each states its CAM02-UCS J' equivalent where it is defined.
+# `CMAP_SPAN_MIN`; each states its CIELAB L* equivalent where it is defined.
 #
 # The sRGB viewing environment, matching CIE 159:2004's worked conditions and
 # colorspacious's `CIECAM02Space.sRGB`: D65 at 100 cd/m^2, a 20% surround, and
@@ -560,7 +560,7 @@ def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
 
 CMAP_SAMPLES = 256          # points `check_figure` samples a colormap at
 CMAP_QUALITATIVE_N = 40     # fewer entries than this is a category list, not a ramp
-CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat, ~2.3 J'
+CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat, ~2.4 L*
 CMAP_BACKTRAVEL_MAX = 0.02  # backward lightness travel, as a fraction of the span
 # A ramp is cyclic when its two ends are the same colour. 1.0 CAM02-UCS is about
 # 2 CIELAB over the slot gamut (see the bridge at `CVD_TARGET`): twice the
@@ -742,10 +742,10 @@ CHROMA_MIN = 0.10
 # cube against a metric that had no calibration, so that agreement is a
 # coincidence and is not evidence for these numbers.
 #
-# What IS evidence: the published Okabe-Ito set clears `CVD_TARGET` at every one
-# of its 28 pairs, and misses `NORMAL_FLOOR` at exactly one - orange #E69F00
-# against yellow #F0E442, at 20.75. That is the pair `figure.mplstyle` already
-# drops, arrived at independently. See the style guide.
+# The published Okabe-Ito set clears `CVD_TARGET` at every one of its 28 pairs
+# and misses `NORMAL_FLOOR` at one, orange #E69F00 against yellow #F0E442 at
+# 20.75, the pair `figure.mplstyle` drops. Stone et al.'s per-axis model fails
+# two more; the style guide gives the numbers.
 #
 # `--ordinal` does not use these. Adjacent steps of a ramp are compared for
 # lightness order, not for identification.
@@ -756,11 +756,11 @@ CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 # The three ordinal rows. `--ordinal` swaps the categorical gates for these.
 #
 # `ORDINAL_DL_MIN` is an OKLab lightness gap, and OKLab has no published unit.
-# Along ten sequential maps one unit of OKLab L is a median 116 CAM02-UCS J'
-# (p5 93, p95 129), so the floor is about 7 J', against the 5.2 that Stone et
-# al.'s 0.333-degree mean reaches through the bridge above. That mean is over
-# all three CIELAB axes; their lightness-only fit was not checked, so this is a
-# comparison, not a derivation.
+# Along ten sequential maps one OKLab L is a median 118 CIELAB L* (p5 94, p95
+# 130), so the floor is about 7.1 L*. Stone et al.'s lightness fit (their Table
+# 3: C 5.079, K 0.751) puts ND(50) at 7.33 L* for a 0.333-degree target and
+# 5.45 at two degrees. Adjacent steps clear the half-of-observers line on a
+# two-degree patch and sit just under it on a hairline.
 ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
 ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest

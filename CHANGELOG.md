@@ -116,8 +116,11 @@ behind a threshold this project enforces.
   transparency as remedies.
 - The `CMAP_WRAP_DE_MAX` comment and `style-guide.md`: 1.0 is about 2 CIELAB,
   not one JND. `RETRACTED_CLAIMS` holds the JND version.
-- `ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` state their CAM02-UCS J' equivalents,
-  about 7 and 2.3.
+- `ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` state their CIELAB L* equivalents,
+  about 7.1 and 2.4.
+- `style-guide.md` "What is evidence for them": Stone et al.'s per-axis model
+  fails three Okabe-Ito pairs at `NORMAL_FLOOR`, not one. Pinned in
+  `test_the_size_model_itself_fails_three_okabe_ito_pairs`.
 
 ### Why it changed
 
@@ -265,8 +268,16 @@ diverging map at 27.963.
 
 `ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` gate on OKLab lightness differences, which
 the same file says have no published unit. Along ten sequential maps one OKLab
-L is a median 116 J', so 0.06 is about 7 J', above the 5.2 that Stone et al.'s
-0.333-degree mean reaches. No threshold moved.
+L is a median 118 L*, so 0.06 is about 7.1 L*. Stone et al.'s lightness fit
+puts ND(50) at 5.45 L* for a two-degree patch and 7.33 for a 0.333-degree
+target, so adjacent ordinal steps sit just under the half-of-observers line on
+a hairline. No threshold moved.
+
+The style guide called Okabe-Ito missing `NORMAL_FLOOR` at exactly the pair the
+shipped cycle drops "the strongest argument these numbers have". In Stone et
+al.'s own model, at 4 ND(50) for a 0.333-degree target, sky blue against blue
+(3.42) and orange against vermillion (3.59) miss too, and the shipped cycle
+keeps both. The CAM02-UCS bridge is a median, and it is what passes them.
 ## 0.10.0 — 2026-09-30
 
 ### What changed
