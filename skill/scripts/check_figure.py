@@ -481,9 +481,11 @@ BANKING_MIN_POINTS = 8
 BANKING_FLAT_SLOPE = 0.01
 # Two panels naming one quantity count as one scale when sharing an axis would
 # cost each at most this factor of its own span: the union of their limits,
-# measured in the axis's scale, over the narrower span. Autoscaled small
-# multiples land well inside 2; 0-1 beside 0-1000 is 1000. The factor is a
-# judgement about how much resolution `sharey` may take, not a measurement.
+# measured in the axis's scale, over the narrower span. The adversarial set in
+# `tests/test_figure.py` puts panels that should share at 1.6 or less and
+# panels that should not at 4.0 or more, so any factor in [1.6, 4.0) separates
+# it; 2.0 within that range is a judgement. At 2.0, 3 of 900 seeded
+# same-process small multiples join no pair, and none at 2.5.
 SHARE_SPAN_RATIO_MAX = 2.0
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the

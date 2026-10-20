@@ -1367,6 +1367,15 @@ def test_the_rdbu_window_is_the_one_that_passes_the_palette_gates():
 # because that is where the surviving copy was.
 
 RETRACTED_CLAIMS = {
+    "autoscaled small multiples landing well inside a span ratio of 2": {
+        "pattern": r"lands? well inside 2",
+        "instead": "3 of 900 seeded same-process small multiples join no "
+                   "pair at SHARE_SPAN_RATIO_MAX = 2.0",
+        "why": "it was not measured. "
+               "test_same_process_small_multiples_mostly_share_at_the_ratio "
+               "measures it",
+        "retracted": "2026-10-20",
+    },
     "anomalous trichromacy failing 1.27% of pairs dichromacy passes": {
         "pattern": r"1\.27\s*%\s*clear|#8e4dc7",
         "instead": "0.13% clear CVD_TARGET under both dichromacy models and "
