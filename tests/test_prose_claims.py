@@ -1748,6 +1748,17 @@ EXTERNAL_CLAIMS = {
                  "ND(50,2), is closer to 6 ... For 0.33 degrees, the required "
                  "difference is closer to 11.",
     },
+    "size model tested range": {
+        "document": "style-guide.md",
+        "anchor": "Szafir (2017) tested steps up to 2 ND(50) and no further",
+        "source": "Szafir, IEEE TVCG 24(1), 392-401, 2017, section 4.1; "
+                  "read from danielleszafir.com/colordiff_vis2017.pdf",
+        "doi": "10.1109/TVCG.2017.2744359",
+        "verified": "2026-10-20",
+        "quote": "used steps of 0.5ND(50,Size), 0.75ND(50,Size), "
+                 "1ND(50,Size), 1.25ND(50,Size), 1.5ND(50,Size), or "
+                 "2ND(50,Size)",
+    },
     "cvd severity matrices": {
         "document": "style-guide.md",
         "anchor": "Dichromacy is not the worst case",

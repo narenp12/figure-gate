@@ -354,7 +354,7 @@ ignore = ["E741", "B905"]
 #               numbers by tests/test_alt_text_numbers.py.
 [tool.codespell]
 skip = "./site,./.venv,./.git,uv.lock,*.png,*.svg"
-ignore-words-list = "vermillion,commun,theses,nd,trough"
+ignore-words-list = "vermillion,commun,theses,nd,1nd,trough"
 
 [tool.mypy]
 python_version = "3.11"

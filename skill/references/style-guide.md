@@ -516,6 +516,18 @@ CAM02-UCS bridge is a median, not a per-pair conversion, and it is what passes
 them. The Okabe-Ito result supports the floors' scale, not their placement to
 within a pair.
 
+The gate stays in CAM02-UCS anyway, because the 4× that fails those pairs is an
+extrapolation. Szafir (2017) tested steps up to 2 ND(50) and no further, and the model is linear through zero, so 2 ND(50) is
+already its predicted 100% detection. Inside that range the model disagrees with
+the gate twice on the shipped cycle under simulation. Bluish green `#009E73`
+against reddish purple `#CC79A7` reads 1.54 ND(50) under Machado deuteranopia
+and 1.66 under Viénot; blue `#0072B2` against the same purple reads 1.94 under
+Machado protanopia and 2.10 under Viénot. CAM02-UCS puts them at 14.76 and
+13.96, over `CVD_TARGET`. They are pinned in
+`test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation` rather
+than gated: no study maps any multiple of ND(50) onto identifying a series
+against its legend.
+
 **Why there is still no size-weighted gate.** A gate multiplying the floors by
 Stone et al.'s size ratio was built and thrown away. Publication line widths are
 far below the range the model was fitted over: a 1pt stroke is 0.05° at reading
@@ -840,6 +852,10 @@ kinds, and the reason `misc` fails, comes from this literature.
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
   about 11 at a third of a degree. The section above derives the floors from
   it, and says why it is not a gate.
+- Szafir, D. A. (2017). Modeling Color Difference for Visualization Design.
+  *IEEE Transactions on Visualization and Computer Graphics* 24(1), 392-401.
+  doi:10.1109/TVCG.2017.2744359. Size models for points, bars and lines,
+  measured at steps up to 2 ND(50).
 - Birch, J. (2012). Worldwide prevalence of red-green color deficiency.
   *Journal of the Optical Society of America A* 29(3), 313-320.
   doi:10.1364/JOSAA.29.000313. The prevalence figures the CVD gate is scoped
