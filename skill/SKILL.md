@@ -264,7 +264,7 @@ panel with a legend or a scatter gates every pair; otherwise neighbours in draw
 order and any two lines whose strokes meet. A pair under the CVD floor passes
 when a dash, marker, hatch or mark type also separates it. Without
 it, a figure on matplotlib's default `tab10` cycle passes every composition row
-while its orange and green sit at CAM02-UCS ΔE 2.4 under protanopia, against a
+while its orange and green sit at CAM02-UCS ΔE 1.6 under protanopia, against a
 floor of 10.5.
 
 **WARN is not FAIL.** A sub-3:1 hue is legal *if* it carries a visible direct

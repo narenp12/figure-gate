@@ -28,7 +28,7 @@ Render the figure and look at it.
 
 A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
 returned nothing but passing rows from the composition checks. `check_palette.py`
-rated that same cycle's orange and green at dE 2.4 under protanopia: one hue to
+rates that same cycle's orange and green at dE 1.6 under protanopia: one hue to
 that reader, against a floor of 10.5. The composition checker had no access to
 the colors it was drawing.
 
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2453 tests, and each check has one asserting it catches a
+    The suite is 2467 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
