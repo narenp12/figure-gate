@@ -60,6 +60,8 @@ behind a threshold this project enforces.
 - Four tests in `tests/test_figure.py` pinning the pair each one puts in front
   of `check_series_color`, and seven `CHECKED` entries in
   `tests/test_alt_text_numbers.py` for their alt text.
+- `check_palette.pair_separation(color_a, color_b)`: `cvd`, `cvd_kind`,
+  `cvd_severity`, `tritan` and `normal` for one pair.
 
 #### Changed
 
@@ -158,6 +160,9 @@ behind a threshold this project enforces.
   allows, [1.6, 4.0), and its same-process miss count.
 - The gallery count is twenty-four in `gallery.py`, the README, `design.md`,
   the gallery page and the tests that count it.
+- `check_figure._separation` takes the panel's `_data_artists` from
+  `check_series_color` and measures each pair with `pair_separation`, not by
+  calling `check_palette.check` and parsing its detail strings.
 
 ### Why it changed
 
@@ -355,6 +360,14 @@ without the second-channel excuse, and `gallery-interrupted` fails Label
 attribution while `axvline` is read at data y 0 to 1. The two legend figures
 move Series color detail from dE 15.1 and 39.5 to 12.8. Before the code-review
 round, one verdict moves. The 21 existing figures record no verdict change.
+
+`_separation` read dE and tritan back out of `check`'s detail strings with a
+regex, so rewording a detail string could have moved a verdict, and it
+harvested each panel's artists a second time. The two separation rows' detail
+strings are now written once, in `check_palette`, for both callers. Verdicts
+and details did not move: the 25-figure sweep is byte-identical before and
+after, and so is `check_series_color` on 400 seeded random figures, 165 of them
+failing and 37 carried by a second channel.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

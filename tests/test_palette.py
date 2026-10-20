@@ -1044,3 +1044,32 @@ def test_cmap_kind_rgb_calls_a_flat_ramp_misc():
     float-sRGB route reached it nowhere in the suite."""
     flat = [(0.47, 0.46, 0.44)] * cp.CMAP_QUALITATIVE_N
     assert cp.cmap_kind_rgb(flat) == "misc"
+
+
+# --- the numbers behind the separation rows ----------------------------------
+# `check_figure._separation` used to call `check` once per pair and read dE and
+# tritan back out of the detail strings with a regex. `pair_separation` hands
+# over the numbers instead; this holds them to what `check` prints.
+
+def _pairs_to_compare():
+    rng = random.Random(0)
+    shipped = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00",
+               "#CC79A7", "#ff7f0e", "#2ca02c", "#d62728", "#1f77b4"]
+    drawn = [f"#{rng.randrange(1 << 24):06x}" for _ in range(30)]
+    pairs = list(itertools.combinations(shipped, 2))
+    pairs += list(zip(drawn[::2], drawn[1::2]))
+    return pairs
+
+
+@pytest.mark.parametrize("a,b", _pairs_to_compare())
+def test_pair_separation_is_the_numbers_check_prints(a, b):
+    rows = {name.split(" (")[0]: detail for name, _, detail in cp.check([a, b])[1]}
+    sep = cp.pair_separation(a, b)
+    cvd = re.search(r"dE (\d+\.\d) \((\w+) at severity ([^)]*)\) - tritan "
+                    r"(\d+\.\d)", rows["CVD separation"])
+    normal = re.search(r"dE (\d+\.\d)", rows["Normal-vision floor"])
+    assert f"{sep['cvd']:.1f}" == cvd.group(1)
+    assert sep["cvd_kind"] == cvd.group(2)
+    assert sep["cvd_severity"] == cvd.group(3)
+    assert f"{sep['tritan']:.1f}" == cvd.group(4)
+    assert f"{sep['normal']:.1f}" == normal.group(1)

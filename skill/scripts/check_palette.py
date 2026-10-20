@@ -47,8 +47,8 @@ __all__ = [
     "cmap_back_travel", "cmap_kind",
     "cmap_back_travel_rgb", "cmap_kind_rgb", "CHROMA_MIN", "CVD_TARGET",
     "NORMAL_FLOOR", "CONTRAST_MIN", "ORDINAL_DL_MIN",
-    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX", "check",
-    "AUDIT_SCHEMA", "check_json", "main",
+    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX",
+    "pair_separation", "check", "AUDIT_SCHEMA", "check_json", "main",
 ]
 
 # --- color conversion -------------------------------------------------------
@@ -766,6 +766,68 @@ ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
 
 
+def _separation_numbers(lin_a: Sequence[float], lin_b: Sequence[float]
+                        ) -> tuple[float, str, str, float, float]:
+    """`(cvd, kind, severity, tritan, normal)` for one pair of linear RGBs.
+
+    `cvd` is the smallest dE over protan and deutan, each swept over severity
+    and read at dichromacy under both models; `kind` and `severity` say where
+    it was found, protan first on a tie. `check` gates the rows on these, and
+    `check_figure` reads them per pair through `pair_separation`."""
+    worst, kind_at, at_at = float("inf"), "", ""
+    for kind in ("protan", "deutan"):
+        views = [(delta_e(simulate(lin_a, kind), simulate(lin_b, kind)),
+                  "1.0")]
+        views += [(delta_e(simulate_anomalous(lin_a, kind, s),
+                           simulate_anomalous(lin_b, kind, s)), f"{s:.1f}")
+                  for s in ANOMALOUS_SEVERITIES]
+        views.append((delta_e(simulate_anomalous(lin_a, kind, 1.0),
+                              simulate_anomalous(lin_b, kind, 1.0)),
+                      "1.0, Machado"))
+        d, at = min(views)
+        if d < worst:
+            worst, kind_at, at_at = d, kind, at
+    tritan = delta_e(simulate(lin_a, "tritan"), simulate(lin_b, "tritan"))
+    return worst, kind_at, at_at, tritan, delta_e(lin_a, lin_b)
+
+
+def pair_separation(color_a: str, color_b: str) -> dict[str, float | str]:
+    """The numbers behind `check`'s two separation rows, for one pair.
+
+    Args:
+        color_a: A hex string.
+        color_b: A hex string.
+
+    Returns:
+        `{"cvd", "cvd_kind", "cvd_severity", "tritan", "normal"}`. `cvd` is
+        the CAM02-UCS dE the CVD row gates against `CVD_TARGET`, at the
+        deficiency and severity named; `normal` is the dE the normal-vision
+        row gates against `NORMAL_FLOOR`; `tritan` is reported, not gated.
+    """
+    cvd, kind, at, tritan, normal = _separation_numbers(
+        hex_to_linear(color_a), hex_to_linear(color_b))
+    return {"cvd": cvd, "cvd_kind": kind, "cvd_severity": at,
+            "tritan": tritan, "normal": normal}
+
+
+def _cvd_detail(a: str, b: str, d: float, kind: str, at: str,
+                tritan: float) -> str:
+    """The CVD row's detail. `check_figure` writes its own [FIX]."""
+    return (f"worst {a} vs {b} dE {d:.1f} ({kind} at severity {at}) - "
+            f"tritan {tritan:.1f}"
+            + ("" if d >= CVD_TARGET
+               else "  [FIX] needs direct labels/gaps/texture, or re-step"))
+
+
+def _normal_detail(a: str, b: str, d: float) -> str:
+    """The normal-vision row's detail."""
+    return (f"worst {a} vs {b} dE {d:.1f}"
+            + ("" if d >= NORMAL_FLOOR else
+               "  [FIX] move one of the pair, or re-step the ramp"
+               f"  [WHY] below {NORMAL_FLOOR}, hard to tell apart in "
+               "full color"))
+
+
 def check(colors: Sequence[str], surface: str = "#ffffff",
           all_pairs: bool = False, ordinal: bool = False,
           ink: Collection[str] = frozenset(),
@@ -859,44 +921,25 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     # severity 1.0, so the sweep has one model from end to end and the worst
     # case covers the disagreement between the two. MACHADO's comment has the
     # measurement.
+    numbers = {(i, j): _separation_numbers(lin[i], lin[j]) for i, j in pairs}
     worst_cvd, worst_cvd_at = float("inf"), None
-    for i, j in pairs:
-        for kind in ("protan", "deutan"):
-            views = [(delta_e(simulate(lin[i], kind), simulate(lin[j], kind)),
-                      "1.0")]
-            views += [(delta_e(simulate_anomalous(lin[i], kind, s),
-                               simulate_anomalous(lin[j], kind, s)), f"{s:.1f}")
-                      for s in ANOMALOUS_SEVERITIES]
-            views.append((delta_e(simulate_anomalous(lin[i], kind, 1.0),
-                                  simulate_anomalous(lin[j], kind, 1.0)),
-                          "1.0, Machado"))
-            d, at = min(views)
-            if d < worst_cvd:
-                worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
-    worst_tri = min((delta_e(simulate(lin[i], "tritan"), simulate(lin[j], "tritan"))
-                     for i, j in pairs), default=float("nan"))
+    for (i, j), (d, kind, at, _, _) in numbers.items():
+        if d < worst_cvd:
+            worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
+    worst_tri = min((n[3] for n in numbers.values()), default=float("nan"))
     if worst_cvd_at:
         a, b, kind, at = worst_cvd_at
-        good = worst_cvd >= CVD_TARGET
-        rows.append((f"CVD separation ({label})", good,
-                     f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind} at severity "
-                     f"{at}) - tritan {worst_tri:.1f}"
-                     + ("" if good else "  [FIX] needs direct labels/gaps/texture, or re-step")))
+        rows.append((f"CVD separation ({label})", worst_cvd >= CVD_TARGET,
+                     _cvd_detail(a, b, worst_cvd, kind, at, worst_tri)))
 
     worst_n, worst_n_at = float("inf"), None
-    for i, j in pairs:
-        d = delta_e(lin[i], lin[j])
-        if d < worst_n:
-            worst_n, worst_n_at = d, (colors[i], colors[j])
+    for (i, j), n in numbers.items():
+        if n[4] < worst_n:
+            worst_n, worst_n_at = n[4], (colors[i], colors[j])
     if worst_n_at:
         a, b = worst_n_at
-        good = worst_n >= NORMAL_FLOOR
-        rows.append((f"Normal-vision floor ({label})", good,
-                     f"worst {a} vs {b} dE {worst_n:.1f}"
-                     + ("" if good else
-                        "  [FIX] move one of the pair, or re-step the ramp"
-                        f"  [WHY] below {NORMAL_FLOOR}, hard to tell apart in "
-                        "full color")))
+        rows.append((f"Normal-vision floor ({label})", worst_n >= NORMAL_FLOOR,
+                     _normal_detail(a, b, worst_n)))
 
     # Advisory, not a gate: a sub-3:1 hue is legal, it just obligates a visible
     # direct label. Reporting it as FAIL while the run still passes reads as a
