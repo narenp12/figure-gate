@@ -86,6 +86,7 @@ __all__ = [
     "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "XHEIGHT_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
     "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_SLOPE",
+    "SHARE_SPAN_RATIO_MAX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
     "VENUE_PANEL_LABEL_PT",
     "content_width_pt", "type_ceiling_pt", "x_height_fraction",
@@ -478,6 +479,12 @@ BANKING_MIN_POINTS = 8
 # this is a factor of ten below it, the factor `BANKING_SLOPE_MAX` puts between
 # banked and reported, and that factor is a judgement. See `_banking_slopes`.
 BANKING_FLAT_SLOPE = 0.01
+# Two panels naming one quantity count as one scale when sharing an axis would
+# cost each at most this factor of its own span: the union of their limits,
+# measured in the axis's scale, over the narrower span. Autoscaled small
+# multiples land well inside 2; 0-1 beside 0-1000 is 1000. The factor is a
+# judgement about how much resolution `sharey` may take, not a measurement.
+SHARE_SPAN_RATIO_MAX = 2.0
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -751,11 +758,16 @@ NOT_CONFIGURABLE = {
         "CSS's definition of a bold face, which matplotlib follows. Not this "
         "project's number to set",
     "GRID_PAIR_CAP":
-        "the memory bound on check_overplotting's fallback, about 100MB of "
-        "working set. It moves no verdict",
+        "the memory bound on the scipy-free paths of check_overplotting and "
+        "the series stroke-contact test, about 100MB of working set. It moves "
+        "no verdict",
     "RAMP_LUT_N":
         "the sample count a registered ramp is compared over, not a boundary "
         "any verdict falls on",
+    "SERIES_CONTACT_PX":
+        "the 2px vertex spacing of `_densify_px`, which is how far apart two "
+        "crossing strokes can be at their nearest vertices. Smaller misses "
+        "crossings; larger joins strokes that do not meet",
 }
 
 
@@ -2640,6 +2652,35 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
                     "do not move it")
 
 
+def _largest_sharable(axes: list[Any], axis: str) -> int:
+    """The most panels in `axes` that could share one `axis` axis.
+
+    Spans are compared in the axis's own scale, so two log panels a decade
+    apart are as far apart as two linear ones a span apart. Panels are joined
+    when the union of their limits is within `SHARE_SPAN_RATIO_MAX` of the
+    narrower span, and the answer is the largest group so joined."""
+    import numpy as np
+    spans = []
+    for a in axes:
+        lo, hi = sorted(getattr(a, f"{axis}axis").get_transform().transform(
+            np.asarray(getattr(a, f"get_{axis}lim")(), dtype=float)))
+        spans.append((float(lo), float(hi)))
+    parent = list(range(len(spans)))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            i = parent[i]
+        return i
+    for i, j in itertools.combinations(range(len(spans)), 2):
+        (lo_i, hi_i), (lo_j, hi_j) = spans[i], spans[j]
+        narrow = min(hi_i - lo_i, hi_j - lo_j)
+        union = max(hi_i, hi_j) - min(lo_i, lo_j)
+        if narrow > 0 and union <= SHARE_SPAN_RATIO_MAX * narrow:
+            parent[root(i)] = root(j)
+    sizes = Counter(root(i) for i in range(len(spans)))
+    return max(sizes.values()) if sizes else 0
+
+
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
     """Panels on the same scale should share their axis furniture.
 
@@ -2664,18 +2705,23 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
         rows.setdefault(r_, []).append(ax)
         cols.setdefault(c_, []).append(ax)
 
-    # Keyed on limits and scale as well as the label, like the tick half below:
-    # the remedy is `sharey`, and two panels at 0-1 and 0-1000 that name the
-    # same quantity cannot share one without flattening a panel.
+    # Keyed on scale and on limits that could share an axis, as well as the
+    # label: the remedy is `sharey`, and two panels at 0-1 and 0-1000 that name
+    # the same quantity cannot share one without flattening a panel. Exact
+    # limits are too strict a key, because autoscaled panels differ by a few
+    # hundredths; `SHARE_SPAN_RATIO_MAX` says how far apart is too far.
     dupes = []
-    for group, getter, lim_of, scale_of, axis in (
-            (rows, "get_ylabel", "get_ylim", "get_yscale", "y"),
-            (cols, "get_xlabel", "get_xlim", "get_xscale", "x")):
+    for group, getter, axis in ((rows, "get_ylabel", "y"),
+                                (cols, "get_xlabel", "x")):
         for _, axes in group.items():
-            vals = [(getattr(a, getter)().strip(), getattr(a, lim_of)(),
-                     getattr(a, scale_of)()) for a in axes]
-            for (label, _lim, _scale), n in Counter(
-                    v for v in vals if v[0]).items():
+            keyed: dict[tuple[str, str], list[Any]] = {}
+            for a in axes:
+                label = getattr(a, getter)().strip()
+                if label:
+                    scale = getattr(a, f"get_{axis}scale")()
+                    keyed.setdefault((label, scale), []).append(a)
+            for (label, _scale), same in keyed.items():
+                n = _largest_sharable(same, axis)
                 if n > 1:
                     dupes.append(f"{axis}label {label!r} x{n}")
 
@@ -3301,15 +3347,17 @@ def _axes_all_pairs(ax: Axes) -> bool:
 
     Asked per axes, not per figure: a scatter in one panel does not make a
     line-only panel two panels over answer to the stricter rule. A figure
-    legend is the exception, since it keys every panel."""
+    legend is the exception, since it keys every panel. A hidden legend keys
+    nothing."""
     from matplotlib.collections import PathCollection
     if any(isinstance(c, PathCollection) for c in ax.collections):
         return True
-    if ax.get_legend() is not None:
+    legend = ax.get_legend()
+    if legend is not None and legend.get_visible():
         return True
     parent: Any = ax.figure
     while parent is not None:
-        if getattr(parent, "legends", None):
+        if any(lg.get_visible() for lg in getattr(parent, "legends", ())):
             return True
         parent = getattr(parent, "_parent", None)
     return False
@@ -3352,7 +3400,7 @@ def _gated_pairs(ax: Axes, distinct: list[str],
 
 def _strokes_meet(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
     """Whether any vertex of one densified stroke lies within `tol` pixels of
-    a vertex of the other. scipy when present, numpy in chunks otherwise."""
+    a vertex of the other. scipy when present, a numpy grid otherwise."""
     import numpy as np
     lo = np.maximum(pa.min(axis=0), pb.min(axis=0)) - tol
     hi = np.minimum(pa.max(axis=0), pb.max(axis=0)) + tol
@@ -3365,33 +3413,84 @@ def _strokes_meet(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
     try:
         from scipy.spatial import cKDTree
     except ImportError:                      # optional, see `_box_blur`
-        for start in range(0, len(pa), 256):
-            d2 = ((pa[start:start + 256, None, :] - pb[None, :, :]) ** 2).sum(-1)
-            if (d2 <= tol * tol).any():
-                return True
-        return False
+        return _strokes_meet_grid(pa, pb, tol)
     d, _ = cKDTree(pb).query(pa, k=1, distance_upper_bound=tol)
     return bool(np.isfinite(d).any())
+
+
+def _strokes_meet_grid(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
+    """`_strokes_meet` without scipy, exact and bounded in memory.
+
+    Cells `tol` wide, so two vertices within `tol` sit in the same or
+    neighbouring cells. Each vertex of `pa` is paired only with the vertices of
+    `pb` in its nine cells, and the pairs are measured `GRID_PAIR_CAP` at a time.
+    A dense all-pairs block per chunk of `pa`, which this replaces, came to
+    1.7GB per chunk on three noisy 20000-point lines."""
+    import numpy as np
+    origin = np.minimum(pa.min(axis=0), pb.min(axis=0))
+    step = max(float(tol), 1e-9)
+    ca = np.floor((pa - origin) / step).astype(np.int64)
+    cb = np.floor((pb - origin) / step).astype(np.int64)
+    width = int(max(ca[:, 1].max(), cb[:, 1].max())) + 3
+    key_b = (cb[:, 0] + 1) * width + (cb[:, 1] + 1)
+    order = np.argsort(key_b, kind="stable")
+    key_b, pb = key_b[order], pb[order]
+    tol2 = float(tol) * float(tol)
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            key_a = (ca[:, 0] + 1 + dx) * width + (ca[:, 1] + 1 + dy)
+            first = np.searchsorted(key_b, key_a, side="left")
+            count = np.searchsorted(key_b, key_a, side="right") - first
+            has = np.flatnonzero(count)
+            if not len(has):
+                continue
+            ends = np.cumsum(count[has])
+            start = 0
+            while start < len(has):
+                stop = int(np.searchsorted(ends, (ends[start - 1] if start
+                                                  else 0) + GRID_PAIR_CAP,
+                                           side="right"))
+                stop = max(stop, start + 1)
+                rows = has[start:stop]
+                n = count[rows]
+                ia = np.repeat(rows, n)
+                offset = np.arange(int(n.sum())) - np.repeat(
+                    np.cumsum(n) - n, n)
+                ib = np.repeat(first[rows], n) + offset
+                d = pa[ia] - pb[ib]
+                if np.any((d * d).sum(axis=1) <= tol2):
+                    return True
+                start = stop
+    return False
 
 
 def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     """What besides hue tells this artist's series apart: mark type, dash,
     marker shape and hatch. Two series whose sets of these share no member are
-    separated without colour."""
+    separated without colour.
+
+    A marker is compared as the path it draws, on both sides. `scatter` keeps
+    only the path and `plot` only the marker name, and comparing a name with a
+    path called the same circle two markers."""
     import numpy as np
     from matplotlib.lines import Line2D
+    from matplotlib.markers import MarkerStyle
+
+    def shape(path: Any) -> tuple[float, ...]:
+        return tuple(np.round(path.vertices, 3).ravel())
+
     hatch = getattr(artist, "get_hatch", lambda: None)() or None
     if isinstance(artist, Line2D):
         marker = artist.get_marker()
-        marker = (None if str(marker).strip().lower() in ("", "none")
-                  else str(marker))
+        drawn = None
+        if str(marker).strip().lower() not in ("", "none", " "):
+            style = MarkerStyle(marker)
+            drawn = shape(style.get_path().transformed(style.get_transform()))
         dash = str(artist.get_linestyle()) if kind == "line" else None
-        return (kind, dash, marker, hatch)
+        return (kind, dash, drawn, hatch)
     if kind == "marks":
         paths = artist.get_paths()
-        shape = (tuple(np.round(paths[0].vertices, 3).ravel())
-                 if len(paths) else None)
-        return (kind, None, shape, hatch)
+        return (kind, None, shape(paths[0]) if len(paths) else None, hatch)
     return (kind, None, None, hatch)
 
 
@@ -3441,7 +3540,14 @@ def _separation(cp: Any, ax: Axes,
         excusable = row == "CVD separation"
         hard = [r for r in found if not r[1] and not (excusable and r[3])]
         if hard:
-            fails.append(panel(min(hard, key=lambda r: r[0])[2]))
+            detail = panel(min(hard, key=lambda r: r[0])[2])
+            if excusable:
+                # `check_palette`'s remedy is for a list of hexes. Here the
+                # channels the row can see are the ones worth naming.
+                detail = (detail.split("  [FIX]")[0].strip()
+                          + "  [FIX] separate the pair by dash, marker, hatch "
+                            "or mark type as well as hue, or re-step")
+            fails.append(detail)
             continue
         _, passed, detail, _ = min(found, key=lambda r: r[0])
         detail = panel(detail.split("  [FIX]")[0].strip())
@@ -3458,7 +3564,7 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     The hole this closes: `check_palette.py` judges a list of hexes someone
     remembered to paste into a terminal, and this file never looked at color at
     all. A figure on matplotlib's default `tab10` cycle - whose orange and green
-    measure CAM02-UCS dE 2.4 under protanopia, against a floor of 10.5 - passed
+    measure CAM02-UCS dE 1.6 under protanopia, against a floor of 10.5 - passed
     every composition check
     clean. Two scripts in one project that never spoke.
 
@@ -3904,12 +4010,17 @@ def _drawstyle_xy(line: Any) -> np.ndarray:
 
 
 def _polyline_px(line: Any, ax: Axes) -> np.ndarray | None:
-    """A `Line2D`'s stroke in display space, drawstyle expanded and densified."""
+    """A `Line2D`'s stroke in display space, drawstyle expanded and densified.
+
+    Through the line's own transform, as `_path_px` does: `axvline` and
+    `axhline` draw in a blended one, and read through `transData` an
+    `axvline`'s stroke spans data y 0 to 1 rather than the panel."""
     import numpy as np
     xy = _drawstyle_xy(line)
     if xy.ndim != 2 or len(xy) == 0:
         return None
-    return _densify_px(np.asarray(ax.transData.transform(xy), dtype=float))
+    transform = line.get_transform() or ax.transData
+    return _densify_px(np.asarray(transform.transform(xy), dtype=float))
 
 
 def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
@@ -4711,7 +4822,9 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     "slopeless" lines - zero or infinite slope - because they are unchanged by
     the aspect ratio and still drag the median that sets it. Generalised here
     from exactly zero to under `BANKING_FLAT_SLOPE` on the page, and its
-    reciprocal for upright.
+    reciprocal for upright, within a line that has a segment between the two. A
+    line with none is the panel banked too flat or too steep, which is what the
+    gate reports, so only its exactly slopeless segments go.
 
     The cull is on the slope, not on the rise in pixels. A rise cull depends on
     how finely the stroke was sampled: splitting every segment of the saw wave
@@ -4750,7 +4863,12 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
         drawn = ((slopes >= BANKING_FLAT_SLOPE)
                  & (slopes <= 1.0 / BANKING_FLAT_SLOPE))
         if not drawn.any():
-            continue
+            # Flat or upright throughout is the panel banked badly, which is
+            # the finding, not a tail to cull. Only Heer & Agrawala's exactly
+            # slopeless segments are dropped here.
+            drawn = (slopes > 0) & np.isfinite(slopes)
+            if not drawn.any():
+                continue
         runs.append(slopes[drawn])
     if not runs:
         return None

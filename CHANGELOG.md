@@ -45,7 +45,8 @@ behind a threshold this project enforces.
   `EXTERNAL_CLAIMS["fluent print size"]`,
   `RETRACTED_CLAIMS["7.5pt as the size where text is comfortable"]`, and
   `Legge` in `GUIDE_CITED`.
-- `check_figure.SERIES_CONTACT_PX = 2.0`.
+- `check_figure.SERIES_CONTACT_PX = 2.0`, in `NOT_CONFIGURABLE`.
+- `check_figure.SHARE_SPAN_RATIO_MAX = 2.0`.
 - Invariance tests in `tests/test_figure.py`: draw order, stroke contact,
   second channel, vertex density, and label redundancy across scales.
 
@@ -126,6 +127,22 @@ behind a threshold this project enforces.
   `test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation`.
   Szafir (2017) joins the References, `EXTERNAL_CLAIMS["size model tested
   range"]` and `GUIDE_CITED`.
+- `check_banking`: a line flatter than `BANKING_FLAT_SLOPE`, or steeper than
+  its reciprocal, along its whole length keeps every segment but the exactly
+  slopeless ones.
+- `check_redundancy` counts a repeated axis title among panels on one scale
+  type whose limits could share an axis within `SHARE_SPAN_RATIO_MAX`, not
+  among panels with identical limits.
+- `check_series_color`: a hidden legend does not make a panel gate every pair;
+  `plot` and `scatter` markers are compared as drawn paths; `axvline` and
+  `axhline` strokes are read through their own transform, in label attribution
+  too; the CVD `[FIX]` names dash, marker, hatch or mark type.
+- `_strokes_meet` without scipy uses a grid capped by `GRID_PAIR_CAP`.
+- `check_figure.NOT_CONFIGURABLE` gains `SERIES_CONTACT_PX`, and its
+  `GRID_PAIR_CAP` reason names the contact test. `config_keys()` loses
+  `SERIES_CONTACT_PX` and gains `SHARE_SPAN_RATIO_MAX`.
+- tab10's orange and green are quoted at dE 1.6 under protanopia, the number
+  the row prints, in `SKILL.md`, `design.md` and `check_series_color`.
 
 ### Why it changed
 
@@ -290,6 +307,17 @@ in-band six-colour cycle drawn from Okabe-Ito and Tol's sets passes it (0 of
 38760). The two simulated pairs it fails at 2 ND(50), inside the measured
 range, are recorded rather than gated, because no study ties an ND(50)
 multiple to identifying a series.
+
+A code review of this branch found the invariance fixes had broken their own
+rows. The slope cull read a panel banked too flat throughout as "no line
+panel": nine points at page slope 0.0096 warned before and passed after. Exact
+limits as the redundancy key missed two "Accuracy" panels autoscaled to 0.10
+to 0.95 and 0.12 to 0.97. A `scatter` circle beside a `plot` circle excused a
+dE 1.6 pair as carried by a second channel. An `axvline` crossing a line was
+read at data y 0 to 1 and never compared. A hidden legend switched the panel to
+all-pairs. The scipy-free contact test peaked at 784 MiB on two 100000-vertex
+rings; the grid peaks under 200 MiB and takes 1.07s where scipy takes 1.18s on
+three 20000-point lines. The corpus records no verdict change.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

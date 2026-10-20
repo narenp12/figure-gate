@@ -1128,7 +1128,7 @@ def test_series_color_catches_the_default_matplotlib_cycle():
     """The failure that motivated the gate. A figure on matplotlib's own `tab10`
     cycle passed Clipping, Text collision, Contrast stack, Mark ratio, Axis
     redundancy, Type size and Ink coverage clean, and its orange and green
-    measure CAM02-UCS dE 2.4 under protanopia -- one hue to a reader who cannot
+    measure CAM02-UCS dE 1.6 under protanopia -- one hue to a reader who cannot
     separate them. `check_palette.py` had always known; nothing asked it."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     for i, c in enumerate(TAB10):
@@ -6215,7 +6215,7 @@ def test_the_sizes_the_docs_quote(family, size):
 # density) or contradicted the remedy the row itself prints. Each comes with
 # the control that keeps the fix from passing by switching the gate off.
 
-# tab10's orange and green: dE 2.4 under protanopia, against `CVD_TARGET`.
+# tab10's orange and green: dE 1.6 under protanopia, against `CVD_TARGET`.
 CVD_PAIR = ("#ff7f0e", "#2ca02c")
 # Okabe-Ito orange and yellow: clear `CVD_TARGET`, miss `NORMAL_FLOOR` at 20.8.
 NORMAL_PAIR = ("#e69f00", "#f0e442")
@@ -6359,3 +6359,161 @@ def test_a_repeated_label_on_panels_that_cannot_share_a_scale_is_not_redundant()
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Axis redundancy"] is True
+
+
+# --- second review round: what the first round's fixes broke -----------------
+#
+# A code review of the invariance round found each of these on its own diff.
+# Each test failed before its fix.
+
+def test_banking_still_warns_on_a_panel_flat_throughout():
+    """The slope cull is for a flat tail inside a line that has a rate, not for
+    a line banked too flat everywhere: culling that one left nothing and read
+    "no line panel", so the flatter the panel the less the gate said."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4))
+    x = np.arange(9.0)
+    ax.plot(x, 0.0132 * x)
+    ax.set_ylim(-5, 5)
+    status, detail = cf.check_banking(fig)
+    plt.close(fig)
+    assert status == "warn" and "taller" in detail, detail
+
+
+def test_banking_still_culls_a_constant_reference_line():
+    """The control. A slope of exactly zero is unchanged by the aspect, which
+    is Heer & Agrawala's reason to cull it, so a horizontal reference line
+    beside a banked curve leaves the panel banked."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 4))
+    x = np.linspace(0.0, 1.0, 20)
+    ax.plot(x, x)
+    ax.plot(x, 0 * x + 0.5)
+    status, detail = cf.check_banking(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_autoscaled_panels_naming_one_quantity_are_still_redundant():
+    """Keying on exact float limits stopped the label half firing on the
+    commonest small multiple: two panels autoscaled a few hundredths apart."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    a.plot([0, 1], [0.10, 0.95])
+    b.plot([0, 1], [0.12, 0.97])
+    for ax in (a, b):
+        ax.set_ylabel("Accuracy")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    plt.close(fig)
+    assert status is False and "ylabel 'Accuracy'" in detail, detail
+
+
+def test_the_same_circle_from_scatter_and_plot_is_one_marker():
+    """`scatter(marker="o")` and `plot(..., "o")` draw the same circle. Read
+    as two markers, they excused a dE 1.6 pair as carried by a second
+    channel the reader cannot see."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 8)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(x, x, color=CVD_PAIR[0], marker="o", label="a")
+    ax.plot(x, 1 - x, "o", color=CVD_PAIR[1], label="b")
+    assert _series_color(fig) is False
+
+
+def test_a_vertical_rule_that_crosses_a_line_is_compared_with_it():
+    """`axvline` draws in a blended transform. Read through `transData`, its
+    stroke spanned data y 0 to 1 instead of the panel, and the crossing with
+    the orange diagonal was missed."""
+    import numpy as np
+    x = np.linspace(0.0, 10.0, 50)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, x, color=CVD_PAIR[0])
+    ax.plot(x, 0 * x + 9.5, color="#1f77b4")
+    ax.axvline(5, color=CVD_PAIR[1])
+    assert _series_color(fig) is False
+
+
+def test_a_hidden_legend_does_not_change_which_pairs_are_compared():
+    """A legend the reader never sees is not a key the reader matches against.
+    `legend().set_visible(False)` must leave the verdict where no legend
+    leaves it."""
+    verdicts = []
+    for hide in (False, True):
+        fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=hide,
+                           crossing=False)
+        if hide:
+            fig.axes[0].get_legend().set_visible(False)
+        verdicts.append(_series_color(fig))
+    assert verdicts == [True, True]
+
+
+def test_the_series_fix_names_only_channels_the_row_reads():
+    """The row reads dash, marker, hatch and mark type. A [FIX] that sends the
+    author to direct labels sends them to a change that leaves a legended
+    panel failing."""
+    fig = _two_lines(CVD_PAIR, [("-", None), ("-", None)])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    detail = next(d for n, s, d in rows if n == "Series color")
+    fix = detail.split("[FIX]", 1)[1]
+    assert "direct label" not in fix
+    assert all(w in fix for w in ("dash", "marker", "hatch")), fix
+
+
+def test_tab10_orange_and_green_read_as_the_prose_says():
+    """`check_series_color`'s docstring, SKILL.md and design.md quote this
+    pair. The row reports the worst dichromacy model, Machado's."""
+    from check_palette import check
+    detail = dict((n, d) for n, _, d in check(list(CVD_PAIR))[1])[
+        "CVD separation (adjacent)"]
+    assert "dE 1.6 (protan at severity 1.0, Machado)" in detail, detail
+
+
+def test_series_contact_is_the_densifier_spacing_and_not_configurable():
+    """Two strokes crossing between vertices are at most the vertex spacing
+    apart at the nearest vertex pair, so the slack has to be that spacing."""
+    import numpy as np
+    pts = np.array([[0.0, 0.0], [997.0, 13.0], [1500.0, -400.0]])
+    dense = cf._densify_px(pts)
+    assert np.hypot(*np.diff(dense, axis=0).T).max() <= cf.SERIES_CONTACT_PX
+    assert "SERIES_CONTACT_PX" in cf.NOT_CONFIGURABLE
+
+
+def _rings(n):
+    """Two concentric rings of `n` vertices each, 10px apart everywhere, so
+    nothing meets at a 3px tolerance. Most of the outer ring lies inside the
+    inner ring's bounding box, so the prefilter cannot answer for the search."""
+    import numpy as np
+    t = np.linspace(0.0, 2 * np.pi, n)
+    ring = np.column_stack([np.cos(t), np.sin(t)])
+    return 100 * ring + 500, 90 * ring + 500
+
+
+def test_the_numpy_contact_path_agrees_with_scipy(monkeypatch):
+    import numpy as np
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(0)
+    cases = [_rings(400)]
+    for _ in range(40):
+        a = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
+        b = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
+        cases.append((a, b))
+    want = [cf._strokes_meet(a, b, 3.0) for a, b in cases]
+    _without_scipy(monkeypatch)
+    got = [cf._strokes_meet(a, b, 3.0) for a, b in cases]
+    assert got == want and True in want and False in want
+
+
+def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
+    """`check_overplotting`'s fallback is capped by `GRID_PAIR_CAP`; this one
+    built a (256, len(b), 2) block per chunk, 1.7GB on noisy lines."""
+    import tracemalloc
+    a, b = _rings(100_000)
+    _without_scipy(monkeypatch)
+    tracemalloc.start()
+    try:
+        assert cf._strokes_meet(a, b, 3.0) is False
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 200 * 2**20, f"peak {peak / 2**20:.0f} MiB"

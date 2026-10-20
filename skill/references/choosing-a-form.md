@@ -273,7 +273,8 @@ cannot help set one, and a tail of them drags the median that does. The rule is
 generalized from exactly zero or infinite slope to a slope under
 `BANKING_FLAT_SLOPE = 0.01` on the page, or over its reciprocal. The cull is on
 the slope rather than the rise in pixels, because splitting a segment changes
-its rise and not its slope.
+its rise and not its slope. A line flat under that bound from end to end is
+not a tail: it is the panel banked too flat, and it is kept and reported.
 
 A converged training run is mostly a flat tail, 76 segments out of 119 under
 the cull. Culling them is the difference between a median slope of 0.0006,
