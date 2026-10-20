@@ -451,13 +451,16 @@ Simulating only the endpoint would be sound if the endpoint were the hardest
 view.
 
 Measured over 244 650 pairs of hues this validator would accept as series slots,
-1.27% clear ΔE 10.5 under dichromacy and miss it at some lower severity, and
-dichromacy overstates separation by as much as 12.7 ΔE. `#8e4dc7` and `#1402ef`
-are one such pair, at 19.2 under dichromacy and 8.3 at severity 0.9.
+0.13% clear ΔE 10.5 under both dichromacy models and miss it at some lower
+severity, and dichromacy overstates separation by as much as 10.7 ΔE. `#1a80b8`
+and `#fb00e4` are one such pair: 54.1 in full colour, 14.0 and 12.4 under the two
+dichromacy models, and 9.8 at protan severity 0.8.
 
 So the row reports the worst view found and names the severity it was found at,
 using the Machado, Oliveira and Fernandes (2009) matrices for
-`ANOMALOUS_SEVERITIES` and the Viénot matrices at dichromacy. The bundled
+`ANOMALOUS_SEVERITIES` and both Viénot's and Machado's matrices at dichromacy.
+The second model matters: against Viénot alone the share is 1.35%, and nine
+tenths of it is the two models disagreeing at severity 1.0. The bundled
 cycle's worst adjacent pair reads 31.7, which is what says the stricter reading
 is not a floor nobody can satisfy.
 

@@ -105,6 +105,13 @@ behind a threshold this project enforces.
   `BANKING_FLAT_PX` is removed.
 - `check_redundancy` counts a repeated axis title only among panels with the
   same limits and scale, as it already did for tick labels.
+- `check_palette.check` reads dichromacy under Machado's severity 1.0 as well
+  as Viénot's, reported as `severity 1.0, Machado`.
+- The severity claim above `MACHADO` and in `style-guide.md`: 0.13% of
+  244650 slot pairs, up to 10.7 dE, with `#1a80b8` and `#fb00e4` as the
+  example. `RETRACTED_CLAIMS` holds the 1.27% and `#8e4dc7` version.
+- `test_the_sweep_leaves_dichromacy_to_the_vienot_matrices` becomes
+  `test_the_sweep_reads_dichromacy_under_both_models`.
 
 ### Why it changed
 
@@ -230,6 +237,19 @@ colours, on orange `#e69f00` against yellow `#f0e442` at 20.8 against
 The corpus records no verdict change. `gallery-broadening` reads three line
 panels for banking instead of one: the other two had been culled whole.
 `demo` with its legend now reports orange against green, dE 20.7.
+
+The severity sweep compared Viénot at 1.0 with Machado below it. Over the
+same 244650 slot pairs, 1.35% clear `CVD_TARGET` under Viénot and miss it at a
+lower Machado severity; 0.13% clear it under both dichromacy models and miss
+it below. Nine tenths of the published effect was the two models disagreeing.
+The documented pair, `#8e4dc7` against `#1402ef`, reads 7.97 under Machado's
+own severity 1.0, below its 8.3 at 0.9. Of the 309 pairs only the sweep
+fails, 177 clear `NORMAL_FLOOR`; no other row catches them, so the sweep stays.
+
+Dropping Viénot for a single-model sweep would pass 0.59% of pairs Viénot
+calls too close. Reading both tightens instead: 0.44% of pairs newly fail.
+Against colorspacious, which sweeps Machado to 100, false passes on the
+oracle test's 4005 pairs go from 9 to 0. The corpus records no verdict change.
 ## 0.10.0 — 2026-09-30
 
 ### What changed
