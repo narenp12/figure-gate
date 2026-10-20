@@ -537,28 +537,31 @@ def test_the_cyclic_wrap_threshold_sits_in_an_empty_band():
     assert cp.CMAP_WRAP_DE_MAX <= 27 < min(wraps["diverging"])
 
 
-J_PER_OKLAB_L_MAPS = ("viridis", "cividis", "plasma", "magma", "inferno",
-                      "Blues", "Greens", "Greys", "YlOrBr", "PuBu")
+LSTAR_PER_OKLAB_L_MAPS = ("viridis", "cividis", "plasma", "magma", "inferno",
+                          "Blues", "Greens", "Greys", "YlOrBr", "PuBu")
 
 
-def test_the_oklab_lightness_floors_state_their_j_prime_equivalent():
-    """`ORDINAL_DL_MIN` says one OKLab L is a median 116 J' (p5 93, p95 129)
-    along these maps, which puts it at about 7 J' against the 5.2 hairline
-    floor, half `CVD_TARGET`. `CMAP_SPAN_MIN` says ~2.3 J'."""
+def test_the_oklab_lightness_floors_state_their_lstar_equivalent():
+    """`ORDINAL_DL_MIN` says one OKLab L is a median 118 L* (p5 94, p95 130)
+    along these maps, so the floor is about 7.1 L*, between Stone et al.'s
+    lightness ND(50) at two degrees (5.45) and at 0.333 (7.33).
+    `CMAP_SPAN_MIN` says ~2.4 L*."""
     import statistics
     ratios = []
-    for name in J_PER_OKLAB_L_MAPS:
-        lj = [(cp.linear_to_oklab(v)[0], cp.linear_to_cam02ucs(v)[0])
+    for name in LSTAR_PER_OKLAB_L_MAPS:
+        ll = [(cp.linear_to_oklab(v)[0], _cielab(v)[0])
               for v in map(cp.hex_to_linear, cmap_samples(name))]
-        ratios += [(j1 - j0) / (l1 - l0) for (l0, j0), (l1, j1)
-                   in zip(lj, lj[1:]) if abs(l1 - l0) > 1e-3]
+        ratios += [(s1 - s0) / (l1 - l0) for (l0, s0), (l1, s1)
+                   in zip(ll, ll[1:]) if abs(l1 - l0) > 1e-3]
     ratios.sort()
     median = statistics.median(ratios)
     p5, p95 = (ratios[int(q * (len(ratios) - 1))] for q in (0.05, 0.95))
-    assert round(median) == 116
-    assert round(p5) == 93 and round(p95) == 129
-    assert round(cp.ORDINAL_DL_MIN * median) == 7 > cp.CVD_TARGET / 2
-    assert round(cp.CMAP_SPAN_MIN * median, 1) == 2.3
+    assert round(median) == 118
+    assert round(p5) == 94 and round(p95) == 130
+    nd_hairline, nd_patch = 5.079 + 0.751 / (1 / 3), 5.079 + 0.751 / 2
+    assert (round(nd_hairline, 2), round(nd_patch, 2)) == (7.33, 5.45)
+    assert nd_patch < round(cp.ORDINAL_DL_MIN * median, 1) == 7.1 < nd_hairline
+    assert round(cp.CMAP_SPAN_MIN * median, 1) == 2.4
 
 
 def test_check_palette_still_imports_nothing_outside_the_standard_library():
@@ -876,6 +879,26 @@ def test_the_separation_floors_reproduce_the_size_model_they_derive_from():
         "the gallery pair the size gate flagged is no longer comfortably clear "
         "of the size model's requirement, which is the whole reason the gate "
         "was not shipped")
+
+
+def test_the_size_model_itself_fails_three_okabe_ito_pairs():
+    """`style-guide.md` says Stone et al.'s per-axis model at 0.333 degrees,
+    floor 4 ND(50), fails three Okabe-Ito pairs where CAM02-UCS fails one.
+    Coefficients are their Table 3, read from the paper 2026-10-20."""
+    nd = [c + k * 3 for c, k in ((5.079, 0.751), (5.339, 1.541),
+                                 (5.349, 2.871))]
+    in_nd, in_ucs = {}, {}
+    for a, b in itertools.combinations(OKABE_ITO, 2):
+        la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+        in_nd[a, b] = math.sqrt(sum(((x - y) / n) ** 2 for x, y, n
+                                    in zip(_cielab(la), _cielab(lb), nd)))
+        in_ucs[a, b] = cp.delta_e(la, lb)
+    misses = {k: round(v, 2) for k, v in in_nd.items() if v < 4}
+    assert misses == {
+        ("#E69F00", "#F0E442"): 3.91, ("#E69F00", "#D55E00"): 3.59,
+        ("#56B4E9", "#0072B2"): 3.42}
+    assert [k for k, v in in_ucs.items() if v < cp.NORMAL_FLOOR] == [
+        ("#E69F00", "#F0E442")]
 
 
 def test_the_bridge_between_the_two_colour_spaces_is_population_dependent():

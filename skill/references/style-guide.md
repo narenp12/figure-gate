@@ -505,10 +505,16 @@ against a metric that had no calibration.
 palette. Run against the published Okabe-Ito eight-colour set, `CVD_TARGET`
 clears all 28 pairs and `NORMAL_FLOOR` misses exactly one: orange `#E69F00`
 against yellow `#F0E442`, at 20.75. Yellow is one of the two colours the shipped
-cycle already drops. Arriving at that independently is the strongest argument
-these numbers have, and it is why the result is pinned in
-`test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor` rather
-than sanded off with a friendlier fixture.
+cycle already drops. The result is pinned in
+`test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor`.
+
+That agreement depends on the metric. In Stone et al.'s own per-axis model at
+0.333°, where the floor is 4 ND(50), three pairs miss: sky blue `#56B4E9`
+against blue `#0072B2` at 3.42, orange against vermillion `#D55E00` at 3.59,
+and orange against yellow at 3.91. The shipped cycle keeps the first two. The
+CAM02-UCS bridge is a median, not a per-pair conversion, and it is what passes
+them. The Okabe-Ito result supports the floors' scale, not their placement to
+within a pair.
 
 **Why there is still no size-weighted gate.** A gate multiplying the floors by
 Stone et al.'s size ratio was built and thrown away. Publication line widths are
