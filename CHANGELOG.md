@@ -116,6 +116,12 @@ behind a threshold this project enforces.
   example. `RETRACTED_CLAIMS` holds the 1.27% and `#8e4dc7` version.
 - `test_the_sweep_leaves_dichromacy_to_the_vienot_matrices` becomes
   `test_the_sweep_reads_dichromacy_under_both_models`.
+- `check_overplotting`'s docstring no longer lists hollow markers and
+  transparency as remedies.
+- The `CMAP_WRAP_DE_MAX` comment and `style-guide.md`: 1.0 is about 2 CIELAB,
+  not one JND. `RETRACTED_CLAIMS` holds the JND version.
+- `ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` state their CAM02-UCS J' equivalents,
+  about 7 and 2.3.
 
 ### Why it changed
 
@@ -259,6 +265,17 @@ Dropping Viénot for a single-model sweep would pass 0.59% of pairs Viénot
 calls too close. Reading both tightens instead: 0.44% of pairs newly fail.
 Against colorspacious, which sweeps Machado to 100, false passes on the
 oracle test's 4005 pairs go from 9 to 0. The corpus records no verdict change.
+
+`CMAP_WRAP_DE_MAX` called one CAM02-UCS unit a just-noticeable difference, with
+no source. Through the file's own bridge, a median 1.99 CIELAB per unit, it is
+twice the theoretical 2-degree JND Stone et al. give. The threshold rests on
+the registry instead: the two twilights wrap at 0.000 and 0.376, the nearest
+diverging map at 27.963.
+
+`ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` gate on OKLab lightness differences, which
+the same file says have no published unit. Along ten sequential maps one OKLab
+L is a median 116 J', so 0.06 is about 7 J', above the 5.2 that Stone et al.'s
+0.333-degree mean reaches. No threshold moved.
 ## 0.10.0 — 2026-09-30
 
 ### What changed

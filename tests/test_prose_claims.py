@@ -1378,6 +1378,17 @@ RETRACTED_CLAIMS = {
                "its 8.3 at 0.9",
         "retracted": "2026-10-19",
     },
+    "one CAM02-UCS unit being one just-noticeable difference": {
+        "pattern": r"(unit|ΔE)[^.]{0,60}one just[- ]noticeable",
+        "instead": "1.0 CAM02-UCS is about 2 CIELAB over the slot gamut, "
+                   "twice the theoretical 2-degree JND Stone et al. give and "
+                   "a third of their practical ND(50,2); CMAP_WRAP_DE_MAX "
+                   "rests on its measured clearance, not on a JND",
+        "why": "no source was given, and the file's own bridge (median 1.99 "
+               "CIELAB per unit) with the Stone quote in EXTERNAL_CLAIMS "
+               "puts one unit at two theoretical JNDs",
+        "retracted": "2026-10-20",
+    },
     "ACM or Elsevier rejecting a submission for Type 3 fonts": {
         "pattern": r"(ACM|Elsevier)[^.]{0,80}reject[^.]{0,40}submission",
         "instead": "IEEE PDF eXpress does not accept Type 3 and refuses the "
