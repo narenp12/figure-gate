@@ -85,7 +85,7 @@ __all__ = [
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
     "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "XHEIGHT_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
-    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_SLOPE",
+    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS",
     "SHARE_SPAN_RATIO_MAX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
     "VENUE_PANEL_LABEL_PT",
@@ -453,32 +453,25 @@ LINE_FLOOR_PT = 1.0
 FURNITURE_FLOOR_PT = 0.5
 
 # --- banking -----------------------------------------------------------------
-# How far the typical line segment may sit from 45 degrees before the panel's
-# aspect ratio is reported. Cleveland banks a panel by choosing the aspect that
-# puts the median absolute segment slope at 1, where slope discrimination is
-# most accurate; this is the factor either side of that at which the gate says
-# so, and it is one number rather than two because a slope of 10 and a slope of
-# 0.1 are the same misjudgement rotated.
+# How far a line panel's aspect may sit from banked before it is reported.
+# Banked is Talbot, Gerth & Hanrahan's (2011): the aspect that minimises the
+# arc length of the plotted strokes at constant area, which puts a single
+# straight line at 45 degrees, where Cleveland found slope discrimination most
+# accurate. This is the factor either side of that aspect at which the gate
+# says so, and it is one number rather than two because ten times too tall and
+# ten times too wide are the same misjudgement rotated. For one straight line
+# the factor is the reciprocal of its page slope, so 10 is a line at 84 degrees
+# or at 6.
 #
-# Deliberately loose. 10 is a segment at 84 degrees or at 6, which is a panel
-# that is essentially vertical or essentially flat over its own typical step,
-# and there is no argument about those. Tighter bands were measured against the
-# corpus first: the 14 series in `examples/` that this gate reads span 0.19 to
-# 2.95, so [0.25, 4] would have fired on one of them and [0.1, 10] leaves the
-# nearest legitimate case a factor of 1.9 clear.
+# Deliberately loose. Set when the gate read Cleveland's median slope instead:
+# the 14 series in `examples/` it read then spanned 0.19 to 2.95, so [0.25, 4]
+# would have fired on one of them and [0.1, 10] left the nearest legitimate
+# case a factor of 1.9 clear. Arc length moves no corpus verdict.
 BANKING_SLOPE_MAX = 10.0
 # Below this many vertices a line is furniture, not a rate: a reference rule, a
 # leg of a schematic, the two points of an annotation leader. The corpus has 24
 # such strokes and none of them has a typical slope worth reporting.
 BANKING_MIN_POINTS = 8
-# A segment flatter than this on the page, or steeper than its reciprocal, is
-# culled before the median. Heer & Agrawala cull exactly-zero and
-# exactly-infinite slopes: they are unchanged by the aspect ratio and still
-# move the median that sets it. The cull has to sit below the gate's own flat
-# bound, `1 / BANKING_SLOPE_MAX`, or it removes the panels the gate reports on;
-# this is a factor of ten below it, the factor `BANKING_SLOPE_MAX` puts between
-# banked and reported, and that factor is a judgement. See `_banking_slopes`.
-BANKING_FLAT_SLOPE = 0.01
 # Two panels naming one quantity count as one scale when sharing an axis would
 # cost each at most this factor of its own span: the union of their limits,
 # measured in the axis's scale, over the narrower span. The adversarial set in
@@ -4809,9 +4802,10 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                   f"{min(furniture_widths):.2f}pt (floor {FURNITURE_FLOOR_PT})")
 
 
-def _banking_slopes(ax: Axes) -> np.ndarray | None:
-    """Absolute display-space segment slopes of the strokes in one panel, or
-    None where banking is not a question this panel answers.
+def _banking_segments(ax: Axes) -> np.ndarray | None:
+    """`(|dx|, |dy|)` in display pixels for each authored segment of the
+    strokes in one panel, or None where banking is not a question this panel
+    answers.
 
     Four exclusions, each measured against the corpus rather than reasoned into
     existence. A line with `linestyle="none"` draws marks, not a stroke, and the
@@ -4821,32 +4815,12 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     furniture rather than a rate. And an x that does not run one way is a
     parametric curve, where "the typical slope" is not a rate of anything.
 
-    Slopes come off the vertices the author gave, not the densified stroke:
-    densifying makes every segment the same 2px length and the median of that
-    is an artefact of the densifier. For a `step` line that also reads the
-    treads rather than the risers, which is what the reader compares.
-
-    Segments that render flat or upright are culled. Heer & Agrawala cull
-    "slopeless" lines - zero or infinite slope - because they are unchanged by
-    the aspect ratio and still drag the median that sets it. Generalised here
-    from exactly zero to under `BANKING_FLAT_SLOPE` on the page, and its
-    reciprocal for upright, within a line that has a segment between the two. A
-    line with none is the panel banked too flat or too steep, which is what the
-    gate reports, so only its exactly slopeless segments go.
-
-    The cull is on the slope, not on the rise in pixels. A rise cull depends on
-    how finely the stroke was sampled: splitting every segment of the saw wave
-    into 100 leaves the drawn stroke and its slopes unchanged, puts every rise
-    under half a pixel, and culled the whole panel the gate exists for. A slope
-    is unchanged by splitting the segment it belongs to, so the cull is too.
-
-    That is not a nicety. A saturating curve - a converged training run, which
-    is about as common as figures get - is 76 segments out of 119 flatter than
-    `BANKING_FLAT_SLOPE`, and without the cull its median slope is 0.0006: the
-    gate warned that a perfectly ordinary figure needed to be sixteen hundred
-    times taller. Culled, the same panel reads 0.34, which is banked. The saw
-    wave the gate exists to catch loses only its risers and still warns.
-    """
+    A line with no rise anywhere is dropped too: Heer & Agrawala's slopeless
+    line, a reference level the aspect cannot bank. Nothing else is culled.
+    Arc length needs no cull for flat segments, which is one of the reasons
+    Talbot, Gerth & Hanrahan give for it: a saturating curve's flat tail
+    contributes its run and pulls the aspect only as far as its share of the
+    curve's length."""
     import numpy as np
     if ax.get_aspect() != "auto":
         return None
@@ -4863,21 +4837,13 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
         pts = pts[np.isfinite(pts).all(axis=1)]
         if len(pts) < BANKING_MIN_POINTS:
             continue
-        dx = np.diff(pts[:, 0])
-        if not (np.all(dx > 0) or np.all(dx < 0)):
+        d = np.diff(pts, axis=0)
+        if not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
             continue
-        dy = np.diff(pts[:, 1])
-        slopes = np.abs(dy / dx)
-        drawn = ((slopes >= BANKING_FLAT_SLOPE)
-                 & (slopes <= 1.0 / BANKING_FLAT_SLOPE))
-        if not drawn.any():
-            # Flat or upright throughout is the panel banked badly, which is
-            # the finding, not a tail to cull. Only Heer & Agrawala's exactly
-            # slopeless segments are dropped here.
-            drawn = (slopes > 0) & np.isfinite(slopes)
-            if not drawn.any():
-                continue
-        runs.append(slopes[drawn])
+        d = np.abs(d)
+        if not (d[:, 1] > 0).any():
+            continue
+        runs.append(d)
     if not runs:
         return None
     # Pooled across the panel's strokes, because the aspect is one choice made
@@ -4885,14 +4851,47 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     return np.concatenate(runs)
 
 
+def _banking_factor(ax: Axes) -> float | None:
+    """The factor by which banking would multiply the panel's height-to-width
+    ratio, or None where `_banking_segments` finds nothing to bank.
+
+    Talbot, Gerth & Hanrahan (2011): the aspect that minimises the summed
+    length of the strokes while the plot keeps its area. Scaling the height by
+    sqrt(a) and the width by 1/sqrt(a) gives each segment length
+    sqrt(dx^2/a + dy^2 a). Each term is convex in log(a), as their paper's
+    search parameter is, so the sum has one minimum and a golden-section search
+    over log(a) finds it. Unlike the median slope it replaced, the result does
+    not depend on how finely, or how unevenly, a curve was sampled."""
+    import numpy as np
+    seg = _banking_segments(ax)
+    if seg is None:
+        return None
+    dx2, dy2 = seg[:, 0] ** 2, seg[:, 1] ** 2
+
+    def length(s: float) -> float:
+        return float(np.sum(np.sqrt(dx2 * math.exp(-s) + dy2 * math.exp(s))))
+
+    lo, hi = -30.0, 30.0
+    ratio = (math.sqrt(5.0) - 1.0) / 2.0
+    for _ in range(120):
+        a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+        if length(a) < length(b):
+            hi = b
+        else:
+            lo = a
+    return math.exp((lo + hi) / 2.0)
+
+
 def check_banking(fig: Figure) -> tuple[bool | str, str]:
     """Whether a panel's aspect ratio lets the reader compare rates of change.
 
-    Cleveland banks a panel to 45 degrees: choose the height-to-width ratio that
-    puts the median absolute segment slope at 1, because slope discrimination is
-    most accurate near 45 and falls away either side of it. A cycle that is
-    plain in one aspect ratio is invisible in another, and the wrong one is
-    usually the one the default produced.
+    Banking to 45 degrees is Cleveland's: slope discrimination is most accurate
+    near 45 and falls away either side of it, so the aspect should put the
+    strokes there. The aspect that does it is Talbot, Gerth & Hanrahan's, the
+    one minimising the strokes' arc length at constant area; `_banking_factor`
+    says why that and not the median slope. A cycle that is plain in one aspect
+    ratio is invisible in another, and the wrong one is usually the one the
+    default produced.
 
     The failure is a resolution failure, and it is measurable. On a saw wave
     whose decay limbs alternate between two rates, one exactly twice the other:
@@ -4902,38 +4901,32 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
 
     Advisory, and loose, because the right aspect is a judgement about what the
     reader's job is and this cannot know that. `BANKING_SLOPE_MAX` is a factor
-    of ten either side of banked - a typical segment steeper than 84 degrees or
-    flatter than 6 - which is a panel essentially vertical or essentially flat
-    over its own typical step. See `_banking_slopes` for what is excluded and
-    why; a scatter, a map at fixed aspect and a parametric curve are all cases
-    where the median slope means nothing.
+    of ten either side of banked, which for one straight line is a stroke
+    steeper than 84 degrees or flatter than 6. See `_banking_segments` for what
+    is excluded and why; a scatter, a map at fixed aspect and a parametric curve
+    are all cases where banking means nothing.
     """
-    import numpy as np
     floor = 1.0 / BANKING_SLOPE_MAX
     bad, seen = [], []
     for i, ax in enumerate(_all_axes(fig)):
-        slopes = _banking_slopes(ax)
-        if slopes is None or not len(slopes):
+        factor = _banking_factor(ax)
+        if factor is None:
             continue
-        median = float(np.median(slopes))
-        seen.append(median)
-        if floor <= median <= BANKING_SLOPE_MAX:
+        seen.append(max(factor, 1.0 / factor))
+        if floor <= factor <= BANKING_SLOPE_MAX:
             continue
-        degrees = math.degrees(math.atan(median))
-        # Banking multiplies the height-to-width ratio by 1/median. Making the
-        # panel wider multiplies its width, dividing the ratio; making it
-        # taller multiplies the height, so the author acts on 1/median.
-        factor = 1.0 / median if median < 1 else median
-        bad.append(f"ax{i} typical segment at {degrees:.0f} deg "
-                   f"(slope {median:.2g}); banking wants the panel "
-                   f"{factor:g}x " + ("wider" if median > 1 else "taller"))
+        # A factor over 1 multiplies the height-to-width ratio: the panel
+        # should be taller. Under 1 it should be wider by the reciprocal.
+        by = factor if factor > 1 else 1.0 / factor
+        bad.append(f"ax{i} banking wants the panel {by:.3g}x "
+                   + ("taller" if factor > 1 else "wider"))
     if not seen:
         return True, "no line panel whose aspect encodes a rate"
     if not bad:
+        lo, hi = f"{min(seen):.2g}", f"{max(seen):.2g}"
         return True, (f"{len(seen)} line panel"
-                      f"{'s' if len(seen) != 1 else ''}, typical segment "
-                      f"{math.degrees(math.atan(min(seen))):.0f}-"
-                      f"{math.degrees(math.atan(max(seen))):.0f} deg")
+                      f"{'s' if len(seen) != 1 else ''}, "
+                      f"{lo if lo == hi else lo + '-' + hi}x from banked")
     return "warn", ("; ".join(bad)
                     + "  [FIX] set the panel aspect, or the figure size, to the "
                       "ratio named above"

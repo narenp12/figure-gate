@@ -251,13 +251,20 @@ at all. At 6.4 x 1.9 they land 10.6 degrees apart, and it is the first thing you
 see. Same data, same axes, same limits: a 2:1 difference in rate, rendered as a
 difference no reader can resolve.
 
-`check_figure.py` gates this as an advisory row. It reads the median absolute
-segment slope of each panel's strokes in display space, and warns outside a
-factor of `BANKING_SLOPE_MAX = 10.0` either side of banked, which is a typical
-segment past 84 degrees or under 6. The row is deliberately loose: the right
-aspect depends on what the reader's job is, and a script cannot know that. What
-it can say is that a panel is essentially vertical or essentially flat over its
-own typical step.
+`check_figure.py` gates this as an advisory row. It finds the aspect Talbot,
+Gerth and Hanrahan (2011) recommend: the one that minimises the arc length of
+the panel's strokes in display space while the panel keeps its area. A single
+straight line is banked to 45 degrees by it. The row warns when that aspect is
+more than a factor of `BANKING_SLOPE_MAX = 10.0` from the panel's own, which
+for one straight line is a stroke past 84 degrees or under 6. The row is
+deliberately loose: the right aspect depends on what the reader's job is, and a
+script cannot know that. What it can say is that a panel is far from banked.
+
+Arc length replaced Cleveland's median absolute slope. The median depends on
+how the curve was sampled: one curve, y = sqrt(x) with 40 points spaced three
+ways, needed its aspect changed 1.9x, 0.949x or 2.51x by the median and
+1.37x to 1.38x by arc length. Talbot et al. name this as a defect of three of
+the four earlier criteria, the median slope among them.
 
 The gate skips what banking does not apply to:
 
@@ -266,20 +273,12 @@ The gate skips what banking does not apply to:
 - A line whose x does not run one way.
 - Any stroke under `BANKING_MIN_POINTS = 8` vertices, which is furniture rather
   than a rate.
+- A line with no rise anywhere, after Heer and Agrawala's "slopeless lines": a
+  reference level the aspect cannot bank.
 
-Segments that render flat are culled, after Heer and Agrawala's "slopeless
-lines". A horizontal or vertical segment is unchanged by the aspect ratio, so it
-cannot help set one, and a tail of them drags the median that does. The rule is
-generalized from exactly zero or infinite slope to a slope under
-`BANKING_FLAT_SLOPE = 0.01` on the page, or over its reciprocal. The cull is on
-the slope rather than the rise in pixels, because splitting a segment changes
-its rise and not its slope. A line flat under that bound from end to end is
-not a tail: it is the panel banked too flat, and it is kept and reported.
-
-A converged training run is mostly a flat tail, 76 segments out of 119 under
-the cull. Culling them is the difference between a median slope of 0.0006,
-which warns and asks for a panel sixteen hundred times taller, and 0.34, which
-is banked.
+Nothing else is culled. A converged training run is mostly a flat tail, and
+the median slope needed a cull to read it as banked; arc length counts the
+tail as the run it is.
 
 ## The forms with no research-figure use
 
@@ -310,8 +309,11 @@ is banked.
   banking.
 - Heer, J. & Agrawala, M. (2006). Multi-scale banking to 45 degrees. *IEEE
   Transactions on Visualization and Computer Graphics* 12(5), 701-708.
-  doi:10.1109/TVCG.2006.163. The "slopeless lines" culling the gate applies,
-  and the survey of banking criteria.
+  doi:10.1109/TVCG.2006.163. The "slopeless lines" the gate drops, and the
+  survey of banking criteria.
+- Talbot, J., Gerth, J. & Hanrahan, P. (2011). Arc length-based aspect ratio
+  selection. *IEEE Transactions on Visualization and Computer Graphics* 17(12),
+  2276-2282. doi:10.1109/TVCG.2011.167. The criterion the gate banks by.
 - Tukey, J. W. (1977). *Exploratory Data Analysis.* The box plot, and what it
   was for.
 - Wilkinson, L. (2005). *The Grammar of Graphics.* The decomposition `ggplot2`

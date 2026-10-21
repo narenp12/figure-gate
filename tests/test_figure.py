@@ -4755,7 +4755,7 @@ def test_banking_never_returns_a_hard_failure():
     assert ok is not False or gates(rows)["Banking"] is not False
 
 
-def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
+def test_banking_skips_the_panels_where_banking_means_nothing():
     """Four exclusions, each with a case. A steep aspect is applied to all four
     so that a panel which is *not* skipped would warn, which is what keeps this
     from passing by drawing nothing."""
@@ -4765,7 +4765,7 @@ def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
         fig, ax = plt.subplots(figsize=(2.0, 6.0), dpi=100)
         build(ax)
         fig.canvas.draw()
-        return fig, cf._banking_slopes(ax)
+        return fig, cf._banking_segments(ax)
 
     # A full-amplitude zigzag, so the typical segment is far steeper than the
     # panel's own diagonal and a panel that is read cannot help but warn.
@@ -4796,91 +4796,27 @@ def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
     assert gates(rows)["Banking"] == "warn"
 
 
-def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
-    """Densifying makes every segment 2px long, so a median taken over the
-    densified points measures the densifier rather than the data. The two
-    disagree by construction on a line whose segments differ in length."""
-    import numpy as np
-    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
-    # Short steep steps and long shallow ones, in equal number: the authored
-    # median sits between them, the densified one is dominated by the long
-    # segments because densifying splits them into far more points.
-    x = np.cumsum([0.0] + [0.2, 8.0] * 15)
-    y = np.cumsum([0.0] + [4.0, 0.4] * 15)
-    line, = ax.plot(x, y)
-    fig.canvas.draw()
-    authored = float(np.median(cf._banking_slopes(ax)))
-
-    dense = cf._polyline_px(line, ax)
-    d = np.diff(dense, axis=0)
-    keep = np.abs(d[:, 0]) > 1e-9
-    densified = float(np.median(np.abs(d[keep, 1] / d[keep, 0])))
-    plt.close(fig)
-    assert authored != pytest.approx(densified, rel=0.2), (
-        f"authored {authored:.3f} and densified {densified:.3f} agree here, so "
-        "this fixture no longer distinguishes the two readings")
-
-
-def test_banking_culls_segments_that_render_flat():
-    """A saturating curve - a converged training run - has 76 of its 119
-    segments under the cull. Slope cannot tell the flat tail from flat at any
-    aspect, and banking a panel on it asks for something sixteen hundred times
-    taller; the cull has to happen before the median, or the gate warns on
-    the most ordinary figure there is."""
+def test_banking_needs_no_cull_for_a_saturating_curve():
+    """A converged training run is mostly flat tail. The median slope read it
+    as banked only after culling the tail, because unculled its median sat
+    under the floor and asked for a panel far taller. Arc length counts the
+    tail as the run it is and banks the curve without a cull."""
     import numpy as np
     x = np.arange(120, dtype=float)
     y = 1.0 - np.exp(-x / 6.0)
     fig, ax = plt.subplots(figsize=(6.4, 4.0), dpi=100)
     ax.plot(x, y, lw=1.5)
     fig.canvas.draw()
-
-    p = ax.transData.transform(np.column_stack([x, y]))
-    d = np.diff(p, axis=0)
-    dx, dy = d[:, 0], d[:, 1]
-    slope = np.abs(dy / dx)
-    drawn = (slope >= cf.BANKING_FLAT_SLOPE) & (slope <= 1 / cf.BANKING_FLAT_SLOPE)
-
-    # The docstring's numbers, measured rather than imported: most of the
-    # stroke renders flat, and the raw (unculled) median is below the floor.
-    assert drawn.sum() < 0.5 * len(dx), (
-        f"{drawn.sum()} of {len(dx)} segments drawn; the fixture stopped "
-        "being a saturating curve")
-    keep = np.abs(dx) > 1e-9
-    raw = float(np.median(np.abs(dy[keep] / dx[keep])))
-    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, (
-        f"raw median {raw:.4f}; the gate would not have warned anyway")
-
+    d = np.abs(np.diff(ax.transData.transform(np.column_stack([x, y])), axis=0))
+    raw = float(np.median(d[:, 1] / d[:, 0]))
     ok, rows = cf.audit(fig)
-    slopes = cf._banking_slopes(ax)
+    factor = cf._banking_factor(ax)
     plt.close(fig)
-    assert gates(rows)["Banking"] is True, "the cull did not silence the warn"
-    assert slopes is not None and np.median(slopes) >= 1.0 / cf.BANKING_SLOPE_MAX
+    # The case the cull existed for: an unculled median would have warned.
+    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, raw
+    assert 1.0 / cf.BANKING_SLOPE_MAX <= factor <= cf.BANKING_SLOPE_MAX, factor
+    assert gates(rows)["Banking"] is True
     assert ok is True
-
-
-def test_banking_leaves_the_saw_wave_alone():
-    """The cull exists so that flat segments do not drown a real rate; it must
-    not have the side effect of swallowing the figure the gate exists for. Every
-    decay limb - the rates the reader compares - is kept. The ten risers, each
-    one step wide and the full height of a tall panel, render upright and are
-    culled, as Heer & Agrawala cull infinite slopes, and the failure still
-    lands."""
-    import numpy as np
-    fig, x, y = _alternating_rates((2.4, 5.2))
-    ax = fig.axes[0]
-    p = ax.transData.transform(np.column_stack([x, y]))
-    d = np.diff(p, axis=0)
-    dx, dy = d[:, 0], d[:, 1]
-    slope = np.abs(dy / dx)
-    drawn = (slope >= cf.BANKING_FLAT_SLOPE) & (slope <= 1 / cf.BANKING_FLAT_SLOPE)
-    limbs = np.diff(y) < 0
-    assert drawn[limbs].all(), (
-        f"{int(drawn[limbs].sum())}/{int(limbs.sum())} decay limbs drawn; the "
-        "cull is eating the figure the gate exists for")
-    assert not drawn[~limbs].any(), "the risers stopped rendering upright"
-    ok, rows = cf.audit(fig)
-    plt.close(fig)
-    assert gates(rows)["Banking"] == "warn"
 
 
 # --- regressions: gates that fired on correct figures ----------------------
@@ -5850,7 +5786,9 @@ def test_banking_measures_the_aspect_of_an_inset():
     fig, ax = plt.subplots(figsize=(4, 3))
     ax.plot([0, 1], [0, 1], lw=1.5)
     sub = ax.inset_axes([0.45, 0.45, 0.5, 0.5])
-    t = np.linspace(0, 40, 400)
+    # 80, not 40: at 40 the inset is banked within a factor of 0.104, inside
+    # the band, and the test is about the inset being read, not the band.
+    t = np.linspace(0, 80, 800)
     sub.plot(t, np.sin(t))
     ok, rows = cf.audit(fig)
     plt.close(fig)
@@ -6323,11 +6261,10 @@ def _subdivided(x, y, k):
 @pytest.mark.parametrize("k", [1, 10, 100])
 def test_banking_does_not_depend_on_how_finely_a_stroke_is_sampled(k):
     """Splitting every segment into k equal pieces leaves the drawn stroke and
-    the multiset of segment slopes unchanged, so the verdict must not move.
-    A rise cull in pixels made it move: at k=100 every segment rose under
-    half a pixel, all were culled, and the panel the gate exists for read
-    "no line panel"."""
-    import numpy as np
+    its length unchanged, so the factor must not move. A rise cull in pixels,
+    under the median slope this replaced, made it move: at k=100 every segment
+    rose under half a pixel, all were culled, and the panel the gate exists
+    for read "no line panel"."""
     fig, x, y = _alternating_rates((2.4, 5.2))
     plt.close(fig)
     xs, ys = _subdivided(x, y, k)
@@ -6336,14 +6273,14 @@ def test_banking_does_not_depend_on_how_finely_a_stroke_is_sampled(k):
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(0, 1)
     fig.canvas.draw()
-    slopes = cf._banking_slopes(ax)
+    factor = cf._banking_factor(ax)
     ok, rows = cf.audit(fig)
     plt.close(fig)
-    assert slopes is not None
+    assert factor is not None
     base = _alternating_rates((2.4, 5.2))[0]
-    want = float(np.median(cf._banking_slopes(base.axes[0])))
+    want = cf._banking_factor(base.axes[0])
     plt.close(base)
-    assert float(np.median(slopes)) == pytest.approx(want, rel=1e-6)
+    assert factor == pytest.approx(want, rel=1e-6)
     assert gates(rows)["Banking"] == "warn"
 
 
@@ -6367,9 +6304,9 @@ def test_a_repeated_label_on_panels_that_cannot_share_a_scale_is_not_redundant()
 # Each test failed before its fix.
 
 def test_banking_still_warns_on_a_panel_flat_throughout():
-    """The slope cull is for a flat tail inside a line that has a rate, not for
-    a line banked too flat everywhere: culling that one left nothing and read
-    "no line panel", so the flatter the panel the less the gate said."""
+    """A line banked too flat everywhere is the finding. Under the median
+    slope's cull it was culled to nothing and read "no line panel", so the
+    flatter the panel the less the gate said."""
     import numpy as np
     fig, ax = plt.subplots(figsize=(6, 4))
     x = np.arange(9.0)
@@ -6380,10 +6317,10 @@ def test_banking_still_warns_on_a_panel_flat_throughout():
     assert status == "warn" and "taller" in detail, detail
 
 
-def test_banking_still_culls_a_constant_reference_line():
-    """The control. A slope of exactly zero is unchanged by the aspect, which
-    is Heer & Agrawala's reason to cull it, so a horizontal reference line
-    beside a banked curve leaves the panel banked."""
+def test_banking_drops_a_constant_reference_line():
+    """The control. A line with no rise is Heer & Agrawala's slopeless line,
+    which the aspect cannot bank, so a horizontal reference line beside a
+    banked curve leaves the panel banked."""
     import numpy as np
     fig, ax = plt.subplots(figsize=(4, 4))
     x = np.linspace(0.0, 1.0, 20)

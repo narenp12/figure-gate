@@ -1591,6 +1591,21 @@ def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
 # claim without repeating the search, and so an uncited external number fails.
 
 EXTERNAL_CLAIMS = {
+    "arc length banking": {
+        "document": "choosing-a-form.md",
+        "anchor": "minimises the arc length of the panel's strokes",
+        "source": "Talbot, Gerth & Hanrahan, IEEE TVCG 17(12), 2276-2282, 2011",
+        "doi": "10.1109/TVCG.2011.167",
+        "verified": "2026-10-20",
+        "quote": "we recommend a simple, effective method for selecting the "
+                 "aspect ratio: minimize the arc length of the data curve "
+                 "while keeping the area of the plot constant. ... Three are "
+                 "not parameterization invariant, meaning that the "
+                 "semantically unimportant way a curve is approximated by line "
+                 "segments can dramatically change the selected aspect ratio "
+                 "... Thus, a single diagonal line will always be banked to 45 "
+                 "degrees.",
+    },
     "anomalous trichromacy the commoner form": {
         "document": "style-guide.md",
         "anchor": "5.71% are anomalous trichromats and 2.28% dichromats",
@@ -2476,3 +2491,31 @@ def test_the_anomalous_share_is_the_sum_the_table_gives():
     assert anomalous == pytest.approx(p_anomaly + d_anomaly)
     assert dichromat == pytest.approx(p_anopia + d_anopia)
     assert total == pytest.approx(anomalous + dichromat)
+
+
+
+def test_the_banking_sampling_numbers_are_the_ones_the_gate_measures():
+    """`choosing-a-form.md` quotes what the median slope and arc length make
+    of one curve sampled three ways. Both are recomputed here."""
+    import numpy as np
+    text = " ".join(document("choosing-a-form.md").read_text(encoding="utf-8").split())
+    stated = re.search(r"needed its aspect changed ([\d.]+)x, ([\d.]+)x or "
+                       r"([\d.]+)x by the median and ([\d.]+)x to ([\d.]+)x by "
+                       r"arc length", text)
+    assert stated, "the sampling sentence was rewritten"
+    *medians, arc_lo, arc_hi = (float(v) for v in stated.groups())
+    t = np.linspace(0.0, 1.0, 40)
+    got_median, got_arc = [], []
+    for x in (t, t ** 3, 1 - (1 - t) ** 3):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        ax.plot(x, np.sqrt(x))
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        fig.canvas.draw()
+        d = np.abs(np.diff(ax.transData.transform(
+            np.column_stack([x, np.sqrt(x)])), axis=0))
+        got_median.append(1.0 / float(np.median(d[:, 1] / d[:, 0])))
+        got_arc.append(cf._banking_factor(ax))
+        plt.close(fig)
+    assert [round(m, 3) for m in got_median] == pytest.approx(medians, abs=0.01)
+    assert round(min(got_arc), 2) == arc_lo and round(max(got_arc), 2) == arc_hi
