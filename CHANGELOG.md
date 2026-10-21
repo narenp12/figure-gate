@@ -121,9 +121,14 @@ behind a threshold this project enforces.
 - `check_series_color`: a pair under `CVD_TARGET` passes when a mark type,
   dash, marker or hatch also separates the two series. `NORMAL_FLOOR` is not
   excused.
-- `check_banking` culls segments by on-page slope, under
-  `BANKING_FLAT_SLOPE = 0.01` or over its reciprocal.
-  `BANKING_FLAT_PX` is removed.
+- `check_banking` banks by arc length at constant area (Talbot, Gerth &
+  Hanrahan 2011), through `_banking_factor`, not by median absolute slope,
+  and drops only lines with no rise. `BANKING_FLAT_PX` is removed. The row's
+  detail gives the aspect factor: "ax0 banking wants the panel 130x
+  taller", or "3 line panels, 1.2-3.5x from banked".
+- `choosing-a-form.md` and `docs/gates.md` describe the arc-length criterion;
+  Talbot et al. join the References and `EXTERNAL_CLAIMS["arc length
+  banking"]`.
 - `check_redundancy` counts a repeated axis title only among panels with the
   same limits and scale, as it already did for tick labels.
 - `check_palette.check` reads dichromacy under Machado's severity 1.0 as well
@@ -147,9 +152,6 @@ behind a threshold this project enforces.
   `test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation`.
   Szafir (2017) joins the References, `EXTERNAL_CLAIMS["size model tested
   range"]` and `GUIDE_CITED`.
-- `check_banking`: a line flatter than `BANKING_FLAT_SLOPE`, or steeper than
-  its reciprocal, along its whole length keeps every segment but the exactly
-  slopeless ones.
 - `check_redundancy` counts a repeated axis title among panels on one scale
   type whose limits could share an axis within `SHARE_SPAN_RATIO_MAX`, not
   among panels with identical limits.
@@ -392,6 +394,16 @@ totals only. Sharpe, Stockman, Jägle & Nathans (1999) Table 1.6 splits 45 989
 European men: 1.08% protanomaly, 4.63% deuteranomaly, 1.01% protanopia, 1.27%
 deuteranopia, so anomalous trichromats are 5.71 of the 7.99 points. The
 sourced claim lives in the style guide, where the ledger can hold it.
+
+Banking read Cleveland's median absolute slope, which depends on how a curve
+was sampled: `y = sqrt(x)` with 40 points spaced three ways needed its aspect
+changed 1.9x, 0.949x or 2.51x. Talbot, Gerth & Hanrahan (2011) name this
+defect in three of the four earlier criteria and recommend minimising arc
+length at constant area, which reads 1.37x to 1.38x on all three. Arc length
+also needs no cull for flat segments, so `BANKING_FLAT_SLOPE`, added earlier in
+this release and a judgement, is gone with it. The 25-figure corpus records no
+verdict change; ten Banking details change wording.
+
 ## 0.10.0 — 2026-09-30
 
 ### What changed
