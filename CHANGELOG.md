@@ -205,6 +205,15 @@ behind a threshold this project enforces.
   `_separation_numbers` reads distances from them.
 - `test_check_palette_still_imports_nothing_outside_the_standard_library`
   allows `functools`.
+- `check_line_weight`, `check_contrast_stack` and `_data_artists` read each
+  `InsetIndicator`'s rectangle and connectors with `ax.patches`
+  (`_drawn_patches`).
+- `pyproject.toml` raises matplotlib's `indicate_inset` unpacking warning as an
+  error.
+- `examples/gallery.py` (`broadening`) and
+  `test_an_inset_connector_is_not_a_data_hue` read the connectors from
+  `InsetIndicator.connectors` where `indicate_inset_zoom` returns one, and
+  index the tuple otherwise.
 
 ### Why it changed
 
@@ -476,6 +485,17 @@ length at constant area, which reads 1.37x to 1.38x on all three. Arc length
 also needs no cull for flat segments, so `BANKING_FLAT_SLOPE`, added earlier in
 this release and a judgement, is gone with it. The 25-figure corpus records no
 verdict change; ten Banking details change wording.
+
+matplotlib 3.10 returns an `InsetIndicator` from `indicate_inset_zoom` and
+warns that "From 3.12 it will no longer be possible to unpack the return value
+into two elements." Both call sites unpacked it. Raised as an error, the
+warning fails CI's latest-matplotlib jobs on a call site that unpacks; the
+3.8.4 job takes the tuple branch. On 3.10 and later the rectangle and
+connectors are drawn by the `InsetIndicator`, not from `ax.patches`, so
+`check_line_weight` passed a 0.1pt frame, and
+`test_an_inset_connector_is_not_a_data_hue` passed with the `ConnectionPatch`
+exclusion it pins deleted. `check_contrast_stack` read the rectangle's alpha
+of 0.5 as a level on 3.8.4 and not on 3.11.1.
 
 ## 0.10.0 — 2026-09-30
 

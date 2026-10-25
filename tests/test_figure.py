@@ -5811,7 +5811,10 @@ def test_an_inset_connector_is_not_a_data_hue():
     fig, ax, sub = _inset_host()
     for i, color in enumerate(("#472a7a", "#2f6b8e", "#1fa187")):
         ax.plot([0, 1], [i, i], lw=2, color=color)
-    _rect, connectors = ax.indicate_inset_zoom(sub)
+    indicator = ax.indicate_inset_zoom(sub)
+    # The tuple and `InsetIndicator` returns, as in `gallery.broadening`.
+    connectors = (indicator[1] if isinstance(indicator, tuple)
+                  else indicator.connectors)
     assert any(isinstance(c, ConnectionPatch) for c in connectors), (
         "matplotlib stopped building the connectors out of ConnectionPatch; "
         "this test is measuring nothing")
@@ -5822,6 +5825,34 @@ def test_an_inset_connector_is_not_a_data_hue():
             for h, _, _ in entries}
     plt.close(fig)
     assert "#e69f00" not in hues, hues
+
+
+def test_a_thin_inset_indicator_fails_line_weight():
+    """A 0.1pt frame and 0.2pt connectors. From matplotlib 3.10 both are drawn
+    by an `InsetIndicator` in `ax.artists`, not from `ax.patches`, and the
+    gate passed them unmeasured."""
+    fig, ax, sub = _inset_host()
+    indicator = ax.indicate_inset_zoom(sub, lw=0.1)
+    connectors = (indicator[1] if isinstance(indicator, tuple)
+                  else indicator.connectors)
+    for connector in connectors:
+        connector.set_linewidth(0.2)
+    status, detail = cf.check_line_weight(fig, scale=1.0)
+    plt.close(fig)
+    assert status is False, detail
+    assert "a Rectangle edge at 0.10pt" in detail, detail
+    assert "a ConnectionPatch edge at 0.20pt" in detail, detail
+
+
+def test_contrast_stack_reads_an_inset_indicator_on_every_matplotlib():
+    """The indicator's rectangle is drawn at alpha 0.5. It is in `ax.patches`
+    on 3.8.4 and in an `InsetIndicator` from 3.10, and the row read alpha
+    levels [0.5, 1.0] on one and [1.0] on the other."""
+    fig, ax, sub = _inset_host()
+    ax.indicate_inset_zoom(sub)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "alpha levels [0.5, 1.0]" in detail, detail
 
 
 def test_overplotting_measures_a_blob_inside_an_inset():
