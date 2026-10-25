@@ -214,6 +214,22 @@ behind a threshold this project enforces.
   `test_an_inset_connector_is_not_a_data_hue` read the connectors from
   `InsetIndicator.connectors` where `indicate_inset_zoom` returns one, and
   index the tuple otherwise.
+- `check_text_readability` tests casing with `is not None`, and composites
+  the text's alpha over its backdrop or casing before measuring contrast.
+- `_worst_backdrop` takes `alpha`; `_contrast_field_255` takes one colour or
+  one per pixel.
+- `check_mark_ratio` skips invisible collections and the `" "` marker, and
+  reads `plot` markers through `marker_extent_pt(..., stroked=False)`.
+- `marker_extent_pt` takes `stroked` (default `True`).
+- `check_form` flags bars on a linear axis whose limits are both below zero.
+- `_contact_fraction` drops marks at a non-finite position or radius, masked
+  offsets included, before either path.
+- `check_overplotting` and `_marks_px` place points through the artist's own
+  transform, and read lines through `get_xydata`.
+- `check_ink` measures each panel against its axes face composited over the
+  figure face, not the figure's top-left pixel.
+- `check_fonts` expands each `font.family` entry: a generic name to its
+  `font.<generic>` list, a face name to itself.
 
 ### Why it changed
 
@@ -496,6 +512,24 @@ connectors are drawn by the `InsetIndicator`, not from `ax.patches`, so
 `test_an_inset_connector_is_not_a_data_hue` passed with the `ConnectionPatch`
 exclusion it pins deleted. `check_contrast_stack` read the rectangle's alpha
 of 0.5 as a level on 3.8.4 and not on 3.11.1.
+
+A review of the gates against matplotlib's artist model found ten wrong
+verdicts, each reproduced by a test in `tests/test_figure.py`. An ndarray
+casing colour raised in `if halo_color:` and the crash read as a hard FAIL.
+Black text at alpha 0.15 passed. `"."` at ms 12 beside `"o"` at ms 5 failed at
+5.8x; they draw 6pt and 5pt. A hidden s=2000 scatter failed a figure at 200x.
+Negative bars on `ylim(-9, -3)` passed. One NaN in a scatter made `cKDTree`
+raise. A `transform=ax.transAxes` scatter was placed through `transData`, and
+a marker cloud on a date axis was never measured because
+`asarray(get_xdata(), dtype=float)` raised on datetimes. Under `ggplot` and
+`seaborn-v0_8-darkgrid` one sine line read 0.95 ink, because the figure corner
+is white and the axes face is grey; `test_external_style_corpus` asserted that
+fire as a property of dark grounds. `font.family = "NoSuchFontXYZ"` left the
+substitution check an empty list. Mark ratio leaves edge strokes uncounted on
+both sides, as its `scatter` side already did: counted, `gallery-field` moves
+from 4.8x to 5.1x and fails a threshold calibrated without them. The 25-figure
+corpus records no verdict change; `gallery-field`'s Mark ratio detail moves
+from 4.8x to 4.4x, because a star's path is narrower than its markersize.
 
 ## 0.10.0 — 2026-09-30
 
