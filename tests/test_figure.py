@@ -6862,3 +6862,170 @@ def test_a_line_that_draws_nothing_is_not_a_series():
             fig.axes[0].plot([0, 1], [0, 2], ls="none", color="#9467bd")
         verdicts.append(_series_color(fig))
     assert verdicts == [True, True]
+
+
+# --- matplotlib-review fixes ---------------------------------------------------
+# Each reproduces a wrong verdict found reading the gates against matplotlib's
+# own artist model: what an artist draws, in the space it was placed in.
+
+def _row(fig, name):
+    _, rows = cf.audit(fig)
+    plt.close(fig)
+    return {r[0]: (r[1], r[2]) for r in rows}[name]
+
+
+def test_casing_given_as_an_array_is_read_as_casing():
+    """`withStroke(foreground=...)` takes any colour spec, an ndarray
+    included. `if halo_color:` raised on one, and the gate's crash read as a
+    hard FAIL."""
+    import numpy as np
+    from matplotlib import patheffects as pe
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.text(0.2, 0.7, "Cased label", fontsize=10, path_effects=[
+        pe.withStroke(linewidth=3, foreground=np.array([1.0, 1.0, 1.0]))])
+    status, detail = _row(fig, "Text readability")
+    assert "gate raised" not in detail, detail
+    assert status is True, detail
+
+
+def test_translucent_text_is_judged_at_the_colour_it_draws():
+    """Black text at alpha 0.15 lands as #d9d9d9 on white, about 1.4:1. It
+    passed when the gate read `get_color()` and ignored `get_alpha()`."""
+    verdicts = []
+    for alpha in (1.0, 0.15):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.plot([0, 1], [0, 1])
+        ax.text(0.55, 0.2, "Faint label", fontsize=10, color="black",
+                alpha=alpha)
+        verdicts.append(_row(fig, "Text readability")[0])
+    assert verdicts == [True, False], verdicts
+
+
+def test_mark_ratio_reads_the_size_a_dot_marker_draws():
+    """`"."` draws at half its markersize, as `marker_extent_pt` measures.
+    Read raw, `"."` at ms 12 beside `"o"` at ms 5 was 5.8x and failed; drawn,
+    the two are 6pt and 5pt across."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 2], ".", markersize=12)
+    ax.plot([0, 1, 2], [2, 1, 0], "o", markersize=5)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_mark_ratio_skips_a_hidden_scatter():
+    """The line loop skipped invisible artists and the scatter loop did not:
+    a hidden s=2000 scatter failed the figure at 200x."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 2], s=20)
+    ax.scatter([1], [1], s=2000).set_visible(False)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_negative_bars_on_an_axis_that_stops_short_of_zero_are_truncated():
+    """Negative bars hang from zero. `ylim(-9, -3)` cuts their baseline the
+    way `ylim(3, 9)` cuts positive ones, and only the second was caught."""
+    verdicts = []
+    for sign in (1, -1):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.bar([1, 2, 3], [sign * 5, sign * 7, sign * 8])
+        ax.set_ylim(sorted((sign * 3, sign * 9)))
+        ok, detail = cf.check_form(fig)
+        plt.close(fig)
+        verdicts.append(ok)
+    assert verdicts == [False, False], detail
+    assert "short of zero" in detail, detail
+
+
+def test_overplotting_drops_a_mark_that_is_not_drawn():
+    """A NaN offset draws nothing. `cKDTree` refuses non-finite data, so one
+    NaN in a scatter turned the row into "gate raised ValueError"."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    x, y = rng.random(400), rng.random(400)
+    details = []
+    for poison in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        xs = x.copy()
+        if poison:
+            xs[0] = np.nan
+        ax.scatter(xs, y, s=4)
+        details.append(cf.check_overplotting(fig))
+        plt.close(fig)
+    assert all(isinstance(ok, bool) for ok, _ in details), details
+    assert details[0][0] == details[1][0], details
+
+
+def test_overplotting_places_a_scatter_in_its_own_coordinates():
+    """`transform=ax.transAxes` puts offsets in axes fractions. Mapped through
+    `transData` on a 0-1000 axis instead, a sparse cloud collapsed into one
+    corner and read as 100% contact."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    x, y = rng.random(200), rng.random(200)
+    verdicts = []
+    for in_axes in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        if in_axes:
+            ax.set_xlim(0, 1000)
+            ax.set_ylim(0, 1000)
+            ax.scatter(x, y, s=4, transform=ax.transAxes)
+        else:
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.scatter(x, y, s=4)
+        verdicts.append(cf.check_overplotting(fig))
+        plt.close(fig)
+    assert verdicts[0] == verdicts[1], verdicts
+    assert verdicts[0][0] is True, verdicts
+
+
+def test_overplotting_measures_marks_on_a_date_axis():
+    """`np.asarray(get_xdata(), dtype=float)` raises on datetimes and the
+    error was swallowed, so a dense marker-only cloud on a date axis read as
+    "no scatter overplotting". `get_xydata` is after unit conversion."""
+    import datetime as dt
+    import numpy as np
+    rng = np.random.default_rng(2)
+    days, y = rng.random(3000) * 30, rng.random(3000)
+    start = dt.datetime(2024, 1, 1)
+    verdicts = []
+    for dated in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        x = ([start + dt.timedelta(days=float(d)) for d in days] if dated
+             else days)
+        ax.plot(x, y, "o", markersize=4, linestyle="none")
+        verdicts.append(_row(fig, "Overplotting")[0])
+    assert verdicts == ["warn", "warn"], verdicts
+
+
+@pytest.mark.parametrize("style", ["ggplot", "seaborn-v0_8-darkgrid"])
+def test_ink_reads_a_tinted_axes_face_as_ground(style):
+    """These styles grey the axes and leave the figure white. The page colour
+    was read off the figure's corner pixel, so the whole panel counted as ink
+    and one sine line read 0.95."""
+    import numpy as np
+    with plt.style.context(style):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        x = np.linspace(0, 10, 200)
+        ax.plot(x, np.sin(x))
+        ok, detail = cf.check_ink(fig)
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_fonts_reports_a_missing_face_named_directly():
+    """`font.family` may name a face rather than a generic family. There is
+    no `font.<name>` list then, and the lookup that drove the check was empty,
+    so a face that is not installed was never reported."""
+    import logging
+    import matplotlib as mpl
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+    with mpl.rc_context({"font.family": "NoSuchFontXYZ"}):
+        ok, detail = cf.check_fonts(plt.figure())
+    plt.close("all")
+    assert ok == "warn", detail
+    assert "NoSuchFontXYZ" in detail, detail

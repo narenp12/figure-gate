@@ -263,9 +263,14 @@ def test_the_gates_that_fire_selectively_fire_for_a_stated_reason():
         "palette puts #586e75 text on #eee8d5 ground, and if that reads as "
         "clean the gate has stopped measuring contrast")
 
-    # Dark grounds and heavy grids, counted as ink over the whole rectangle.
+    # A tinted axes face is ground, not ink. These styles grey the axes and
+    # leave the figure white, and `check_ink` once read the page colour off
+    # the figure's corner pixel and counted their whole panel as ink: 0.95 on
+    # a single sine line. What still fires is `fivethirtyeight`'s heavy grid
+    # and `classic`, whose large type collapses the axes to a 2px sliver.
     inked = fired("Ink coverage")
-    assert {"seaborn-v0_8-dark", "seaborn-v0_8-darkgrid"} <= inked, (
-        f"the dark-ground styles no longer warn on ink coverage: {inked}")
+    tinted = {"seaborn-v0_8-dark", "seaborn-v0_8-darkgrid", "ggplot"}
+    assert not tinted & inked, (
+        f"tinted-ground styles warn on ink coverage again: {tinted & inked}")
     assert not fired("Ink coverage", hard_only=True), (
         "Ink coverage is advisory and just hard-failed an external style")

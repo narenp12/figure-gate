@@ -1576,7 +1576,8 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
 
 
 def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
-                    mask: np.ndarray | None = None) -> tuple[np.ndarray, float]:
+                    mask: np.ndarray | None = None,
+                    alpha: float = 1.0) -> tuple[np.ndarray, float]:
     """The contrast the text holds over all but the worst `min_share` of its
     box, and the backdrop pixel that sets it.
 
@@ -1603,13 +1604,19 @@ def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
     `mask` selects the pixels the label covers. On an oblique box the corners of
     the sampled block are page the label never reaches, and a dark field in one
     of those corners would set the verdict for a string sitting on light ground.
+
+    `alpha` is the text's own opacity. Agg blends a translucent glyph with the
+    pixel under it, so that blend is the colour the reader sees.
     """
     import numpy as np
     if mask is not None:
         pix = block[mask].reshape(-1, 3).astype(float)
     else:
         pix = block.reshape(-1, 3).astype(float)
-    ratios = _contrast_field_255(fg, pix)
+    ink = np.asarray(fg, dtype=float)
+    if alpha < 1.0:
+        ink = alpha * ink + (1.0 - alpha) * pix
+    ratios = _contrast_field_255(ink, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
     k = int(min_share * (len(ratios) - 1))
@@ -1663,7 +1670,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
     crossed.
     """
     import numpy as np
-    from matplotlib.colors import to_rgb
+    from matplotlib.colors import to_rgb, to_rgba
 
     items = _texts(fig, r)
     if not items:
@@ -1744,8 +1751,12 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
             continue
         checked += 1
 
-        fg = np.array(to_rgb(t.get_color())) * 255.0
+        rgba = to_rgba(t.get_color(), t.get_alpha())
+        fg, alpha = np.array(rgba[:3]) * 255.0, float(rgba[3])
         halo_color, _ = _halo(t)
+        # The foreground may be any colour spec, an array included, so the
+        # test is for presence and not truthiness.
+        cased = halo_color is not None
         name = str(t.get_text())[:22]
 
         frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL, mask)
@@ -1753,20 +1764,21 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
             cluttered.append(
                 f"{name!r} sits on data ink over {frac:.0%} of its box"
                 + (" — the casing hides it by erasing the data underneath"
-                   if halo_color else " and wears no casing"))
+                   if cased else " and wears no casing"))
 
         pt = t.get_fontsize() * scale
         bold = _is_bold(t)
         floor = (TEXT_CONTRAST_MIN_LARGE
                  if pt >= LARGE_TEXT_PT or (pt >= LARGE_TEXT_BOLD_PT and bold)
                  else TEXT_CONTRAST_MIN)
-        if halo_color:
+        if cased:
             # Casing replaces the backdrop under the strokes, so that is what
             # the reader reads against.
-            ratio = _contrast_255(fg, np.array(to_rgb(halo_color)) * 255.0)
+            ground = np.array(to_rgb(halo_color)) * 255.0
+            ratio = _contrast_255(alpha * fg + (1.0 - alpha) * ground, ground)
         else:
             _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
-                                       mask)
+                                       mask, alpha)
         if ratio < floor:
             faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
                          f"(text needs {floor}:1)")
@@ -1823,7 +1835,9 @@ def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
         lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
         return lin @ np.array([0.2126, 0.7152, 0.0722])
 
-    back, front = lum(pixels), float(lum(fg))
+    # `fg` may be one colour or one per pixel: `_worst_backdrop` composites
+    # translucent text over each backdrop pixel before measuring it.
+    back, front = lum(pixels), lum(fg)
     hi, lo = np.maximum(back, front), np.minimum(back, front)
     return (hi + 0.05) / (lo + 0.05)
 
@@ -2049,7 +2063,8 @@ def scatter_diameter_pt(size: float | np.ndarray) -> float | np.ndarray:
     return size ** 0.5
 
 
-def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
+def marker_extent_pt(line: Any, dpi: float,
+                     stroked: bool = True) -> tuple[float, float]:
     """The width and height in points that a `plot` marker actually draws.
 
     `markersize` is a diameter in points, which is the honest half of the
@@ -2111,6 +2126,8 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
         line: A `Line2D`.
         dpi: The resolution the figure will be measured at, needed only for
             `","`, whose size is a device pixel rather than a length.
+        stroked: Count the edge stroke. `check_mark_ratio` passes False,
+            because its `scatter` side reads `s` alone.
 
     Returns:
         `(width_pt, height_pt)` of the drawn mark's bounding box.
@@ -2124,7 +2141,7 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
     style = MarkerStyle(marker)
     box = style.get_path().transformed(style.get_transform()).get_extents()
     size = float(line.get_markersize())
-    stroke = marker_stroke_pt(line)
+    stroke = marker_stroke_pt(line) if stroked else 0.0
     width, height = box.width * size, box.height * size
     return (width + (stroke if height else 0.0),
             height + (stroke if width else 0.0))
@@ -2245,15 +2262,24 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     for ax in _all_axes(fig):
         sizes: list[float] = []
         for c in ax.collections:
+            if not c.get_visible():
+                continue
             s: Any = getattr(c, "get_sizes", lambda: [])()
             sizes.extend(math.pi * (scatter_diameter_pt(float(v)) / 2.0) ** 2
                          for v in s if v > 0)
         for ln in ax.lines:
-            if not ln.get_visible() or ln.get_marker() in ("", "None", None):
+            if not ln.get_visible() or ln.get_marker() in ("", "None", None,
+                                                           " "):
                 continue
-            ms = float(ln.get_markersize())
-            if ms > 0:
-                sizes.append(math.pi * (ms / 2.0) ** 2)
+            if float(ln.get_markersize()) <= 0:
+                continue
+            # The drawn path, as `check_overplotting` reads it: `"."` draws
+            # at half its markersize and `","` at one pixel. The long side is
+            # the diameter, so a `"|"` counts as long as it is. Unstroked, to
+            # match the `scatter` side above.
+            d = float(max(marker_extent_pt(ln, fig.dpi, stroked=False)))
+            if d > 0:
+                sizes.append(math.pi * (d / 2.0) ** 2)
         if len(sizes) < 2:
             continue
         sizes.sort()
@@ -2421,17 +2447,27 @@ def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> fl
     `cKDTree` is passed in rather than imported so the caller decides once
     whether scipy is present; None takes the same grouping over a uniform grid
     instead of a tree, in `_grid_contacts`, for the same answer.
+
+    A mark at a non-finite position or radius is not drawn, so it is dropped
+    before either path runs and is not counted in the fraction. `cKDTree`
+    refuses non-finite data outright. `scatter` hands its offsets over as a
+    masked array, so masked entries are filled with NaN first.
     """
     import numpy as np
+    xy = np.ma.filled(np.ma.asarray(xy, dtype=float), np.nan)
+    radius_px = np.ma.filled(np.ma.asarray(radius_px, dtype=float), np.nan)
+    drawn = np.isfinite(xy).all(axis=1) & np.isfinite(radius_px)
+    if not drawn.all():
+        xy, radius_px = xy[drawn], radius_px[drawn]
     n = len(xy)
+    if not n:
+        return 0.0
     r_max = float(radius_px.max())
     uniform = bool(np.ptp(radius_px) == 0.0)
 
     if cKDTree is None:
         hit = np.zeros(n, dtype=bool)
-        here = np.flatnonzero(np.isfinite(xy).all(axis=1)
-                              & np.isfinite(radius_px))
-        groups = [g[np.isin(g, here)] for g in _radius_octaves(radius_px)]
+        groups = _radius_octaves(radius_px)
         for target in groups:
             if len(target) == 0:
                 continue
@@ -2588,8 +2624,10 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
                 continue
             if offsets.size < 2:
                 continue
+            # The offsets live in whatever space the artist was placed in;
+            # `transform=ax.transAxes` puts them in axes fractions.
             try:
-                xy = ax.transData.transform(offsets)
+                xy = coll.get_offset_transform().transform(offsets)
             except Exception:
                 continue
             sizes: Any = getattr(coll, "get_sizes", lambda: [])()
@@ -2620,10 +2658,11 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
             # marker-only spelling is the one `scatter` has an equivalent of.
             if str(line.get_linestyle()) not in ("", "None", "none", " "):
                 continue
+            # `get_xydata` is after unit conversion, so a date axis reads as
+            # floats; `get_xdata` hands back the datetimes themselves.
             try:
-                xy = ax.transData.transform(np.column_stack([
-                    np.asarray(line.get_xdata(), dtype=float),
-                    np.asarray(line.get_ydata(), dtype=float)]))
+                xy = line.get_transform().transform(
+                    np.asarray(line.get_xydata(), dtype=float))
             except Exception:
                 continue
             xy = xy[np.isfinite(xy).all(axis=1)]
@@ -3044,12 +3083,21 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         with _at_draw_rc(fig), _at_measure_dpi(fig):
             _, canvas = _renderer(fig)
             return check_ink(fig, context_axes, canvas)
+    from matplotlib.colors import to_rgba
+
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
-    # The page colour is read off the top-left pixel, which assumes nothing is
-    # drawn in that corner.
-    bg = buf[0, 0]
-    ink_mask = (np.abs(buf - bg).sum(axis=2) > INK_DELTA_MIN)
+
+    def ground_255(ax: Axes) -> np.ndarray:
+        # The colour an empty patch of this panel renders as: the axes face
+        # over the figure face over the white Agg clears to. A style that
+        # greys the axes and not the figure (`ggplot`, seaborn's `darkgrid`)
+        # otherwise reads its whole panel as ink.
+        rgb = np.ones(3)
+        for colour in (fig.get_facecolor(), ax.get_facecolor()):
+            r, g, b, a = to_rgba(colour)
+            rgb = a * np.array([r, g, b]) + (1.0 - a) * rgb
+        return np.round(rgb * 255.0)
 
     if context_axes is None:
         context_axes = []
@@ -3067,14 +3115,14 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         x0, x1 = int(max(bb.x0, 0)), int(min(bb.x1, buf.shape[1]))
         y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
         # Agg's origin is top-left, the figure's is bottom-left
-        sub = ink_mask[h - y1:h - y0, x0:x1]
+        block = buf[h - y1:h - y0, x0:x1]
+        sub = np.abs(block - ground_255(ax)).sum(axis=2) > INK_DELTA_MIN
         if sub.size == 0:
             continue
 
         if id(ax) in context_ids:
             # Separate surface pixels from mark pixels via 2-means on color.
-            sub_buf = buf[h - y1:h - y0, x0:x1].astype(float)
-            flat = sub_buf.reshape(-1, 3)
+            flat = block.astype(float).reshape(-1, 3)
             m1 = flat.mean(axis=0)
             # Seeded apart from the mean: two equal centroids never split.
             m2 = m1 + 30.0
@@ -3181,11 +3229,13 @@ def _marks_px(artist: Any, ax: Axes) -> np.ndarray | None:
     try:
         if isinstance(artist, Line2D):
             xy = np.asarray(artist.get_xydata(), dtype=float)
+            to_px = artist.get_transform()
         else:
             xy = np.asarray(artist.get_offsets(), dtype=float)
+            to_px = artist.get_offset_transform()
         if xy.ndim != 2 or len(xy) == 0:
             return None
-        return np.asarray(ax.transData.transform(xy), dtype=float)
+        return np.asarray(to_px.transform(xy), dtype=float)
     except (AttributeError, ValueError, TypeError):
         return None
 
@@ -4020,11 +4070,14 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         scale = ax.get_yscale() if vertical else ax.get_xscale()
         # A log axis cannot include zero, so a log bar chart is truncated by
         # construction and this gate has nothing to say about it.
-        if scale == "linear" and min(lim) > 0:
+        # Negative bars hang from zero too, so an axis that stops short of
+        # zero from below cuts them the same way.
+        if scale == "linear" and (min(lim) > 0 or max(lim) < 0):
             axis = "y" if vertical else "x"
+            edge = min(lim) if min(lim) > 0 else max(lim)
             bad.append(
-                f"ax{i} bars on a truncated {axis} axis (starts at "
-                f"{min(lim):.4g}): bar length encodes the value, so a "
+                f"ax{i} bars on a truncated {axis} axis (stops at "
+                f"{edge:.4g}, short of zero): bar length encodes the value, so a "
                 "cut baseline misstates every ratio  [FIX] the fix is the "
                 "form, not the axis - use a dot plot")
     if not bad:
@@ -5360,11 +5413,23 @@ def check_fonts(fig: Figure) -> tuple[bool | str, str]:
                      "production; set both to 42")
 
     family = mpl.rcParams["font.family"]
-    generic = family[0] if isinstance(family, (list, tuple)) else family
-    wanted = list(mpl.rcParams.get(f"font.{generic}", []))
+    families = ([family] if isinstance(family, str) else list(family)) or [
+        "sans-serif"]
+    generic = families[0]
+    # `font.family` holds generic names, concrete face names, or both. A
+    # generic name stands for its `font.<generic>` list; a concrete one is
+    # itself, and when it is missing nothing else in the list says so.
+    wanted = []
+    for name in families:
+        key = {"sans": "sans-serif", "sans serif": "sans-serif"}.get(
+            name.lower(), name.lower())
+        if key in ("serif", "sans-serif", "cursive", "fantasy", "monospace"):
+            wanted.extend(mpl.rcParams.get(f"font.{key}", []))
+        else:
+            wanted.append(name)
     if wanted:
         try:
-            got = get_font(findfont(FontProperties(family=generic))).family_name
+            got = get_font(findfont(FontProperties(family=families))).family_name
         except Exception:
             got = None
         if got is not None and not any(got.lower() == w.lower() for w in wanted):
