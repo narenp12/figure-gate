@@ -585,8 +585,10 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
     # cost this file the claim it exists to keep. The walk is over
     # every `Import` node, so the function-local `import json` is on this list
     # rather than hidden by being deferred.
-    assert imported <= {"__future__", "argparse", "collections", "itertools",
-                        "json", "math"}, imported
+    #
+    # `functools` is `lru_cache` on `_cvd_views`.
+    assert imported <= {"__future__", "argparse", "collections", "functools",
+                        "itertools", "json", "math"}, imported
 
 
 # --- anomalous trichromacy ---------------------------------------------------

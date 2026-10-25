@@ -1613,10 +1613,10 @@ def dose_response():
 
 
 # --- 24. an interrupted time series ------------------------------------------
-# No legend, so the series-colour row compares neighbours in draw order and
-# every pair of lines whose strokes meet. The rule-change line is drawn third
-# and crosses the observed series, which is drawn first: only the contact test
-# puts that pair, blue against purple, in front of the gates. `axvline` draws
+# No legend, so the series-colour row compares lines whose strokes meet and
+# each line with its nearest. The rule-change line is drawn third and crosses
+# the observed series, which is drawn first: contact puts that pair, blue
+# against purple, in front of the gates whatever the order. `axvline` draws
 # in a blended transform, so the test has to read it through that transform;
 # through `transData` it spans data y 0 to 1, far below these values. After
 # Fig 4 of doi:10.1371/journal.pone.0358360.

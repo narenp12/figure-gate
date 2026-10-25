@@ -260,12 +260,13 @@ contour dash, colormap kind, font embedding, and alt text, in that order.
 normal-vision separation, and contrast against the surface.
 
 **Series color** runs the hues the figure drew through the palette gates. A
-panel with a legend or a scatter gates every pair; otherwise neighbours in draw
-order and any two lines whose strokes meet. A pair under the CVD floor passes
-when a dash, marker, hatch or mark type also separates it. Without
-it, a figure on matplotlib's default `tab10` cycle passes every composition row
-while its orange and green sit at CAM02-UCS ΔE 1.6 under protanopia, against a
-floor of 10.5.
+panel with a legend, or with marks drawn without a line, gates every pair.
+Otherwise it gates areas that are neighbours in draw order, lines whose strokes
+meet, each line and its nearest of another hue, and a line and each area it
+crosses. A pair under the CVD floor passes when a dash, marker, hatch or mark
+type also separates it. Without it, a figure on matplotlib's default `tab10`
+cycle passes every composition row while its orange and green sit at CAM02-UCS
+ΔE 1.6 under protanopia, against a floor of 10.5.
 
 **WARN is not FAIL.** A sub-3:1 hue is legal *if* it carries a visible direct
 label, and a saturated panel is fine *if* it is a heatmap. Read the row and

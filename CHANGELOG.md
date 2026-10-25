@@ -116,21 +116,28 @@ behind a threshold this project enforces.
 - The ceiling `[FIX]` rounds the authored size down to 0.1pt, the x-height
   `[FIX]` rounds it up.
 - `check_series_color` gates every pair in a panel with a legend, as in one
-  with a scatter. Otherwise it gates neighbours in draw order and every pair
-  of line series whose strokes come within `SERIES_CONTACT_PX` of touching.
+  with marks and no line (`scatter`, or `plot` with a marker only). Otherwise
+  it gates these, each read inside the box its artist is clipped to:
+  - area hues that are neighbours in draw order;
+  - every pair of line series whose strokes come within `SERIES_CONTACT_PX`
+    of touching;
+  - each stroke and its nearest of another hue;
+  - a line and each area whose shape it enters.
+
+  A hue drawn only as lines takes no part in draw order.
 - `check_series_color`: a pair under `CVD_TARGET` passes when a mark type,
-  dash, marker or hatch also separates the two series. `NORMAL_FLOOR` is not
-  excused.
+  dash, marker or hatch also separates the two series in some kind of artist
+  both draw (`_carried`). `NORMAL_FLOOR` is not excused.
 - `check_banking` banks by arc length at constant area (Talbot, Gerth &
   Hanrahan 2011), through `_banking_factor`, not by median absolute slope,
-  and drops only lines with no rise. `BANKING_FLAT_PX` is removed. The row's
+  and drops only a line whose rise on the page is under its stroke width.
+  `BANKING_FLAT_PX` is retired: `load_config` warns (`FutureWarning`) and
+  skips it, as every `RETIRED_KEYS` key. The row's
   detail gives the aspect factor: "ax0 banking wants the panel 130x
   taller", or "3 line panels, 1.2-3.5x from banked".
 - `choosing-a-form.md` and `docs/gates.md` describe the arc-length criterion;
   Talbot et al. join the References and `EXTERNAL_CLAIMS["arc length
   banking"]`.
-- `check_redundancy` counts a repeated axis title only among panels with the
-  same limits and scale, as it already did for tick labels.
 - `check_palette.check` reads dichromacy under Machado's severity 1.0 as well
   as Viénot's, reported as `severity 1.0, Machado`.
 - The severity claim above `MACHADO` and in `style-guide.md`: 0.13% of
@@ -159,7 +166,7 @@ behind a threshold this project enforces.
   `plot` and `scatter` markers are compared as drawn paths; `axvline` and
   `axhline` strokes are read through their own transform, in label attribution
   too; the CVD `[FIX]` names dash, marker, hatch or mark type.
-- `_strokes_meet` without scipy uses a grid capped by `GRID_PAIR_CAP`.
+- `_StrokeGaps` without scipy uses a grid capped by `GRID_PAIR_CAP`.
 - `check_figure.NOT_CONFIGURABLE` gains `SERIES_CONTACT_PX`, and its
   `GRID_PAIR_CAP` reason names the contact test. `config_keys()` loses
   `SERIES_CONTACT_PX` and gains `SHARE_SPAN_RATIO_MAX`.
@@ -177,8 +184,74 @@ behind a threshold this project enforces.
 - `check_figure._separation` takes the panel's `_data_artists` from
   `check_series_color` and measures each pair with `pair_separation`, not by
   calling `check_palette.check` and parsing its detail strings.
+  `check_palette._cvd_detail` takes `fix`; `_separation` passes `False`.
+- `check_series_color` warns, naming what is missing, when the
+  `check_palette.py` beside it has no `pair_separation`, `_cvd_detail` or
+  `_normal_detail`.
+- `check_series_color` compares dashes by `Line2D`'s on-off sequence, not by
+  `get_linestyle()`, and ignores the dash offset.
+- `_data_artists` skips a `Line2D` with no stroke and no marker.
+- `_gated_pairs` reads an area as the outlines `_area_px` returns, each path
+  through the transforms matplotlib draws it with, and stroke gaps exactly
+  through `_StrokeGaps`.
+- `_data_artists` skips error bar caps (`_errorbar_caps`).
+- `_largest_sharable` counts the largest group whose union of limits is
+  within `SHARE_SPAN_RATIO_MAX` of its narrowest span, not a chain of pairs.
+- `_banking_segments` takes segments within each finite run of a line, and
+  reads the line through its own transform.
+- `_banking_factor` reuses the surviving probe and stops at a 1e-9 bracket on
+  log(a).
+- `check_palette._cvd_views` caches each colour's simulated views;
+  `_separation_numbers` reads distances from them.
+- `test_check_palette_still_imports_nothing_outside_the_standard_library`
+  allows `functools`.
 
 ### Why it changed
+
+A code review of the invariance round found draw order still deciding pairs.
+Lines that never met passed with blue plotted between orange and green and
+failed with the calls reordered, and `plot(x, y, "o")` clouds escaped both the
+all-pairs rule and the contact test. Draw order is kept for areas, where it is
+what a stacked bar puts side by side. A line against an area is carried by
+mark type in the CVD row, so `NORMAL_FLOOR` is what it answers to.
+`make sweep` over the 25 corpus figures records no verdict change; one detail
+moves, in `gallery-interrupted`, where `#d55e00` and `#cc79a7` were neighbours
+in draw order and are now not compared.
+
+Pairwise joins in `_largest_sharable` chained: 0-1, 0-2 and 0-4 counted as
+three panels for one `sharey`, which squashes 0-1 to a quarter. A dropped NaN
+run was banked as one invented segment across the gap. `get_linestyle()`
+returns '--' for every dash tuple. A vendored `check_palette.py` older than
+`pair_separation` raised `AttributeError` out of `audit`.
+
+Read against matplotlib 3.8.4 and 3.11.1, the versions CI runs:
+`Collection.get_window_extent` is a null box for `vlines` on both and for
+`fill_between` on 3.8.4, so a line crossing one was never compared with it.
+`plot(..., ls="none")` without a marker draws nothing, and read as marks it
+made its panel gate every pair.
+
+A review of the stack found pairs still read off geometry the page does not
+draw. An area was its bounding box, which for a band along the diagonal is the
+panel. On a log axis `get_path_collection_extents` applied only the affine part
+of the transform, so a band from 10 to 1000 missed a line inside it. Strokes
+were read past the axis limits, so lines crossing only off the panel were
+compared. Error bar caps are marker-only lines, so a capped panel compared
+every pair. Two series each drawn as a line and a plain band failed with their
+lines dashed apart, because the bands matched. Nearest strokes were read on 256
+samples per stroke, every pair of samples of every pair of strokes: 6.9s on 120
+random walks, now 0.27s with scipy and 0.08s without. 19 adversarial
+series-pair cases go from 8 wrong to none on matplotlib 3.8.4 and 3.11.1. Of
+400 seeded random-walk panels, 30 change pairs, 29 of them panels whose x
+limits cut the lines; all 30 now match distances over every vertex pair, and
+none did before. The corpus records no row change.
+
+A review of the stack found the remaining line cull too strict. Dropping only
+a line with no rise at all banked float noise: a metric converged at 0.95 with
+noise of sd 1e-4 on a 0-1 axis wanted its panel 107x taller, and at sd 1e-6
+10200x, where the exact level read no line panel. A line is now dropped when
+its rise on the page is under its own stroke width, the width at which it
+draws as a level line, so no constant is added. Loading a v0.10.0 file that
+set `BANKING_FLAT_PX` raised `ValueError`.
 
 `TYPE_FLOOR_PT = 7.5` had no source. It shipped in the initial release, and
 "7.5 is where it is comfortable" was added two days later. 6.0 is the minimum

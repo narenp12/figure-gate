@@ -188,7 +188,7 @@ Every alt text here is the string the figure itself carries, passed to
 
 <figure markdown="span">
   ![Possessions per game by season, 2005 to 2025, with a segmented linear fit either side of a rule change in 2018. Pace rises about half a possession a season before the change, jumps to near 100 after it, and then drifts down.](images/gallery-interrupted.png)
-  <figcaption>No legend, so the series-colour row compares neighbours in draw order and every pair of lines that touch. The rule-change line is drawn third and crosses the observed series, drawn first: only the contact test compares those two. <code>axvline</code> draws in a blended transform, and read through <code>transData</code> the line would sit at data y 0 to 1, below this panel.</figcaption>
+  <figcaption>No legend, so the series-colour row compares lines that touch and each line with its nearest of another hue. The rule-change line is drawn third and crosses the observed series, drawn first, so the two are compared whatever the order. <code>axvline</code> draws in a blended transform, and read through <code>transData</code> the line would sit at data y 0 to 1, below this panel.</figcaption>
 </figure>
 
 ---

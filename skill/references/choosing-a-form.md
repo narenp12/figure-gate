@@ -273,8 +273,9 @@ The gate skips what banking does not apply to:
 - A line whose x does not run one way.
 - Any stroke under `BANKING_MIN_POINTS = 8` vertices, which is furniture rather
   than a rate.
-- A line with no rise anywhere, after Heer and Agrawala's "slopeless lines": a
-  reference level the aspect cannot bank.
+- A line whose rise on the page is under its own stroke width, after Heer and
+  Agrawala's "slopeless lines": it draws as a reference level the aspect cannot
+  bank, float noise and all.
 
 Nothing else is culled. A converged training run is mostly a flat tail, and
 the median slope needed a cull to read it as banked; arc length needs none.

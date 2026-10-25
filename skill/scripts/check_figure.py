@@ -50,6 +50,7 @@ import importlib
 import itertools
 import math
 import sys
+import warnings
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -91,7 +92,7 @@ __all__ = [
     "VENUE_PANEL_LABEL_PT",
     "content_width_pt", "type_ceiling_pt", "x_height_fraction",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
-    "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
+    "NOT_CONFIGURABLE", "RETIRED_KEYS", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
     "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
     "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
@@ -259,7 +260,7 @@ MAX_SERIES_HUES = 6
 # Slack, in display pixels, beyond the two strokes' half-widths at which two
 # line series count as meeting on the page. It is the densifier's vertex
 # spacing: two strokes that cross between vertices are at most this far apart
-# at the nearest pair of vertices. See `_strokes_meet`.
+# at the nearest pair of vertices. See `_StrokeGaps`.
 SERIES_CONTACT_PX = 2.0
 
 # Rows `audit` can return "warn" for and never False. They are the checks whose
@@ -795,6 +796,16 @@ def _config_targets() -> dict[str, Any]:
     return targets
 
 
+# Keys a released version accepted and this one does not. `load_config` warns
+# and skips each rather than raising on a file that was valid when written.
+RETIRED_KEYS = {
+    "BANKING_FLAT_PX":
+        "it culled banking segments that rose less than this many pixels; "
+        "banking is now by arc length, which needs no segment cull, and drops "
+        "only a line whose rise on the page is under its stroke width",
+}
+
+
 def _pinned_reason(key: str) -> Any:
     """Why `key` is not settable from a file, or `None` when it is not pinned.
 
@@ -877,7 +888,8 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     Every key is checked before any is assigned, so a file with one bad key
     changes nothing. A key that names no constant raises rather than being
-    skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
+    skipped, unless a released version accepted it: a `RETIRED_KEYS` key
+    warns and is skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
     `KeyError` `content_width_pt` raises, which lists the rows it knows.
 
     Args:
@@ -888,6 +900,9 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
         `{name: value}` for every constant assigned, `CONTENT_WIDTH_PT`
         included when the file set it through `venue`. Empty when there is no
         file to read.
+
+    Warns:
+        FutureWarning: A key is in `RETIRED_KEYS`.
 
     Raises:
         ValueError: A key names no settable constant, a value has the wrong
@@ -913,6 +928,11 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     planned: dict[str, Any] = {}
     for key, value in table.items():
+        if key in RETIRED_KEYS and key not in targets:
+            warnings.warn(f"{path} sets {key}, which v0.10.0 accepted and this "
+                          f"version ignores: {RETIRED_KEYS[key]}",
+                          FutureWarning, stacklevel=2)
+            continue
         if key == "venue":
             if not isinstance(value, str):
                 raise ValueError(
@@ -2651,29 +2671,32 @@ def _largest_sharable(axes: list[Any], axis: str) -> int:
     """The most panels in `axes` that could share one `axis` axis.
 
     Spans are compared in the axis's own scale, so two log panels a decade
-    apart are as far apart as two linear ones a span apart. Panels are joined
-    when the union of their limits is within `SHARE_SPAN_RATIO_MAX` of the
-    narrower span, and the answer is the largest group so joined."""
+    apart are as far apart as two linear ones a span apart. A group can share
+    when the union of all its limits is within `SHARE_SPAN_RATIO_MAX` of its
+    narrowest span, which is what the shared axis squashes that panel by. The
+    answer is the largest such group. Joining pairs instead chains: 0-1, 0-2
+    and 0-4 pass pairwise and fail as one axis."""
     import numpy as np
     spans = []
     for a in axes:
         lo, hi = sorted(getattr(a, f"{axis}axis").get_transform().transform(
             np.asarray(getattr(a, f"get_{axis}lim")(), dtype=float)))
         spans.append((float(lo), float(hi)))
-    parent = list(range(len(spans)))
-
-    def root(i: int) -> int:
-        while parent[i] != i:
-            i = parent[i]
-        return i
-    for i, j in itertools.combinations(range(len(spans)), 2):
-        (lo_i, hi_i), (lo_j, hi_j) = spans[i], spans[j]
-        narrow = min(hi_i - lo_i, hi_j - lo_j)
-        union = max(hi_i, hi_j) - min(lo_i, lo_j)
-        if narrow > 0 and union <= SHARE_SPAN_RATIO_MAX * narrow:
-            parent[root(i)] = root(j)
-    sizes = Counter(root(i) for i in range(len(spans)))
-    return max(sizes.values()) if sizes else 0
+    best = 1 if spans else 0
+    # For each panel as the group's narrowest, every window of the allowed
+    # width that starts at some panel's lower limit and covers this one.
+    for lo_n, hi_n in spans:
+        width = hi_n - lo_n
+        if width <= 0:
+            continue
+        reach = SHARE_SPAN_RATIO_MAX * width
+        for start in {lo for lo, _ in spans if lo <= lo_n}:
+            if hi_n > start + reach:
+                continue
+            best = max(best, sum(1 for lo, hi in spans
+                                 if hi - lo >= width and lo >= start
+                                 and hi <= start + reach))
+    return best
 
 
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
@@ -3303,9 +3326,15 @@ def _data_colors_by_axes(
       enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
-    return {ax: [(h, label, kind)
-                 for _, label, kind, hexes in artists for h in hexes]
+    return {ax: _flatten(artists)
             for ax, artists in _data_artists_by_axes(fig).items()}
+
+
+def _flatten(artists: list[tuple[Any, str | None, str, list[str]]]
+             ) -> list[tuple[str, str | None, str]]:
+    """`_data_artists` output as one `(hex, label, kind)` per colour."""
+    return [(h, label, kind) for _, label, kind, hexes in artists
+            for h in hexes]
 
 
 def _data_artists_by_axes(
@@ -3314,22 +3343,35 @@ def _data_artists_by_axes(
     out = {}
     for ax in _all_axes(fig):
         artists = _data_artists(ax)
-        if any(hexes for *_, hexes in artists):
+        if artists:
             out[ax] = artists
     return out
+
+
+def _draws_nothing(line: Any) -> bool:
+    """A `Line2D` with no stroke and no marker, which puts no ink on the page:
+    `plot(..., ls="none")` used to pad autoscaling or carry a label."""
+    stroke = str(line.get_linestyle()).strip().lower()
+    marker = str(line.get_marker()).strip().lower()
+    return ((stroke in ("none", "", " ") or line.get_linewidth() <= 0)
+            and marker in ("none", "", " "))
 
 
 def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
     """`[(artist, label, kind, hexes)]` for one panel, harvested on the terms
     `_data_colors_by_axes` documents. Kept per artist so the separation row can
     ask where a series is drawn and what else tells it apart."""
+    from matplotlib.lines import Line2D
     from matplotlib.patches import ConnectionPatch
 
+    caps = _errorbar_caps(ax)
     out = []
     for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
         if not artist.get_visible():
             continue
-        if isinstance(artist, ConnectionPatch):
+        if isinstance(artist, ConnectionPatch) or id(artist) in caps:
+            continue
+        if isinstance(artist, Line2D) and _draws_nothing(artist):
             continue
         if getattr(artist, "get_array", lambda: None)() is not None:
             continue
@@ -3353,6 +3395,18 @@ def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
     return out
 
 
+def _errorbar_caps(ax: Axes) -> set[int]:
+    """`id`s of the caps of every error bar in a panel.
+
+    `errorbar` draws its caps as marker-only `Line2D`s, the second member of
+    its `ErrorbarContainer`. `_artist_kind` reads those as marks, so a capped
+    error bar made its panel gate every pair and an uncapped one did not. A cap
+    is the end of a bar, in the bar's colour, and the bar is harvested."""
+    from matplotlib.container import ErrorbarContainer
+    return {id(cap) for c in ax.containers if isinstance(c, ErrorbarContainer)
+            for cap in c.lines[1]}
+
+
 def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
     """Flat `(hex, label)` across the whole figure, for the checks that only
     need the bag of identified hues and not the panel each lives in."""
@@ -3360,11 +3414,15 @@ def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
             for h, label, _ in items]
 
 
-def _axes_all_pairs(ax: Axes) -> bool:
+def _axes_all_pairs(ax: Axes,
+                    artists: list[tuple[Any, str | None, str, list[str]]]
+                    ) -> bool:
     """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
-    drawn as; a built figure does say. Scatter puts every series next to every
-    other, so every pair has to separate. A legend does too, by another route:
+    drawn as; a built figure does say. Marks put every series next to every
+    other, so every pair has to separate: `scatter`, and `plot` with a marker
+    and no line, which `_artist_kind` calls marks too. A legend does too, by
+    another route:
     it asks the reader to identify each series against a swatch, which is the
     task `NORMAL_FLOOR`'s comment sets the floors for, and any line can be
     mistaken for any swatch. Without either, `_gated_pairs` decides.
@@ -3373,8 +3431,7 @@ def _axes_all_pairs(ax: Axes) -> bool:
     line-only panel two panels over answer to the stricter rule. A figure
     legend is the exception, since it keys every panel. A hidden legend keys
     nothing."""
-    from matplotlib.collections import PathCollection
-    if any(isinstance(c, PathCollection) for c in ax.collections):
+    if any(kind == "marks" for _, _, kind, _ in artists):
         return True
     legend = ax.get_legend()
     if legend is not None and legend.get_visible():
@@ -3392,74 +3449,198 @@ def _gated_pairs(ax: Axes, distinct: list[str],
                  ) -> set[tuple[int, int]]:
     """Index pairs into `distinct` that the separation rows compare.
 
-    Every pair where `_axes_all_pairs` says so. Otherwise neighbours in draw
-    order, which is what a stacked bar puts side by side, and every pair of
-    line series whose strokes meet on the page. Draw order alone is a list the
-    reader never sees: orange and green lines that cross were never compared
-    when blue was plotted between them, and the same figure failed with the
-    plot calls reordered."""
+    Every pair where `_axes_all_pairs` says so. Otherwise a pair is compared
+    where the page puts it side by side: area hues that are neighbours in draw
+    order, which is what a stacked bar puts side by side, every pair of line
+    series whose strokes meet, each stroke with its nearest of another hue,
+    and a line with every area whose shape its stroke enters. A hue drawn only
+    as lines takes no part in draw order, which is a list the reader never
+    sees: flat lines that never touched passed with blue plotted between
+    orange and green and failed with the calls reordered.
+
+    Strokes and areas are read where they are drawn, inside the box each is
+    clipped to (`_on_page`): two lines that cross only beyond the axis limits
+    meet nowhere a reader can see."""
+    import numpy as np
     n = len(distinct)
-    if _axes_all_pairs(ax):
+    if _axes_all_pairs(ax, artists):
         return set(itertools.combinations(range(n), 2))
-    pairs = {(i, i + 1) for i in range(n - 1)}
     index = {h: i for i, h in enumerate(distinct)}
-    strokes = []
-    for artist, _, kind, hexes in artists:
+    line_only = set(index.values())
+    for _, _, kind, hexes in artists:
         if kind != "line":
-            continue
-        px = _polyline_px(artist, ax)
-        if px is not None and len(px):
-            strokes.append((artist, px, [index[h] for h in hexes]))
+            line_only -= {index[h] for h in hexes}
+    ordered = [i for i in range(n) if i not in line_only]
+    pairs = set(zip(ordered, ordered[1:]))
+    strokes, areas = [], []
+    for artist, _, kind, hexes in artists:
+        ids = [index[h] for h in hexes]
+        if kind == "line":
+            px = _on_page(_polyline_px(artist, ax), artist, ax)
+            if px is not None and len(px):
+                strokes.append((artist, px, ids))
+        else:
+            polys, filled = _area_px(artist)
+            if polys and np.all(np.ptp(np.vstack(polys), axis=0) > 0):
+                outline = _on_page(np.vstack([_densify_px(p) for p in polys]),
+                                   artist, ax)
+                areas.append((polys if filled else [], outline, ids))
+
+    def wanted(ia: list[int], ib: list[int]) -> set[tuple[int, int]]:
+        return {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
+
+    gaps = _StrokeGaps([px for _, px, _ in strokes])
     dpi = ax.figure.dpi
-    for (a, pa, ia), (b, pb, ib) in itertools.combinations(strokes, 2):
-        wanted = {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
-        if not wanted - pairs:
+    for (i, (a, _, ia)), (j, (b, _, ib)) in itertools.combinations(
+            enumerate(strokes), 2):
+        new = wanted(ia, ib) - pairs
+        if not new:
             continue
         tol = ((a.get_linewidth() + b.get_linewidth()) / 2.0 * dpi / 72.0
                + SERIES_CONTACT_PX)
-        if _strokes_meet(pa, pb, tol):
-            pairs |= wanted
+        if gaps.gap(i, j, tol) <= tol:
+            pairs |= new
+    # Each stroke beside its nearest: what a reader tells it apart from where
+    # nothing touches. A stroke whose every pair is already gated can add
+    # none, so it is not searched: on 120 random walks in six hues every pair
+    # is gated by the contact test above. Only a stroke that makes a pair is
+    # a rival: a line's own dashed bounds touch it and are its own hue.
+    hues = {h for _, _, ids in strokes for h in ids}
+    for i, (_, _, ia) in enumerate(strokes):
+        if wanted(ia, list(hues)) - pairs:
+            rivals = [j for j, (_, _, ib) in enumerate(strokes)
+                      if wanted(ia, ib)]
+            for j in gaps.nearest(i, rivals):
+                pairs |= wanted(ia, strokes[j][2])
+    for a, pa, ia in strokes:
+        tol = a.get_linewidth() / 2.0 * dpi / 72.0 + SERIES_CONTACT_PX
+        for polys, outline, ib in areas:
+            new = wanted(ia, ib) - pairs
+            if new and _enters(pa, polys, outline, tol):
+                pairs |= new
     return pairs
 
 
-def _strokes_meet(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
-    """Whether any vertex of one densified stroke lies within `tol` pixels of
-    a vertex of the other. scipy when present, a numpy grid otherwise."""
-    import numpy as np
-    lo = np.maximum(pa.min(axis=0), pb.min(axis=0)) - tol
-    hi = np.minimum(pa.max(axis=0), pb.max(axis=0)) + tol
-    if np.any(lo > hi):
-        return False
-    pa = pa[np.all((pa >= lo) & (pa <= hi), axis=1)]
-    pb = pb[np.all((pb >= lo) & (pb <= hi), axis=1)]
-    if not len(pa) or not len(pb):
-        return False
-    try:
-        from scipy.spatial import cKDTree
-    except ImportError:                      # optional, see `_box_blur`
-        return _strokes_meet_grid(pa, pb, tol)
-    d, _ = cKDTree(pb).query(pa, k=1, distance_upper_bound=tol)
-    return bool(np.isfinite(d).any())
+def _on_page(px: np.ndarray | None, artist: Any, ax: Axes) -> np.ndarray | None:
+    """The display vertices of `px` that `artist` draws: those inside the box
+    it is clipped to, or all of them when it is not clipped. A clip path with
+    no box, as on a polar axes, is read as the axes' box."""
+    if px is None or not len(px) or not artist.get_clip_on():
+        return px
+    box = artist.get_clip_box() or ax.bbox
+    return px[(px[:, 0] >= box.x0) & (px[:, 0] <= box.x1)
+              & (px[:, 1] >= box.y0) & (px[:, 1] <= box.y1)]
 
 
-def _strokes_meet_grid(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
-    """`_strokes_meet` without scipy, exact and bounded in memory.
+class _StrokeGaps:
+    """Distances between the vertices of densified strokes, each pair measured
+    once and only as far as the question needs.
 
-    Cells `tol` wide, so two vertices within `tol` sit in the same or
+    `gap(i, j, bound)` is the smallest distance from a vertex of stroke `i` to
+    one of stroke `j` when that is at most `bound`, and infinity otherwise. It
+    is exact, with scipy (one `cKDTree` per stroke, built the first time the
+    stroke is asked about) or without it (`_grid_gap`), so the pairs never
+    depend on what is installed. The 256 sampled vertices per stroke this
+    replaces sit about 1/255 of the stroke's length apart, more than
+    `SERIES_CONTACT_PX`, the tie tolerance `nearest` applies, on a long stroke.
+    """
+
+    def __init__(self, pts: list[np.ndarray]) -> None:
+        import numpy as np
+        try:
+            from scipy.spatial import cKDTree
+        except ImportError:                  # optional, see `_box_blur`
+            cKDTree = None
+        self.kd = cKDTree
+        self.pts = pts
+        self.lo = [p.min(axis=0) for p in pts]
+        self.hi = [p.max(axis=0) for p in pts]
+        self.trees: dict[int, Any] = {}
+        self.known: dict[tuple[int, int], tuple[float, float]] = {}
+        self.inf = np.inf
+
+    def gap(self, i: int, j: int, bound: float) -> float:
+        key = (min(i, j), max(i, j))
+        got, asked = self.known.get(key, (self.inf, -1.0))
+        if got > bound and asked < bound:
+            got = self._measure(i, j, bound)
+            self.known[key] = (got, bound)
+        return got if got <= bound else self.inf
+
+    def _measure(self, i: int, j: int, bound: float) -> float:
+        import numpy as np
+        lo = np.maximum(self.lo[i], self.lo[j]) - bound
+        hi = np.minimum(self.hi[i], self.hi[j]) + bound
+        if np.any(lo > hi):
+            return self.inf
+        pa = self.pts[i][np.all((self.pts[i] >= lo) & (self.pts[i] <= hi),
+                                axis=1)]
+        if not len(pa):
+            return self.inf
+        if self.kd is None:
+            pb = self.pts[j][np.all((self.pts[j] >= lo) & (self.pts[j] <= hi),
+                                    axis=1)]
+            return _grid_gap(pa, pb, bound) if len(pb) else self.inf
+        if j not in self.trees:
+            self.trees[j] = self.kd(self.pts[j])
+        # The tree leaves out a neighbour exactly at its bound; the grid keeps
+        # it. Asked a hair wider and cut here, both keep it.
+        d, _ = self.trees[j].query(pa, k=1,
+                                   distance_upper_bound=np.nextafter(bound, np.inf))
+        found = float(d.min())
+        return found if found <= bound else self.inf
+
+    def nearest(self, i: int, among: list[int]) -> list[int]:
+        """The strokes in `among` within `SERIES_CONTACT_PX` of the one
+        nearest stroke `i`.
+
+        The search is bounded before it starts. The closest pair among 32
+        sampled vertices of each stroke is a distance two real vertices are
+        apart, so the nearest stroke is no farther than that. Only strokes
+        within that distance plus `SERIES_CONTACT_PX` are measured."""
+        import numpy as np
+        others = [j for j in among if j != i]
+        if not others:
+            return []
+        own = self._sample(i)
+        bound = min(float(np.hypot(*(own[:, None, :]
+                                     - self._sample(j)[None, :, :]).T).min())
+                    for j in others) + SERIES_CONTACT_PX
+        found = {}
+        for j in others:
+            reach = np.maximum(0.0, np.maximum(self.lo[j] - self.hi[i],
+                                               self.lo[i] - self.hi[j]))
+            if float(np.hypot(*reach)) <= bound:
+                found[j] = self.gap(i, j, bound)
+        near = min(found.values())
+        return [j for j, g in found.items() if g <= near + SERIES_CONTACT_PX]
+
+    def _sample(self, i: int) -> np.ndarray:
+        import numpy as np
+        p = self.pts[i]
+        return p[np.linspace(0, len(p) - 1, min(len(p), 32)).astype(int)]
+
+
+def _grid_gap(pa: np.ndarray, pb: np.ndarray, bound: float) -> float:
+    """The smallest distance between a vertex of `pa` and one of `pb` when it
+    is at most `bound`, else infinity: `_StrokeGaps` without scipy, exact and
+    bounded in memory.
+
+    Cells `bound` wide, so two vertices within `bound` sit in the same or
     neighbouring cells. Each vertex of `pa` is paired only with the vertices of
     `pb` in its nine cells, and the pairs are measured `GRID_PAIR_CAP` at a time.
     A dense all-pairs block per chunk of `pa`, which this replaces, came to
     1.7GB per chunk on three noisy 20000-point lines."""
     import numpy as np
     origin = np.minimum(pa.min(axis=0), pb.min(axis=0))
-    step = max(float(tol), 1e-9)
+    step = max(float(bound), 1e-9)
     ca = np.floor((pa - origin) / step).astype(np.int64)
     cb = np.floor((pb - origin) / step).astype(np.int64)
     width = int(max(ca[:, 1].max(), cb[:, 1].max())) + 3
     key_b = (cb[:, 0] + 1) * width + (cb[:, 1] + 1)
     order = np.argsort(key_b, kind="stable")
     key_b, pb = key_b[order], pb[order]
-    tol2 = float(tol) * float(tol)
+    best = np.inf
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             key_a = (ca[:, 0] + 1 + dx) * width + (ca[:, 1] + 1 + dy)
@@ -3482,16 +3663,96 @@ def _strokes_meet_grid(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
                     np.cumsum(n) - n, n)
                 ib = np.repeat(first[rows], n) + offset
                 d = pa[ia] - pb[ib]
-                if np.any((d * d).sum(axis=1) <= tol2):
-                    return True
+                best = min(best, float(np.sqrt((d * d).sum(axis=1)).min()))
                 start = stop
-    return False
+    return best if best <= bound else np.inf
+
+
+def _area_px(artist: Any) -> tuple[list[np.ndarray], bool]:
+    """The outlines an area artist draws, in display pixels, and whether it
+    paints inside them (`_fills`). Only a painted outline is closed; an
+    unfilled one is its stroke, and closing it would draw a chord.
+
+    Each path goes through the transforms matplotlib draws it with. A patch
+    takes its whole transform. A collection takes `_prepare_points`, the
+    helper `Collection.draw` calls, which applies the non-affine part of the
+    transform; then, as `RendererBase._iter_collection_raw_paths` and
+    `_iter_collection` do, each path's own transform, the affine part, and
+    its offset. `get_path_collection_extents`, which this replaces, applies
+    only the affine part, and put a `fill_between` band on a log axis
+    hundreds of pixels from where it is drawn. Its box also covered page a
+    diagonal band never fills.
+    """
+    import numpy as np
+    from matplotlib.collections import Collection
+    from matplotlib.transforms import Affine2D, IdentityTransform
+    try:
+        if not isinstance(artist, Collection):
+            paths = [artist.get_transform().transform_path(artist.get_path())]
+        else:
+            master, offset_trf, offsets, raw = artist._prepare_points()
+            per = artist.get_transforms()
+            drawn = [raw[k % len(raw)].transformed(
+                         (Affine2D(per[k % len(per)]) if len(per)
+                          else IdentityTransform()) + master)
+                     for k in range(max(len(raw), len(per)) if len(raw) else 0)]
+            shift = (offset_trf.transform(offsets) if len(offsets)
+                     else np.zeros((1, 2)))
+            paths = [drawn[k % len(drawn)].transformed(
+                         Affine2D().translate(*shift[k % len(shift)]))
+                     for k in range(max(len(drawn), len(shift)) if drawn else 0)]
+    except (ValueError, TypeError, AttributeError, RuntimeError):
+        return [], False
+    filled = _fills(artist)
+    out = []
+    for path in paths:
+        for poly in path.to_polygons(closed_only=filled):
+            poly = poly[np.isfinite(poly).all(axis=1)]
+            if len(poly) >= 2:
+                out.append(poly)
+    return out, filled
+
+
+def _fills(artist: Any) -> bool:
+    """Whether an area artist paints its inside: a hatch, a collection's face
+    (`_is_filled`), or a patch's fill in a colour that is not transparent."""
+    from matplotlib.collections import Collection
+    if getattr(artist, "get_hatch", lambda: None)():
+        return True
+    if isinstance(artist, Collection):
+        return _is_filled(artist)
+    return bool(artist.get_fill() and artist.get_facecolor()[3] > 0)
+
+
+def _enters(stroke: np.ndarray, polys: list[np.ndarray],
+            outline: np.ndarray | None, tol: float) -> bool:
+    """Whether a stroke's densified vertices lie inside an area's painted
+    outlines (`polys`) or within `tol` of the part of an outline that is
+    drawn."""
+    from matplotlib.path import Path
+    if any(Path(p).contains_points(stroke).any() for p in polys):
+        return True
+    return (outline is not None and len(outline) > 0
+            and _StrokeGaps([stroke, outline]).gap(0, 1, tol) <= tol)
+
+
+def _dash(line: Any) -> Any:
+    """A `Line2D`'s on-off dash sequence before linewidth scaling, or None
+    for a solid line. `get_linestyle()` reports every dash tuple as '--',
+    which made `(0, (4, 2))` and `(0, (1, 1))` one dash. The offset is
+    dropped: it shifts a dash along the line without changing how it looks.
+    The private attribute is on matplotlib 3.8.4 and 3.11.1; the style name
+    stands in where it is missing."""
+    pattern = getattr(line, "_unscaled_dash_pattern", None)
+    if pattern is None:
+        return str(line.get_linestyle())
+    seq = pattern[1]
+    return None if seq is None else tuple(round(float(x), 3) for x in seq)
 
 
 def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     """What besides hue tells this artist's series apart: mark type, dash,
-    marker shape and hatch. Two series whose sets of these share no member are
-    separated without colour.
+    marker shape and hatch. `_carried` compares two series by these.
 
     A marker is compared as the path it draws, on both sides. `scatter` keeps
     only the path and `plot` only the marker name, and comparing a name with a
@@ -3510,12 +3771,22 @@ def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
         if str(marker).strip().lower() not in ("", "none", " "):
             style = MarkerStyle(marker)
             drawn = shape(style.get_path().transformed(style.get_transform()))
-        dash = str(artist.get_linestyle()) if kind == "line" else None
-        return (kind, dash, drawn, hatch)
+        return (kind, _dash(artist) if kind == "line" else None, drawn, hatch)
     if kind == "marks":
         paths = artist.get_paths()
         return (kind, None, shape(paths[0]) if len(paths) else None, hatch)
     return (kind, None, None, hatch)
+
+
+def _carried(a: dict[str, set[tuple[Any, ...]]],
+             b: dict[str, set[tuple[Any, ...]]]) -> bool:
+    """Whether something besides hue tells two series apart, given each one's
+    `_second_channel`s by kind: they draw no kind in common, or in some kind
+    both draw they share no channel. A line and its band in each of two hues,
+    the lines dashed differently, are told apart by their lines; asking every
+    artist to differ let the two plain bands cancel the dash."""
+    shared = a.keys() & b.keys()
+    return not shared or any(a[k].isdisjoint(b[k]) for k in shared)
 
 
 def _separation(cp: Any, ax: Axes, distinct: list[str],
@@ -3529,14 +3800,15 @@ def _separation(cp: Any, ax: Axes, distinct: list[str],
     comment makes secondary encoding mandatory below it, and the row's [FIX]
     asks for it. `NORMAL_FLOOR` is excused by nothing, as its comment says.
     `artists` is `_data_artists(ax)`, harvested once by the caller."""
-    channels: dict[str, set[tuple[Any, ...]]] = {}
+    channels: dict[str, dict[str, set[tuple[Any, ...]]]] = {}
     for artist, _, kind, hexes in artists:
         for h in hexes:
-            channels.setdefault(h, set()).add(_second_channel(artist, kind))
+            channels.setdefault(h, {}).setdefault(kind, set()).add(
+                _second_channel(artist, kind))
     measured = []
     for i, j in sorted(_gated_pairs(ax, distinct, artists)):
         a, b = distinct[i], distinct[j]
-        carried = channels.get(a, set()).isdisjoint(channels.get(b, set()))
+        carried = _carried(channels.get(a, {}), channels.get(b, {}))
         measured.append((a, b, cp.pair_separation(a, b), carried))
     if not measured:
         return [], []
@@ -3630,9 +3902,7 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     ramp wider rather than to guess at intent from four hexes.
     """
     artists_by_ax = _data_artists_by_axes(fig)
-    by_ax = {ax: [(h, label, kind) for _, label, kind, hexes in artists
-                  for h in hexes]
-             for ax, artists in artists_by_ax.items()}
+    by_ax = {ax: _flatten(artists) for ax, artists in artists_by_ax.items()}
     if not by_ax:
         return True, "no categorical series colors"
 
@@ -3641,6 +3911,15 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     if cp is None:
         notes.append("check_palette.py is not importable beside this file, "
                      "so separation went unchecked")
+    else:
+        # Vendored one file at a time, the sibling can be older than this file.
+        missing = [n for n in ("pair_separation", "_cvd_detail",
+                               "_normal_detail") if not hasattr(cp, n)]
+        if missing:
+            notes.append("check_palette.py beside this file has no "
+                         + ", ".join(missing)
+                         + ", so separation went unchecked")
+            cp = None
 
     for ax, items in by_ax.items():
         distinct = list(dict.fromkeys(h for h, _, _ in items))
@@ -4039,8 +4318,8 @@ def _polyline_px(line: Any, ax: Axes) -> np.ndarray | None:
     xy = _drawstyle_xy(line)
     if xy.ndim != 2 or len(xy) == 0:
         return None
-    transform = line.get_transform() or ax.transData
-    return _densify_px(np.asarray(transform.transform(xy), dtype=float))
+    return _densify_px(np.asarray(line.get_transform().transform(xy),
+                                  dtype=float))
 
 
 def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
@@ -4059,8 +4338,6 @@ def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
     """
     import numpy as np
     transform = artist.get_transform()
-    if transform is None:
-        transform = ax.transData
     runs = []
     for path in artist.get_paths():
         if not len(path.vertices):
@@ -4837,10 +5114,11 @@ def _banking_segments(ax: Axes) -> np.ndarray | None:
     furniture rather than a rate. And an x that does not run one way is a
     parametric curve, where "the typical slope" is not a rate of anything.
 
-    A line with no rise anywhere is dropped too: Heer & Agrawala's slopeless
-    line, a reference level the aspect cannot bank. Nothing else is culled.
-    Arc length needs no cull for flat segments, which is one of the reasons
-    Talbot, Gerth & Hanrahan give for it: a saturating curve's flat tail
+    A line whose rise on the page is under its own stroke width is dropped
+    too: it draws as a level line, Heer & Agrawala's slopeless line, a
+    reference level the aspect cannot bank. Dropping only an exactly flat one
+    banked float noise on a converged metric. Nothing else is culled.
+    Arc length needs no cull for flat segments: a saturating curve's flat tail
     contributes its run and pulls the aspect only as far as its share of the
     curve's length."""
     import numpy as np
@@ -4855,15 +5133,18 @@ def _banking_segments(ax: Axes) -> np.ndarray | None:
         xy = np.asarray(line.get_xydata(), dtype=float)
         if xy.ndim != 2 or len(xy) < BANKING_MIN_POINTS:
             continue
-        pts = ax.transData.transform(xy)
-        pts = pts[np.isfinite(pts).all(axis=1)]
-        if len(pts) < BANKING_MIN_POINTS:
+        # Through the line's own transform, as `_polyline_px` reads it. A
+        # non-finite vertex is a gap in the stroke, so segments are taken
+        # within each finite run and never across one.
+        pts = line.get_transform().transform(xy)
+        finite = np.isfinite(pts).all(axis=1)
+        if finite.sum() < BANKING_MIN_POINTS:
             continue
-        d = np.diff(pts, axis=0)
-        if not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
+        d = np.diff(pts, axis=0)[finite[1:] & finite[:-1]]
+        if not len(d) or not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
             continue
         d = np.abs(d)
-        if not (d[:, 1] > 0).any():
+        if np.ptp(pts[finite, 1]) < line.get_linewidth() * ax.figure.dpi / 72:
             continue
         runs.append(d)
     if not runs:
@@ -4894,14 +5175,21 @@ def _banking_factor(ax: Axes) -> float | None:
     def length(s: float) -> float:
         return float(np.sum(np.sqrt(dx2 * math.exp(-s) + dy2 * math.exp(s))))
 
+    # One new probe per step, the survivor reused, until the bracket on
+    # log(a) is 1e-9 wide: the factor to about nine digits.
     lo, hi = -30.0, 30.0
     ratio = (math.sqrt(5.0) - 1.0) / 2.0
-    for _ in range(120):
-        a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
-        if length(a) < length(b):
-            hi = b
+    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+    fa, fb = length(a), length(b)
+    while hi - lo > 1e-9:
+        if fa < fb:
+            hi, b, fb = b, a, fa
+            a = hi - ratio * (hi - lo)
+            fa = length(a)
         else:
-            lo = a
+            lo, a, fa = a, b, fb
+            b = lo + ratio * (hi - lo)
+            fb = length(b)
     return math.exp((lo + hi) / 2.0)
 
 
