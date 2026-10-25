@@ -496,8 +496,8 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
                          f"not {kind!r} - see the note above MACHADO")
     if not 0.0 <= severity <= 1.0:
         raise ValueError(f"severity runs 0.0 to 1.0, got {severity!r}")
-    # Half up, not `round`'s half-to-even, which read 0.25 as 0.2 and 0.35 as
-    # 0.4.
+    # Half up. `round` is half-to-even and read 0.05, 0.25, 0.45, 0.65 and 0.85
+    # a tenth low.
     tenths = math.floor(severity * 10 + 0.5)
     if tenths == 0:
         r, g, b = (max(0.0, min(1.0, c)) for c in rgb)

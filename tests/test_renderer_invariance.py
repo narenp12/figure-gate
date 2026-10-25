@@ -229,20 +229,19 @@ def test_a_gate_called_on_its_own_measures_what_audit_measures(gallery):
         "one of the two is not at MEASURE_DPI")
 
 
-def test_a_hidpi_canvas_is_still_the_case_it_always_was(gallery):
-    """`_authored_dpi` reads `_original_dpi`, and a HiDPI backend is the one
-    situation where that disagrees with `fig.dpi`. The figure has to come back
-    on the authored value, not on the display's. That correction predates
-    `MEASURE_DPI` and is the half of this problem that had already been found.
+def test_a_hidpi_canvas_is_handed_back_on_its_own_dpi(gallery):
+    """A HiDPI backend is the one situation where `_original_dpi` disagrees
+    with `fig.dpi`. The figure goes back onto its own canvas, which still holds
+    a device pixel ratio of 2, so it comes back on the doubled dpi it arrived
+    on, as `savefig` leaves it; `_original_dpi`, which `savefig` writes at,
+    stays at the authored 150.
     """
     fig = build(gallery, "convergence", 150)
     fig.canvas._device_pixel_ratio = 2
     fig.dpi = 2 * fig._original_dpi
     try:
         cf.audit(fig)
-        assert fig.dpi == 150, (
-            f"a Retina figure came back on {fig.dpi} rather than on the 150 it "
-            "was authored at")
+        assert (fig.dpi, fig._original_dpi) == (300, 150)
     finally:
         plt.close(fig)
 

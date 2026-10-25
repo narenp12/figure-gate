@@ -990,17 +990,6 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
     return planned
 
 
-def _authored_dpi(fig: Figure) -> float:
-    """The dpi the figure belongs on when this file is finished with it.
-
-    `_original_dpi` is private but is set unconditionally in `Figure.__init__`,
-    and it is the only record of the authored value once a HiDPI canvas has
-    overwritten `fig.dpi`. `Figure.set_dpi` does not touch it, which is what
-    makes it survive the measurement below.
-    """
-    return float(getattr(fig, "_original_dpi", fig.dpi))
-
-
 @contextlib.contextmanager
 def _on_own_canvas(fig: Figure) -> Any:
     """Hand `fig` back on the canvas it arrived on.
@@ -1009,13 +998,21 @@ def _on_own_canvas(fig: Figure) -> Any:
     matplotlib's own `savefig` swaps canvases the same way and puts the old one
     back in a `finally` (`FigureCanvasBase._switch_canvas_and_return_print_method`),
     so an audited figure still shows in its GUI window.
+
+    `_original_dpi` is put back too. It is the authored dpi, and `savefig`
+    writes at it. matplotlib 3.8's canvas `__init__` overwrites it with
+    `fig.dpi`, which inside `audit` is `MEASURE_DPI`, so a second audit used
+    to hand back a figure that saved at 150 dpi.
     """
     before = fig.canvas
+    original = getattr(fig, "_original_dpi", None)
     try:
         yield
     finally:
         if fig.canvas is not before:
             fig.set_canvas(before)
+        if original is not None:
+            fig._original_dpi = original
 
 
 @contextlib.contextmanager
@@ -1027,21 +1024,20 @@ def _at_measure_dpi(fig: Figure) -> Any:
     figure, and a figure the caller still owns has to come back the way it
     arrived, so this is a context manager rather than an assignment.
 
-    Restoring to `_authored_dpi` rather than to whatever `fig.dpi` held on entry
-    is deliberate: under a HiDPI GUI backend the entry value is the authored dpi
-    times the display's device pixel ratio, which is a fact about the display
-    and not about the figure. That is the same correction this function has
-    always made, now written where it can be read.
+    The dpi it held on entry is the one restored, as `savefig` restores it. Under
+    a HiDPI GUI backend that is the authored dpi times the device pixel ratio,
+    and `_on_own_canvas` hands the figure back to the canvas holding that ratio.
+    `savefig` writes at `_original_dpi`, so the doubled value does not double
+    the output.
     """
     before = fig.dpi
-    after = _authored_dpi(fig)
     try:
         if before != MEASURE_DPI:
             fig.dpi = MEASURE_DPI
         yield
     finally:
-        if fig.dpi != after:
-            fig.dpi = after
+        if fig.dpi != before:
+            fig.dpi = before
 
 
 @contextlib.contextmanager
@@ -1614,6 +1610,27 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     return float(edge.sum() - _near_any(pix, anchors, tol).sum()) / area
 
 
+def _over(src: Any, src_alpha: Any, dst: Any, dst_alpha: Any = 1.0
+          ) -> tuple[Any, Any]:
+    """`src` at `src_alpha` drawn over `dst` at `dst_alpha`, as Agg blends.
+
+    Agg blends straight (non-premultiplied) RGBA: the result's alpha is
+    `sa + da * (1 - sa)` and its colour is the alpha-weighted mean of the two.
+    Over an opaque `dst` that is `sa * src + (1 - sa) * dst`. Over the
+    transparent white Agg clears to, a translucent face keeps its own colour:
+    a 0.2 grey at alpha 0.5 reads RGB 51 in the buffer, not 153.
+
+    Returns:
+        `(colour, alpha)`, broadcast over whatever arrays were passed.
+    """
+    import numpy as np
+    src, dst = np.asarray(src, dtype=float), np.asarray(dst, dtype=float)
+    out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
+    weight = np.where(out_alpha > 0, src_alpha / np.where(out_alpha > 0,
+                                                          out_alpha, 1.0), 0.0)
+    return weight * src + (1.0 - weight) * dst, out_alpha
+
+
 def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
                     mask: np.ndarray | None = None,
                     alpha: float = 1.0) -> tuple[np.ndarray, float]:
@@ -1654,7 +1671,7 @@ def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
         pix = block.reshape(-1, 3).astype(float)
     ink = np.asarray(fg, dtype=float)
     if alpha < 1.0:
-        ink = alpha * ink + (1.0 - alpha) * pix
+        ink, _ = _over(ink, alpha, pix)
     ratios = _contrast_field_255(ink, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
@@ -1814,7 +1831,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
             # Casing replaces the backdrop under the strokes, so that is what
             # the reader reads against.
             ground = np.array(to_rgb(halo_color)) * 255.0
-            ratio = _contrast_255(alpha * fg + (1.0 - alpha) * ground, ground)
+            ratio = _contrast_255(_over(fg, alpha, ground)[0], ground)
         else:
             _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
                                        mask, alpha)
@@ -1986,7 +2003,7 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     alphas: list[float] = []
     families: dict[Any, set[float]] = {}
     ranked = False
-    from matplotlib.collections import PolyCollection
+    from matplotlib.collections import Collection, PathCollection
     from matplotlib.patches import Patch
     for ax in _all_axes(fig):
         for a in list(ax.collections) + list(ax.lines) + _drawn_patches(ax):
@@ -2033,9 +2050,11 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             # opacity, which is the haze this row exists to catch, and
             # `test_contrast_stack_counts_alpha_levels_inside_an_inset` pins
             # exactly that at six lines of one colour. A scatter is marks, so
-            # it is not grouped either; `fill_between`, `stackplot` and `fill`
-            # are `PolyCollection`s, and `axvspan` and `bar` are filled patches.
-            filled = (isinstance(a, PolyCollection)
+            # it is not grouped either. `fill_between` and `stackplot` are
+            # filled collections; `fill`, `axvspan` and `bar` add filled
+            # patches.
+            filled = ((isinstance(a, Collection)
+                       and not isinstance(a, PathCollection) and _is_filled(a))
                       or (isinstance(a, Patch) and a.get_fill()))
             if filled:
                 key = _artist_rgb(a)
@@ -2268,6 +2287,32 @@ def _str_equal(value: Any, text: str) -> bool:
     return isinstance(value, str) and value == text
 
 
+def _no_marker(marker: Any) -> bool:
+    """Whether a `Line2D` marker draws nothing. A marker may be an ndarray of
+    vertices, which `in ("", "None")` compares elementwise and raises on."""
+    return marker is None or (isinstance(marker, str)
+                              and marker.strip().lower() in ("", "none"))
+
+
+def _marker_path_extent(coll: Any, short: bool = False) -> float:
+    """The long side of a scatter's marker path, in units of `sqrt(s)`, or the
+    short side with `short`.
+
+    `scatter` keeps the marker path already through `MarkerStyle.get_transform`,
+    so `"."` carries its half scale here as it does for `plot`. `"o"` is 1.0,
+    and `"|"` is 0.0 on its short side: its width is the stroke. A collection
+    with no single marker path counts as 1.0, as before.
+    """
+    from matplotlib.collections import PathCollection
+    paths = coll.get_paths() if isinstance(coll, PathCollection) else []
+    if len(paths) != 1 or not len(paths[0].vertices):
+        return 1.0
+    box = paths[0].get_extents()
+    if not (box.width or box.height):
+        return 1.0
+    return float((min if short else max)(box.width, box.height))
+
+
 def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     """One mark far larger than the rest stops reading as a mark and starts
     reading as an ornament stuck on top of the plot.
@@ -2309,11 +2354,12 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
             if not c.get_visible():
                 continue
             s: Any = getattr(c, "get_sizes", lambda: [])()
-            sizes.extend(math.pi * (scatter_diameter_pt(float(v)) / 2.0) ** 2
-                         for v in s if v > 0)
+            unit = _marker_path_extent(c)
+            sizes.extend(
+                math.pi * (unit * scatter_diameter_pt(float(v)) / 2.0) ** 2
+                for v in s if v > 0)
         for ln in ax.lines:
-            if not ln.get_visible() or ln.get_marker() in ("", "None", None,
-                                                           " "):
+            if not ln.get_visible() or _no_marker(ln.get_marker()):
                 continue
             if float(ln.get_markersize()) <= 0:
                 continue
@@ -2686,7 +2732,9 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
             # already match. `np.resize` tiles, which is that same cycle.
             if sizes.size != n:
                 sizes = np.resize(sizes, n)
-            drawn = scatter_diameter_pt(sizes) + collection_stroke_pt(coll)
+            # The narrower side, as for `plot` markers below.
+            drawn = (_marker_path_extent(coll, short=True)
+                     * scatter_diameter_pt(sizes) + collection_stroke_pt(coll))
             radius_px = drawn / 2.0 * dpi / 72.0
 
             frac = _contact_fraction(xy, radius_px, cKDTree)
@@ -2696,7 +2744,7 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
         for j, line in enumerate(ax.lines):
             if not line.get_visible():
                 continue
-            if line.get_marker() in ("", "None", None, " "):
+            if _no_marker(line.get_marker()):
                 continue
             # A line drawn through its marks is a path, not a cloud. Only the
             # marker-only spelling is the one `scatter` has an equivalent of.
@@ -3158,15 +3206,36 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
 
+    from matplotlib.figure import SubFigure
+
+    hosts = {id(child): host for host in _all_axes(fig)
+             for child in getattr(host, "child_axes", []) or []}
+
     def ground_255(ax: Axes) -> np.ndarray:
-        # The colour an empty patch of this panel renders as: the axes face
-        # over the figure face over the white Agg clears to. A style that
-        # greys the axes and not the figure (`ggplot`, seaborn's `darkgrid`)
-        # otherwise reads its whole panel as ink.
-        rgb = np.ones(3)
-        for colour in (fig.get_facecolor(), ax.get_facecolor()):
-            r, g, b, a = to_rgba(colour)
-            rgb = a * np.array([r, g, b]) + (1.0 - a) * rgb
+        # The colour an empty patch of this panel renders as, built from the
+        # patches Agg draws under it: the figure's, each enclosing subfigure's,
+        # each host axes', and the panel's own. A style that greys the axes
+        # and not the figure (`ggplot`, seaborn's `darkgrid`) otherwise reads
+        # its whole panel as ink. An axes patch is drawn only when `axison`
+        # and `get_frame_on()` are both true (`_AxesBase.draw`), so
+        # `axis("off")` leaves the ground under it.
+        panels = [ax]
+        while id(panels[-1]) in hosts:
+            panels.append(hosts[id(panels[-1])])
+        figures = []
+        parent = panels[-1].figure
+        while isinstance(parent, SubFigure):
+            figures.append(parent)
+            parent = getattr(parent, "_parent", fig)
+        figures.append(fig)
+        patches = [f.patch for f in reversed(figures)]
+        patches += [p.patch for p in reversed(panels)
+                    if p.axison and p.get_frame_on()]
+        rgb, alpha = np.ones(3), 0.0          # Agg clears to transparent white
+        for patch in patches:
+            if patch.get_visible():
+                r, g, b, a = to_rgba(patch.get_facecolor())
+                rgb, alpha = _over((r, g, b), a, rgb, alpha)
         return np.round(rgb * 255.0)
 
     if context_axes is None:
@@ -3452,9 +3521,8 @@ def _draws_nothing(line: Any) -> bool:
     """A `Line2D` with no stroke and no marker, which puts no ink on the page:
     `plot(..., ls="none")` used to pad autoscaling or carry a label."""
     stroke = str(line.get_linestyle()).strip().lower()
-    marker = str(line.get_marker()).strip().lower()
     return ((stroke in ("none", "", " ") or line.get_linewidth() <= 0)
-            and marker in ("none", "", " "))
+            and _no_marker(line.get_marker()))
 
 
 def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
@@ -3883,7 +3951,7 @@ def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     if isinstance(artist, Line2D):
         marker = artist.get_marker()
         drawn = None
-        if str(marker).strip().lower() not in ("", "none", " "):
+        if not _no_marker(marker):
             style = MarkerStyle(marker)
             drawn = shape(style.get_path().transformed(style.get_transform()))
         return (kind, _dash(artist) if kind == "line" else None, drawn, hatch)
@@ -4983,7 +5051,7 @@ def _marker_outline_pt(artist: Any, background: Any) -> float:
     from matplotlib.markers import MarkerStyle
 
     if isinstance(artist, Line2D):
-        if str(artist.get_marker()) in ("None", "none", "", " "):
+        if _no_marker(artist.get_marker()):
             return 0.0
         width = marker_stroke_pt(artist)
         if width <= 0.0:
@@ -6023,8 +6091,11 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
-            and handed back on its authored dpi, so the verdict depends on
-            neither the backend it was made on nor the resolution it was set to.
+            and handed back on the dpi it arrived on, as `savefig` does, so the
+            verdict depends on neither the backend it was made on nor the
+            resolution it was set to. Under a HiDPI backend that is the
+            authored dpi times the device pixel ratio; `_original_dpi` stays
+            the authored one.
         scale: Placed size over authored size, overriding `page_scale`
             outright.
         placed_frac: Fraction of the content width the figure is placed at.
