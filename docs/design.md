@@ -33,9 +33,9 @@ that reader, against a floor of 10.5. The composition checker had no access to
 the colors it was drawing.
 
 `check_series_color` closes that gap. It reads the hues off the figure's own
-artists, decides which pairs the reader compares, and runs them through the
-palette gates. A legend or a scatter puts every pair in play; otherwise it is
-neighbours in draw order and lines whose strokes meet. That is row 12 of the 21.
+artists, decides which pairs the reader compares (the Series color row of
+[the gate reference](gates.md#figure-gates) lists them), and runs them through
+the palette gates. That is row 12 of the 21.
 
 ```mermaid
 flowchart TD
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2581 tests, and each check has one asserting it catches a
+    The suite is 2613 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

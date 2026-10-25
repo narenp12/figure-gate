@@ -6579,10 +6579,11 @@ def test_the_numpy_contact_path_agrees_with_scipy(monkeypatch):
         a = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
         b = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
         cases.append((a, b))
-    want = [cf._strokes_meet(a, b, 3.0) for a, b in cases]
+    want = [cf._StrokeGaps([a, b]).gap(0, 1, 3.0) for a, b in cases]
     _without_scipy(monkeypatch)
-    got = [cf._strokes_meet(a, b, 3.0) for a, b in cases]
-    assert got == want and True in want and False in want
+    got = [cf._StrokeGaps([a, b]).gap(0, 1, 3.0) for a, b in cases]
+    np.testing.assert_allclose(got, want, rtol=1e-12)
+    assert np.isfinite(want).any() and np.isinf(want).any()
 
 
 def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
@@ -6593,7 +6594,7 @@ def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
     _without_scipy(monkeypatch)
     tracemalloc.start()
     try:
-        assert cf._strokes_meet(a, b, 3.0) is False
+        assert cf._StrokeGaps([a, b]).gap(0, 1, 3.0) == float("inf")
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -6602,10 +6603,9 @@ def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
 
 # --- the gallery reaches each way a pair is chosen ---------------------------
 #
-# `check_series_color` picks the pairs it compares before it compares any:
-# every pair under a legend or a figure legend, otherwise draw-order
-# neighbours and lines that touch, and a pair under `CVD_TARGET` passes when a
-# second channel carries it. `gallery-classifiers`, `-abundance`,
+# `check_series_color` picks the pairs it compares before it compares any
+# (`_gated_pairs`), and a pair under `CVD_TARGET` passes when a second channel
+# carries it. `gallery-classifiers`, `-abundance`,
 # `-dose-response` and `-interrupted` exist so the corpus sweep reaches each.
 # Each test names the pair and shows the path is what put it there.
 
@@ -6664,7 +6664,7 @@ def test_the_red_green_pair_passes_only_as_carried_by_a_second_channel():
     assert bare is False, bare_detail
 
 
-def test_only_the_contact_test_compares_the_rule_change_with_the_series():
+def test_contact_compares_the_rule_change_with_the_series():
     fig = _gallery_figure("interrupted")
     ax = fig.axes[0]
     distinct = list(dict.fromkeys(
@@ -6713,3 +6713,431 @@ def test_series_color_harvests_each_panel_once(monkeypatch):
     cf.check_series_color(fig)
     plt.close(fig)
     assert len(calls) == len(axes), calls
+
+
+# --- third review round: what the second round's fixes left -------------------
+#
+# A code review of `main...review-invariances` found each of these. Each test
+# failed before its fix.
+
+_ORANGE_BLUE_GREEN = ("#ff7f0e", "#1f77b4", "#2ca02c")
+
+
+def _clouds(order):
+    """Three interleaved marker-only clouds drawn with `plot`, no legend."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        ax.plot(rng.random(200), rng.random(200), "o", ms=2, color=c)
+    return fig
+
+
+def test_marker_only_plot_clouds_gate_every_pair_whatever_the_draw_order():
+    """`plot(x, y, "o")` puts every series beside every other, as `scatter`
+    does. Read as neither, orange beside green was compared only when they were
+    neighbours in the plot calls."""
+    import itertools
+    verdicts = {order: _series_color(_clouds(order))
+                for order in itertools.permutations(_ORANGE_BLUE_GREEN)}
+    assert set(verdicts.values()) == {False}, verdicts
+
+
+@pytest.mark.parametrize("crossing", [False, True])
+def test_unkeyed_lines_get_one_verdict_in_every_draw_order(crossing):
+    """Lines are compared where their strokes meet, never by draw order. Flat
+    lines that never touch passed with blue plotted second and failed with
+    green plotted second."""
+    import itertools
+    verdicts = {order: _series_color(_three_lines(order, legend=False,
+                                                  crossing=crossing))
+                for order in itertools.permutations(_ORANGE_BLUE_GREEN)}
+    assert set(verdicts.values()) == {crossing is False}, verdicts
+
+
+# Okabe-Ito blue bars beside `NORMAL_PAIR`: an orange bar and a yellow line.
+_BARS_AND_LINE = ("#e69f00", "#0072b2", "#f0e442")
+
+
+def _bars_and_line(order, line_y):
+    """Orange and blue bars and a yellow line at height `line_y`, drawn in
+    `order`, no legend."""
+    import numpy as np
+    x = np.linspace(-0.5, 1.5, 30)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        if c == "#f0e442":
+            ax.plot(x, 0 * x + line_y, color=c)
+        else:
+            ax.bar([_BARS_AND_LINE.index(c)], [1.0], color=c)
+    ax.set_ylim(0, 2)
+    return fig
+
+
+@pytest.mark.parametrize("line_y,fails", [(0.5, True), (1.8, False)])
+def test_a_line_is_compared_with_the_areas_it_crosses(line_y, fails):
+    """A line through the orange bar is beside it on the page whatever the
+    plot calls' order. Mark type does not excuse `NORMAL_FLOOR`. The control
+    line runs clear above both bars."""
+    import itertools
+    verdicts = {order: _series_color(_bars_and_line(order, line_y))
+                for order in itertools.permutations(_BARS_AND_LINE)}
+    assert set(verdicts.values()) == {not fails}, verdicts
+
+
+def _panels(spans):
+    from matplotlib.figure import Figure
+    axes = Figure().subplots(1, len(spans))
+    for ax, (lo, hi) in zip(axes, spans):
+        ax.set_ylim(lo, hi)
+    return list(axes)
+
+
+def test_sharable_panels_are_judged_as_a_group_not_a_chain():
+    """0-1 beside 0-2 and 0-2 beside 0-4 each fit `SHARE_SPAN_RATIO_MAX`, but
+    one axis over all three squashes 0-1 to a quarter of its height. A chain
+    of pairwise joins counted all three."""
+    assert cf.SHARE_SPAN_RATIO_MAX == 2.0
+    assert cf._largest_sharable(_panels([(0, 1), (0, 2), (0, 4)]), "y") == 2
+    assert cf._largest_sharable(_panels([(0, 1), (0, 1.5), (0, 2)]), "y") == 3
+
+
+def test_an_older_vendored_check_palette_warns_instead_of_raising(monkeypatch):
+    """`_sibling` exists for files vendored one at a time. A `check_palette.py`
+    from before `pair_separation` is a sibling that cannot answer, not a crash
+    in `audit`."""
+    cp = cf._sibling("check_palette")
+    monkeypatch.delattr(cp, "pair_separation")
+    fig = _two_series()
+    status, detail = cf.check_series_color(fig)
+    plt.close(fig)
+    assert status == "warn" and "pair_separation" in detail, detail
+
+
+@pytest.mark.parametrize("dashes,carried", [
+    (((0, (4, 2)), (0, (1, 1))), True),
+    (("--", (0, (1, 1))), True),
+    (((0, (1, 1)), (0, (1, 1))), False),
+    # The same dash shifted along the line reads as the same dash.
+    (((0, (4, 2)), (2, (4, 2))), False),
+])
+def test_custom_dash_patterns_are_compared_as_drawn(dashes, carried):
+    """`get_linestyle()` reports every dash tuple as '--', so two visibly
+    different dashes read as one channel."""
+    ok = _series_color(_two_lines(CVD_PAIR, [(d, None) for d in dashes]))
+    assert ok is carried
+
+
+def _bank(draw):
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+    draw(ax)
+    fig.canvas.draw()
+    factor = cf._banking_factor(ax)
+    plt.close(fig)
+    return factor
+
+
+def test_banking_does_not_bridge_a_gap_in_a_line():
+    """A NaN run is a gap on the page. Dropping the NaNs and then differencing
+    banked an invented segment across it."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 100)
+    y = np.sin(6 * x) * x
+    gappy = y.copy()
+    gappy[40:60] = np.nan
+
+    def one(ax):
+        ax.plot(x, gappy)
+        ax.set_ylim(-1, 1)
+
+    def two(ax):
+        ax.plot(x[:40], y[:40], color="C0")
+        ax.plot(x[60:], y[60:], color="C0")
+        ax.set_ylim(-1, 1)
+
+    assert _bank(one) == pytest.approx(_bank(two), rel=1e-6)
+
+
+def test_banking_reads_a_line_through_its_own_transform():
+    """A line drawn in axes coordinates, read through `transData`, banked
+    pixels it does not occupy."""
+    import numpy as np
+    u = np.linspace(0.0, 1.0, 50)
+    v = 0.5 + 0.4 * np.sin(8 * u)
+
+    def axes_coords(ax):
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 100)
+        ax.plot(u, v, transform=ax.transAxes)
+
+    def data_coords(ax):
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 100)
+        ax.plot(10 * u, 100 * v)
+
+    assert _bank(axes_coords) == pytest.approx(_bank(data_coords), rel=1e-6)
+
+
+def test_pair_separation_simulates_each_colour_once(monkeypatch):
+    """Twelve panels of the same six hues under a legend gate 180 pairs. Each
+    hue needs simulating once per deficiency and severity, not once per pair."""
+    import numpy as np
+    cp = cf._sibling("check_palette")
+    cp._cvd_views.cache_clear()
+    calls = []
+    real = cp.simulate_anomalous
+    monkeypatch.setattr(cp, "simulate_anomalous",
+                        lambda *a: calls.append(a) or real(*a))
+    hues = ["#0072b2", "#e69f00", "#009e73", "#cc79a7", "#56b4e9", "#d55e00"]
+    fig, axes = plt.subplots(3, 4, figsize=(8, 6))
+    x = np.linspace(0.0, 1.0, 5)
+    for ax in axes.flat:
+        for k, h in enumerate(hues):
+            ax.plot(x, x + k, color=h, label=h)
+        ax.legend()
+    cf.check_series_color(fig)
+    plt.close(fig)
+    per_hue = 2 * (len(cp.ANOMALOUS_SEVERITIES) + 1)
+    assert len(calls) == len(hues) * per_hue, len(calls)
+
+
+# The geometry `_gated_pairs` reads: the shape an area fills and the part of a
+# stroke the panel shows, measured exactly. A review of the review-invariances
+# branch found each case; each test failed before its fix.
+
+def _drawn_pairs(fig, ax):
+    fig.canvas.draw()
+    gated = _gated(ax)
+    plt.close(fig)
+    return gated
+
+
+def test_a_line_is_compared_with_an_area_whose_shape_it_enters():
+    """A band along the diagonal has the whole panel for a bounding box, and
+    green far above it was compared with orange. Blue sits between the band
+    and green, so only the band can pair them. Green crossing the band is."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(0.0, 1.0, 50)
+    for green_y, enters in ((0.9, False), (0.6, False), (0.3, True),
+                            (0.15, True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x, x, color=orange)
+        ax.fill_between(x, x - 0.05, x + 0.05, color=orange, alpha=0.3)
+        ax.plot([0, 0.25], [green_y - 0.05] * 2, color="#1f77b4")
+        ax.plot([0, 0.25], [green_y] * 2, color=green)
+        ax.set_ylim(-0.1, 1.1)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is enters, green_y
+
+
+def test_a_band_on_a_log_axis_is_read_where_it_is_drawn():
+    """`get_path_collection_extents` applied only the affine part of the
+    transform, which put a band from 10 to 1000 on a log axis above the panel,
+    so a line inside it was never compared with it."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(1.0, 10.0, 50)
+    for green_y, enters in ((100, True), (3, False)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.fill_between(x, 10, 1000, color=orange, alpha=0.4)
+        ax.plot(x, 0 * x + green_y, color=green)
+        ax.plot(x, 0 * x + 1.5, color="#1f77b4")
+        ax.set_yscale("log")
+        ax.set_ylim(1, 1e4)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is enters, green_y
+
+
+def test_lines_that_meet_only_beyond_the_limits_are_not_neighbours():
+    """Green crosses orange at x = 2.5. With the panel cut at x = 0 the
+    crossing is off the page and blue lies between them."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(-5.0, 5.0, 200)
+    for xmax, meets in ((0, False), (5, True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x, 0 * x + 10, color=orange)
+        ax.plot(x, 0 * x + 5, color="#1f77b4")
+        ax.plot(x, 4 * x, color=green)
+        ax.set_xlim(-5, xmax)
+        ax.set_ylim(-20, 12)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is meets, xmax
+
+
+def test_a_line_inside_its_own_dashed_bounds_is_compared_with_its_neighbour():
+    """A line's dashed bounds touch it and are its own hue, so each stroke's
+    nearest was a stroke of its own series: orange and green lines 0.3 apart,
+    each between bounds 0.08 away, were not compared."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, off in zip(CVD_PAIR, (0.0, 0.3)):
+        ax.plot(x, np.sin(x) + off, color=c)
+        for s in (0.08, -0.08):
+            ax.plot(x, np.sin(x) + off + s, "--", color=c)
+    assert frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)
+
+
+def test_error_bar_caps_do_not_change_which_pairs_are_compared():
+    """Caps are marker-only lines, read as marks, so a capped error bar made
+    its panel compare every pair and an uncapped one did not."""
+    import numpy as np
+    x = np.arange(6)
+    gated = {}
+    for capsize in (0, 2, 4):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        for k, c in enumerate(_ORANGE_BLUE_GREEN):
+            ax.errorbar(x, 0 * x + 10 * k, yerr=0.5, capsize=capsize, color=c)
+        gated[capsize] = _drawn_pairs(fig, ax)
+    assert gated[2] == gated[0] == gated[4], gated
+    assert frozenset(CVD_PAIR) not in gated[0], gated[0]
+
+
+def test_a_dash_carries_two_lines_that_each_have_a_plain_band():
+    """Each series is a line and its band. The bands match in all but hue, and
+    asking every artist of one series to differ from every artist of the other
+    let them cancel the dash. The control: two solid lines carry nothing."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 50)
+    verdicts = {}
+    for second in ("--", "-"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        for c, ls, off in ((CVD_PAIR[0], "-", 0.0), (CVD_PAIR[1], second, 0.02)):
+            ax.plot(x, x + off, color=c, ls=ls, label=c)
+            ax.fill_between(x, x + off - 0.05, x + off + 0.05, color=c,
+                            alpha=0.2)
+        ax.legend()
+        verdicts[second] = _series_color(fig)
+    assert verdicts == {"--": True, "-": False}, verdicts
+
+
+def test_an_open_outline_is_compared_only_where_it_is_drawn():
+    """An unfilled `Polygon(closed=False)` draws an L. Closed, it gained the
+    chord from its last vertex to its first, and a line along that chord, far
+    from the L, was compared with it. The control crosses the L."""
+    from matplotlib.patches import Polygon
+    orange, green = CVD_PAIR
+    for xs, ys, crosses in (([0.45, 0.55], [0.55, 0.45], False),
+                            ([0.5, 0.5], [0.05, 0.15], True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.add_patch(Polygon([[0.1, 0.9], [0.1, 0.1], [0.9, 0.1]],
+                             closed=False, fill=False, edgecolor=orange))
+        ax.plot(xs, ys, color=green)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is crosses, xs
+
+
+def _brute_gap(a, b):
+    import numpy as np
+    return min(float(np.sqrt(((a[i:i + 256, None] - b[None]) ** 2).sum(-1)).min())
+               for i in range(0, len(a), 256))
+
+
+def test_stroke_gaps_are_exact_with_and_without_scipy(monkeypatch):
+    """Gaps were read on 256 sampled vertices per stroke, further apart than
+    the `SERIES_CONTACT_PX` tie tolerance on a long stroke. Each stroke's
+    nearest is checked against every vertex pair."""
+    import numpy as np
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(3)
+    strokes = [cf._densify_px(np.cumsum(rng.normal(0, 4, (400, 2)), axis=0)
+                              + rng.normal(0, 60, 2) + 300) for _ in range(6)]
+    gap = {(i, j): _brute_gap(strokes[i], strokes[j])
+           for i in range(6) for j in range(6) if i != j}
+    want = []
+    for i in range(6):
+        near = min(g for (a, _), g in gap.items() if a == i)
+        want.append(sorted(j for (a, j), g in gap.items()
+                           if a == i and g <= near + cf.SERIES_CONTACT_PX))
+    for scipy in (True, False):
+        if not scipy:
+            _without_scipy(monkeypatch)
+        gaps = cf._StrokeGaps(strokes)
+        assert (gaps.kd is not None) is scipy
+        assert [sorted(gaps.nearest(i, list(range(6)))) for i in range(6)] == want
+        for (i, j), g in gap.items():
+            assert gaps.gap(i, j, g + 1e-6) == pytest.approx(g, rel=1e-12)
+
+
+def test_the_nearest_search_skips_a_stroke_whose_pairs_are_all_gated(
+        monkeypatch):
+    """120 random walks in six hues: comparing every pair of 256 samples of
+    every pair of strokes took seven seconds. Every hue pair is gated by
+    contact first, so no stroke is searched."""
+    import numpy as np
+    searched = []
+    real = cf._StrokeGaps.nearest
+    monkeypatch.setattr(cf._StrokeGaps, "nearest",
+                        lambda self, i: searched.append(i) or real(self, i))
+    rng = np.random.default_rng(1)
+    hues = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for k in range(120):
+        ax.plot(np.cumsum(rng.normal(size=200)), color=hues[k % 6], lw=0.8)
+    gated = _drawn_pairs(fig, ax)
+    assert len(gated) == 15 and searched == [], (len(gated), len(searched))
+
+
+
+def _level(sd, lw=1.5):
+    import numpy as np
+    rng = np.random.default_rng(1)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    x = np.arange(100.0)
+    ax.plot(x, 0.95 + sd * rng.normal(size=100), lw=lw)
+    ax.set_ylim(0, 1)
+    return fig
+
+
+@pytest.mark.parametrize("sd", [1e-6, 1e-4, 1e-3])
+def test_banking_drops_a_level_line_whatever_its_float_noise(sd):
+    """A metric converged at 0.95, its noise narrower on the page than its
+    stroke, draws as a level line. Only an exactly flat one was dropped, so
+    float noise was banked where an exactly level line read no line panel."""
+    fig = _level(sd)
+    status = cf.check_banking(fig)
+    plt.close(fig)
+    assert status == (True, "no line panel whose aspect encodes a rate"), status
+
+
+def test_banking_keeps_a_line_whose_rise_is_wider_than_its_stroke():
+    """The control, and the line drawn is what decides it: the same values
+    rise about 2.5px, more than a 0.5pt stroke and less than a 4pt one."""
+    verdicts = {}
+    for lw in (0.5, 4.0):
+        fig = _level(1.5e-3, lw)
+        verdicts[lw] = cf.check_banking(fig)[1]
+        plt.close(fig)
+    assert verdicts[0.5].startswith("1 line panel"), verdicts
+    assert verdicts[4.0] == "no line panel whose aspect encodes a rate", verdicts
+
+# --- matplotlib behaviours the third round leaned on --------------------------
+#
+# Each was found reading matplotlib 3.8.4 and 3.11.1, the two versions CI runs.
+
+
+@pytest.mark.parametrize("area", ["fill_between", "vlines"])
+def test_a_line_is_compared_with_a_collection_it_crosses(area):
+    """`Collection.get_window_extent` returns a null box for `vlines` on both
+    versions and for `fill_between` on 3.8.4, so a line crossing one was
+    never compared with it."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 30)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    if area == "fill_between":
+        ax.fill_between(x, 0.2, 0.8, color=NORMAL_PAIR[0])
+    else:
+        ax.vlines([0.3, 0.6], 0.0, 1.0, color=NORMAL_PAIR[0], lw=3)
+    ax.plot(x, 0 * x + 0.5, color=NORMAL_PAIR[1])
+    ax.set_ylim(0, 1)
+    assert _series_color(fig) is False
+
+
+def test_a_line_that_draws_nothing_is_not_a_series():
+    """`plot(..., ls="none")` without a marker puts no ink on the page, yet it
+    read as marks and made the panel gate every pair."""
+    verdicts = []
+    for ghost in (False, True):
+        fig = _three_lines(_ORANGE_BLUE_GREEN, legend=False, crossing=False)
+        if ghost:
+            fig.axes[0].plot([0, 1], [0, 2], ls="none", color="#9467bd")
+        verdicts.append(_series_color(fig))
+    assert verdicts == [True, True]
