@@ -2651,29 +2651,32 @@ def _largest_sharable(axes: list[Any], axis: str) -> int:
     """The most panels in `axes` that could share one `axis` axis.
 
     Spans are compared in the axis's own scale, so two log panels a decade
-    apart are as far apart as two linear ones a span apart. Panels are joined
-    when the union of their limits is within `SHARE_SPAN_RATIO_MAX` of the
-    narrower span, and the answer is the largest group so joined."""
+    apart are as far apart as two linear ones a span apart. A group can share
+    when the union of all its limits is within `SHARE_SPAN_RATIO_MAX` of its
+    narrowest span, which is what the shared axis squashes that panel by. The
+    answer is the largest such group. Joining pairs instead chains: 0-1, 0-2
+    and 0-4 pass pairwise and fail as one axis."""
     import numpy as np
     spans = []
     for a in axes:
         lo, hi = sorted(getattr(a, f"{axis}axis").get_transform().transform(
             np.asarray(getattr(a, f"get_{axis}lim")(), dtype=float)))
         spans.append((float(lo), float(hi)))
-    parent = list(range(len(spans)))
-
-    def root(i: int) -> int:
-        while parent[i] != i:
-            i = parent[i]
-        return i
-    for i, j in itertools.combinations(range(len(spans)), 2):
-        (lo_i, hi_i), (lo_j, hi_j) = spans[i], spans[j]
-        narrow = min(hi_i - lo_i, hi_j - lo_j)
-        union = max(hi_i, hi_j) - min(lo_i, lo_j)
-        if narrow > 0 and union <= SHARE_SPAN_RATIO_MAX * narrow:
-            parent[root(i)] = root(j)
-    sizes = Counter(root(i) for i in range(len(spans)))
-    return max(sizes.values()) if sizes else 0
+    best = 1 if spans else 0
+    # For each panel as the group's narrowest, every window of the allowed
+    # width that starts at some panel's lower limit and covers this one.
+    for lo_n, hi_n in spans:
+        width = hi_n - lo_n
+        if width <= 0:
+            continue
+        reach = SHARE_SPAN_RATIO_MAX * width
+        for start in {lo for lo, _ in spans if lo <= lo_n}:
+            if hi_n > start + reach:
+                continue
+            best = max(best, sum(1 for lo, hi in spans
+                                 if hi - lo >= width and lo >= start
+                                 and hi <= start + reach))
+    return best
 
 
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
@@ -3281,9 +3284,15 @@ def _data_colors_by_axes(
       enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
-    return {ax: [(h, label, kind)
-                 for _, label, kind, hexes in artists for h in hexes]
+    return {ax: _flatten(artists)
             for ax, artists in _data_artists_by_axes(fig).items()}
+
+
+def _flatten(artists: list[tuple[Any, str | None, str, list[str]]]
+             ) -> list[tuple[str, str | None, str]]:
+    """`_data_artists` output as one `(hex, label, kind)` per colour."""
+    return [(h, label, kind) for _, label, kind, hexes in artists
+            for h in hexes]
 
 
 def _data_artists_by_axes(
@@ -3292,15 +3301,25 @@ def _data_artists_by_axes(
     out = {}
     for ax in _all_axes(fig):
         artists = _data_artists(ax)
-        if any(hexes for *_, hexes in artists):
+        if artists:
             out[ax] = artists
     return out
+
+
+def _draws_nothing(line: Any) -> bool:
+    """A `Line2D` with no stroke and no marker, which puts no ink on the page:
+    `plot(..., ls="none")` used to pad autoscaling or carry a label."""
+    stroke = str(line.get_linestyle()).strip().lower()
+    marker = str(line.get_marker()).strip().lower()
+    return ((stroke in ("none", "", " ") or line.get_linewidth() <= 0)
+            and marker in ("none", "", " "))
 
 
 def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
     """`[(artist, label, kind, hexes)]` for one panel, harvested on the terms
     `_data_colors_by_axes` documents. Kept per artist so the separation row can
     ask where a series is drawn and what else tells it apart."""
+    from matplotlib.lines import Line2D
     from matplotlib.patches import ConnectionPatch
 
     out = []
@@ -3308,6 +3327,8 @@ def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
         if not artist.get_visible():
             continue
         if isinstance(artist, ConnectionPatch):
+            continue
+        if isinstance(artist, Line2D) and _draws_nothing(artist):
             continue
         if getattr(artist, "get_array", lambda: None)() is not None:
             continue
@@ -3338,11 +3359,15 @@ def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
             for h, label, _ in items]
 
 
-def _axes_all_pairs(ax: Axes) -> bool:
+def _axes_all_pairs(ax: Axes,
+                    artists: list[tuple[Any, str | None, str, list[str]]]
+                    ) -> bool:
     """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
-    drawn as; a built figure does say. Scatter puts every series next to every
-    other, so every pair has to separate. A legend does too, by another route:
+    drawn as; a built figure does say. Marks put every series next to every
+    other, so every pair has to separate: `scatter`, and `plot` with a marker
+    and no line, which `_artist_kind` calls marks too. A legend does too, by
+    another route:
     it asks the reader to identify each series against a swatch, which is the
     task `NORMAL_FLOOR`'s comment sets the floors for, and any line can be
     mistaken for any swatch. Without either, `_gated_pairs` decides.
@@ -3351,8 +3376,7 @@ def _axes_all_pairs(ax: Axes) -> bool:
     line-only panel two panels over answer to the stricter rule. A figure
     legend is the exception, since it keys every panel. A hidden legend keys
     nothing."""
-    from matplotlib.collections import PathCollection
-    if any(isinstance(c, PathCollection) for c in ax.collections):
+    if any(kind == "marks" for _, _, kind, _ in artists):
         return True
     legend = ax.get_legend()
     if legend is not None and legend.get_visible():
@@ -3370,33 +3394,74 @@ def _gated_pairs(ax: Axes, distinct: list[str],
                  ) -> set[tuple[int, int]]:
     """Index pairs into `distinct` that the separation rows compare.
 
-    Every pair where `_axes_all_pairs` says so. Otherwise neighbours in draw
-    order, which is what a stacked bar puts side by side, and every pair of
-    line series whose strokes meet on the page. Draw order alone is a list the
-    reader never sees: orange and green lines that cross were never compared
-    when blue was plotted between them, and the same figure failed with the
-    plot calls reordered."""
+    Every pair where `_axes_all_pairs` says so. Otherwise a pair is compared
+    where the page puts it side by side: area hues that are neighbours in draw
+    order, which is what a stacked bar puts side by side, every pair of line
+    series whose strokes meet, each stroke with its nearest stroke, and a line
+    with every area whose extent its stroke enters. A hue drawn only as lines
+    takes no part in draw order, which is a list the reader never sees: flat
+    lines that never touched passed with blue plotted between orange and green
+    and failed with the calls reordered."""
+    import numpy as np
     n = len(distinct)
-    if _axes_all_pairs(ax):
+    if _axes_all_pairs(ax, artists):
         return set(itertools.combinations(range(n), 2))
-    pairs = {(i, i + 1) for i in range(n - 1)}
     index = {h: i for i, h in enumerate(distinct)}
-    strokes = []
-    for artist, _, kind, hexes in artists:
+    line_only = set(index.values())
+    for _, _, kind, hexes in artists:
         if kind != "line":
-            continue
-        px = _polyline_px(artist, ax)
-        if px is not None and len(px):
-            strokes.append((artist, px, [index[h] for h in hexes]))
+            line_only -= {index[h] for h in hexes}
+    ordered = [i for i in range(n) if i not in line_only]
+    pairs = set(zip(ordered, ordered[1:]))
+    strokes, areas = [], []
+    for artist, _, kind, hexes in artists:
+        ids = [index[h] for h in hexes]
+        if kind == "line":
+            px = _polyline_px(artist, ax)
+            if px is not None and len(px):
+                strokes.append((artist, px, ids))
+        else:
+            box = _extent_px(artist)
+            if box is not None and box.width > 0 and box.height > 0:
+                areas.append((box, ids))
+
+    def wanted(ia: list[int], ib: list[int]) -> set[tuple[int, int]]:
+        return {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
+
     dpi = ax.figure.dpi
     for (a, pa, ia), (b, pb, ib) in itertools.combinations(strokes, 2):
-        wanted = {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
-        if not wanted - pairs:
+        new = wanted(ia, ib) - pairs
+        if not new:
             continue
         tol = ((a.get_linewidth() + b.get_linewidth()) / 2.0 * dpi / 72.0
                + SERIES_CONTACT_PX)
         if _strokes_meet(pa, pb, tol):
-            pairs |= wanted
+            pairs |= new
+    # Each stroke beside its nearest: what a reader tells it apart from where
+    # nothing touches. Ties within `SERIES_CONTACT_PX` count as nearest. Read
+    # on 256 evenly spaced vertices per stroke, with or without scipy, so the
+    # pairs never depend on what is installed.
+    samples = [p[np.linspace(0, len(p) - 1, min(len(p), 256)).astype(int)]
+               for _, p, _ in strokes]
+    gap = np.full((len(strokes), len(strokes)), np.inf)
+    for i, j in itertools.combinations(range(len(strokes)), 2):
+        diff = samples[i][:, None, :] - samples[j][None, :, :]
+        gap[i, j] = gap[j, i] = float(np.sqrt((diff ** 2).sum(-1)).min())
+    for i, (_, _, ia) in enumerate(strokes):
+        if len(strokes) < 2:
+            break
+        near = gap[i].min()
+        for j in np.flatnonzero(gap[i] <= near + SERIES_CONTACT_PX):
+            pairs |= wanted(ia, strokes[j][2])
+    for a, pa, ia in strokes:
+        tol = a.get_linewidth() / 2.0 * dpi / 72.0 + SERIES_CONTACT_PX
+        for box, ib in areas:
+            new = wanted(ia, ib) - pairs
+            if new and np.any((pa[:, 0] >= box.x0 - tol)
+                              & (pa[:, 0] <= box.x1 + tol)
+                              & (pa[:, 1] >= box.y0 - tol)
+                              & (pa[:, 1] <= box.y1 + tol)):
+                pairs |= new
     return pairs
 
 
@@ -3466,6 +3531,44 @@ def _strokes_meet_grid(pa: np.ndarray, pb: np.ndarray, tol: float) -> bool:
     return False
 
 
+def _extent_px(artist: Any) -> Any:
+    """The display-space box an area artist draws in, or None.
+
+    A collection's paths are put through its own transforms here because
+    `Collection.get_window_extent` is `get_datalim(IdentityTransform())`, a
+    null box for `vlines` on matplotlib 3.8.4 and 3.11.1 and for
+    `fill_between` on 3.8.4."""
+    from matplotlib.collections import Collection
+    from matplotlib.path import get_path_collection_extents
+    try:
+        if not isinstance(artist, Collection):
+            return artist.get_window_extent()
+        paths = artist.get_paths()
+        if not len(paths):
+            return None
+        offset_trf = artist.get_offset_transform()
+        return get_path_collection_extents(
+            artist.get_transform().frozen(), paths, artist.get_transforms(),
+            offset_trf.transform_non_affine(artist.get_offsets()),
+            offset_trf.get_affine().frozen())
+    except (ValueError, TypeError, AttributeError, RuntimeError):
+        return None
+
+
+def _dash(line: Any) -> Any:
+    """A `Line2D`'s on-off dash sequence before linewidth scaling, or None
+    for a solid line. `get_linestyle()` reports every dash tuple as '--',
+    which made `(0, (4, 2))` and `(0, (1, 1))` one dash. The offset is
+    dropped: it shifts a dash along the line without changing how it looks.
+    The private attribute is on matplotlib 3.8.4 and 3.11.1; the style name
+    stands in where it is missing."""
+    pattern = getattr(line, "_unscaled_dash_pattern", None)
+    if pattern is None:
+        return str(line.get_linestyle())
+    seq = pattern[1]
+    return None if seq is None else tuple(round(float(x), 3) for x in seq)
+
+
 def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     """What besides hue tells this artist's series apart: mark type, dash,
     marker shape and hatch. Two series whose sets of these share no member are
@@ -3488,8 +3591,7 @@ def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
         if str(marker).strip().lower() not in ("", "none", " "):
             style = MarkerStyle(marker)
             drawn = shape(style.get_path().transformed(style.get_transform()))
-        dash = str(artist.get_linestyle()) if kind == "line" else None
-        return (kind, dash, drawn, hatch)
+        return (kind, _dash(artist) if kind == "line" else None, drawn, hatch)
     if kind == "marks":
         paths = artist.get_paths()
         return (kind, None, shape(paths[0]) if len(paths) else None, hatch)
@@ -3611,9 +3713,7 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     ramp wider rather than to guess at intent from four hexes.
     """
     artists_by_ax = _data_artists_by_axes(fig)
-    by_ax = {ax: [(h, label, kind) for _, label, kind, hexes in artists
-                  for h in hexes]
-             for ax, artists in artists_by_ax.items()}
+    by_ax = {ax: _flatten(artists) for ax, artists in artists_by_ax.items()}
     if not by_ax:
         return True, "no categorical series colors"
 
@@ -3622,6 +3722,15 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     if cp is None:
         notes.append("check_palette.py is not importable beside this file, "
                      "so separation went unchecked")
+    else:
+        # Vendored one file at a time, the sibling can be older than this file.
+        missing = [n for n in ("pair_separation", "_cvd_detail",
+                               "_normal_detail") if not hasattr(cp, n)]
+        if missing:
+            notes.append("check_palette.py beside this file has no "
+                         + ", ".join(missing)
+                         + ", so separation went unchecked")
+            cp = None
 
     for ax, items in by_ax.items():
         distinct = list(dict.fromkeys(h for h, _, _ in items))
@@ -4833,12 +4942,15 @@ def _banking_segments(ax: Axes) -> np.ndarray | None:
         xy = np.asarray(line.get_xydata(), dtype=float)
         if xy.ndim != 2 or len(xy) < BANKING_MIN_POINTS:
             continue
-        pts = ax.transData.transform(xy)
-        pts = pts[np.isfinite(pts).all(axis=1)]
-        if len(pts) < BANKING_MIN_POINTS:
+        # Through the line's own transform, as `_polyline_px` reads it. A
+        # non-finite vertex is a gap in the stroke, so segments are taken
+        # within each finite run and never across one.
+        pts = (line.get_transform() or ax.transData).transform(xy)
+        finite = np.isfinite(pts).all(axis=1)
+        if finite.sum() < BANKING_MIN_POINTS:
             continue
-        d = np.diff(pts, axis=0)
-        if not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
+        d = np.diff(pts, axis=0)[finite[1:] & finite[:-1]]
+        if not len(d) or not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
             continue
         d = np.abs(d)
         if not (d[:, 1] > 0).any():
@@ -4871,14 +4983,21 @@ def _banking_factor(ax: Axes) -> float | None:
     def length(s: float) -> float:
         return float(np.sum(np.sqrt(dx2 * math.exp(-s) + dy2 * math.exp(s))))
 
+    # One new probe per step, the survivor reused, until the bracket on
+    # log(a) is 1e-9 wide: the factor to about nine digits.
     lo, hi = -30.0, 30.0
     ratio = (math.sqrt(5.0) - 1.0) / 2.0
-    for _ in range(120):
-        a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
-        if length(a) < length(b):
-            hi = b
+    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+    fa, fb = length(a), length(b)
+    while hi - lo > 1e-9:
+        if fa < fb:
+            hi, b, fb = b, a, fa
+            a = hi - ratio * (hi - lo)
+            fa = length(a)
         else:
-            lo = a
+            lo, a, fa = a, b, fb
+            b = lo + ratio * (hi - lo)
+            fb = length(b)
     return math.exp((lo + hi) / 2.0)
 
 

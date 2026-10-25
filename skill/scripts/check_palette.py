@@ -23,6 +23,7 @@ the surface, mirroring `check_figure`'s own `INK_TOKENS` intent.
 from __future__ import annotations
 
 import argparse
+import functools
 import itertools
 import math
 from collections.abc import Collection, Sequence
@@ -773,21 +774,40 @@ def _separation_numbers(lin_a: Sequence[float], lin_b: Sequence[float]
     and read at dichromacy under both models; `kind` and `severity` say where
     it was found, protan first on a tie. `check` gates the rows on these, and
     `check_figure` reads them per pair through `pair_separation`."""
+    va = _cvd_views(tuple(lin_a), ANOMALOUS_SEVERITIES)
+    vb = _cvd_views(tuple(lin_b), ANOMALOUS_SEVERITIES)
     worst, kind_at, at_at = float("inf"), "", ""
     for kind in ("protan", "deutan"):
-        views = [(delta_e(simulate(lin_a, kind), simulate(lin_b, kind)),
-                  "1.0")]
-        views += [(delta_e(simulate_anomalous(lin_a, kind, s),
-                           simulate_anomalous(lin_b, kind, s)), f"{s:.1f}")
-                  for s in ANOMALOUS_SEVERITIES]
-        views.append((delta_e(simulate_anomalous(lin_a, kind, 1.0),
-                              simulate_anomalous(lin_b, kind, 1.0)),
-                      "1.0, Machado"))
-        d, at = min(views)
+        d, at = min((_ucs_distance(a, b), at)
+                    for (a, at), (b, _) in zip(va[kind], vb[kind]))
         if d < worst:
             worst, kind_at, at_at = d, kind, at
-    tritan = delta_e(simulate(lin_a, "tritan"), simulate(lin_b, "tritan"))
-    return worst, kind_at, at_at, tritan, delta_e(lin_a, lin_b)
+    return (worst, kind_at, at_at, _ucs_distance(va["tritan"], vb["tritan"]),
+            _ucs_distance(va["normal"], vb["normal"]))
+
+
+def _ucs_distance(a: Sequence[float], b: Sequence[float]) -> float:
+    """`delta_e` on two colours already in CAM02-UCS."""
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+@functools.lru_cache(maxsize=4096)
+def _cvd_views(lin: tuple[float, ...],
+               severities: tuple[float, ...]) -> dict[str, Sequence]:
+    """One colour in CAM02-UCS as each simulated viewer sees it, so a colour
+    in many pairs is simulated once. `delta_e` between two views is the
+    distance between them. `severities` is `ANOMALOUS_SEVERITIES`, passed so
+    the cache cannot outlive a change to it."""
+    out: dict[str, Sequence] = {
+        "tritan": linear_to_cam02ucs(simulate(lin, "tritan")),
+        "normal": linear_to_cam02ucs(lin)}
+    for kind in ("protan", "deutan"):
+        views = [(simulate(lin, kind), "1.0")]
+        views += [(simulate_anomalous(lin, kind, s), f"{s:.1f}")
+                  for s in severities]
+        views.append((simulate_anomalous(lin, kind, 1.0), "1.0, Machado"))
+        out[kind] = [(linear_to_cam02ucs(v), at) for v, at in views]
+    return out
 
 
 def pair_separation(color_a: str, color_b: str) -> dict[str, float | str]:
