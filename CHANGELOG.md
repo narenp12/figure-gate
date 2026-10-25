@@ -228,22 +228,38 @@ behind a threshold this project enforces.
   offsets included, before either path.
 - `check_overplotting` and `_marks_px` place points through the artist's own
   transform, and read lines through `get_xydata`.
-- `check_ink` measures each panel against its axes face composited over the
-  figure face, not the figure's top-left pixel.
+- `check_ink` measures each panel against the patches Agg draws under it,
+  blended with `_over`: the figure's, each enclosing subfigure's, each host
+  axes', and its own where `axison` and `get_frame_on()` hold. It no longer
+  reads the figure's top-left pixel.
 - `check_fonts` expands each `font.family` entry: a generic name to its
   `font.<generic>` list, a face name to itself.
-- `check_contrast_stack` groups `PolyCollection`s and filled patches by
-  colour, not every entry in `ax.collections`.
+- `check_contrast_stack` groups filled collections other than scatters, and
+  filled patches, by colour, not every entry in `ax.collections`.
 - `_corners` measures the upright box through `_text_only_extent`.
 - `check_dual_axis` pairs `_all_axes`, not `fig.axes`.
 - `_is_bold` resolves weight names through `font_manager.weight_dict`.
-- `_artist_kind` returns `"line"` for a `LineCollection`.
+- `_artist_kind` returns `"line"` for a `LineCollection`; `_polyline_px`
+  reads one through `_path_px`, and `_gated_pairs` takes its widest stroke
+  (`_stroke_pt`).
 - `_tick_texts`, `_polar_radial_ticks`, `_furniture`, `_legend_text_ids`,
   `_furniture_text_ids`, `check_identity_channel` and
   `check_label_attribution` walk `_all_axes`.
 - `describe` returns `None`.
 - `audit`, and `check_ink` and `check_text_readability` called without a
-  canvas, put back the canvas the figure arrived on (`_on_own_canvas`).
+  canvas, put back the canvas, `fig.dpi` and `_original_dpi` the figure
+  arrived with (`_on_own_canvas`, `_at_measure_dpi`). `_authored_dpi` is
+  removed.
+- `check_mark_ratio` scales a scatter's `sqrt(s)` by its marker path's long
+  side (`_marker_path_extent`).
+- `check_overplotting` scales it by the short side
+  (`_marker_path_extent(..., short=True)`).
+  `"|"` has a short side of 0, so its width is its stroke.
+- `check_mark_ratio`, `check_overplotting`, `_draws_nothing`, `_second_channel`
+  and `_marker_outline_pt` test for no marker with
+  `_no_marker`, which takes a vertex-array marker.
+- `_over(src, src_alpha, dst, dst_alpha)`, Agg's straight-alpha blend, used
+  by `_worst_backdrop`, cased `check_text_readability` and `check_ink`.
 - `check_figure.GATE_RAISED` and `suggest_fixes.GATE_RAISED`; `suggest` skips
   a row whose detail opens with it.
 - `check_palette.check` matches `ink` case-insensitively and with or
@@ -564,11 +580,25 @@ went unseen; a legend inside an inset left `check_identity_channel` warning.
 canvas it swaps (`FigureCanvasBase._switch_canvas_and_return_print_method`);
 `audit` did not, so an audited figure no longer showed in its window.
 `suggest` offered figure remedies for a gate that crashed. `#52514E` as ink
-did not exempt `#52514e`. `round` is half-to-even, so severity 0.25 read as
-0.2 and 0.35 as 0.4. The corpus records no verdict change. Text collision
+did not exempt `#52514e`. `round` is half-to-even, so severity 0.05, 0.25,
+0.45, 0.65 and 0.85 read a tenth low. The corpus records no verdict change. Text collision
 counts fewer objects on `gallery-broadening`, `gallery-counts` and
 `gallery-secondary-scale`, because inset and secondary-axis tick labels now
 take the tick exemption host ticks already had.
+
+Reviewing those fixes found more. `check_ink` read 1.00 under `ggplot` with
+`axis("off")`, on a grey `SubFigure`, and over a translucent figure face: Agg
+skips the axes patch unless `axison` and `frameon` hold, and blends onto the
+transparent white it clears to. `scatter(marker=".", s=36)` beside
+`plot(".", ms=6)`, the same dot, read 4.0x, and a `"."` cloud at `s=36` warned
+72% merging where the `plot` spelling passed. A vertex-array marker raised in
+both mark gates. A `PatchCollection` fan was not grouped. On matplotlib 3.8.4
+the canvas `__init__` sets `_original_dpi = fig.dpi`, so a second `audit` left
+`savefig` writing at 150 dpi. `savefig` writes at `_original_dpi` and puts
+`fig.dpi` back as it found it, so a HiDPI figure now comes back on its doubled
+dpi, matching the canvas it is handed back to. Two tests required the authored
+dpi on the assumption that the doubled dpi doubled the output; on 3.8.4 and
+3.11.1 it does not. The corpus records no verdict change.
 
 ## 0.10.0 — 2026-09-30
 

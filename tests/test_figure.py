@@ -94,21 +94,20 @@ def test_hidpi_does_not_move_any_verdict():
     assert retina_rows == normal_rows
 
 
-def test_hidpi_figure_is_measured_at_its_authored_dpi():
-    """The dpi the figure was authored at is the one the caller gets back.
-
-    Measuring now happens at `MEASURE_DPI` rather than at the authored value
-    (see `test_renderer_invariance.py` for why, and for the general form of this
-    test), but the figure is borrowed, not kept. Leaving the doubled value in
-    place would hand back a figure whose next `savefig` writes at twice the
-    resolution its author asked for.
+def test_hidpi_figure_comes_back_as_it_arrived():
+    """The figure is borrowed, not kept, and comes back on the canvas and dpi
+    it arrived with, as `savefig` leaves it. On a HiDPI canvas that dpi is the
+    authored value times the device pixel ratio; `savefig` writes at
+    `_original_dpi` either way, so its output does not move.
     """
     fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
-    authored = fig.dpi
-    cf.audit(hidpi(fig))
-    assert fig.dpi == authored
+    before = _png_size(fig)
+    entry = hidpi(fig).dpi
+    cf.audit(fig)
+    after = (fig.dpi, _png_size(fig))
     plt.close(fig)
+    assert after == (entry, before)
 
 
 def test_collision_catches_two_labels_in_the_same_place():
@@ -2595,6 +2594,28 @@ def test_the_two_spellings_of_one_cloud_report_the_same_number():
 
     assert (from_plot.replace("line0", "MARKS")
             == from_scatter.replace("col0", "MARKS")), (from_plot, from_scatter)
+
+
+@pytest.mark.parametrize("marker", [".", "|", "D", "s"])
+def test_the_two_spellings_agree_for_every_marker_shape(marker):
+    """`scatter` scales its marker path by `sqrt(s)`, so `"."` is half as wide
+    as `"o"` and `"|"` is as wide as its stroke. Read as `sqrt(s)` discs, a
+    `"."` cloud at `s=36` warned 72% merging where `plot(".", ms=6)` of the
+    same points passed."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    x, y = rng.random(400), rng.random(400)
+    rows = []
+    for spell in ("scatter", "plot"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        if spell == "scatter":
+            ax.scatter(x, y, s=36, marker=marker, lw=0)
+        else:
+            ax.plot(x, y, marker, ms=6, mew=0)
+        status, detail = cf.check_overplotting(fig)
+        rows.append((status, detail.replace("col0", "M").replace("line0", "M")))
+        plt.close(fig)
+    assert rows[0] == rows[1], rows
 
 
 # --- the edge stroked around a mark is ink
@@ -7513,3 +7534,114 @@ def test_identity_channel_sees_a_legend_inside_an_inset():
     ok, detail = cf.check_identity_channel(fig)
     plt.close(fig)
     assert ok is True, detail
+
+
+# --- matplotlib parity, review of the parity fixes ---------------------------
+
+def _sine_ink(fig, ax):
+    import numpy as np
+    x = np.linspace(0, 10, 200)
+    ax.plot(x, np.sin(x))
+    ok, detail = cf.check_ink(fig)
+    plt.close(fig)
+    return ok, detail
+
+
+@pytest.mark.parametrize("hide", ["axis", "frame"])
+def test_ink_ground_skips_an_axes_patch_agg_never_draws(hide):
+    """Agg draws the axes patch only when `axison` and `frameon` are both
+    True. Under `ggplot` the predicted grey ground was missing from the render
+    and the whole panel read 1.00."""
+    with plt.style.context("ggplot"):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        if hide == "axis":
+            ax.axis("off")
+        else:
+            ax.set_frame_on(False)
+        ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_ink_ground_includes_a_subfigure_face():
+    fig = plt.figure(figsize=(4, 3))
+    sf = fig.subfigures(1, 1)
+    sf.set_facecolor("#dddddd")
+    ax = sf.subplots()
+    ax.patch.set_alpha(0.0)
+    ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_ink_ground_blends_a_translucent_face_as_agg_does():
+    """Agg clears to transparent white and a translucent face drawn onto it
+    keeps its own colour; compositing it over opaque white predicted 153 where
+    the buffer holds 51."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    fig.patch.set_facecolor((0.2, 0.2, 0.2, 0.5))
+    ax.patch.set_alpha(0.3)
+    ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_mark_ratio_reads_a_scatter_marker_path_as_plot_does():
+    """`scatter` applies the marker's own transform too, so `"."` draws at
+    half of `sqrt(s)`. Read only on the `plot` side, two equal dot clouds
+    read 4.0x at s=36 and ms=6."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots()
+    ax.scatter(rng.random(10), rng.random(10), marker=".", s=36)
+    ax.plot(rng.random(10), rng.random(10), ".", ms=6)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert "mark area 1.0x" in detail, detail
+
+
+def test_mark_gates_take_a_vertex_array_marker():
+    """A marker may be an (N, 2) vertex array. `in (...)` compared it
+    elementwise and raised."""
+    import numpy as np
+    verts = np.array([[0, 0], [1, 0], [0.5, 1]])
+    fig, ax = plt.subplots()
+    ax.plot([0, 1, 2], [0, 1, 0], ls="none", marker=verts)
+    ax.plot([0, 1, 2], [1, 0, 1], "o")
+    cf.check_mark_ratio(fig)
+    cf.check_overplotting(fig)
+    plt.close(fig)
+
+
+def test_contrast_stack_groups_a_patch_collection_fan():
+    from matplotlib.collections import PatchCollection
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], color="k")
+    for a in (0.2, 0.3, 0.4, 0.5):
+        ax.add_collection(PatchCollection(
+            [Rectangle((0.5 * a, 0), 1 - a, 1)], alpha=a,
+            facecolor=OKABE[4], edgecolor="none"))
+    ok, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def _png_size(fig):
+    import io
+    import matplotlib.image as mpimg
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    return mpimg.imread(buf).shape[:2]
+
+
+def test_a_second_audit_leaves_savefig_output_unchanged():
+    """matplotlib 3.8.4's canvas `__init__` sets `_original_dpi = fig.dpi`,
+    which inside `audit` is `MEASURE_DPI`. `savefig` reads `_original_dpi`, so
+    after two audits it wrote at 150 dpi."""
+    fig, ax = plt.subplots(dpi=100)
+    ax.plot([0, 1], [0, 1])
+    before = _png_size(fig)
+    cf.audit(fig)
+    cf.audit(fig)
+    after = (fig.dpi, fig._original_dpi, _png_size(fig))
+    plt.close(fig)
+    assert after == (100, 100, before)
