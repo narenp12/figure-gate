@@ -1448,8 +1448,12 @@ def broadening():
     for label in (*zoom.get_xticklabels(), *zoom.get_yticklabels()):
         label.set_path_effects([pe.withStroke(linewidth=2.4,
                                               foreground=SURFACE)])
-    _rect, connectors = band_ax.indicate_inset_zoom(zoom, edgecolor=MUTED,
-                                                    lw=1.0)
+    indicator = band_ax.indicate_inset_zoom(zoom, edgecolor=MUTED, lw=1.0)
+    # 3.8 and 3.9 return a `(rectangle, connectors)` tuple. 3.10 returns an
+    # `InsetIndicator`, which unpacks into the same two with a deprecation
+    # warning until 3.12 stops it (matplotlib/inset.py, `__getitem__`).
+    connectors = (indicator[1] if isinstance(indicator, tuple)
+                  else indicator.connectors)
     # matplotlib picks which corners to join by where the inset sits, and from
     # up and to the left it chose one connector that ran the full diagonal of
     # the panel, through all four curves. The two upward ones say the same

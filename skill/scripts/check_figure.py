@@ -1955,7 +1955,7 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     ranked = False
     for ax in _all_axes(fig):
         collections_here = set(map(id, ax.collections))
-        for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
+        for a in list(ax.collections) + list(ax.lines) + _drawn_patches(ax):
             if not a.get_visible():
                 continue
             before = len(alphas)
@@ -3348,6 +3348,26 @@ def _data_artists_by_axes(
     return out
 
 
+def _drawn_patches(ax: Axes) -> list[Any]:
+    """`ax.patches`, plus the frame and connectors of each `InsetIndicator`.
+
+    From matplotlib 3.10 `indicate_inset_zoom` adds one `InsetIndicator` to
+    `ax.artists`, and its `draw` draws the rectangle and the connectors itself,
+    so neither is in `ax.patches` as both are on 3.8 and 3.9. Reading
+    `connectors` updates them, as that `draw` does first.
+    """
+    patches = list(ax.patches)
+    try:
+        from matplotlib.inset import InsetIndicator
+    except ImportError:  # matplotlib < 3.10
+        return patches
+    for artist in ax.artists:
+        if isinstance(artist, InsetIndicator) and artist.get_visible():
+            patches.append(artist.rectangle)
+            patches.extend(artist.connectors or ())
+    return patches
+
+
 def _draws_nothing(line: Any) -> bool:
     """A `Line2D` with no stroke and no marker, which puts no ink on the page:
     `plot(..., ls="none")` used to pad autoscaling or carry a label."""
@@ -3366,7 +3386,8 @@ def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
 
     caps = _errorbar_caps(ax)
     out = []
-    for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
+    for artist in (list(ax.lines) + _drawn_patches(ax)
+                   + list(ax.collections)):
         if not artist.get_visible():
             continue
         if isinstance(artist, ConnectionPatch) or id(artist) in caps:
@@ -5012,7 +5033,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
 
         # Patch edges and the arrow on an annotation. A schematic is drawn
         # entirely out of these, and none of it reached the loop above.
-        for patch in ax.patches:
+        for patch in _drawn_patches(ax):
             if patch.get_visible() and stroked(patch):
                 measure(patch.get_linewidth(),
                         f"a {type(patch).__name__} edge")

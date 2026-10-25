@@ -401,6 +401,10 @@ filterwarnings = [
     # ImportError attached when that happens, so the suite stays green and says
     # what it stopped checking. Drop this line once cmasher ships the fix.
     "ignore:Passing 'N' to ListedColormap is deprecated:DeprecationWarning",
+    # matplotlib 3.10 warns on unpacking what `indicate_inset_zoom` returns,
+    # and 3.12 stops it. An error, so a call site that unpacks fails here on
+    # 3.10 and 3.11, not first on 3.12.
+    "error:Since Matplotlib 3.10 indicate_inset:DeprecationWarning",
 ]
 
 # Coverage is configured here but deliberately NOT in `addopts`. Two legs of the
