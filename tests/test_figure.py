@@ -5738,7 +5738,10 @@ def test_an_inset_connector_is_not_a_data_hue():
     fig, ax, sub = _inset_host()
     for i, color in enumerate(("#472a7a", "#2f6b8e", "#1fa187")):
         ax.plot([0, 1], [i, i], lw=2, color=color)
-    _rect, connectors = ax.indicate_inset_zoom(sub)
+    indicator = ax.indicate_inset_zoom(sub)
+    # An `InsetIndicator` from 3.10, a `(rectangle, connectors)` tuple before.
+    connectors = (indicator.connectors if hasattr(indicator, "connectors")
+                  else indicator[1])
     assert any(isinstance(c, ConnectionPatch) for c in connectors), (
         "matplotlib stopped building the connectors out of ConnectionPatch; "
         "this test is measuring nothing")

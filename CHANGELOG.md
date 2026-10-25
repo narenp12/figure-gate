@@ -192,6 +192,10 @@ behind a threshold this project enforces.
   `_separation_numbers` reads distances from them.
 - `test_check_palette_still_imports_nothing_outside_the_standard_library`
   allows `functools`.
+- `examples/gallery.py` (`broadening`) and
+  `test_an_inset_connector_is_not_a_data_hue` read the connectors from
+  `InsetIndicator.connectors` where `indicate_inset_zoom` returns one, and
+  index the tuple otherwise.
 
 ### Why it changed
 
@@ -435,6 +439,11 @@ length at constant area, which reads 1.37x to 1.38x on all three. Arc length
 also needs no cull for flat segments, so `BANKING_FLAT_SLOPE`, added earlier in
 this release and a judgement, is gone with it. The 25-figure corpus records no
 verdict change; ten Banking details change wording.
+
+matplotlib 3.10 returns an `InsetIndicator` from `indicate_inset_zoom` and
+warns that "From 3.12 it will no longer be possible to unpack the return value
+into two elements." Both call sites unpacked it. With that warning raised as an
+error, the suite passes on 3.10.8, 3.11.2 and 3.12.0.dev843; it passes on 3.8.4.
 
 ## 0.10.0 — 2026-09-30
 
