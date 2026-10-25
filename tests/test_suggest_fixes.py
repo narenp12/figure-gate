@@ -306,3 +306,22 @@ def test_both_files_carry_the_same_mark():
     """Written out in each rather than imported, because this one is the
     optional third file and cannot require the module it describes."""
     assert sf.DID_NOT_RUN == cf.DID_NOT_RUN
+
+
+def test_a_gate_that_raised_gets_no_remedy(monkeypatch):
+    """A crashed gate measured nothing about the figure, so `suggest` gives
+    it no remedy."""
+    gate = next(g for g in cf.GATES if g.name in {r.gate for r in sf.REMEDIES})
+
+    def boom(fig, **_):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(cf, "GATES", [gate._replace(func=boom)])
+    fig = plt.figure()
+    _, rows = cf.audit(fig)
+    plt.close(fig)
+    assert rows[0][2].startswith(cf.GATE_RAISED), rows
+    assert sf.suggest(rows) == []
+
+
+def test_both_files_carry_the_same_crash_mark():
+    assert sf.GATE_RAISED == cf.GATE_RAISED

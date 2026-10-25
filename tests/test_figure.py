@@ -1501,6 +1501,20 @@ def test_an_inset_is_not_a_dual_axis():
     assert gates(rows)["Dual axis"] is True
 
 
+def test_dual_axis_catches_a_twin_on_an_inset():
+    """`sub.twinx()` lands in `fig.axes` and the inset it twins does not, so
+    pairing `fig.axes` compared the twin with everything but its own frame.
+    Insets follow `fig.axes` in the names, so the host stays ax0."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 2], color=OKABE[0])
+    sub = ax.inset_axes([0.6, 0.15, 0.3, 0.3])
+    sub.plot([0, 1], [1, 0], color=OKABE[1])
+    sub.twinx().plot([0, 1], [100, 0], color=OKABE[2])
+    status, detail = cf.check_dual_axis(fig)
+    plt.close(fig)
+    assert status is False and "ax1+ax2" in detail, detail
+
+
 # --- form -------------------------------------------------------------------
 
 def test_form_catches_a_pie_chart():
@@ -7339,3 +7353,163 @@ def test_fonts_reports_a_missing_face_named_directly():
     plt.close("all")
     assert ok == "warn", detail
     assert "NoSuchFontXYZ" in detail, detail
+
+
+# --- matplotlib parity, second pass ------------------------------------------
+#
+# The rest of the 2026-10-25 review: places where the code disagreed with its
+# own comment or with what matplotlib does. Each test fails on the code before
+# the fix.
+
+def test_contrast_stack_groups_fills_not_scatters():
+    """The comment says only filled regions are grouped; the code grouped
+    `ax.collections`. Three scatters in one colour collapsed to one level, and
+    an `axvspan` fan, which lands in `ax.patches`, counted four."""
+    fig, ax = plt.subplots()
+    for a in (0.2, 0.4, 0.6):
+        ax.scatter([0, 1], [a, a], alpha=a, color=OKABE[4])
+    _, scatters = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], color="k")
+    for a in (0.1, 0.2, 0.3, 0.4):
+        ax.axvspan(0.5 * a, 1 - 0.5 * a, alpha=a, color=OKABE[4])
+    fan = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "[0.2, 0.4, 0.6]" in scatters, scatters
+    assert fan[0] is True, fan
+
+
+def test_corners_rotate_an_annotation_with_an_arrow():
+    """The upright measure took `get_window_extent`, arrow included, so it
+    never matched the text-only box and every rotated annotation fell back to
+    the axis-aligned box."""
+    import numpy as np
+    fig, ax = plt.subplots()
+    t = ax.annotate("rotated label", (0.1, 0.1), xytext=(0.5, 0.5),
+                    rotation=45, arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    bb = cf._text_only_extent(t, r)
+    corners = cf._corners(t, bb, r)
+    plt.close(fig)
+    flat = np.array([(bb.x0, bb.y0), (bb.x1, bb.y0),
+                     (bb.x1, bb.y1), (bb.x0, bb.y1)])
+    assert not np.allclose(corners, flat)
+
+
+@pytest.mark.parametrize("weight", ["demibold", "demi", "semibold", "bold",
+                                    "heavy", "extra bold", "black", 600])
+def test_is_bold_reads_every_weight_matplotlib_maps_to_600_or_more(weight):
+    fig = plt.figure()
+    t = fig.text(0, 0, "x", fontweight=weight)
+    plt.close(fig)
+    assert cf._is_bold(t)
+
+
+@pytest.mark.parametrize("weight", ["normal", "medium", "roman", 500])
+def test_is_bold_rejects_weights_under_600(weight):
+    fig = plt.figure()
+    t = fig.text(0, 0, "x", fontweight=weight)
+    plt.close(fig)
+    assert not cf._is_bold(t)
+
+
+def test_describe_returns_none_as_documented():
+    fig = plt.figure()
+    out = cf.describe(fig, "A description long enough to carry a finding.")
+    plt.close(fig)
+    assert out is None
+
+
+def test_artist_kind_calls_a_line_collection_a_line():
+    """`vlines` and errorbar bars are strokes; they were read as "area"."""
+    fig, ax = plt.subplots()
+    lc = ax.vlines([0, 1], 0, 1)
+    plt.close(fig)
+    assert cf._artist_kind(lc) == "line"
+
+
+@pytest.mark.parametrize("draw", ["errorbar", "vlines"])
+def test_series_color_reads_a_line_collection_beside_a_line(draw):
+    """`_artist_kind` calls a `LineCollection` a line, and only `Line2D` has
+    `get_xydata`: the stroke readers read a collection's paths, or the gate
+    raises."""
+    import numpy as np
+    x = np.linspace(0, 1, 20)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    if draw == "errorbar":
+        ax.errorbar(x, x, yerr=0.1, color=OKABE[4])
+    else:
+        ax.vlines(x, 0, x, color=OKABE[4])
+    ax.plot(x, 1 - x, color=OKABE[5])
+    status, detail = _row(fig, "Series color")
+    assert not detail.startswith(cf.GATE_RAISED), detail
+    assert status is True, detail
+
+
+def test_error_bar_series_are_compared_with_each_other():
+    """Read as strokes, an error bar's bars touch its line in its own hue.
+    Two error bar series 0.3 apart are still compared: a stroke's nearest is
+    sought among strokes of another hue."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, off in zip(CVD_PAIR, (0.0, 0.3)):
+        ax.errorbar(x, np.sin(x) + off, yerr=0.05, color=c)
+    assert frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)
+
+
+@pytest.mark.parametrize("fmt,carried", [(("o-", "s--"), True),
+                                         (("none", "none"), False)])
+def test_error_bars_neither_cancel_nor_make_a_second_channel(fmt, carried):
+    """Error bars are plain in every series. Filed with each series' line,
+    they cancelled the marker and dash that tell `fmt="o-"` from `"s--"`,
+    which pass drawn with `plot`. Bars alone are told apart by nothing."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, f, off in zip(CVD_PAIR, fmt, (0.0, 0.3)):
+        ax.errorbar(x, np.sin(x) + off, yerr=0.05, fmt=f, color=c, label=c)
+    ax.legend()
+    status, detail = _row(fig, "Series color")
+    assert status is carried, detail
+
+
+def test_tick_and_polar_helpers_see_inset_axes():
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1], [0, 1])
+    polar = ax.inset_axes([0.05, 0.05, 0.3, 0.3], projection="polar")
+    fig.canvas.draw()
+    ticks = cf._tick_texts(fig)
+    radial = cf._polar_radial_ticks(fig)
+    plt.close(fig)
+    assert all(id(t) in ticks for t in sub.get_xticklabels())
+    assert all(id(t) in radial for t in polar.get_yticklabels())
+
+
+def test_furniture_helpers_see_inset_axes():
+    from matplotlib.colors import to_rgb
+    fig, ax, sub = _inset_host()
+    sub.set_facecolor("#ddeeff")
+    sub.set_title("Zoom")
+    sub.plot([0, 1], [0, 1], label="a")
+    sub.legend()
+    colors = cf._furniture(fig)
+    furniture_ids = cf._furniture_text_ids(fig)
+    legend_ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert tuple(c * 255.0 for c in to_rgb("#ddeeff")) in colors
+    assert id(sub.title) in furniture_ids
+    assert all(id(t) in legend_ids for t in sub.get_legend().get_texts())
+
+
+def test_identity_channel_sees_a_legend_inside_an_inset():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.axis("off")
+    sub = ax.inset_axes([0.1, 0.1, 0.8, 0.8])
+    sub.plot([0, 1], [0, 1], color=OKABE[4], label="one")
+    sub.plot([0, 1], [1, 0], color=OKABE[1], label="two")
+    sub.legend()
+    ok, detail = cf.check_identity_channel(fig)
+    plt.close(fig)
+    assert ok is True, detail

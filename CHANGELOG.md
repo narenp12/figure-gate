@@ -128,6 +128,8 @@ behind a threshold this project enforces.
 - `check_series_color`: a pair under `CVD_TARGET` passes when a mark type,
   dash, marker or hatch also separates the two series in some kind of artist
   both draw (`_carried`). `NORMAL_FLOOR` is not excused.
+- `_carried` reads error bars (`_errorbar_bars`) as a kind of their own, not
+  as lines.
 - `check_banking` banks by arc length at constant area (Talbot, Gerth &
   Hanrahan 2011), through `_banking_factor`, not by median absolute slope,
   and drops only a line whose rise on the page is under its stroke width.
@@ -230,6 +232,23 @@ behind a threshold this project enforces.
   figure face, not the figure's top-left pixel.
 - `check_fonts` expands each `font.family` entry: a generic name to its
   `font.<generic>` list, a face name to itself.
+- `check_contrast_stack` groups `PolyCollection`s and filled patches by
+  colour, not every entry in `ax.collections`.
+- `_corners` measures the upright box through `_text_only_extent`.
+- `check_dual_axis` pairs `_all_axes`, not `fig.axes`.
+- `_is_bold` resolves weight names through `font_manager.weight_dict`.
+- `_artist_kind` returns `"line"` for a `LineCollection`.
+- `_tick_texts`, `_polar_radial_ticks`, `_furniture`, `_legend_text_ids`,
+  `_furniture_text_ids`, `check_identity_channel` and
+  `check_label_attribution` walk `_all_axes`.
+- `describe` returns `None`.
+- `audit`, and `check_ink` and `check_text_readability` called without a
+  canvas, put back the canvas the figure arrived on (`_on_own_canvas`).
+- `check_figure.GATE_RAISED` and `suggest_fixes.GATE_RAISED`; `suggest` skips
+  a row whose detail opens with it.
+- `check_palette.check` matches `ink` case-insensitively and with or
+  without the `#`.
+- `simulate_anomalous` rounds severity to the nearest tenth half up.
 
 ### Why it changed
 
@@ -530,6 +549,26 @@ both sides, as its `scatter` side already did: counted, `gallery-field` moves
 from 4.8x to 5.1x and fails a threshold calibrated without them. The 25-figure
 corpus records no verdict change; `gallery-field`'s Mark ratio detail moves
 from 4.8x to 4.4x, because a star's path is narrower than its markersize.
+
+The same review found code that disagreed with its own comment or with
+matplotlib; each case has a test that fails on the old code. Three scatters
+in one colour collapsed to one alpha level, and a four-band `axvspan` fan
+counted four. A rotated annotation with an arrow fell back to its axis-aligned
+box, 5x the ink at 45 degrees. `"demibold"` and `"demi"` are weight 600 in
+matplotlib and were read as regular. `vlines` read as an area.
+`sub.twinx()` lands in `fig.axes` and the inset `sub` does not, so
+`check_dual_axis` compared the twin with every frame but its own. Seven helpers
+and gates still walked `fig.axes`, so an inset's ticks, legend, title and face
+went unseen; a legend inside an inset left `check_identity_channel` warning.
+`describe` returned `fig` under a `-> None` signature. `savefig` restores the
+canvas it swaps (`FigureCanvasBase._switch_canvas_and_return_print_method`);
+`audit` did not, so an audited figure no longer showed in its window.
+`suggest` offered figure remedies for a gate that crashed. `#52514E` as ink
+did not exempt `#52514e`. `round` is half-to-even, so severity 0.25 read as
+0.2 and 0.35 as 0.4. The corpus records no verdict change. Text collision
+counts fewer objects on `gallery-broadening`, `gallery-counts` and
+`gallery-secondary-scale`, because inset and secondary-axis tick labels now
+take the tick exemption host ticks already had.
 
 ## 0.10.0 — 2026-09-30
 
