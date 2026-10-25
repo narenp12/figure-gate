@@ -1700,22 +1700,23 @@ def test_a_source_the_style_guide_names_is_in_its_references(surname):
         f"the style guide cites {surname} and its References do not list them")
 
 
-def test_an_audited_figure_is_left_on_an_agg_canvas():
-    """`docs/gates.md` says drawing on Agg rebinds `fig.canvas`, so an audited
-    figure no longer shows in a GUI window. A GUI canvas cannot be built in CI,
-    so an SVG canvas stands in for any canvas that is not Agg."""
+def test_an_audited_figure_is_handed_back_its_canvas():
+    """`docs/gates.md` says the figure comes back on the canvas it arrived on,
+    as `savefig` does. A GUI canvas cannot be built in CI, so an SVG canvas
+    stands in for any canvas that is not Agg."""
     import matplotlib
     matplotlib.use("agg")
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.backends.backend_svg import FigureCanvasSVG
     from matplotlib.figure import Figure
 
     import check_figure as cf
 
-    assert "rebinds `fig.canvas`" in GATES.read_text(encoding="utf-8"), (
+    assert "the canvas it arrived on" in GATES.read_text(encoding="utf-8"), (
         "docs/gates.md no longer makes the claim; drop this test with it")
     fig = Figure()
-    FigureCanvasSVG(fig)
+    svg = FigureCanvasSVG(fig)
     fig.add_subplot().plot([0, 1], [0, 1])
     cf.audit(fig)
-    assert type(fig.canvas) is FigureCanvasAgg
+    cf.check_ink(fig)
+    cf.check_text_readability(fig, None)
+    assert fig.canvas is svg

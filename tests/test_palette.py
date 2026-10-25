@@ -1075,3 +1075,21 @@ def test_pair_separation_is_the_numbers_check_prints(a, b):
     assert sep["cvd_severity"] == cvd.group(3)
     assert f"{sep['tritan']:.1f}" == cvd.group(4)
     assert f"{sep['normal']:.1f}" == normal.group(1)
+
+
+def test_ink_tokens_match_regardless_of_case():
+    """`#52514E` passed as ink against `#52514e` in the palette was not
+    exempted, and failed Chroma floor."""
+    ok, rows = cp.check(["#0072b2", "#e69f00", "#52514E"],
+                        ink=frozenset({"#52514e"}))
+    chroma = next(r for r in rows if r[0] == "Chroma floor")
+    assert chroma[1] is True, chroma
+
+
+@pytest.mark.parametrize("severity, tenth", [(0.15, 0.2), (0.25, 0.3),
+                                             (0.35, 0.4), (0.05, 0.1)])
+def test_anomalous_severity_rounds_half_up(severity, tenth):
+    """`round` is half-to-even: 0.25 read as 0.2 while 0.35 read as 0.4."""
+    rgb = (0.2, 0.5, 0.1)
+    assert (cp.simulate_anomalous(rgb, "deutan", severity)
+            == cp.simulate_anomalous(rgb, "deutan", tenth))

@@ -74,7 +74,7 @@ if TYPE_CHECKING:
 # comparing, which turns a break into a silent one. That is the opposite of what
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
-    "DID_NOT_RUN",
+    "DID_NOT_RUN", "GATE_RAISED",
     "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
     "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
     "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
@@ -145,6 +145,10 @@ def _sibling(name: str) -> Any:
 # these files are vendored one at a time, and a contract between two of them
 # cannot live in an import either one may not have.
 DID_NOT_RUN = "did not run: "
+
+# The opening of a row whose gate raised. `suggest_fixes` skips it the way it
+# skips `DID_NOT_RUN`: the gate measured nothing about the figure.
+GATE_RAISED = "gate raised "
 
 # The resolution every pixel measurement in this file is taken at, regardless of
 # what the figure was authored at.
@@ -978,6 +982,23 @@ def _authored_dpi(fig: Figure) -> float:
 
 
 @contextlib.contextmanager
+def _on_own_canvas(fig: Figure) -> Any:
+    """Hand `fig` back on the canvas it arrived on.
+
+    `_renderer` draws on a new `FigureCanvasAgg`, which rebinds `fig.canvas`.
+    matplotlib's own `savefig` swaps canvases the same way and puts the old one
+    back in a `finally` (`FigureCanvasBase._switch_canvas_and_return_print_method`),
+    so an audited figure still shows in its GUI window.
+    """
+    before = fig.canvas
+    try:
+        yield
+    finally:
+        if fig.canvas is not before:
+            fig.set_canvas(before)
+
+
+@contextlib.contextmanager
 def _at_measure_dpi(fig: Figure) -> Any:
     """Hold `fig` at `MEASURE_DPI` for the duration, then put it back.
 
@@ -1077,9 +1098,7 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     dpi it is handed to, and `audit` is what holds the figure there while the
     gates read the canvas it returns.
 
-    Note this rebinds `fig.canvas`: a figure that has been audited is no longer
-    attached to its GUI canvas and will not show in a window. `check_ink` and
-    `check_text_readability` already did this; it is now unconditional.
+    This rebinds `fig.canvas`; `_on_own_canvas` is what puts it back.
 
     Reused across checks so check_ink does not render a second time.
     """
@@ -1138,7 +1157,7 @@ def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
 
 def _tick_texts(fig: Figure) -> set[int]:
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         for t in ax.get_xticklabels() + ax.get_yticklabels():
             ids.add(id(t))
     return ids
@@ -1220,7 +1239,7 @@ def _polar_radial_ticks(fig: Figure) -> set[int]:
     strings went unjudged instead of assuming they passed.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         if getattr(ax, "name", "") == "polar":
             ids.update(id(t) for t in ax.get_yticklabels())
     return ids
@@ -1256,7 +1275,7 @@ def _corners(t: Any, bb: Any, r: Any) -> np.ndarray:
     original = t.get_rotation()
     try:
         t.set_rotation(0)
-        upright = t.get_window_extent(renderer=r)
+        upright = _text_only_extent(t, r)
         w, h = float(upright.width), float(upright.height)
     except Exception:
         return flat
@@ -1433,7 +1452,7 @@ def _furniture(fig: Figure) -> list[tuple[float, ...]]:
     """
     from matplotlib.colors import to_rgb
     out = {tuple(to_rgb(fig.get_facecolor()))}
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         out.add(tuple(to_rgb(ax.get_facecolor())))
         for axis in (ax.xaxis, ax.yaxis):
             for line in axis.get_gridlines():
@@ -1688,7 +1707,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
         # routes on two different faces: measured on `gallery-density` under
         # matplotlib 3.8.4, ax0's ink fraction came back 0.07 through `audit`
         # and 0.08 here.
-        with _at_draw_rc(fig), _at_measure_dpi(fig):
+        with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
             r, canvas = _renderer(fig)
             return check_text_readability(fig, r, canvas, scale, placed_frac,
                                           venue)
@@ -1947,8 +1966,9 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     alphas: list[float] = []
     families: dict[Any, set[float]] = {}
     ranked = False
+    from matplotlib.collections import PolyCollection
+    from matplotlib.patches import Patch
     for ax in _all_axes(fig):
-        collections_here = set(map(id, ax.collections))
         for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
             if not a.get_visible():
                 continue
@@ -1992,8 +2012,12 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             # a run of LINES in one colour is several series told apart by
             # opacity, which is the haze this row exists to catch, and
             # `test_contrast_stack_counts_alpha_levels_inside_an_inset` pins
-            # exactly that at six lines of one colour.
-            if id(a) in collections_here:
+            # exactly that at six lines of one colour. A scatter is marks, so
+            # it is not grouped either; `fill_between`, `stackplot` and `fill`
+            # are `PolyCollection`s, and `axvspan` and `bar` are filled patches.
+            filled = (isinstance(a, PolyCollection)
+                      or (isinstance(a, Patch) and a.get_fill()))
+            if filled:
                 key = _artist_rgb(a)
                 if key is not None:
                     families.setdefault(key, set()).update(
@@ -2873,11 +2897,15 @@ def _script_min_pt(t: Any) -> float | None:
 
 
 def _is_bold(t: Any) -> bool:
-    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier."""
+    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier.
+
+    Names are read through `font_manager.weight_dict`, the table matplotlib
+    itself resolves them with, so "demibold" and "demi" count as 600.
+    """
+    from matplotlib.font_manager import weight_dict
     weight = t.get_fontweight()
-    return (weight in ("bold", "heavy", "black", "extra bold", "semibold")
-            or (isinstance(weight, (int, float))
-                and weight >= BOLD_WEIGHT_MIN))
+    weight = weight_dict.get(weight, weight) if isinstance(weight, str) else weight
+    return isinstance(weight, (int, float)) and weight >= BOLD_WEIGHT_MIN
 
 
 def _is_panel_label(t: Any) -> bool:
@@ -3080,7 +3108,7 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         # managers in the same order: an ink fraction is a count of pixels, and
         # a count of pixels is only a measurement at a fixed resolution and a
         # fixed font list. See `MEASURE_DPI` and `METRIC_RC_KEYS`.
-        with _at_draw_rc(fig), _at_measure_dpi(fig):
+        with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
             _, canvas = _renderer(fig)
             return check_ink(fig, context_axes, canvas)
     from matplotlib.colors import to_rgba
@@ -3290,7 +3318,7 @@ def _artist_kind(artist: Any) -> str:
     band and its mean line and its points is three types in one hue, which is
     the opposite: one identity, several artists. Kind tells them apart."""
     from matplotlib.lines import Line2D
-    from matplotlib.collections import PathCollection
+    from matplotlib.collections import LineCollection, PathCollection
     if isinstance(artist, Line2D):
         # `plot(..., linestyle="none", marker="o")` is a Line2D that draws no
         # line. Calling it one made a path and its own start marker, in one
@@ -3301,6 +3329,8 @@ def _artist_kind(artist: Any) -> str:
         return "line" if drawn else "marks"
     if isinstance(artist, PathCollection):
         return "marks"
+    if isinstance(artist, LineCollection):
+        return "line"      # vlines, hlines, errorbar bars
     return "area"          # bars, fill_between polys, other patches
 
 
@@ -4096,9 +4126,10 @@ def check_identity_channel(fig: Figure) -> tuple[bool | str, str]:
     labeled = {h for h, label in _data_colors(fig) if label}
     if len(labeled) < 2:
         return True, "fewer than two identified series"
-    if fig.legends or any(ax.get_legend() is not None for ax in fig.axes):
+    panels = _all_axes(fig)
+    if fig.legends or any(ax.get_legend() is not None for ax in panels):
         return True, f"{len(labeled)} series, legend present"
-    if any(ax.texts for ax in fig.axes):
+    if any(ax.texts for ax in panels):
         return True, f"{len(labeled)} series, in-axes text (assumed direct labels)"
     return "warn", (f"{len(labeled)} series told apart by hue alone - no legend "
                     "and no text in the axes"
@@ -4313,7 +4344,7 @@ def _legend_text_ids(fig: Figure) -> set[int]:
     keeps a legend."""
     ids: set[int] = set()
     legends = list(fig.legends)
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         lg = ax.get_legend()
         if lg is not None:
             legends.append(lg)
@@ -4419,7 +4450,7 @@ def _furniture_text_ids(fig: Figure) -> set[int]:
     may carry the same string and must still be judged.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         ids.add(id(ax.title))
         ids.add(id(ax.xaxis.label))
         ids.add(id(ax.yaxis.label))
@@ -4498,7 +4529,7 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig) | _furniture_text_ids(fig)
     all_texts = _texts(fig, r)
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         px = {}
         for artist in (*ax.lines, *ax.collections):
             if not artist.get_visible():
@@ -5467,13 +5498,10 @@ def describe(fig: Figure, text: str) -> None:
 
     Args:
         fig: The figure to attach the description to.
-        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor.
-
-    Returns:
-        `None`. The description is stashed on `fig` for `alt_metadata` to read.
+        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor. It
+            is stashed on `fig` for `alt_metadata` to read.
     """
     setattr(fig, ALT_TEXT_ATTR, str(text))
-    return fig
 
 
 # What each output format does with a description, measured rather than
@@ -5770,7 +5798,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
         `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
         report order; `ok` is False only when a row is a hard False.
     """
-    with _at_draw_rc(fig), _at_measure_dpi(fig):
+    with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
     return all(s is not False for _, s, _ in rows), rows
 
@@ -5812,7 +5840,7 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
             # The detail says whose defect it is. A reader whose build just
             # turned red should not go looking at their own figure first.
             status = "warn" if gate.advisory else False
-            detail = (f"gate raised {type(exc).__name__}: {exc}  [FIX] this is "
+            detail = (f"{GATE_RAISED}{type(exc).__name__}: {exc}  [FIX] this is "
                       f"a defect in the checker, or a matplotlib change it has "
                       f"not caught up with -- not something wrong with the "
                       f"figure. Please report it.")

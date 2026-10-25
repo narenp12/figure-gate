@@ -496,7 +496,9 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
                          f"not {kind!r} - see the note above MACHADO")
     if not 0.0 <= severity <= 1.0:
         raise ValueError(f"severity runs 0.0 to 1.0, got {severity!r}")
-    tenths = int(round(severity * 10))
+    # Half up, not `round`'s half-to-even, which read 0.25 as 0.2 and 0.35 as
+    # 0.4.
+    tenths = math.floor(severity * 10 + 0.5)
     if tenths == 0:
         r, g, b = (max(0.0, min(1.0, c)) for c in rgb)
         return r, g, b
@@ -908,10 +910,11 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
                      f"largest/smallest dL {ratio:.2f}" if gaps else "single step"))
         return all(r[1] for r in rows), rows
 
-    ink_set = set(ink) if isinstance(ink, frozenset) else set(ink)
+    # Hex is case-insensitive, so `#52514E` and `#52514e` are one ink.
+    ink_set = {c.lower() for c in ink}
     band = [c for c, v in zip(colors, lab)
-            if c not in ink_set and not (L_MIN <= v[0] <= L_MAX)]
-    n_exempt_band = sum(1 for c in colors if c in ink_set and
+            if c.lower() not in ink_set and not (L_MIN <= v[0] <= L_MAX)]
+    n_exempt_band = sum(1 for c in colors if c.lower() in ink_set and
                         not (L_MIN <= linear_to_oklab(hex_to_linear(c))[0] <= L_MAX))
     rows.append(("Lightness band", not band,
                  f"all {len(colors)} inside L {L_MIN}-{L_MAX}" if not band
@@ -919,8 +922,8 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
                  + (f" ({n_exempt_band} ink tokens exempted)" if n_exempt_band else "")))
 
     chroma = [c for c, v in zip(colors, lab)
-              if c not in ink_set and math.hypot(v[1], v[2]) < CHROMA_MIN]
-    n_exempt_chroma = sum(1 for c in colors if c in ink_set and
+              if c.lower() not in ink_set and math.hypot(v[1], v[2]) < CHROMA_MIN]
+    n_exempt_chroma = sum(1 for c in colors if c.lower() in ink_set and
                           math.hypot(*linear_to_oklab(hex_to_linear(c))[1:]) < CHROMA_MIN)
     rows.append(("Chroma floor", not chroma,
                  f"all {len(colors)} >= {CHROMA_MIN}" if not chroma
