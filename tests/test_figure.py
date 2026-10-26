@@ -7,6 +7,7 @@ only "audit returned False" would pass even if every check had silently broken
 except one, which is close to what happened twice while the checker was written.
 """
 
+import io
 import re
 import shutil
 import sys
@@ -7270,3 +7271,236 @@ def test_a_second_audit_leaves_savefig_output_unchanged():
     after = (fig.dpi, fig._original_dpi, _png_size(fig))
     plt.close(fig)
     assert after == (100, 100, before)
+
+
+def _layout(fig):
+    out = [tuple(ax._position.bounds) + tuple(ax._originalPosition.bounds)
+           for ax in cf._all_axes(fig)]
+    out.append(fig._suptitle.get_position())
+    out.append(tuple(vars(fig.subplotpars).values()))
+    out.extend(tuple(sf.bbox_relative.bounds) for sf in fig.subfigs)
+    return out
+
+
+@pytest.mark.parametrize("layout", ["constrained", "tight", "subfigures"])
+def test_audit_leaves_the_layout_where_it_found_it(layout):
+    """A layout engine runs on every draw and starts from where the last one
+    left the axes. `audit` draws at `MEASURE_DPI`, so it used to move them:
+    under `seaborn-v0_8-talk` an audit passed a panel that the next `savefig`
+    then wrote 0.08 of the figure wide."""
+    if layout == "subfigures":
+        fig = plt.figure(figsize=(5, 3), layout="constrained")
+        axs = [sf.add_subplot() for sf in fig.subfigures(1, 2, width_ratios=(2, 1))]
+    else:
+        fig, axs = plt.subplots(1, 2, figsize=(5, 3), layout=layout)
+    for ax in axs:
+        ax.plot([0, 1], [0, 1], label="a long legend entry")
+        ax.set_ylabel("a label long enough to need room")
+    axs[0].legend(ncols=2, loc="lower center", bbox_to_anchor=(0.5, 1.0))
+    fig.suptitle("A title")
+    fig.savefig(io.BytesIO(), format="png")
+    before = _layout(fig)
+    cf.audit(fig)
+    after = _layout(fig)
+    plt.close(fig)
+    assert after == before
+
+
+@pytest.mark.parametrize("style", ["ggplot", "seaborn-v0_8-darkgrid"])
+def test_ink_reads_a_twin_against_its_hosts_face(style):
+    """`twinx` hides the twin's patch, so the host's face is the ground under
+    it. Read against the figure's white instead, a grey-faced twin measured
+    0.94 ink and warned."""
+    with plt.style.context(style):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot([0, 1, 2], [0, 1, 0])
+        ax.twinx().plot([0, 1, 2], [5, 3, 8], color="C1")
+        ok, detail = cf.check_ink(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def _ink_truth(fig):
+    """Each axes' ink fraction against a render with every axes emptied, so
+    the ground is whatever Agg actually drew under the marks."""
+    import numpy as np
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    canvas = FigureCanvasAgg(fig)
+    canvas.draw()
+    full = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int).copy()
+    hidden = [a for ax in cf._all_axes(fig) for a in ax.get_children()
+              if a is not ax.patch and a.get_visible()]
+    for a in hidden:
+        a.set_visible(False)
+    canvas.draw()
+    ground = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
+    for a in hidden:
+        a.set_visible(True)
+    canvas.draw()
+    h, r = full.shape[0], canvas.get_renderer()
+    out = []
+    for ax in cf._all_axes(fig):
+        bb = ax.get_window_extent(renderer=r)
+        x0, x1 = int(max(bb.x0, 0)), int(min(bb.x1, full.shape[1]))
+        y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
+        d = np.abs(full[h - y1:h - y0, x0:x1]
+                   - ground[h - y1:h - y0, x0:x1]).sum(axis=2)
+        out.append(float((d > cf.INK_DELTA_MIN).mean()))
+    return out, canvas
+
+
+@pytest.mark.parametrize("hatch", [None, "//"])
+@pytest.mark.parametrize("face", ["translucent", "none", "polar"])
+def test_ink_reads_an_axes_partly_over_another_as_agg_draws_it(face, hatch):
+    """A later axes half over a grey one. The ground was one colour per
+    panel, taken from a host that contained the panel whole, so a partial
+    overlap read the grey half of each panel as ink: 0.41 and 0.47 where the
+    render holds 0.06 and 0.05. A hatched face is ground too."""
+    import re
+    fig = plt.figure(figsize=(4, 3), dpi=cf.MEASURE_DPI)
+    a = fig.add_axes((0.1, 0.1, 0.5, 0.8))
+    a.set_facecolor("#888888")
+    a.patch.set_hatch(hatch)
+    b = fig.add_axes((0.35, 0.2, 0.55, 0.6),
+                     projection="polar" if face == "polar" else None)
+    if face == "translucent":
+        b.patch.set_alpha(0.5)
+    elif face == "none":
+        b.set_facecolor("none")
+    else:
+        b.set_facecolor("#cccccc")
+    b.patch.set_hatch(hatch)
+    for ax in (a, b):
+        ax.plot([0, 1], [0, 1], color="k")
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+
+@pytest.mark.parametrize("backdrop", ["add_artist", "patches", "figimage"])
+def test_ink_reads_a_figure_level_backdrop_as_ground(backdrop):
+    """A figure-level artist drawn before the axes is under every mark, as
+    the figure's own patch is. Left out of the ground, a sine on a grey
+    backdrop read 1.00 ink and warned."""
+    import re
+    import numpy as np
+    from matplotlib.patches import Rectangle
+    fig, axs = plt.subplots(1, 2, figsize=(5, 3), dpi=cf.MEASURE_DPI)
+    x = np.linspace(0, 10, 200)
+    for ax in axs:
+        ax.set_facecolor("none")
+        ax.plot(x, np.sin(x))
+    if backdrop == "add_artist":
+        fig.add_artist(Rectangle((0, 0), 1, 1, transform=fig.transFigure,
+                                 color="#dddddd", zorder=-1))
+    elif backdrop == "patches":
+        fig.patches.append(Rectangle(
+            (0.05, 0.05), 0.45, 0.9, transform=fig.transFigure,
+            color="#dddddd", zorder=-1, figure=fig))
+    else:
+        fig.figimage(np.full((450, 750), 0.85), cmap="gray", vmin=0, vmax=1,
+                     zorder=-1)
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+
+def test_ink_reads_a_figure_artist_between_axes_as_ground():
+    """A figure-level rectangle at zorder 0.5, between an axes at 0 and one
+    at 1. Only artists before the first axes counted as ground, so both
+    panels read 1.00 ink where the render holds 0.04 and 0.03."""
+    import re
+    from matplotlib.patches import Rectangle
+    fig = plt.figure(figsize=(4, 3), dpi=cf.MEASURE_DPI)
+    a = fig.add_axes((0.1, 0.1, 0.5, 0.8), zorder=0)
+    fig.add_artist(Rectangle((0.05, 0.05), 0.9, 0.9,
+                             transform=fig.transFigure, color="#bbbbbb",
+                             zorder=0.5))
+    b = fig.add_axes((0.35, 0.2, 0.55, 0.6), zorder=1)
+    for ax in (a, b):
+        ax.set_facecolor("none")
+        ax.plot([0, 1], [0, 1], color="k")
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+def _halo_case(case):
+    fig, ax = plt.subplots(figsize=(4, 3))
+    if case == "axis off":
+        ax.set_facecolor("#e5e5e5")
+        ax.axis("off")
+        return fig, ax, "#ffffff", "#e5e5e5"
+    if case == "frame off":
+        ax.set_facecolor("#e5e5e5")
+        ax.set_frame_on(False)
+        return fig, ax, "#ffffff", "#e5e5e5"
+    if case == "translucent":
+        fig.set_facecolor("#333333")
+        ax.set_facecolor((1, 1, 1, 0.5))
+        return fig, ax, "#999999", "#ffffff"
+    ax.set_facecolor("#e5e5e5")
+    inset = ax.inset_axes((0.2, 0.2, 0.6, 0.6))
+    inset.set_facecolor("none")
+    return fig, inset, "#e5e5e5", "#ffffff"
+
+
+@pytest.mark.parametrize("case", ["axis off", "frame off", "translucent",
+                                  "inset"])
+def test_a_halo_edge_is_read_against_the_ground_agg_drew(case):
+    """`_ground` took the axes' own facecolor, drawn or not, unblended, or
+    `none` falling through to the figure's. A 0.3pt edge in the colour
+    actually under the marks failed the furniture floor, and one in the
+    colour `_ground` guessed passed."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    verdicts = {}
+    for role in ("halo", "visible"):
+        fig, ax, halo, other = _halo_case(case)
+        ax.scatter(rng.random(30), rng.random(30), s=40, color=OKABE[4],
+                   edgecolors=halo if role == "halo" else other,
+                   linewidths=0.3)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+def test_contrast_stack_reads_every_spelling_of_graded_fills_alike():
+    """Three one-colour fills at graded alpha, written six ways matplotlib
+    allows. Patches went ungrouped, so `bar` and `axvspan` read four levels
+    where a `PatchCollection` of the same bars read two."""
+    from matplotlib.collections import PatchCollection
+    from matplotlib.colors import to_rgba
+    from matplotlib.patches import Rectangle
+    c, alphas = OKABE[4], (0.2, 0.4, 0.6)
+    spellings = [
+        lambda ax: [ax.bar([i], [1], color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+        lambda ax: ax.bar([0, 1, 2], [1, 1, 1],
+                          color=[to_rgba(c, a) for a in alphas]),
+        lambda ax: [ax.add_collection(PatchCollection(
+            [Rectangle((i, 0), 0.8, 1)], facecolor=c, alpha=a))
+            for i, a in enumerate(alphas)],
+        lambda ax: ax.add_collection(PatchCollection(
+            [Rectangle((i, 0), 0.8, 1) for i in range(3)],
+            facecolor=[to_rgba(c, a) for a in alphas])),
+        lambda ax: [ax.fill_between([i, i + 0.8], 0, 1, color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+        lambda ax: [ax.axvspan(i, i + 0.8, color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+    ]
+    verdicts = set()
+    for spell in spellings:
+        fig, ax = plt.subplots()
+        ax.plot([0, 3], [0, 1], color="k")
+        spell(ax)
+        verdicts.add(cf.check_contrast_stack(fig))
+        plt.close(fig)
+    assert len(verdicts) == 1, verdicts
+    assert next(iter(verdicts))[0] is True, verdicts

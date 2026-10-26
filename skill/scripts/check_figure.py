@@ -979,20 +979,67 @@ def _on_own_canvas(fig: Figure) -> Any:
     back in a `finally` (`FigureCanvasBase._switch_canvas_and_return_print_method`),
     so an audited figure still shows in its GUI window.
 
+    The swap happens on entry, before `_at_measure_dpi` moves the dpi.
+    `fig.dpi = MEASURE_DPI` calls `set_size_inches(forward=True)`, which on a
+    GUI canvas resizes the window. Under TkAgg the window's resize event then
+    arrived after the audit and set the figure to 6x4.5in from 4x3, so every
+    audit grew the next `savefig` by 1.5x.
+
     `_original_dpi` is put back too. It is the authored dpi, and `savefig`
     writes at it. matplotlib 3.8's canvas `__init__` overwrites it with
     `fig.dpi`, which inside `audit` is `MEASURE_DPI`, so a second audit used
     to hand back a figure that saved at 150 dpi.
     """
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
     before = fig.canvas
     original = getattr(fig, "_original_dpi", None)
     try:
+        FigureCanvasAgg(fig)
         yield
     finally:
         if fig.canvas is not before:
             fig.set_canvas(before)
         if original is not None:
             fig._original_dpi = original
+
+
+@contextlib.contextmanager
+def _layout_kept(fig: Figure) -> Any:
+    """Hand `fig` back with its axes and subfigures where they were.
+
+    A layout engine runs on every draw and starts from where the last draw
+    left things: `constrained` moves axes, subfigures and the `sup*` labels,
+    and `tight` calls `subplots_adjust`. Drawing at `MEASURE_DPI` therefore
+    moved them, so the next audit measured a different layout and the next
+    `savefig` wrote one. Under `seaborn-v0_8-talk` a panel an audit passed then
+    saved 0.08 of the figure wide.
+    """
+    axes = _all_axes(fig)
+    boxes = [(ax._position.frozen(), ax._originalPosition.frozen())
+             for ax in axes]
+    figures, queue = [], [fig]
+    while queue:
+        figures.append(queue.pop())
+        queue.extend(getattr(figures[-1], "subfigs", []))
+    panes = [(f, f.bbox_relative.frozen()) for f in figures[1:]]
+    labels = [(t, t.get_position()) for f in figures
+              for t in (getattr(f, n, None)
+                        for n in ("_suptitle", "_supxlabel", "_supylabel"))
+              if t is not None]
+    pars = dict(vars(fig.subplotpars))
+    try:
+        yield
+    finally:
+        for ax, (active, original) in zip(axes, boxes):
+            ax._position.set(active)
+            ax._originalPosition.set(original)
+            ax.stale = True
+        for f, box in panes:
+            f.bbox_relative.set(box)
+        for t, xy in labels:
+            t.set_position(xy)
+        fig.subplotpars.update(**pars)
 
 
 @contextlib.contextmanager
@@ -1724,7 +1771,8 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
         # routes on two different faces: measured on `gallery-density` under
         # matplotlib 3.8.4, ax0's ink fraction came back 0.07 through `audit`
         # and 0.08 here.
-        with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
+        with (_on_own_canvas(fig), _layout_kept(fig), _at_draw_rc(fig),
+              _at_measure_dpi(fig)):
             r, canvas = _renderer(fig)
             return check_text_readability(fig, r, canvas, scale, placed_frac,
                                           venue)
@@ -2024,9 +2072,13 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
                                         else float(values.min()), 2))
                     if float(values.min()) != solid_here:
                         ranked = True       # the ramp itself is the hierarchy
-            # Only filled regions are grouped. A run of overlapping fills in one
-            # colour is an interval encoding drawn once, which is a fan chart;
-            # a run of LINES in one colour is several series told apart by
+            # Only filled regions are grouped, overlapping or not. A run of
+            # fills in one colour is one opacity encoding, whether it is a fan
+            # chart or bars graded by alpha, and matplotlib spells the same
+            # bars as one `PatchCollection` with an alpha per face, which counts
+            # once; grouping is what gives every spelling one verdict
+            # (`test_contrast_stack_reads_every_spelling_of_graded_fills_alike`).
+            # A run of LINES in one colour is several series told apart by
             # opacity, which is the haze this row exists to catch, and
             # `test_contrast_stack_counts_alpha_levels_inside_an_inset` pins
             # exactly that at six lines of one colour. A scatter is marks, so
@@ -3124,6 +3176,96 @@ def _axes_drew_anything(ax: Axes) -> bool:
                 "tables", "artists"))
 
 
+def _ground_layers(fig: Figure, upto: Axes | None = None) -> list[Any]:
+    """What Agg draws under the marks of every axes, in the order it draws it.
+
+    The figure's patch, each subfigure's, every figure-level artist that some
+    axes is drawn after (a backdrop rectangle, a `figimage`, a panel drawn
+    between two axes), and each axes' patch. `Figure.draw` and `_AxesBase.draw`
+    sort children by zorder, stably, and an axes draws its patch before its
+    child axes. An axes patch is drawn only when `axison` and
+    `get_frame_on()` are both true, so `axis("off")` and `twinx` leave the
+    ground under it. With `upto`, the walk stops where that axes' marks are
+    drawn: after its own patch, before anything over it.
+    """
+    from matplotlib.axes import Axes
+    from matplotlib.figure import SubFigure
+
+    out: list[Any] = []
+    # Figure-level artists not yet known to have an axes drawn after them.
+    pending: list[Any] = []
+
+    class _Reached(Exception):
+        pass
+
+    def axes(ax: Axes) -> None:
+        if not ax.get_visible():
+            return
+        pending.clear()
+        if ax.axison and ax.get_frame_on() and ax.patch.get_visible():
+            out.append(ax.patch)
+        if ax is upto:
+            raise _Reached
+        for child in sorted((c for c in ax.get_children()
+                             if isinstance(c, Axes) and not c.get_animated()),
+                            key=lambda c: c.get_zorder()):
+            axes(child)
+
+    def figure(f: Any) -> None:
+        if not f.get_visible():
+            return
+        if f.patch.get_visible():
+            out.append(f.patch)
+        for child in sorted((c for c in f.get_children()
+                             if c is not f.patch and not c.get_animated()),
+                            key=lambda c: c.get_zorder()):
+            if isinstance(child, SubFigure):
+                figure(child)
+            elif isinstance(child, Axes):
+                axes(child)
+            elif child.get_visible():
+                out.append(child)
+                pending.append(child)
+
+    try:
+        figure(fig)
+    except _Reached:
+        pass
+    return [a for a in out if not any(a is p for p in pending)]
+
+
+def _ground_image(fig: Figure, shape: tuple[int, int] | None = None,
+                  upto: Axes | None = None) -> np.ndarray:
+    """The figure as Agg renders it with every axes emptied, in 0-255 RGB.
+
+    `_ground_layers` drawn onto a fresh `RendererAgg` at the figure's dpi, so
+    the blend, the antialiased edges and a polar face are Agg's own. A style
+    that greys the axes and not the figure (`ggplot`, seaborn's `darkgrid`)
+    otherwise reads its whole panel as ink, and one ground per panel misreads
+    a translucent axes partly over another.
+
+    Args:
+        fig: The drawn figure.
+        shape: `(height, width)` of the canvas buffer; the figure's own size
+            in pixels if omitted.
+        upto: Passed to `_ground_layers`.
+
+    Returns:
+        A `(height, width, 3)` float array.
+    """
+    import numpy as np
+    from matplotlib.backends.backend_agg import RendererAgg
+
+    if shape is None:
+        w, h = fig.bbox.size
+    else:
+        h, w = shape
+    renderer = RendererAgg(int(w), int(h), fig.dpi)
+    for artist in _ground_layers(fig, upto):
+        artist.draw(renderer)
+    return np.asarray(renderer.buffer_rgba())[:, :, :3].astype(float)
+
+
 def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
               canvas: Any = None) -> tuple[bool | str, str]:
     """Ink as a fraction of each plotting area, measured off the rendered
@@ -3150,45 +3292,14 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         # managers in the same order: an ink fraction is a count of pixels, and
         # a count of pixels is only a measurement at a fixed resolution and a
         # fixed font list. See `MEASURE_DPI` and `METRIC_RC_KEYS`.
-        with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
+        with (_on_own_canvas(fig), _layout_kept(fig), _at_draw_rc(fig),
+              _at_measure_dpi(fig)):
             _, canvas = _renderer(fig)
             return check_ink(fig, context_axes, canvas)
-    from matplotlib.colors import to_rgba
-
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
 
-    from matplotlib.figure import SubFigure
-
-    hosts = {id(child): host for host in _all_axes(fig)
-             for child in getattr(host, "child_axes", []) or []}
-
-    def ground_255(ax: Axes) -> np.ndarray:
-        # The colour an empty patch of this panel renders as, built from the
-        # patches Agg draws under it: the figure's, each enclosing subfigure's,
-        # each host axes', and the panel's own. A style that greys the axes
-        # and not the figure (`ggplot`, seaborn's `darkgrid`) otherwise reads
-        # its whole panel as ink. An axes patch is drawn only when `axison`
-        # and `get_frame_on()` are both true (`_AxesBase.draw`), so
-        # `axis("off")` leaves the ground under it.
-        panels = [ax]
-        while id(panels[-1]) in hosts:
-            panels.append(hosts[id(panels[-1])])
-        figures = []
-        parent = panels[-1].figure
-        while isinstance(parent, SubFigure):
-            figures.append(parent)
-            parent = getattr(parent, "_parent", fig)
-        figures.append(fig)
-        patches = [f.patch for f in reversed(figures)]
-        patches += [p.patch for p in reversed(panels)
-                    if p.axison and p.get_frame_on()]
-        rgb, alpha = np.ones(3), 0.0          # Agg clears to transparent white
-        for patch in patches:
-            if patch.get_visible():
-                r, g, b, a = to_rgba(patch.get_facecolor())
-                rgb, alpha = _over((r, g, b), a, rgb, alpha)
-        return np.round(rgb * 255.0)
+    ground = _ground_image(fig, buf.shape[:2])
 
     if context_axes is None:
         context_axes = []
@@ -3207,7 +3318,8 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
         # Agg's origin is top-left, the figure's is bottom-left
         block = buf[h - y1:h - y0, x0:x1]
-        sub = np.abs(block - ground_255(ax)).sum(axis=2) > INK_DELTA_MIN
+        sub = (np.abs(block - ground[h - y1:h - y0, x0:x1]).sum(axis=2)
+               > INK_DELTA_MIN)
         if sub.size == 0:
             continue
 
@@ -4791,17 +4903,50 @@ def _collection_widths(artist: Any) -> list[float]:
         return [float(raw)]
 
 
-def _ground(ax: Axes) -> tuple[float, float, float, float]:
-    """The colour behind an axes' marks: its facecolor, else the figure's, else
-    white. `set_facecolor("none")` is RGBA (0, 0, 0, 0), and reading its RGB
-    would take the page under it for black."""
-    from matplotlib.colors import to_rgba
+def _ground(ax: Axes, points: Any = None) -> tuple[float, float, float]:
+    """The colour Agg has drawn where an axes' marks land, as RGB in 0-1.
 
-    for colour in (ax.get_facecolor(), ax.figure.get_facecolor()):
-        rgba = to_rgba(colour)
-        if rgba[3] > 0.0:
-            return rgba
-    return (1.0, 1.0, 1.0, 1.0)
+    `_ground_image` up to this axes, read at each point, and the colour most
+    points share. Reading the axes' own facecolor instead took an
+    `axis("off")` panel's undrawn grey, a translucent face's unblended colour
+    and an inset's `none` for the ground, and each flipped
+    `check_line_weight` on a halo edge.
+
+    Args:
+        ax: The axes the marks belong to.
+        points: `(N, 2)` display coordinates; the axes' centre if omitted.
+    """
+    import numpy as np
+    from matplotlib.figure import SubFigure
+
+    fig = ax.figure
+    while isinstance(fig, SubFigure):
+        fig = fig._parent
+    img = _ground_image(fig, upto=ax)
+    h, w = img.shape[:2]
+    if points is None or len(points) == 0:
+        bb = ax.bbox
+        points = [((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2)]
+    pts = np.asarray(points, dtype=float).reshape(-1, 2)
+    pts = pts[np.isfinite(pts).all(axis=1)
+              & (pts[:, 0] >= 0) & (pts[:, 0] < w)
+              & (pts[:, 1] >= 0) & (pts[:, 1] < h)]
+    if len(pts) == 0:
+        return (1.0, 1.0, 1.0)
+    # Agg's origin is top-left, the figure's is bottom-left
+    px = img[h - 1 - pts[:, 1].astype(int), pts[:, 0].astype(int)]
+    keys, counts = np.unique(px, axis=0, return_counts=True)
+    r, g, b = (float(v) / 255.0 for v in keys[int(np.argmax(counts))])
+    return (r, g, b)
+
+
+def _marks_display(artist: Any) -> Any:
+    """Where a `Line2D`'s vertices or a collection's offsets land, in display
+    coordinates."""
+    from matplotlib.lines import Line2D
+    if isinstance(artist, Line2D):
+        return artist.get_transform().transform(artist.get_xydata())
+    return artist.get_offset_transform().transform(artist.get_offsets())
 
 
 def _marker_outline_pt(artist: Any, background: Any) -> float:
@@ -4961,7 +5106,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             label = str(artist.get_label() or "")
             named = label if label and not label.startswith("_") else None
             if isinstance(artist, (Line2D, PathCollection)):
-                measure_outline(_marker_outline_pt(artist, _ground(ax)),
+                measure_outline(_marker_outline_pt(
+                    artist, _ground(ax, _marks_display(artist))),
                                 named or "a series")
             name = named or "a stroke"
             if isinstance(artist, Line2D):
@@ -5872,7 +6018,8 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
         `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
         report order; `ok` is False only when a row is a hard False.
     """
-    with _on_own_canvas(fig), _at_draw_rc(fig), _at_measure_dpi(fig):
+    with (_on_own_canvas(fig), _layout_kept(fig), _at_draw_rc(fig),
+          _at_measure_dpi(fig)):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
     return all(s is not False for _, s, _ in rows), rows
 
