@@ -98,8 +98,9 @@ behind a threshold this project enforces.
   becomes `test_line_weight_measures_tick_marks`.
 - `check_line_weight` holds marker outlines to `FURNITURE_FLOOR_PT` when
   `_marker_outline_pt` finds they carry the mark: unfilled or hollow markers,
-  or an edge colour that is neither the face nor the background. A
-  transparent axes background is read as the figure's, then white.
+  or an edge colour that is neither the face nor the background. The
+  background is `_ground`: the colour `_ground_image`, stopped at that axes,
+  holds under most of the marks.
 - `check_line_weight` reads tick widths through `marker_stroke_pt`, so
   `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
   axes with `axison` false and ticks and gridlines on a hidden axis.
@@ -228,10 +229,10 @@ behind a threshold this project enforces.
   offsets included, before either path.
 - `check_overplotting` and `_marks_px` place points through the artist's own
   transform, and read lines through `get_xydata`.
-- `check_ink` measures each panel against the patches Agg draws under it,
-  blended with `_over`: the figure's, each enclosing subfigure's, each host
-  axes', and its own where `axison` and `get_frame_on()` hold. It no longer
-  reads the figure's top-left pixel.
+- `check_ink` measures each pixel against `_ground_image`, which draws
+  `_ground_layers` on a fresh `RendererAgg`: the figure's and each
+  subfigure's patch, every figure-level artist some axes is drawn after,
+  and each axes' patch where `axison` and `get_frame_on()` hold.
 - `check_fonts` expands each `font.family` entry: a generic name to its
   `font.<generic>` list, a face name to itself.
 - `check_contrast_stack` groups filled collections other than scatters, and
@@ -248,8 +249,18 @@ behind a threshold this project enforces.
 - `describe` returns `None`.
 - `audit`, and `check_ink` and `check_text_readability` called without a
   canvas, put back the canvas, `fig.dpi` and `_original_dpi` the figure
-  arrived with (`_on_own_canvas`, `_at_measure_dpi`). `_authored_dpi` is
-  removed.
+  arrived with (`_on_own_canvas`, `_at_measure_dpi`), and the axes positions,
+  subfigure boxes, `sup*` label positions and `subplotpars` (`_layout_kept`).
+  `_authored_dpi` is removed. `_on_own_canvas` moves the figure to a
+  `FigureCanvasAgg` on entry.
+- `tests/test_audit_idempotence.py` audits every gallery, demo and
+  external-style figure twice.
+- `_measuring` enters `_on_own_canvas`, `_layout_kept`, `_at_draw_rc` and
+  `_at_measure_dpi` once per figure, for `audit`, `check_ink` and
+  `check_text_readability`. `@_measured` runs `check_banking`, `check_form`,
+  `check_line_weight`, `check_mark_ratio`, `check_overplotting` and
+  `check_series_color` inside it, and draws the figure first when one is
+  called on its own.
 - `check_mark_ratio` scales a scatter's `sqrt(s)` by its marker path's long
   side (`_marker_path_extent`).
 - `check_overplotting` scales it by the short side
@@ -599,6 +610,44 @@ the canvas `__init__` sets `_original_dpi = fig.dpi`, so a second `audit` left
 dpi, matching the canvas it is handed back to. Two tests required the authored
 dpi on the assumption that the doubled dpi doubled the output; on 3.8.4 and
 3.11.1 it does not. The corpus records no verdict change.
+
+Verifying those fixes found two more. A layout engine runs on every draw from
+where the last draw left the axes, and `audit` left them moved. Under
+`seaborn-v0_8-talk` the first audit passed a panel that the second warned
+on, at 19.7x from banked and 0.86 ink; the next `savefig` then wrote it 0.08
+of the figure wide. `twinx` hides the twin's patch, so the host's face is the
+twin's ground; read against the figure's white, a `ggplot` twin measured 0.94
+ink and warned. That fix took one ground per panel from a host containing it
+whole. An axes half over a grey one then read the grey half as ink, 0.41 and
+0.47 where the render holds 0.06 and 0.05, and a grey polar face read its
+corners as ink. The ground is now composited per pixel. The corpus records no
+verdict change.
+
+Six public gates read display geometry and, called on their own, measured it
+at the dpi the author set. With three lines 0.03 apart, `check_series_color`
+failed the orange and green pair at 40 and 72 dpi and passed it at 150 and
+600. The four context managers were entered in one order at three sites;
+`_measuring` holds that order once. On a figure never drawn they also read
+matplotlib's default 0-1 limits and the axes before the layout engine moved
+them: on autoscaled lines and a scatter under `constrained_layout`,
+`check_series_color` and `check_overplotting` passed what `audit` failed and
+warned on, and `check_banking` read 1.8x where `audit` read 1.6x.
+
+The same one-colour ground remained in two places. `_ground` took the axes'
+own facecolor, so under `axis("off")`, a translucent face or a `none`-faced
+inset a 0.3pt halo edge in the colour under the marks failed the furniture
+floor and a visible one passed. A figure-level backdrop drawn before the axes
+(`fig.add_artist`, `fig.patches`, `figimage`) read 1.00 ink, and so did one
+drawn between two axes: 0.04 and 0.03 in the render. A hatched face needed no
+change. The furniture
+colours `_foreign_ink` matches also take raw facecolors, and the label's own
+ground already anchors that test: four layered probes gave detail strings
+identical to opaque equivalents, so they are unchanged. Under TkAgg
+`fig.dpi = MEASURE_DPI` resized the window through
+`set_size_inches(forward=True)`, its resize event set the figure to 6x4.5in
+from 4x3, and each audit grew the next `savefig` 1.5x, on matplotlib 3.8.4
+and 3.11.1. The corpus records no
+verdict change.
 
 ## 0.10.0 — 2026-09-30
 

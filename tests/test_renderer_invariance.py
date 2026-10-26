@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 import check_figure as cf
@@ -227,6 +228,124 @@ def test_a_gate_called_on_its_own_measures_what_audit_measures(gallery):
     assert standalone == through_audit["Ink coverage"], (
         "check_ink reports one thing on its own and another through audit, so "
         "one of the two is not at MEASURE_DPI")
+
+
+MEASURED_GATES = ("check_banking", "check_form", "check_line_weight",
+                  "check_mark_ratio", "check_overplotting",
+                  "check_series_color")
+
+
+def test_series_color_called_on_its_own_reads_one_dpi():
+    """Three close lines, orange and green apart in draw order. Contact is
+    measured in pixels, so at the author's dpi the pair was gated at 40 and
+    72 dpi and not at 150 or 600."""
+    results = set()
+    for dpi in (40, 72, 150, 600):
+        fig, ax = plt.subplots(figsize=(3, 2), dpi=dpi)
+        x = np.linspace(0, 1, 50)
+        for color, off in (("#ff7f0e", 0), ("#1f77b4", 0.03),
+                           ("#2ca02c", 0.05)):
+            ax.plot(x, x + off, color=color)
+        results.add(cf.check_series_color(fig))
+        plt.close(fig)
+    assert len(results) == 1, results
+
+
+@pytest.mark.parametrize("name", MEASURED_GATES)
+def test_a_measured_gate_hands_the_figure_back(gallery, name):
+    """Called on its own, each gate measures at `MEASURE_DPI` on an Agg
+    canvas and returns the figure on the dpi and canvas it arrived on."""
+    fig = build(gallery, "convergence", 300)
+    canvas = fig.canvas
+    try:
+        getattr(cf, name)(fig)
+        assert (fig.dpi, fig.canvas) == (300, canvas)
+    finally:
+        plt.close(fig)
+
+
+def test_audit_enters_the_measuring_state_once(gallery, monkeypatch):
+    """The gates `audit` calls are already inside `_measuring`, and entering
+    it again would swap the canvas and snapshot the layout once per gate."""
+    entered = []
+    swap = cf._on_own_canvas
+
+    def counted(fig):
+        entered.append(fig)
+        return swap(fig)
+
+    fig = build(gallery, "convergence", 300)
+    monkeypatch.setattr(cf, "_on_own_canvas", counted)
+    try:
+        cf.audit(fig)
+    finally:
+        plt.close(fig)
+    assert len(entered) == 1, len(entered)
+
+
+def test_audit_measures_its_rows_inside_measuring(gallery, monkeypatch):
+    """`_rows` says `audit` calls it inside `_measuring`."""
+    inside = []
+    rows = cf._rows
+
+    def spied(fig, *args):
+        inside.append(id(fig) in cf._MEASURED)
+        return rows(fig, *args)
+
+    fig = build(gallery, "convergence", 300)
+    monkeypatch.setattr(cf, "_rows", spied)
+    try:
+        cf.audit(fig)
+    finally:
+        plt.close(fig)
+    assert inside == [True], inside
+
+
+def _never_drawn():
+    """Autoscaled lines and a scatter far from the default 0-1 limits, under a
+    layout engine: what a gate reads before the first draw is not the page."""
+    rng = np.random.default_rng(0)
+    fig, (a, b) = plt.subplots(1, 2, figsize=(6, 2.5), constrained_layout=True)
+    for color, y in (("#1f77b4", 0), ("#ff7f0e", 1), ("#2ca02c", 2)):
+        a.plot(np.arange(50), 0 * np.arange(50) + y, color=color, lw=0.6)
+    b.scatter(rng.normal(150, 30, 400), rng.normal(500, 80, 400), s=12)
+    b.plot(np.arange(100, 200), 400 + 2 * np.arange(100), color="#555555")
+    fig.suptitle("Never drawn")
+    return fig
+
+
+@pytest.mark.parametrize("name", MEASURED_GATES)
+def test_a_measured_gate_on_a_figure_never_drawn_reads_what_audit_reads(name):
+    """Before the first draw a figure holds the default limits and the
+    pre-layout axes. Called on its own, `check_series_color` passed this
+    figure, `check_overplotting` passed it and `check_banking` read 1.8x where
+    `audit` failed, warned and read 1.6x."""
+    func = {g.name: g.func.__name__ for g in cf.GATES}
+    rows = {func[label]: (s, d) for label, s, d in cf.audit(_never_drawn())[1]}
+    fig = _never_drawn()
+    try:
+        assert getattr(cf, name)(fig) == rows[name]
+    finally:
+        plt.close("all")
+
+
+def test_a_measured_gate_does_not_draw_inside_audit(gallery, monkeypatch):
+    """A measured gate draws when called on its own, and not inside `audit`,
+    which drew once already, in `_rows`."""
+    callers = []
+    real = cf._renderer
+
+    def counted(fig):
+        callers.append(sys._getframe(1).f_code.co_name)
+        return real(fig)
+
+    fig = build(gallery, "convergence", 300)
+    monkeypatch.setattr(cf, "_renderer", counted)
+    try:
+        cf.audit(fig)
+    finally:
+        plt.close(fig)
+    assert callers == ["_rows"], callers
 
 
 def test_a_hidpi_canvas_is_handed_back_on_its_own_dpi(gallery):

@@ -47,6 +47,7 @@ GATE = {
     "test_cvd_oracle",                # Brettel tritan against daltonlens
     "test_renderer_invariance",       # every row, across five authored dpi
     "test_style_context_invariance",  # every row, in and out of the sheet
+    "test_audit_idempotence",         # every row, audited twice
     "test_external_style_corpus",     # every gate, over 28 external styles
     "test_style_sheet",               # the sheet applies and the gate sees it
     "test_suggest_fixes",             # the advice attached to a failing row
