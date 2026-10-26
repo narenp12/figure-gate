@@ -207,14 +207,14 @@ The gate functions are importable and callable on their own, and
 (True, 'no pie, no 3D, no truncated bar baseline')
 ```
 
-Two limits apply when you call a gate directly:
+Two things differ when you call a gate directly:
 
-- Several gates need a renderer, which means drawing the figure yourself.
-- A gate called directly measures at whatever dpi the figure is carrying, so its
-  pixel thresholds are read at a resolution nobody pinned.
-
-Gates that take no renderer argument and use no pixel threshold, such as
-`check_form` and `check_dual_axis`, are the ones this is safe for.
+- Several gates take a renderer argument, which means drawing the figure
+  yourself. They measure on it at the dpi you drew it at, except the
+  text-readability gate, which draws again at `MEASURE_DPI`.
+- A gate with no renderer argument that reads display geometry, such as
+  `check_form`, draws the figure at `MEASURE_DPI` first, as `audit` does. The
+  others, such as `check_dual_axis`, read no display geometry.
 
 ## Change a threshold
 

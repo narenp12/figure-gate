@@ -331,7 +331,14 @@ def test_a_measured_gate_on_a_figure_never_drawn_reads_what_audit_reads(name):
 
 def test_a_measured_gate_does_not_draw_inside_audit(gallery, monkeypatch):
     """A measured gate draws when called on its own, and not inside `audit`,
-    which drew once already, in `_rows`."""
+    which drew once already, in `_rows`. These are the gates the how-to says
+    draw first, its example `check_form` among them and `check_dual_axis` not."""
+    wrapped = {n for n in dir(cf) if n.startswith("check_")
+               and hasattr(getattr(cf, n), "__wrapped__")}
+    assert wrapped == set(MEASURED_GATES), wrapped
+    how_to = (Path(__file__).parent.parent / "docs" / "how-to.md").read_text()
+    assert "such as\n  `check_form`, draws the figure at `MEASURE_DPI` first" in how_to
+    assert "check_form" in wrapped and "check_dual_axis" not in wrapped
     callers = []
     real = cf._renderer
 
