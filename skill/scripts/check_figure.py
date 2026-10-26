@@ -994,7 +994,7 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 def _on_own_canvas(fig: Figure) -> Any:
     """Hand `fig` back on the canvas it arrived on.
 
-    `_renderer` draws on a new `FigureCanvasAgg`, which rebinds `fig.canvas`.
+    The audit draws on a new `FigureCanvasAgg`, which rebinds `fig.canvas`.
     matplotlib's own `savefig` swaps canvases the same way and puts the old one
     back in a `finally` (`FigureCanvasBase._switch_canvas_and_return_print_method`),
     so an audited figure still shows in its GUI window.
@@ -1037,10 +1037,7 @@ def _layout_kept(fig: Figure) -> Any:
     axes = _all_axes(fig)
     boxes = [(ax._position.frozen(), ax._originalPosition.frozen())
              for ax in axes]
-    figures, queue = [], [fig]
-    while queue:
-        figures.append(queue.pop())
-        queue.extend(getattr(figures[-1], "subfigs", []))
+    figures = _all_figures(fig)
     panes = [(f, f.bbox_relative.frozen()) for f in figures[1:]]
     labels = [(t, t.get_position()) for f in figures
               for t in (getattr(f, n, None)
@@ -1201,14 +1198,17 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     dpi it is handed to, and `audit` is what holds the figure there while the
     gates read the canvas it returns.
 
-    This rebinds `fig.canvas`; `_on_own_canvas` is what puts it back.
+    It draws on the `FigureCanvasAgg` `_on_own_canvas` put there, and binds a
+    new one only if `fig.canvas` is anything else.
 
     Reused across checks so check_ink does not render a second time.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     if fig.dpi != MEASURE_DPI:
         fig.dpi = MEASURE_DPI
-    canvas = FigureCanvasAgg(fig)
+    canvas = fig.canvas
+    if type(canvas) is not FigureCanvasAgg:
+        canvas = FigureCanvasAgg(fig)
     canvas.draw()
     return canvas.get_renderer(), canvas
 
@@ -1264,6 +1264,16 @@ def _tick_texts(fig: Figure) -> set[int]:
         for t in ax.get_xticklabels() + ax.get_yticklabels():
             ids.add(id(t))
     return ids
+
+
+def _all_figures(fig: Figure) -> list[Any]:
+    """`fig` first, then every subfigure nested in it. `subfig.legend()`
+    lands in the subfigure's `legends`, not the figure's."""
+    figures, queue = [], [fig]
+    while queue:
+        figures.append(queue.pop(0))
+        queue.extend(getattr(figures[-1], "subfigs", []))
+    return figures
 
 
 def _all_axes(fig: Figure) -> list[Any]:
@@ -1539,6 +1549,22 @@ def _halo(t: Any) -> tuple[Any, float]:
     return None, 0.0
 
 
+def _halo_alpha(t: Any, color: Any) -> float:
+    """The opacity Agg draws a text's casing at. `Stroke` draws with a copy of
+    the text's graphics context, so a text `alpha` fades the casing as it fades
+    the glyphs unless the stroke sets its own; with neither, the foreground
+    colour's own alpha."""
+    from matplotlib import patheffects as pe
+    from matplotlib.colors import to_rgba
+    for effect in (t.get_path_effects() or ()):
+        if isinstance(effect, pe.Stroke):
+            own = (getattr(effect, "_gc", None) or {}).get("alpha")
+            if own is not None:
+                return float(own)
+            break
+    return float(t.get_alpha()) if t.get_alpha() is not None else to_rgba(color)[3]
+
+
 def _furniture(fig: Figure) -> list[tuple[float, ...]]:
     """Colors a label is allowed to sit on, read off the figure that drew them.
 
@@ -1697,25 +1723,12 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     return float(edge.sum() - _near_any(pix, anchors, tol).sum()) / area
 
 
-def _over(src: Any, src_alpha: Any, dst: Any, dst_alpha: Any = 1.0
-          ) -> tuple[Any, Any]:
-    """`src` at `src_alpha` drawn over `dst` at `dst_alpha`, as Agg blends.
-
-    Agg blends straight (non-premultiplied) RGBA: the result's alpha is
-    `sa + da * (1 - sa)` and its colour is the alpha-weighted mean of the two.
-    Over an opaque `dst` that is `sa * src + (1 - sa) * dst`. Over the
-    transparent white Agg clears to, a translucent face keeps its own colour:
-    a 0.2 grey at alpha 0.5 reads RGB 51 in the buffer, not 153.
-
-    Returns:
-        `(colour, alpha)`, broadcast over whatever arrays were passed.
-    """
+def _over(src: Any, src_alpha: Any, dst: Any) -> Any:
+    """`src` at `src_alpha` drawn over an opaque `dst`, as Agg blends:
+    `sa * src + (1 - sa) * dst`, broadcast over whatever arrays were passed."""
     import numpy as np
     src, dst = np.asarray(src, dtype=float), np.asarray(dst, dtype=float)
-    out_alpha = src_alpha + dst_alpha * (1.0 - src_alpha)
-    weight = np.where(out_alpha > 0, src_alpha / np.where(out_alpha > 0,
-                                                          out_alpha, 1.0), 0.0)
-    return weight * src + (1.0 - weight) * dst, out_alpha
+    return src_alpha * src + (1.0 - src_alpha) * dst
 
 
 def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
@@ -1758,7 +1771,7 @@ def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
         pix = block.reshape(-1, 3).astype(float)
     ink = np.asarray(fg, dtype=float)
     if alpha < 1.0:
-        ink, _ = _over(ink, alpha, pix)
+        ink = _over(ink, alpha, pix)
     ratios = _contrast_field_255(ink, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
@@ -1916,9 +1929,12 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
                  else TEXT_CONTRAST_MIN)
         if cased:
             # Casing replaces the backdrop under the strokes, so that is what
-            # the reader reads against.
-            ground = np.array(to_rgb(halo_color)) * 255.0
-            ratio = _contrast_255(_over(fg, alpha, ground)[0], ground)
+            # the reader reads against, laid over it at the opacity Agg draws
+            # it with.
+            ground = _over(np.array(to_rgb(halo_color)) * 255.0,
+                           _halo_alpha(t, halo_color), block)
+            _, ratio = _worst_backdrop(ground, fg, TEXT_BACKDROP_MIN_SHARE,
+                                       mask, alpha)
         else:
             _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
                                        mask, alpha)
@@ -2088,7 +2104,7 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     import numpy as np
 
     alphas: list[float] = []
-    families: dict[Any, set[float]] = {}
+    members: dict[Any, list[int]] = {}    # indices into `alphas`, per family
     ranked = False
     from matplotlib.collections import Collection, PathCollection
     from matplotlib.patches import Patch
@@ -2150,21 +2166,25 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
             if filled:
                 key = _artist_rgb(a)
                 if key is not None:
-                    families.setdefault(key, set()).update(
-                        v for v in alphas[before:] if v < OPAQUE_ALPHA_MIN)
+                    members.setdefault(key, []).extend(
+                        i for i in range(before, len(alphas))
+                        if alphas[i] < OPAQUE_ALPHA_MIN)
     if not alphas:
         return True, "no data artists"
 
     solid = any(x >= OPAQUE_ALPHA_MIN for x in alphas)
+    families = {key: {alphas[i] for i in run} for key, run in members.items()}
     # A graded run of one colour is one decision. Drop every member of such a
     # run and put back a single representative, so the run costs one slot
     # rather than one per band. Opacity is read off the raw values above,
-    # because whether anything is solid is a fact about pixels.
-    graded = {v for run in families.values() if len(run) >= ALPHA_RAMP_MIN_STEPS
-              for v in run}
+    # because whether anything is solid is a fact about pixels. The run's own
+    # entries are dropped, not its values: a line at a value some graded bar
+    # also has is still a level of its own.
+    graded = {i for key, run in families.items()
+              if len(run) >= ALPHA_RAMP_MIN_STEPS for i in members[key]}
     if graded:
         ranked = True
-    kept = {v for v in alphas if v not in graded}
+    kept = {v for i, v in enumerate(alphas) if i not in graded}
     for run in families.values():
         if len(run) >= ALPHA_RAMP_MIN_STEPS:
             kept.add(max(run))
@@ -3265,7 +3285,8 @@ def _axes_drew_anything(ax: Axes) -> bool:
                 "tables", "artists"))
 
 
-def _ground_layers(fig: Figure, upto: Axes | None = None) -> list[Any]:
+def _ground_layers(fig: Figure, upto: Axes | None = None,
+                   below: Any = None) -> list[Any]:
     """What Agg draws under the marks of every axes, in the order it draws it.
 
     The figure's patch, each subfigure's, every figure-level artist that some
@@ -3277,6 +3298,16 @@ def _ground_layers(fig: Figure, upto: Axes | None = None) -> list[Any]:
     `axison` and `twinx` hides the twin's patch, so each leaves the ground
     under it. With `upto`, the walk stops where that axes' marks are
     drawn: after its own patch, before anything over it.
+
+    With `below`, an artist of `upto`, the walk goes on to what Agg draws
+    before it (`_drawn_before`), in `upto` and in each axes holding `upto`, and
+    in each axes drawn before `upto` that does not hold it and whose box meets
+    `upto`'s, such as a twin's host: an image, a fill or a stroke under the
+    marks is what they are seen against. An axes whose box does not meet
+    `upto`'s gives its patch alone, since only what overflows that box, a tick
+    label or an unclipped artist, could lie under the marks. A 6x6 grid of
+    outlined scatters takes 0.17s in `check_line_weight`, against 0.29s
+    drawing every panel.
     """
     from matplotlib.axes import Axes
     from matplotlib.figure import SubFigure
@@ -3295,11 +3326,21 @@ def _ground_layers(fig: Figure, upto: Axes | None = None) -> list[Any]:
         if ax.axison and ax.get_frame_on() and ax.patch.get_visible():
             out.append(ax.patch)
         if ax is upto:
+            if below is not None:
+                out.extend(_drawn_before(ax, below))
             raise _Reached
+        if below is not None and not _holds(ax, upto):
+            if upto is None or ax.bbox.overlaps(upto.bbox):
+                out.extend(_drawn_before(ax))
+            return
         for child in sorted((c for c in ax.get_children()
                              if isinstance(c, Axes) and not c.get_animated()),
                             key=lambda c: c.get_zorder()):
-            axes(child)
+            if below is None:
+                axes(child)
+            elif _holds(child, upto):
+                out.extend(_drawn_before(ax, child))
+                axes(child)
 
     def figure(f: Any) -> None:
         if not f.get_visible():
@@ -3324,9 +3365,59 @@ def _ground_layers(fig: Figure, upto: Axes | None = None) -> list[Any]:
     return [a for a in out if not any(a is p for p in pending)]
 
 
+def _drawn_before(ax: Axes, artist: Any = None) -> list[Any]:
+    """The visible children `ax` draws before `artist`, in the order it draws
+    them: all of them when `artist` is None, none when it is not one of them.
+
+    As `_AxesBase.draw` orders them on matplotlib 3.8.4 and 3.11.1: its
+    children but the patch, sorted by zorder, stably, without the spines when
+    the frame is not drawn, the axis objects when `axison` is false, or
+    anything animated. A child axes in the list is drawn whole.
+    """
+    hidden = {id(a) for a in ax._axis_map.values()} if not ax.axison else set()
+    if not (ax.axison and ax.get_frame_on()):
+        hidden |= {id(s) for s in ax.spines.values()}
+    out: list[Any] = []
+    for child in sorted((c for c in ax.get_children()
+                         if c is not ax.patch and id(c) not in hidden
+                         and not c.get_animated()),
+                        key=lambda c: c.get_zorder()):
+        if child is artist:
+            return out
+        if child.get_visible():
+            out.append(child)
+    return out if artist is None else []
+
+
+def _own_line(artist: Any) -> Any:
+    """A `Line2D`'s line without its markers; None unless `artist` is a
+    `Line2D` that draws both.
+
+    `Line2D.draw` strokes the line and then draws the markers, so one `'o-'`
+    line's markers have that line under them, as a `scatter` has a separate
+    `plot` drawn before it. `_drawn_before` leaves the artist itself out.
+    """
+    import copy
+    from matplotlib.lines import Line2D
+    if not isinstance(artist, Line2D) or _no_marker(artist.get_marker()):
+        return None
+    stroke = str(artist.get_linestyle()).strip().lower()
+    if stroke in ("none", "", " ") or artist.get_linewidth() <= 0:
+        return None
+    line = copy.copy(artist)
+    line.stale_callback = None      # the copy must not mark the figure stale
+    line.set_marker("none")
+    return line
+
+
+def _holds(ax: Axes, target: Axes) -> bool:
+    """Whether `target` is `ax` or an axes drawn inside it."""
+    return ax is target or any(_holds(c, target) for c in ax.child_axes)
+
+
 def _ground_image(fig: Figure, shape: tuple[int, int] | None = None,
-                  upto: Axes | None = None) -> np.ndarray:
-    """The figure as Agg renders it with every axes emptied, in 0-255 RGB.
+                  upto: Axes | None = None, below: Any = None) -> np.ndarray:
+    """The ground Agg draws under the marks, as 8-bit RGB.
 
     `_ground_layers` drawn onto a fresh `RendererAgg` at the figure's dpi, so
     the blend, the antialiased edges and a polar face are Agg's own. A style
@@ -3338,10 +3429,11 @@ def _ground_image(fig: Figure, shape: tuple[int, int] | None = None,
         fig: The drawn figure.
         shape: `(height, width)` of the canvas buffer; the figure's own size
             in pixels if omitted.
-        upto: Passed to `_ground_layers`.
+        upto, below: Passed to `_ground_layers`; with `below`, its own line
+            (`_own_line`) is drawn last.
 
     Returns:
-        A `(height, width, 3)` float array.
+        A `(height, width, 3)` uint8 array.
     """
     import numpy as np
     from matplotlib.backends.backend_agg import RendererAgg
@@ -3351,9 +3443,54 @@ def _ground_image(fig: Figure, shape: tuple[int, int] | None = None,
     else:
         h, w = shape
     renderer = RendererAgg(int(w), int(h), fig.dpi)
-    for artist in _ground_layers(fig, upto):
+    for artist in _ground_layers(fig, upto, below):
         artist.draw(renderer)
-    return np.asarray(renderer.buffer_rgba())[:, :, :3].astype(float)
+    own = _own_line(below)
+    if own is not None:
+        own.draw(renderer)
+    return np.asarray(renderer.buffer_rgba())[:, :, :3]
+
+
+class _ForwardGround:
+    """`_ground_image(fig, upto=ax, below=artist)` for one artist after another,
+    on one Agg buffer drawn forward.
+
+    The layers under a later artist's marks are the layers under an earlier
+    one's and what is drawn between them, so a panel's twelve outlined lines
+    take one render, not twelve. A request that does not extend what is drawn
+    starts a fresh buffer. An artist's own line (`_own_line`) is drawn over a
+    saved copy of the buffer and taken off at the next request, so the buffer
+    the next artist extends holds the layers alone: added as a layer, it broke
+    that prefix, and 2x2 panels of 12 outlined `'o-'` lines took 0.59s
+    against 0.07s. The image returned is a view, valid until the next request.
+    """
+
+    def __init__(self) -> None:
+        self.layers: list[Any] = []
+        self.renderer: Any = None
+        self.saved: Any = None
+
+    def image(self, ax: Axes, artist: Any) -> np.ndarray:
+        import numpy as np
+        from matplotlib.backends.backend_agg import RendererAgg
+        fig = _root_figure(ax)
+        if self.saved is not None:
+            self.renderer.restore_region(self.saved)
+            self.saved = None
+        layers = _ground_layers(fig, upto=ax, below=artist)
+        if (self.renderer is None or len(self.layers) > len(layers)
+                or any(a is not b for a, b in zip(self.layers, layers))):
+            w, h = fig.bbox.size
+            self.renderer = RendererAgg(int(w), int(h), fig.dpi)
+            self.layers = []
+        for layer in layers[len(self.layers):]:
+            layer.draw(self.renderer)
+        self.layers = layers
+        own = _own_line(artist)
+        if own is not None:
+            self.saved = self.renderer.copy_from_bbox(fig.bbox)
+            own.draw(self.renderer)
+        return np.asarray(self.renderer.buffer_rgba())[:, :, :3]
 
 
 def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
@@ -3387,7 +3524,7 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
 
-    ground = _ground_image(fig, buf.shape[:2])
+    ground = _ground_image(fig, buf.shape[:2]).astype(int)
 
     if context_axes is None:
         context_axes = []
@@ -3522,11 +3659,14 @@ def _marks_px(artist: Any, ax: Axes) -> np.ndarray | None:
             xy = np.asarray(artist.get_xydata(), dtype=float)
             to_px = artist.get_transform()
         else:
-            xy = np.asarray(artist.get_offsets(), dtype=float)
+            # A masked offset draws no mark; `np.asarray` keeps its value.
+            xy = np.ma.filled(np.ma.asarray(artist.get_offsets(), dtype=float),
+                              np.nan)
             to_px = artist.get_offset_transform()
         if xy.ndim != 2 or len(xy) == 0:
             return None
-        return np.asarray(to_px.transform(xy), dtype=float)
+        px = np.asarray(to_px.transform(xy), dtype=float)
+        return px[np.isfinite(px).all(axis=1)]
     except (AttributeError, ValueError, TypeError):
         return None
 
@@ -4072,17 +4212,26 @@ def _enters(stroke: np.ndarray, polys: list[np.ndarray],
 
 
 def _dash(line: Any) -> Any:
-    """A `Line2D`'s on-off dash sequence before linewidth scaling, or None
-    for a solid line. `get_linestyle()` reports every dash tuple as '--',
-    which made `(0, (4, 2))` and `(0, (1, 1))` one dash. The offset is
-    dropped: it shifts a dash along the line without changing how it looks.
-    The private attribute is on matplotlib 3.8.4 and 3.11.1; the style name
-    stands in where it is missing."""
+    """A `Line2D`'s or `LineCollection`'s on-off dash sequence before
+    linewidth scaling, or None for a solid line. `get_linestyle()` reports
+    every dash tuple as '--', which made `(0, (4, 2))` and `(0, (1, 1))` one
+    dash. The offset is dropped: it shifts a dash along the line without
+    changing how it looks. A collection whose segments differ gives the tuple
+    of their sequences. The private attributes are on matplotlib 3.8.4 and
+    3.11.1; the style name stands in where they are missing."""
+    def seq(pattern: Any) -> Any:
+        dashes = pattern[1]
+        return (None if dashes is None
+                else tuple(round(float(x), 3) for x in dashes))
+
+    patterns = getattr(line, "_us_linestyles", None)
+    if patterns is not None:
+        seqs = tuple(dict.fromkeys(seq(p) for p in patterns))
+        return seqs[0] if len(seqs) == 1 else seqs
     pattern = getattr(line, "_unscaled_dash_pattern", None)
     if pattern is None:
         return str(line.get_linestyle())
-    seq = pattern[1]
-    return None if seq is None else tuple(round(float(x), 3) for x in seq)
+    return seq(pattern)
 
 
 def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
@@ -4110,6 +4259,8 @@ def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
     if kind == "marks":
         paths = artist.get_paths()
         return (kind, None, shape(paths[0]) if len(paths) else None, hatch)
+    if kind == "line":
+        return (kind, _dash(artist), None, hatch)    # vlines, errorbar bars
     return (kind, None, None, hatch)
 
 
@@ -4578,7 +4729,8 @@ def check_identity_channel(fig: Figure) -> tuple[bool | str, str]:
     if len(labeled) < 2:
         return True, "fewer than two identified series"
     panels = _all_axes(fig)
-    if fig.legends or any(ax.get_legend() is not None for ax in panels):
+    if (any(f.legends for f in _all_figures(fig))
+            or any(ax.get_legend() is not None for ax in panels)):
         return True, f"{len(labeled)} series, legend present"
     if any(ax.texts for ax in panels):
         return True, f"{len(labeled)} series, in-axes text (assumed direct labels)"
@@ -4789,7 +4941,8 @@ def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
 
 
 def _legend_text_ids(fig: Figure) -> set[int]:
-    """Ids of every Text that belongs to a legend, figure-level or axes-level.
+    """Ids of every Text that belongs to a legend: figure-, subfigure- or
+    axes-level.
 
     A legend is a lookup key placed *away* from the curves by design, so its
     entries can never pass a proximity check - and they slip past the `t.axes is
@@ -4797,7 +4950,7 @@ def _legend_text_ids(fig: Figure) -> set[int]:
     attribution check has to drop them explicitly or it fails every figure that
     keeps a legend."""
     ids: set[int] = set()
-    legends = list(fig.legends)
+    legends = [lg for f in _all_figures(fig) for lg in f.legends]
     for ax in _all_axes(fig):
         lg = ax.get_legend()
         if lg is not None:
@@ -5171,26 +5324,25 @@ def _collection_widths(artist: Any) -> list[float]:
         return [float(raw)]
 
 
-def _ground(ax: Axes, points: Any = None) -> tuple[float, float, float]:
-    """The colour Agg has drawn where an axes' marks land, as RGB in 0-1.
+def _ground(ax: Axes, points: Any = None,
+            image: Any = None) -> tuple[float, float, float]:
+    """The most common colour Agg has drawn at `points`, as RGB in 0-1.
 
-    `_ground_image` up to this axes, read at each point, and the colour most
-    points share. Reading the axes' own facecolor instead took an
-    `axis("off")` panel's undrawn grey, a translucent face's unblended colour
-    and an inset's `none` for the ground, and each flipped
-    `check_line_weight` on a halo edge.
+    `_ground_image` up to this axes, read at each point. Reading the axes' own
+    facecolor instead took an `axis("off")` panel's undrawn grey, a
+    translucent face's unblended colour and an inset's `none` for the ground,
+    and each flipped `check_line_weight` on a halo edge.
 
     Args:
         ax: The axes the marks belong to.
-        points: `(N, 2)` display coordinates; the axes' centre if omitted.
+        points: `(N, 2)` display coordinates; the axes' centre if omitted or
+            empty. Points off the image are dropped; white if none remain.
+        image: `_ground_image(fig, upto=ax)`, or `below=` the artist whose
+            marks these are, if the caller already has it.
     """
     import numpy as np
-    from matplotlib.figure import SubFigure
 
-    fig = ax.figure
-    while isinstance(fig, SubFigure):
-        fig = fig._parent
-    img = _ground_image(fig, upto=ax)
+    img = _ground_image(_root_figure(ax), upto=ax) if image is None else image
     h, w = img.shape[:2]
     if points is None or len(points) == 0:
         bb = ax.bbox
@@ -5202,32 +5354,112 @@ def _ground(ax: Axes, points: Any = None) -> tuple[float, float, float]:
     if len(pts) == 0:
         return (1.0, 1.0, 1.0)
     # Agg's origin is top-left, the figure's is bottom-left
-    px = img[h - 1 - pts[:, 1].astype(int), pts[:, 0].astype(int)]
-    keys, counts = np.unique(px, axis=0, return_counts=True)
-    r, g, b = (float(v) / 255.0 for v in keys[int(np.argmax(counts))])
-    return (r, g, b)
+    px = img[h - 1 - pts[:, 1].astype(int),
+             pts[:, 0].astype(int)].astype(np.int64)
+    # One integer per colour, and the smallest colour still wins a tie.
+    # `np.unique(axis=0)` sorts rows: 0.21s against 0.03s on the rims of
+    # 20000 outlined marks.
+    keys, counts = np.unique((px[:, 0] << 16) | (px[:, 1] << 8) | px[:, 2],
+                             return_counts=True)
+    key = int(keys[int(np.argmax(counts))])
+    return ((key >> 16) / 255.0, (key >> 8 & 255) / 255.0, (key & 255) / 255.0)
 
 
-def _marks_display(artist: Any) -> Any:
-    """Where a `Line2D`'s vertices or a collection's offsets land, in display
-    coordinates."""
+def _root_figure(ax: Axes) -> Figure:
+    """The `Figure` an axes is drawn on, through any subfigures."""
+    from matplotlib.figure import SubFigure
+
+    fig = ax.figure
+    while isinstance(fig, SubFigure):
+        fig = fig._parent
+    return fig
+
+
+def _drawn_rows(rows: Any, artist: Any, ax: Axes) -> Any:
+    """The rows of `rows`, display x and y first, whose point Agg draws for
+    `artist`: inside the box it is clipped to (`_on_page`) and its clip path."""
+    import numpy as np
+    rows = _on_page(rows, artist, ax)
+    if rows is None:
+        return np.empty((0, 2))
+    clip = artist.get_clip_path()
+    if artist.get_clip_on() and clip is not None and len(rows):
+        rows = rows[clip.get_fully_transformed_path().contains_points(
+            rows[:, :2])]
+    return rows
+
+
+def _marks_display(artist: Any, ax: Axes) -> Any:
+    """`_marks_px` without the marks its clip box (`_on_page`) or clip path
+    hides.
+
+    Kept for tests; `_marks_rim` filters through `_drawn_rows` the same way.
+    """
+    return _drawn_rows(_marks_px(artist, ax), artist, ax)
+
+
+def _marks_rim(artist: Any, ax: Axes) -> Any:
+    """Display points round the outer edge of each mark `_drawn_rows`
+    keeps, where its outline meets what it is drawn against.
+
+    Sixteen points on an ellipse of the drawn mark's half width and half
+    height, edge stroke included, kept where Agg draws. A line's marks are
+    sized by `marker_extent_pt`; a scatter's path at `sqrt(s)` is widened by
+    `collection_stroke_pt` the same way. Read at the centres, the ground was
+    what lay under the faces: a line drawn by its own `plot` along a scatter was the
+    ground for its marks whatever its width, and one `'o-'` line's own stroke
+    never was. Read here, a line under its own marks is their ground once it
+    covers most of the rim, past about 0.7 of the marks' drawn width.
+    """
+    import numpy as np
     from matplotlib.lines import Line2D
+
+    fig = _root_figure(ax)
+    k = fig.dpi / 72.0
     if isinstance(artist, Line2D):
-        return artist.get_transform().transform(artist.get_xydata())
-    return artist.get_offset_transform().transform(artist.get_offsets())
+        px = _marks_px(artist, ax)
+        if px is None:
+            return np.empty((0, 2))
+        w, h = marker_extent_pt(artist, fig.dpi)
+        rows = np.c_[px, np.tile([w * k / 2, h * k / 2], (len(px), 1))]
+    else:
+        offsets = np.ma.filled(np.ma.asarray(artist.get_offsets(),
+                                             dtype=float), np.nan)
+        paths = artist.get_paths()
+        sizes = np.asarray(artist.get_sizes(), dtype=float)
+        if offsets.ndim != 2 or not len(offsets) or not paths or not sizes.size:
+            return np.empty((0, 2))
+        px = np.asarray(artist.get_offset_transform().transform(offsets),
+                        dtype=float)
+        # matplotlib cycles paths and sizes over the offsets.
+        side = np.array([[e.width, e.height]
+                         for e in (p.get_extents() for p in paths)])
+        n = np.arange(len(px))
+        drawn = np.sqrt(sizes[n % len(sizes)])[:, None] * side[n % len(side)]
+        drawn = drawn + collection_stroke_pt(artist) * (drawn[:, ::-1] > 0)
+        rows = np.c_[px, drawn * k / 2][np.isfinite(px).all(axis=1)]
+    rows = _drawn_rows(rows, artist, ax)
+    if not len(rows):
+        return np.empty((0, 2))
+    turn = np.linspace(0.0, 2 * np.pi, 16, endpoint=False)
+    ring = np.c_[np.cos(turn), np.sin(turn)]
+    rim = (rows[:, None, :2] + rows[:, None, 2:] * ring[None]).reshape(-1, 2)
+    return _drawn_rows(rim, artist, ax)
 
 
-def _marker_outline_pt(artist: Any, background: Any) -> float:
+def _marker_outline_pt(artist: Any, background: Callable[[], Any]) -> float:
     """The width of a marker outline the reader has to see, in points.
 
     An outline carries the mark when the marker is unfilled (`+`, `x`) or
     hollow, or when it is a second colour on the fill. It carries nothing when
     it repeats the fill colour, which is matplotlib's `"face"` edge and every
-    seaborn sheet's, or when it is the axes background, which is a halo.
+    seaborn sheet's, or when it is the ground under the marks (`_ground`),
+    which is a halo.
 
     Args:
         artist: A `Line2D` with markers or a `PathCollection` from `scatter`.
-        background: The colour behind the marks, from `_ground`.
+        background: Returns the colour the outlines are drawn against, from
+            `_ground`; called only when an outline differs from its fill.
 
     Returns:
         The outline width in points, or 0.0 if no outline carries the mark.
@@ -5258,10 +5490,12 @@ def _marker_outline_pt(artist: Any, background: Any) -> float:
         return width                                   # hollow
     n = max(len(edges), len(faces))
     edges, faces = np.resize(edges, (n, 4)), np.resize(faces, (n, 4))
-    bg = np.asarray(to_rgba(background), dtype=float)[:3]
+    bg = None
     for edge, face in zip(edges, faces):
         if edge[3] <= 0.0 or np.allclose(edge[:3], face[:3], atol=1e-3):
             continue
+        if bg is None:
+            bg = np.asarray(to_rgba(background()), dtype=float)[:3]
         if np.allclose(edge[:3], bg, atol=1e-3):
             continue
         return width
@@ -5361,6 +5595,14 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             return False
         return float(artist.get_linewidth() or 0.0) > 0.0
 
+    forward = _ForwardGround()
+
+    def ground(ax: Axes, artist: Any) -> tuple[float, float, float]:
+        """`_ground` round an artist's marks (`_marks_rim`): what Agg draws
+        before them, an image under a scatter and a line under its own
+        markers included."""
+        return _ground(ax, _marks_rim(artist, ax), forward.image(ax, artist))
+
     for ax in _all_axes(fig):
         # A colorbar's dividers ship at 0.4pt and are matplotlib's, not
         # anybody's design decision — the same reason `check_ink` skips this
@@ -5376,7 +5618,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             named = label if label and not label.startswith("_") else None
             if isinstance(artist, (Line2D, PathCollection)):
                 measure_outline(_marker_outline_pt(
-                    artist, _ground(ax, _marks_display(artist))),
+                    artist, functools.partial(ground, ax, artist)),
                                 named or "a series")
             name = named or "a stroke"
             if isinstance(artist, Line2D):
@@ -5974,7 +6216,7 @@ ALT_TEXT_ATTR = "_figure_gate_alt"
 ALT_TEXT_MIN_CHARS = 60
 
 
-def describe(fig: Figure, text: str) -> None:
+def describe(fig: Figure, text: str) -> Figure:
     """Attach a text description to a figure, for readers who cannot see it.
 
     Across 100,000 public Jupyter notebooks, 99.81% of programmatically
@@ -5995,8 +6237,12 @@ def describe(fig: Figure, text: str) -> None:
         fig: The figure to attach the description to.
         text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor. It
             is stashed on `fig` for `alt_metadata` to read.
+
+    Returns:
+        `fig`, as 0.10.0 did.
     """
     setattr(fig, ALT_TEXT_ATTR, str(text))
+    return fig
 
 
 # What each output format does with a description, measured rather than

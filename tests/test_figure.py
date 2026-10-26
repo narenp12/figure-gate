@@ -7235,6 +7235,27 @@ def test_casing_given_as_an_array_is_read_as_casing():
     assert status is True, detail
 
 
+def test_a_text_alpha_fades_its_casing_too():
+    """`Stroke` draws with a copy of the text's graphics context. Black text at
+    alpha 0.6, cased in white over black, gets a #999999 casing and holds
+    3.8:1; read against unfaded white it held 5.7:1. A stroke that sets
+    `alpha=1` keeps its casing white."""
+    import numpy as np
+    from matplotlib import patheffects as pe
+    rows = []
+    for stroke in ({}, {"alpha": 1.0}):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.imshow(np.zeros((4, 4)), cmap="gray", vmin=0, vmax=1,
+                  extent=(0, 1, 0, 1), aspect="auto")
+        ax.set_axis_off()
+        ax.text(0.5, 0.5, "Cased label", fontsize=14, color="black",
+                alpha=0.6, ha="center", va="center", path_effects=[
+                    pe.withStroke(linewidth=12, foreground="w", **stroke)])
+        rows.append(_row(fig, "Text readability"))
+    assert "at 3.8:1" in rows[0][1], rows[0][1]
+    assert rows[1][0] is True, rows[1][1]
+
+
 def test_translucent_text_is_judged_at_the_colour_it_draws():
     """Black text at alpha 0.15 lands as #d9d9d9 on white, about 1.4:1. It
     passed when the gate read `get_color()` and ignored `get_alpha()`."""
@@ -7436,11 +7457,13 @@ def test_is_bold_rejects_weights_under_600(weight):
     assert not cf._is_bold(t)
 
 
-def test_describe_returns_none_as_documented():
+def test_describe_returns_the_figure_as_annotated():
+    """0.10.0 returned `fig` under `-> None`; the annotation was the bug, so
+    a caller chaining `fig = describe(fig, ...)` keeps working."""
     fig = plt.figure()
     out = cf.describe(fig, "A description long enough to carry a finding.")
     plt.close(fig)
-    assert out is None
+    assert out is fig
 
 
 def test_artist_kind_calls_a_line_collection_a_line():
@@ -7537,7 +7560,53 @@ def test_identity_channel_sees_a_legend_inside_an_inset():
     assert ok is True, detail
 
 
+def test_legend_readers_see_a_subfigure_legend():
+    """`subfig.legend()` lands in the subfigure's `legends`; both readers
+    read only the root figure's, and the gate warned "no legend"."""
+    fig = plt.figure(figsize=(6, 3))
+    sf = fig.subfigures(1, 2)[1].subfigures(2, 1)[0]
+    ax = sf.subplots()
+    ax.plot([0, 1], color=OKABE[0], label="one")
+    ax.plot([1, 0], color=OKABE[3], label="two")
+    lg = sf.legend()
+    ok, detail = cf.check_identity_channel(fig)
+    ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert ok is True, detail
+    assert all(id(t) in ids for t in lg.get_texts())
+
+
 # --- matplotlib parity, review of the parity fixes ---------------------------
+
+@pytest.mark.parametrize("case", ["dashed pair", "a line between"])
+def test_series_color_reads_vlines_as_it_reads_the_same_plot(case):
+    """`_second_channel` read dashes only from a `Line2D`, so a dashed
+    `vlines` pair was told to separate by dash. A stroke between two `vlines`
+    hues gates them as it gates two `plot` lines: neither is a draw-order
+    neighbour."""
+    import numpy as np
+    verdicts = []
+    for spell in ("plot", "vlines"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        if case == "dashed pair":
+            x = np.linspace(0, 1, 12)
+            for c, ls, dx in (("#0072b2", "-", 0), ("#2a6fb0", "--", 0.04)):
+                if spell == "plot":
+                    for xi in x + dx:
+                        ax.plot([xi, xi], [0, 1], color=c, lw=1.5, ls=ls)
+                else:
+                    ax.vlines(x + dx, 0, 1, color=c, lw=1.5, linestyles=ls)
+        else:
+            for c, xs in (("#0072b2", 2), (OKABE[1], 3), ("#2a6fb0", 4)):
+                if spell == "plot" or c == OKABE[1]:
+                    ax.plot([xs, xs], [0, 1], color=c, lw=2)
+                else:
+                    ax.vlines([xs], 0, 1, color=c, lw=2)
+            ax.set_xlim(0, 6)
+        status, detail = _row(fig, "Series color")
+        verdicts.append((status, "by dash" in detail))
+    assert verdicts[0] == verdicts[1], verdicts
+
 
 def _sine_ink(fig, ax):
     import numpy as np
@@ -7845,6 +7914,204 @@ def test_a_halo_edge_is_read_against_the_ground_agg_drew(case):
     assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
 
 
+def test_a_halo_edge_is_read_against_the_ground_under_the_drawn_marks():
+    """`_ground` voted over every offset, clipped ones too. With most of a
+    scatter outside a small dark axes, the margin's white outvoted the face:
+    the `#333` halo failed as an outline and a white one passed as a halo."""
+    import numpy as np
+    verdicts = {}
+    for role, edge in (("halo", "#333333"), ("visible", "#ffffff")):
+        rng = np.random.default_rng(0)
+        fig = plt.figure(figsize=(4, 3))
+        ax = fig.add_axes((0.4, 0.4, 0.2, 0.2))
+        ax.set_facecolor("#333333")
+        ax.scatter(rng.random(200) * 5 - 2, rng.random(200) * 5 - 2, s=40,
+                   color=OKABE[1], edgecolors=edge, linewidths=0.3)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+
+@pytest.mark.parametrize("under", ["imshow", "pcolormesh", "inset", "twinx"])
+def test_a_halo_edge_is_read_against_what_is_drawn_under_the_marks(under):
+    """`_ground` stopped at the axes' patch. Over a black image on a white face
+    a black edge, invisible against the image, failed as an outline and a
+    white one passed as a halo. An inset with no face reads its parent's
+    image the same way, and a twin its host's."""
+    import numpy as np
+    verdicts = {}
+    for role, edge in (("halo", "#000000"), ("visible", "#ffffff")):
+        rng = np.random.default_rng(0)
+        fig, ax = plt.subplots(figsize=(4, 3))
+        dark = np.zeros((8, 8))
+        if under == "pcolormesh":
+            ax.pcolormesh(np.linspace(0, 1, 9), np.linspace(0, 1, 9), dark,
+                          cmap="gray", vmin=0, vmax=1)
+        else:
+            ax.imshow(dark, cmap="gray", vmin=0, vmax=1,
+                      extent=(0, 1, 0, 1))
+        if under == "inset":
+            ax = ax.inset_axes((0.2, 0.2, 0.6, 0.6))
+            ax.set_facecolor("none")
+        elif under == "twinx":
+            ax = ax.twinx()
+            ax.set_ylim(0, 1)
+        ax.scatter(rng.random(30), rng.random(30), s=40, color=OKABE[4],
+                   edgecolors=edge, linewidths=0.3)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+def test_mark_readers_skip_masked_offsets():
+    """A masked offset draws no mark, and `_marks_px` read all ten offsets of
+    a scatter with five masked. Each mark reader reads the five; `_marks_rim`
+    sixteen points round each."""
+    import numpy as np
+    fig, ax = plt.subplots()
+    x = np.arange(10.0)
+    sc = ax.scatter(x, np.ma.masked_where(x % 2 == 1, x))
+    fig.canvas.draw()
+    try:
+        assert len(cf._marks_px(sc, ax)) == 5
+        assert len(cf._marks_display(sc, ax)) == 5
+        assert len(cf._marks_rim(sc, ax)) == 5 * 16
+    finally:
+        plt.close(fig)
+
+
+def test_the_forward_ground_is_each_artists_ground_image():
+    """`_ForwardGround` draws one buffer forward instead of one render per
+    artist. Asked in creation order and back again, it returns exactly what
+    `_ground_image(..., below=artist)` renders. Neither order is draw order:
+    the scatter is created last and, at `zorder=1.5`, drawn first."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.imshow(np.linspace(0, 1, 64).reshape(8, 8), cmap="gray",
+              extent=(0, 1, 0, 1), aspect="auto")
+    rng = np.random.default_rng(0)
+    artists = [ax.plot(rng.random(8), rng.random(8), "o-", mec="w", lw=3)[0]
+               for _ in range(4)]
+    artists.append(ax.scatter(rng.random(20), rng.random(20), s=80,
+                              edgecolors="k", zorder=1.5))
+    fig.canvas.draw()
+    forward = cf._ForwardGround()
+    try:
+        for artist in artists + artists[::-1]:
+            assert np.array_equal(forward.image(ax, artist),
+                                  cf._ground_image(fig, upto=ax, below=artist))
+    finally:
+        plt.close(fig)
+
+
+_OWN_LINES = ([(edges, lw, "o") for edges in ("halo", "open marker")
+               for lw in (1, 1.5, 2, 3, 4, 5, 6, 8, 12)]
+              + [("halo", 3, marker) for marker in "s^D"])
+
+
+@pytest.mark.parametrize("edges, lw, marker", _OWN_LINES)
+def test_marks_on_their_own_line_read_alike_in_both_spellings(edges, lw,
+                                                              marker):
+    """`plot` then a `scatter` along it, and one `'o-'` line, draw the same
+    page. Read at the marks' centres, the separate line was ground and the
+    one line's own stroke was not: a white halo edge was measured as an
+    outline in the first spelling only, and an open marker's only edge passed
+    there as a halo. Under 6pt marks a line from 5pt up is what their edges
+    are seen against, in both spellings and at 100, 200 and 300 dpi."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    y = 0.2 + 0.6 * x
+    line, face, edge = {"halo": ("#222222", OKABE[0], "white"),
+                        "open marker": (OKABE[3], "white", OKABE[3])}[edges]
+    measured = []
+    for dpi in (100, 200, 300):
+        for spelling in ("plot and scatter", "one line"):
+            fig, ax = plt.subplots(figsize=(4, 3), dpi=dpi)
+            if spelling == "one line":
+                ax.plot(x, y, marker + "-", color=line, lw=lw, ms=6,
+                        mfc=face, mec=edge, mew=0.3)
+            else:
+                ax.plot(x, y, color=line, lw=lw)
+                ax.scatter(x, y, s=36, marker=marker, facecolors=face,
+                           edgecolors=edge, linewidths=0.3, zorder=3)
+            measured.append("marker outlines"
+                            in cf.check_line_weight(fig, scale=1.0)[1])
+            plt.close(fig)
+    assert measured == [(lw >= 5) == (edges == "halo")] * 6, measured
+
+
+@pytest.mark.parametrize("lw, ground", [(4.0, False), (5.0, True)])
+def test_a_line_is_ground_for_its_own_marks_once_it_covers_their_rim(lw,
+                                                                     ground):
+    """`_marks_rim`: a line under 6pt marks, 6.3pt drawn with their 0.3pt
+    edge, is their ground past about 0.7 of that width. White edges are a
+    halo on a 4pt line and an outline on a 5pt one."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot(x, 0.2 + 0.6 * x, "o-", color="#222222", lw=lw, ms=6,
+            mfc=OKABE[0], mec="white", mew=0.3)
+    detail = cf.check_line_weight(fig, scale=1.0)[1]
+    plt.close(fig)
+    assert ("marker outlines" in detail) is ground, detail
+
+
+@pytest.mark.parametrize("offset", [0.0, 0.078])
+def test_a_band_reads_alike_drawn_as_a_wide_line_or_a_fill(offset):
+    """White 0.3pt edges on marks inside a dark band are an outline whether
+    the band is a 20pt line or a `fill_between` band about 23pt across. With
+    strokes kept out of the ground, the line's band read as a halo. Marks
+    along the band's edge read alike both ways too, at 100, 200 and 300
+    dpi."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    y = 0.2 + 0.6 * x
+    measured = []
+    for dpi in (100, 200, 300):
+        for band in ("line", "fill"):
+            fig, ax = plt.subplots(figsize=(4, 3), dpi=dpi)
+            ax.set_xlim(-0.05, 1.05)
+            ax.set_ylim(0, 1)
+            if band == "line":
+                ax.plot(x, y, color="#222222", lw=20, solid_capstyle="butt")
+            else:
+                ax.fill_between(x, y - 0.078, y + 0.078, color="#222222",
+                                lw=0)
+            ax.scatter(x, y + offset, s=36, color=OKABE[0],
+                       edgecolors="white", linewidths=0.3, zorder=3)
+            measured.append("marker outlines"
+                            in cf.check_line_weight(fig, scale=1.0)[1])
+            plt.close(fig)
+    assert len(set(measured)) == 1, measured
+    assert measured[0] or offset, measured
+
+
+@pytest.mark.parametrize("layout", ["apart", "overlapping"])
+def test_an_earlier_axes_is_ground_only_where_its_box_meets_the_marks(layout):
+    """`_ground_layers` gives an earlier axes that does not hold the marks'
+    axes its patch alone unless the two boxes meet. What that costs: an
+    unclipped line drawn from a panel beside them, across the marks, is not
+    ground."""
+    fig = plt.figure(figsize=(6, 3))
+    left = fig.add_axes((0.1, 0.1, 0.35, 0.8))
+    right = fig.add_axes((0.55 if layout == "apart" else 0.3, 0.1, 0.35, 0.8))
+    line, = left.plot([0, 3], [0.5, 0.5], lw=8, clip_on=False)
+    left.set_xlim(0, 1)
+    marks = right.scatter([0.5], [0.5], s=36, edgecolors="white")
+    fig.canvas.draw()
+    try:
+        layers = cf._ground_layers(fig, upto=right, below=marks)
+        assert any(a is left.patch for a in layers)
+        assert any(a is line for a in layers) is (layout == "overlapping")
+    finally:
+        plt.close(fig)
+
+
 def test_contrast_stack_reads_every_spelling_of_graded_fills_alike():
     """Three one-colour fills at graded alpha, written six ways matplotlib
     allows. Patches went ungrouped, so `bar` and `axvspan` read four levels
@@ -7878,3 +8145,18 @@ def test_contrast_stack_reads_every_spelling_of_graded_fills_alike():
         plt.close(fig)
     assert len(verdicts) == 1, verdicts
     assert next(iter(verdicts))[0] is True, verdicts
+
+
+def test_contrast_stack_keeps_a_line_at_a_graded_bar_alpha():
+    """A graded run was dropped by value, so a line at 0.4 beside bars at
+    0.2, 0.4 and 0.6 lost its level: four levels read as three."""
+    fig, ax = plt.subplots()
+    for i, a in enumerate((0.2, 0.4, 0.6)):
+        ax.bar([i], [1], color=OKABE[0], alpha=a)
+    ax.plot([0, 2], [0, 1], color=OKABE[3], alpha=0.4)
+    ax.plot([0, 2], [0.5, 0.5], color="k")
+    ax.plot([0, 2], [0.2, 0.8], color=OKABE[5], alpha=0.8)
+    ok, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "[0.4, 0.6, 0.8, 1.0]" in detail, detail
+    assert ok is False, detail

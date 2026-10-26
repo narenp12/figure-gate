@@ -40,7 +40,7 @@ the palette gates. That is row 12 of the 21.
 ```mermaid
 flowchart TD
     figure["figure on its axis"] --> read["check_series_color"]
-    read -- "legend, marks, contact" --> need{"which pairs?"}
+    read -- "legend, marks, contact" --> need{"all-pairs or<br/>side by side?"}
     need --> gates["the palette gates"]
     gates --> verdict{"series colour row"}
     verdict -- "cleared" --> pass["the row clears with the figure"]
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2741 tests, and each check has one asserting it catches a
+    The suite is 2780 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test

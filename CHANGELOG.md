@@ -99,8 +99,13 @@ behind a threshold this project enforces.
 - `check_line_weight` holds marker outlines to `FURNITURE_FLOOR_PT` when
   `_marker_outline_pt` finds they carry the mark: unfilled or hollow markers,
   or an edge colour that is neither the face nor the background. The
-  background is `_ground`: the colour `_ground_image`, stopped at that axes,
-  holds under most of the marks.
+  background is `_ground`: the most common colour `_ground_image` holds on
+  the rims (`_marks_rim`) of the marks Agg draws inside their clip box and
+  clip path (`_drawn_rows`). `_ground_image` draws everything before that
+  artist, and a `Line2D`'s own line (`_own_line`), in its axes and in each
+  earlier axes whose box meets it (a twin's host). `check_line_weight` draws
+  that ground forward on one buffer (`_ForwardGround`), and only for an
+  outline that differs from its fill. `_ground_image` returns Agg's uint8 RGB.
 - `check_line_weight` reads tick widths through `marker_stroke_pt`, so
   `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
   axes with `axison` false and ticks and gridlines on a hidden axis.
@@ -218,7 +223,9 @@ behind a threshold this project enforces.
   `InsetIndicator.connectors` where `indicate_inset_zoom` returns one, and
   index the tuple otherwise.
 - `check_text_readability` tests casing with `is not None`, and composites
-  the text's alpha over its backdrop or casing before measuring contrast.
+  the text's alpha over its backdrop, or over its casing laid on the backdrop
+  at the opacity Agg draws the casing with (`_halo_alpha`), before measuring
+  contrast.
 - `_worst_backdrop` takes `alpha`; `_contrast_field_255` takes one colour or
   one per pixel.
 - `check_mark_ratio` skips invisible collections and the `" "` marker, and
@@ -236,23 +243,26 @@ behind a threshold this project enforces.
 - `check_fonts` expands each `font.family` entry: a generic name to its
   `font.<generic>` list, a face name to itself.
 - `check_contrast_stack` groups filled collections other than scatters, and
-  filled patches, by colour, not every entry in `ax.collections`.
+  filled patches, by colour, not every entry in `ax.collections`, and drops a
+  graded run's own entries rather than every entry at one of its values.
 - `_corners` measures the upright box through `_text_only_extent`.
 - `check_dual_axis` pairs `_all_axes`, not `fig.axes`.
 - `_is_bold` resolves weight names through `font_manager.weight_dict`.
 - `_artist_kind` returns `"line"` for a `LineCollection`; `_polyline_px`
   reads one through `_path_px`, and `_gated_pairs` takes its widest stroke
-  (`_stroke_pt`).
+  (`_stroke_pt`). `_dash` reads a `LineCollection`'s `_us_linestyles`, and
+  `_second_channel` compares its dash.
 - `_tick_texts`, `_polar_radial_ticks`, `_furniture`, `_legend_text_ids`,
   `_furniture_text_ids`, `check_identity_channel` and
-  `check_label_attribution` walk `_all_axes`.
-- `describe` returns `None`.
+  `check_label_attribution` walk `_all_axes`. `_legend_text_ids`,
+  `check_identity_channel` and `_layout_kept` walk `_all_figures`.
+- `describe` is annotated `-> Figure`, which it returns.
 - `audit`, and `check_ink` and `check_text_readability` called without a
   canvas, put back the canvas, `fig.dpi` and `_original_dpi` the figure
   arrived with (`_on_own_canvas`, `_at_measure_dpi`), and the axes positions,
   subfigure boxes, `sup*` label positions and `subplotpars` (`_layout_kept`).
   `_authored_dpi` is removed. `_on_own_canvas` moves the figure to a
-  `FigureCanvasAgg` on entry.
+  `FigureCanvasAgg` on entry, and `_renderer` draws on it.
 - `tests/test_audit_idempotence.py` audits every gallery, demo and
   external-style figure twice.
 - `_measuring` enters `_on_own_canvas`, `_layout_kept`, `_at_draw_rc` and
@@ -269,8 +279,10 @@ behind a threshold this project enforces.
 - `check_mark_ratio`, `check_overplotting`, `_draws_nothing`, `_second_channel`
   and `_marker_outline_pt` test for no marker with
   `_no_marker`, which takes a vertex-array marker.
-- `_over(src, src_alpha, dst, dst_alpha)`, Agg's straight-alpha blend, used
-  by `_worst_backdrop`, cased `check_text_readability` and `check_ink`.
+- `_over(src, src_alpha, dst)`, Agg's blend over an opaque ground, used by
+  `_worst_backdrop` and cased `check_text_readability`.
+- `_marks_px` skips masked and non-finite marks; `_marks_display` is
+  `_marks_px` inside `_on_page` and the artist's clip path.
 - `check_figure.GATE_RAISED` and `suggest_fixes.GATE_RAISED`; `suggest` skips
   a row whose detail opens with it.
 - `check_palette.check` matches `ink` case-insensitively and with or
@@ -587,7 +599,7 @@ matplotlib and were read as regular. `vlines` read as an area.
 `check_dual_axis` compared the twin with every frame but its own. Seven helpers
 and gates still walked `fig.axes`, so an inset's ticks, legend, title and face
 went unseen; a legend inside an inset left `check_identity_channel` warning.
-`describe` returned `fig` under a `-> None` signature. `savefig` restores the
+`describe` returned `fig` under a `-> None` signature; it still returns `fig`, so callers that chain it keep working. `savefig` restores the
 canvas it swaps (`FigureCanvasBase._switch_canvas_and_return_print_method`);
 `audit` did not, so an audited figure no longer showed in its window.
 `suggest` offered figure remedies for a gate that crashed. `#52514E` as ink
@@ -629,17 +641,47 @@ failed the orange and green pair at 40 and 72 dpi and passed it at 150 and
 600. The four context managers were entered in one order at three sites;
 `_measuring` holds that order once. On a figure never drawn they also read
 matplotlib's default 0-1 limits and the axes before the layout engine moved
-them: on autoscaled lines and a scatter under `constrained_layout`,
-`check_series_color` and `check_overplotting` passed what `audit` failed and
-warned on, and `check_banking` read 1.8x where `audit` read 1.6x.
+them. On autoscaled lines and a scatter under `constrained_layout`,
+`check_series_color` passed what `audit` failed, `check_overplotting` passed
+what it warned on, and `check_banking` read 1.8x where `audit` read 1.6x.
+
+A marker outline is seen against what lies round the mark, not under it.
+Read at the centres, a line drawn by its own `plot` along a scatter was ground
+for the marks at any width, and one `'o-'` line's own stroke never was. So the
+two spellings of one page split. Both misreads were in the `plot` and
+`scatter` spelling: a white halo edge measured as an outline, and an open
+marker's only edge passed as a halo. Leaving strokes out of the ground joined
+the spellings and split a band drawn as a 20pt line from a `fill_between` band
+23pt across. Read on the rim with strokes and `_own_line` drawn, 23 of 23
+adversarial pairs agree, against 22 with strokes left out, and the verdicts
+hold at 100, 200 and 300 dpi. They are own lines from 1 to 12pt under 6pt
+marks in both spellings, square, triangle and diamond markers, and a band
+drawn both ways; `test_marks_on_their_own_line_read_alike_in_both_spellings`
+and `test_a_band_reads_alike_drawn_as_a_wide_line_or_a_fill` run them. The
+rim is where WCAG 2.2's Understanding 1.4.11 tests a graphical object,
+"against adjacent color(s)"; taking its most common colour is this project's
+choice. A literature search found no perception study of outlines this thin:
+Szafir (2018) tests lines down to 0.05 degrees, and 0.3pt at 50cm is 0.012.
+Of the gallery's 83 line and scatter artists, 3 have a `_marker_outline_pt`
+above 0 and 1 reads a ground; of the external corpus's 196, 84 have one above
+0 and 3 read a ground. No verdict changes. `check_line_weight` takes 0.07s on
+2x2 panels of 12 outlined `'o-'` lines, 0.03s on 20000 outlined marks and 0.17s
+on a 6x6 grid of outlined scatters, where drawing every earlier panel under
+each one's marks took 0.29s.
 
 The same one-colour ground remained in two places. `_ground` took the axes'
 own facecolor, so under `axis("off")`, a translucent face or a `none`-faced
 inset a 0.3pt halo edge in the colour under the marks failed the furniture
 floor and a visible one passed. A figure-level backdrop drawn before the axes
 (`fig.add_artist`, `fig.patches`, `figimage`) read 1.00 ink, and so did one
-drawn between two axes: 0.04 and 0.03 in the render. A hatched face needed no
-change. The furniture
+drawn between two axes: 0.04 and 0.03 in the render. `_ground` also counted
+marks clipped outside the axes, so with most of a scatter outside a small
+`#333` axes the margin's white won the vote and both halo verdicts inverted;
+it rendered once per artist, 36 renders for a 2x2 figure where 4 do. It
+also stopped at the axes' patch, so over a black `imshow` or `pcolormesh` on a
+white face, or an inset with no face over one, a black 0.3pt edge failed as an
+outline and a white one passed as a halo. Converting each render to float took
+5.8ms of 7.3ms on a 9in figure. A hatched face needed no change. The furniture
 colours `_foreign_ink` matches also take raw facecolors, and the label's own
 ground already anchors that test: four layered probes gave detail strings
 identical to opaque equivalents, so they are unchanged. Under TkAgg
@@ -648,6 +690,22 @@ identical to opaque equivalents, so they are unchanged. Under TkAgg
 from 4x3, and each audit grew the next `savefig` 1.5x, on matplotlib 3.8.4
 and 3.11.1. The corpus records no
 verdict change.
+
+A code review of the stack found four more. A dashed `vlines` beside a solid
+one was told to separate by dash, which the same lines drawn with `plot` were
+not. A stroke between two `vlines` hues no longer makes them draw-order
+neighbours; that matches `plot`, and a test pins the two spellings together.
+`subfig.legend()` lands in `SubFigure.legends`, so a subfigure legend left
+`check_identity_channel` warning "no legend". A line at alpha 0.4 beside bars
+graded 0.2, 0.4 and 0.6 lost its level, so four levels read as three. `make
+sweep` over the 25 corpus figures records no verdict change. The diagram in
+`docs/design.md` had lost the two-line diamond
+`test_the_design_flow_diagram_draws_an_svg` reads.
+
+`_marks_px` read the value under a masked scatter offset, where `scatter`
+draws no mark: all ten offsets of a scatter with five masked. A text `alpha`
+fades its casing as well as its glyphs, and black text at 0.6 cased in white
+over black read 5.7:1 against white where Agg draws 3.8:1.
 
 ## 0.10.0 — 2026-09-30
 
