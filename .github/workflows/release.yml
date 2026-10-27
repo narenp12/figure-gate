@@ -126,7 +126,7 @@ jobs:
       # The PyPA action rather than `uv publish`: it signs the files and
       # attaches a PEP 740 attestation, which `uv publish` does not -- 0.1.0,
       # uploaded that way, has none. uv still builds.
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   # A GitHub release for every PyPI release. The notes are cut from CHANGELOG.md
   # rather than written here or generated from commits: the changelog is the
