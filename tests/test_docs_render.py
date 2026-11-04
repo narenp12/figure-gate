@@ -984,7 +984,7 @@ def test_the_design_flow_diagram_draws_an_svg(page, server):
       return { roots: window.__closedRoots.length, svgs };
     }""")
     assert drawn["roots"] >= 1, (
-        "gates.md's mermaid fence rendered no closed shadow root - the engine "
+        "design.md's mermaid fence rendered no closed shadow root - the engine "
         "did not run, or the bundle stopped rendering mermaid into a shadow")
     assert any(s["nodes"] >= 50 and s["w"] > 0 for s in drawn["svgs"]), (
         f"no closed shadow root holds a real diagram, got {drawn['svgs']} - "
@@ -1003,17 +1003,18 @@ def test_the_design_flow_diagram_draws_an_svg(page, server):
                if any("all-pairs" in t for t in s["text"])]
     assert len(diamond) == 1, (
         f"expected one diagram root carrying the 'all-pairs' diamond, got "
-        f"{len(diamond)} - gates.md's story changed, or a second diagram "
+        f"{len(diamond)} - design.md's story changed, or a second diagram "
         "matches the label search")
     root = diamond[0]
     assert root["brs"] >= 1, (
-        "the flow diagram's `need` diamond carries no `<br>`, so 'adjacent or' "
-        "and 'all-pairs?' sit on one line - a literal `\\n` renders as text, "
+        "the flow diagram's `need` diamond carries no `<br>`, so 'all-pairs or' "
+        "and 'side by side?' sit on one line - a literal `\\n` renders as text, "
         "which is the defect this assertion is written to see")
     diamond_text = " | ".join(root["text"])
-    assert "adjacent or" in diamond_text and "all-pairs?" in diamond_text, (
+    assert "all-pairs or" in diamond_text and "side by side?" in diamond_text, (
         f"the diamond's two lines are {diamond_text!r} - the label no longer "
-        "reads 'adjacent or' over 'all-pairs?', or the diagram's story changed")
+        "reads 'all-pairs or' over 'side by side?', or the diagram's story "
+        "changed")
 
 
 def test_the_gates_threshold_column_sorts_by_value(page, server):

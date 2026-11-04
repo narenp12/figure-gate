@@ -125,6 +125,16 @@ def test_a_key_that_names_no_threshold_raises(tmp_path):
         cf.load_config(path)
 
 
+def test_a_key_a_release_accepted_warns_and_is_skipped(tmp_path):
+    """v0.10.0 accepted `BANKING_FLAT_PX`. Raising on it would stop every
+    project whose file was valid when written; the rest of the file still
+    applies."""
+    path = write(tmp_path, body="BANKING_FLAT_PX = 0.5\nLINE_FLOOR_PT = 0.75\n")
+    with pytest.warns(FutureWarning, match="BANKING_FLAT_PX"):
+        assert cf.load_config(path) == {"LINE_FLOOR_PT": 0.75}
+    assert not hasattr(cf, "BANKING_FLAT_PX")
+
+
 def test_a_wrong_type_raises_and_names_the_current_value(tmp_path):
     path = write(tmp_path, body='TYPE_FLOOR_PT = "big"\n')
     with pytest.raises(ValueError, match=r"expected a number \(TYPE_FLOOR_PT"):

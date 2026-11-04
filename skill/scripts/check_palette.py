@@ -23,6 +23,7 @@ the surface, mirroring `check_figure`'s own `INK_TOKENS` intent.
 from __future__ import annotations
 
 import argparse
+import functools
 import itertools
 import math
 from collections.abc import Collection, Sequence
@@ -47,8 +48,8 @@ __all__ = [
     "cmap_back_travel", "cmap_kind",
     "cmap_back_travel_rgb", "cmap_kind_rgb", "CHROMA_MIN", "CVD_TARGET",
     "NORMAL_FLOOR", "CONTRAST_MIN", "ORDINAL_DL_MIN",
-    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX", "check",
-    "AUDIT_SCHEMA", "check_json", "main",
+    "ORDINAL_LIGHT_END_CONTRAST_MIN", "ORDINAL_STEP_RATIO_MAX",
+    "pair_separation", "check", "AUDIT_SCHEMA", "check_json", "main",
 ]
 
 # --- color conversion -------------------------------------------------------
@@ -128,6 +129,8 @@ def linear_to_oklab(rgb: Sequence[float]) -> tuple[float, float, float]:
 # OKLab stays for the two rows that ask about a *coordinate* rather than a
 # distance: the lightness band and the chroma floor. Those are design choices
 # about where in the space a series hue should sit, and they claim no calibration.
+# Two thresholds do gate on an OKLab lightness *difference*, `ORDINAL_DL_MIN` and
+# `CMAP_SPAN_MIN`; each states its CIELAB L* equivalent where it is defined.
 #
 # The sRGB viewing environment, matching CIE 159:2004's worked conditions and
 # colorspacious's `CIECAM02Space.sRGB`: D65 at 100 cd/m^2, a 20% surround, and
@@ -368,10 +371,12 @@ def simulate(rgb: Sequence[float], kind: str) -> tuple[float, float, float]:
 # The matrices above model dichromacy: a cone class absent. Most colour vision
 # deficiency is not that. Anomalous trichromacy - a cone whose peak sensitivity
 # is shifted rather than missing - is the more common form, and simulating only
-# the endpoint would be sound if the endpoint were the worst case. It is not.
-# Measured over 244650 pairs of hues this file would accept as series slots,
-# 1.27% clear CVD_TARGET under dichromacy and miss it at some lower severity,
-# and dichromacy overstates separation by up to 12.7 dE.
+# the endpoint would be sound if the endpoint were the worst case. It is not,
+# though by less than first measured. Measured over 244650 pairs of hues this
+# file would accept as series slots, 0.13% clear CVD_TARGET under both dichromacy models
+# and miss it at some lower severity, and dichromacy overstates separation
+# by up to 10.7 dE. Against Vienot alone the share is 1.35%: nine tenths of that
+# is the two models disagreeing at 1.0, not anomalous trichromacy.
 #
 # Published as Table 1 of Machado, Oliveira & Fernandes (2009), at severities in
 # tenths. Keyed by tenths so the lookup is an integer: severity 0.0 is the
@@ -457,10 +462,9 @@ MACHADO = {
 }
 
 
-# The severities the gates sweep. 1.0 is left out on purpose: it is dichromacy,
-# which `simulate` already covers with the matrices the documented numbers were
-# measured on, and reading it twice under two models would move every published
-# figure in the style guide for no coverage gained.
+# The anomalous severities the gates sweep. 1.0 is dichromacy, not anomalous, so
+# it is not listed; `check` reads it under both models, `simulate` and
+# `simulate_anomalous(..., 1.0)`.
 ANOMALOUS_SEVERITIES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
@@ -474,9 +478,9 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
     published matrices, because that is a modelling claim the paper does not
     make and this file would then be asserting.
 
-    `simulate` remains the dichromacy model and the anchor for every number the
-    style guide quotes. This is the range between the two ends, which is where
-    most colour vision deficiency actually sits.
+    `simulate` is the dichromacy model `check` reports as severity 1.0; this
+    function at 1.0 is the second one, reported as "1.0, Machado". Below 1.0
+    is anomalous trichromacy.
 
     Args:
         rgb: Linear-light `(r, g, b)`, each channel in 0..1.
@@ -492,7 +496,9 @@ def simulate_anomalous(rgb: Sequence[float], kind: str,
                          f"not {kind!r} - see the note above MACHADO")
     if not 0.0 <= severity <= 1.0:
         raise ValueError(f"severity runs 0.0 to 1.0, got {severity!r}")
-    tenths = int(round(severity * 10))
+    # Half up. `round` is half-to-even and read 0.05, 0.25, 0.45, 0.65 and 0.85
+    # a tenth low.
+    tenths = math.floor(severity * 10 + 0.5)
     if tenths == 0:
         r, g, b = (max(0.0, min(1.0, c)) for c in rgb)
         return r, g, b
@@ -556,18 +562,17 @@ def oklab_distance(rgb_a: Sequence[float], rgb_b: Sequence[float]) -> float:
 
 CMAP_SAMPLES = 256          # points `check_figure` samples a colormap at
 CMAP_QUALITATIVE_N = 40     # fewer entries than this is a category list, not a ramp
-CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat
+CMAP_SPAN_MIN = 0.02        # OKLab lightness span below which a ramp is flat, ~2.4 L*
 CMAP_BACKTRAVEL_MAX = 0.02  # backward lightness travel, as a fraction of the span
-# A ramp is cyclic when its two ends are the same colour, and "the same colour"
-# now has a definition instead of a tuning: CAM02-UCS is fitted so that a unit
-# of its distance is about one just-noticeable difference, so ends closer than
-# 1.0 are ends a reader cannot tell apart. The OKLab 3.0 this replaces could not
-# be stated that way - it was a number between the two clusters and nothing more.
+# A ramp is cyclic when its two ends are the same colour. 1.0 CAM02-UCS is about
+# 2 CIELAB over the slot gamut (see the bridge at `CVD_TARGET`): twice the
+# theoretical 2-degree JND Stone et al. give, a third of their practical
+# ND(50,2) of 6. It is not a JND.
 #
 # Measured over the 18 maps in matplotlib's registry that reach this branch:
 # twilight wraps at 0.000 and twilight_shifted at 0.376, and the nearest
-# diverging map, BrBG, wraps at 27.963. The threshold has two orders of
-# magnitude of clearance on either side, so it is a definition rather than a fit.
+# diverging map, BrBG, wraps at 27.963. Any value between 0.4 and 27 sorts the
+# registry the same way, so the number is a placement, not a fit.
 CMAP_WRAP_DE_MAX = 1.0
 
 # Uppercase numbers here that are not thresholds, and the reason each is not.
@@ -739,10 +744,10 @@ CHROMA_MIN = 0.10
 # cube against a metric that had no calibration, so that agreement is a
 # coincidence and is not evidence for these numbers.
 #
-# What IS evidence: the published Okabe-Ito set clears `CVD_TARGET` at every one
-# of its 28 pairs, and misses `NORMAL_FLOOR` at exactly one - orange #E69F00
-# against yellow #F0E442, at 20.75. That is the pair `figure.mplstyle` already
-# drops, arrived at independently. See the style guide.
+# The published Okabe-Ito set clears `CVD_TARGET` at every one of its 28 pairs
+# and misses `NORMAL_FLOOR` at one, orange #E69F00 against yellow #F0E442 at
+# 20.75, the pair `figure.mplstyle` drops. Stone et al.'s per-axis model fails
+# two more; the style guide gives the numbers.
 #
 # `--ordinal` does not use these. Adjacent steps of a ramp are compared for
 # lightness order, not for identification.
@@ -751,9 +756,98 @@ NORMAL_FLOOR = 21.0       # 4x Stone et al.; hard floor, no secondary encoding e
 CONTRAST_MIN = 3.0        # for marks; text on a fill needs 4.5 (3.0 if large)
 
 # The three ordinal rows. `--ordinal` swaps the categorical gates for these.
+#
+# `ORDINAL_DL_MIN` is an OKLab lightness gap, and OKLab has no published unit.
+# Along ten sequential maps one OKLab L is a median 118 CIELAB L* (p5 94, p95
+# 130), so the floor is about 7.1 L*. Stone et al.'s lightness fit (their Table
+# 3: C 5.079, K 0.751) puts ND(50) at 7.33 L* for a 0.333-degree target and
+# 5.45 at two degrees. Adjacent steps clear the half-of-observers line on a
+# two-degree patch and sit just under it on a hairline.
 ORDINAL_DL_MIN = 0.06     # OKLab lightness between adjacent steps
 ORDINAL_LIGHT_END_CONTRAST_MIN = 2.0   # lightest step against the surface
 ORDINAL_STEP_RATIO_MAX = 2.0           # largest lightness step / smallest
+
+
+def _separation_numbers(lin_a: Sequence[float], lin_b: Sequence[float]
+                        ) -> tuple[float, str, str, float, float]:
+    """`(cvd, kind, severity, tritan, normal)` for one pair of linear RGBs.
+
+    `cvd` is the smallest dE over protan and deutan, each swept over severity
+    and read at dichromacy under both models; `kind` and `severity` say where
+    it was found, protan first on a tie. `check` gates the rows on these, and
+    `check_figure` reads them per pair through `pair_separation`."""
+    va = _cvd_views(tuple(lin_a), ANOMALOUS_SEVERITIES)
+    vb = _cvd_views(tuple(lin_b), ANOMALOUS_SEVERITIES)
+    worst, kind_at, at_at = float("inf"), "", ""
+    for kind in ("protan", "deutan"):
+        d, at = min((_ucs_distance(a, b), at)
+                    for (a, at), (b, _) in zip(va[kind], vb[kind]))
+        if d < worst:
+            worst, kind_at, at_at = d, kind, at
+    return (worst, kind_at, at_at, _ucs_distance(va["tritan"], vb["tritan"]),
+            _ucs_distance(va["normal"], vb["normal"]))
+
+
+def _ucs_distance(a: Sequence[float], b: Sequence[float]) -> float:
+    """`delta_e` on two colours already in CAM02-UCS."""
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+@functools.lru_cache(maxsize=4096)
+def _cvd_views(lin: tuple[float, ...],
+               severities: tuple[float, ...]) -> dict[str, Sequence]:
+    """One colour in CAM02-UCS as each simulated viewer sees it, so a colour
+    in many pairs is simulated once. `delta_e` between two views is the
+    distance between them. `severities` is `ANOMALOUS_SEVERITIES`, passed so
+    the cache cannot outlive a change to it."""
+    out: dict[str, Sequence] = {
+        "tritan": linear_to_cam02ucs(simulate(lin, "tritan")),
+        "normal": linear_to_cam02ucs(lin)}
+    for kind in ("protan", "deutan"):
+        views = [(simulate(lin, kind), "1.0")]
+        views += [(simulate_anomalous(lin, kind, s), f"{s:.1f}")
+                  for s in severities]
+        views.append((simulate_anomalous(lin, kind, 1.0), "1.0, Machado"))
+        out[kind] = [(linear_to_cam02ucs(v), at) for v, at in views]
+    return out
+
+
+def pair_separation(color_a: str, color_b: str) -> dict[str, float | str]:
+    """The numbers behind `check`'s two separation rows, for one pair.
+
+    Args:
+        color_a: A hex string.
+        color_b: A hex string.
+
+    Returns:
+        `{"cvd", "cvd_kind", "cvd_severity", "tritan", "normal"}`. `cvd` is
+        the CAM02-UCS dE the CVD row gates against `CVD_TARGET`, at the
+        deficiency and severity named; `normal` is the dE the normal-vision
+        row gates against `NORMAL_FLOOR`; `tritan` is reported, not gated.
+    """
+    cvd, kind, at, tritan, normal = _separation_numbers(
+        hex_to_linear(color_a), hex_to_linear(color_b))
+    return {"cvd": cvd, "cvd_kind": kind, "cvd_severity": at,
+            "tritan": tritan, "normal": normal}
+
+
+def _cvd_detail(a: str, b: str, d: float, kind: str, at: str,
+                tritan: float, fix: bool = True) -> str:
+    """The CVD row's detail. `check_figure` passes `fix=False` and writes its
+    own [FIX]."""
+    return (f"worst {a} vs {b} dE {d:.1f} ({kind} at severity {at}) - "
+            f"tritan {tritan:.1f}"
+            + ("" if d >= CVD_TARGET or not fix
+               else "  [FIX] needs direct labels/gaps/texture, or re-step"))
+
+
+def _normal_detail(a: str, b: str, d: float) -> str:
+    """The normal-vision row's detail."""
+    return (f"worst {a} vs {b} dE {d:.1f}"
+            + ("" if d >= NORMAL_FLOOR else
+               "  [FIX] move one of the pair, or re-step the ramp"
+               f"  [WHY] below {NORMAL_FLOOR}, hard to tell apart in "
+               "full color"))
 
 
 def check(colors: Sequence[str], surface: str = "#ffffff",
@@ -817,10 +911,14 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
                      f"largest/smallest dL {ratio:.2f}" if gaps else "single step"))
         return all(r[1] for r in rows), rows
 
-    ink_set = set(ink) if isinstance(ink, frozenset) else set(ink)
+    # Hex is case-insensitive and its `#` optional, as `hex_to_linear` reads
+    # it, so `#52514E`, `#52514e` and `52514e` are one ink.
+    def key(c: str) -> str:
+        return c.strip().lower().lstrip("#")
+    ink_set = {key(c) for c in ink}
     band = [c for c, v in zip(colors, lab)
-            if c not in ink_set and not (L_MIN <= v[0] <= L_MAX)]
-    n_exempt_band = sum(1 for c in colors if c in ink_set and
+            if key(c) not in ink_set and not (L_MIN <= v[0] <= L_MAX)]
+    n_exempt_band = sum(1 for c in colors if key(c) in ink_set and
                         not (L_MIN <= linear_to_oklab(hex_to_linear(c))[0] <= L_MAX))
     rows.append(("Lightness band", not band,
                  f"all {len(colors)} inside L {L_MIN}-{L_MAX}" if not band
@@ -828,8 +926,8 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
                  + (f" ({n_exempt_band} ink tokens exempted)" if n_exempt_band else "")))
 
     chroma = [c for c, v in zip(colors, lab)
-              if c not in ink_set and math.hypot(v[1], v[2]) < CHROMA_MIN]
-    n_exempt_chroma = sum(1 for c in colors if c in ink_set and
+              if key(c) not in ink_set and math.hypot(v[1], v[2]) < CHROMA_MIN]
+    n_exempt_chroma = sum(1 for c in colors if key(c) in ink_set and
                           math.hypot(*linear_to_oklab(hex_to_linear(c))[1:]) < CHROMA_MIN)
     rows.append(("Chroma floor", not chroma,
                  f"all {len(colors)} >= {CHROMA_MIN}" if not chroma
@@ -845,42 +943,29 @@ def check(colors: Sequence[str], surface: str = "#ffffff",
     # been measured against the corpus.
     #
     # Swept over severity, not read at the endpoint: dichromacy is not the worst
-    # case. MACHADO's comment has the measurement.
+    # case. Dichromacy is read under both models, Vienot's and Machado's own
+    # severity 1.0, so the sweep has one model from end to end and the worst
+    # case covers the disagreement between the two. MACHADO's comment has the
+    # measurement.
+    numbers = {(i, j): _separation_numbers(lin[i], lin[j]) for i, j in pairs}
     worst_cvd, worst_cvd_at = float("inf"), None
-    for i, j in pairs:
-        for kind in ("protan", "deutan"):
-            views = [(delta_e(simulate(lin[i], kind), simulate(lin[j], kind)),
-                      1.0)]
-            views += [(delta_e(simulate_anomalous(lin[i], kind, s),
-                               simulate_anomalous(lin[j], kind, s)), s)
-                      for s in ANOMALOUS_SEVERITIES]
-            d, at = min(views)
-            if d < worst_cvd:
-                worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
-    worst_tri = min((delta_e(simulate(lin[i], "tritan"), simulate(lin[j], "tritan"))
-                     for i, j in pairs), default=float("nan"))
+    for (i, j), (d, kind, at, _, _) in numbers.items():
+        if d < worst_cvd:
+            worst_cvd, worst_cvd_at = d, (colors[i], colors[j], kind, at)
+    worst_tri = min((n[3] for n in numbers.values()), default=float("nan"))
     if worst_cvd_at:
         a, b, kind, at = worst_cvd_at
-        good = worst_cvd >= CVD_TARGET
-        rows.append((f"CVD separation ({label})", good,
-                     f"worst {a} vs {b} dE {worst_cvd:.1f} ({kind} at severity "
-                     f"{at:.1f}) - tritan {worst_tri:.1f}"
-                     + ("" if good else "  [FIX] needs direct labels/gaps/texture, or re-step")))
+        rows.append((f"CVD separation ({label})", worst_cvd >= CVD_TARGET,
+                     _cvd_detail(a, b, worst_cvd, kind, at, worst_tri)))
 
     worst_n, worst_n_at = float("inf"), None
-    for i, j in pairs:
-        d = delta_e(lin[i], lin[j])
-        if d < worst_n:
-            worst_n, worst_n_at = d, (colors[i], colors[j])
+    for (i, j), n in numbers.items():
+        if n[4] < worst_n:
+            worst_n, worst_n_at = n[4], (colors[i], colors[j])
     if worst_n_at:
         a, b = worst_n_at
-        good = worst_n >= NORMAL_FLOOR
-        rows.append((f"Normal-vision floor ({label})", good,
-                     f"worst {a} vs {b} dE {worst_n:.1f}"
-                     + ("" if good else
-                        "  [FIX] move one of the pair, or re-step the ramp"
-                        f"  [WHY] below {NORMAL_FLOOR}, hard to tell apart in "
-                        "full color")))
+        rows.append((f"Normal-vision floor ({label})", worst_n >= NORMAL_FLOOR,
+                     _normal_detail(a, b, worst_n)))
 
     # Advisory, not a gate: a sub-3:1 hue is legal, it just obligates a visible
     # direct label. Reporting it as FAIL while the run still passes reads as a
