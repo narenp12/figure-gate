@@ -116,6 +116,10 @@ NOT_A_THRESHOLD = {
     ("check_figure.py", "check_overplotting", "n < 2"):
         "`n` is `len(xy)` one line up, so this is the emptiness guard the "
         "shape rule recognises everywhere it is not read through a name",
+    ("check_figure.py", "_banking_factor", "hi - lo > 1e-09"):
+        "the golden-section search's stopping width on log(a), as the "
+        "two-means tolerance above is the split's. It decides when the "
+        "search stops, not whether a panel passes",
 }
 
 

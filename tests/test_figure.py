@@ -7,8 +7,10 @@ only "audit returned False" would pass even if every check had silently broken
 except one, which is close to what happened twice while the checker was written.
 """
 
+import io
 import re
 import shutil
+import sys
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -93,21 +95,20 @@ def test_hidpi_does_not_move_any_verdict():
     assert retina_rows == normal_rows
 
 
-def test_hidpi_figure_is_measured_at_its_authored_dpi():
-    """The dpi the figure was authored at is the one the caller gets back.
-
-    Measuring now happens at `MEASURE_DPI` rather than at the authored value
-    (see `test_renderer_invariance.py` for why, and for the general form of this
-    test), but the figure is borrowed, not kept. Leaving the doubled value in
-    place would hand back a figure whose next `savefig` writes at twice the
-    resolution its author asked for.
+def test_hidpi_figure_comes_back_as_it_arrived():
+    """The figure is borrowed, not kept, and comes back on the canvas and dpi
+    it arrived with, as `savefig` leaves it. On a HiDPI canvas that dpi is the
+    authored value times the device pixel ratio; `savefig` writes at
+    `_original_dpi` either way, so its output does not move.
     """
     fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
     ax.plot([0, 1], [0, 1])
-    authored = fig.dpi
-    cf.audit(hidpi(fig))
-    assert fig.dpi == authored
+    before = _png_size(fig)
+    entry = hidpi(fig).dpi
+    cf.audit(fig)
+    after = (fig.dpi, _png_size(fig))
     plt.close(fig)
+    assert after == (entry, before)
 
 
 def test_collision_catches_two_labels_in_the_same_place():
@@ -1127,7 +1128,7 @@ def test_series_color_catches_the_default_matplotlib_cycle():
     """The failure that motivated the gate. A figure on matplotlib's own `tab10`
     cycle passed Clipping, Text collision, Contrast stack, Mark ratio, Axis
     redundancy, Type size and Ink coverage clean, and its orange and green
-    measure CAM02-UCS dE 2.4 under protanopia -- one hue to a reader who cannot
+    measure CAM02-UCS dE 1.6 under protanopia -- one hue to a reader who cannot
     separate them. `check_palette.py` had always known; nothing asked it."""
     fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
     for i, c in enumerate(TAB10):
@@ -1498,6 +1499,20 @@ def test_an_inset_is_not_a_dual_axis():
     ok, rows = cf.audit(fig)
     plt.close(fig)
     assert gates(rows)["Dual axis"] is True
+
+
+def test_dual_axis_catches_a_twin_on_an_inset():
+    """`sub.twinx()` lands in `fig.axes` and the inset it twins does not, so
+    pairing `fig.axes` compared the twin with everything but its own frame.
+    Insets follow `fig.axes` in the names, so the host stays ax0."""
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 2], color=OKABE[0])
+    sub = ax.inset_axes([0.6, 0.15, 0.3, 0.3])
+    sub.plot([0, 1], [1, 0], color=OKABE[1])
+    sub.twinx().plot([0, 1], [100, 0], color=OKABE[2])
+    status, detail = cf.check_dual_axis(fig)
+    plt.close(fig)
+    assert status is False and "ax1+ax2" in detail, detail
 
 
 # --- form -------------------------------------------------------------------
@@ -2582,6 +2597,28 @@ def test_the_two_spellings_of_one_cloud_report_the_same_number():
             == from_scatter.replace("col0", "MARKS")), (from_plot, from_scatter)
 
 
+@pytest.mark.parametrize("marker", [".", "|", "D", "s"])
+def test_the_two_spellings_agree_for_every_marker_shape(marker):
+    """`scatter` scales its marker path by `sqrt(s)`, so `"."` is half as wide
+    as `"o"` and `"|"` is as wide as its stroke. Read as `sqrt(s)` discs, a
+    `"."` cloud at `s=36` warned 72% merging where `plot(".", ms=6)` of the
+    same points passed."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    x, y = rng.random(400), rng.random(400)
+    rows = []
+    for spell in ("scatter", "plot"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        if spell == "scatter":
+            ax.scatter(x, y, s=36, marker=marker, lw=0)
+        else:
+            ax.plot(x, y, marker, ms=6, mew=0)
+        status, detail = cf.check_overplotting(fig)
+        rows.append((status, detail.replace("col0", "M").replace("line0", "M")))
+        plt.close(fig)
+    assert rows[0] == rows[1], rows
+
+
 # --- the edge stroked around a mark is ink
 
 def test_the_marker_stroke_widens_the_drawn_mark():
@@ -3651,6 +3688,193 @@ def test_the_ceiling_fix_names_the_authored_size():
     assert "set text at 14.0pt as authored, 7.0pt on the page" in detail
 
 
+def _xlabel_type(size_pt, scale, **kw):
+    with plt.rc_context({"font.family": kw.pop("family", "DejaVu Sans")}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("dose", fontsize=size_pt)
+        result = cf.check_type_size(fig, cf._renderer(fig)[0], scale=scale,
+                                    **kw)
+    plt.close(fig)
+    return result
+
+
+def test_the_ceiling_fix_names_a_size_under_the_ceiling():
+    """7 / 0.745 is 9.396pt. Rounded to 9.4 it is 7.003pt on the page, over
+    Nature's 7pt maximum, so the fix rounds down to 9.3."""
+    status, detail = _xlabel_type(9.4, 0.745, venue="nature")
+    assert status is False, detail
+    assert "set text at 9.3pt as authored" in detail, detail
+    assert _xlabel_type(9.3, 0.745, venue="nature")[0] is not False
+
+
+def test_the_x_height_fix_names_a_size_that_clears_it():
+    """8.9 / 0.745 is 11.946pt. Rounded to 11.9 the x-height stays under
+    4pt, so the fix rounds up to 12.0."""
+    status, detail = _xlabel_type(10.0, 0.745, family="STIXGeneral")
+    assert status == "warn", detail
+    assert "set it at 12.0pt as authored" in detail, detail
+    assert _xlabel_type(11.9, 0.745, family="STIXGeneral")[0] == "warn"
+    assert _xlabel_type(12.0, 0.745, family="STIXGeneral")[0] is True
+
+
+def test_a_failing_size_never_prints_as_its_limit():
+    """5.996pt fails a 6pt floor and 7.003pt a 7pt maximum. Each is shown
+    rounded away from the limit, not onto it."""
+    status, detail = _xlabel_type(8.0, 0.7495)
+    assert status is False and "(5.99, 'dose')" in detail, detail
+    # Rounded to 0.1pt first, as before the fix, 5.95pt read as 6.0 and passed.
+    assert _xlabel_type(5.95, 1.0)[0] is False
+    status, detail = _xlabel_type(9.4, 0.745, venue="nature")
+    assert status is False and "(7.01, 'dose')" in detail, detail
+
+
+def test_a_size_failing_by_the_slack_prints_under_the_floor():
+    """2e-6pt under the floor is past `_PT_TOL` and fails. It prints under
+    6, not as 6."""
+    status, detail = _xlabel_type(8.0, (6.0 - 2e-6) / 8.0)
+    assert status is False and "(5.99, 'dose')" in detail, detail
+
+
+def test_the_slack_is_under_a_printer_dot_and_over_float_error():
+    """The numbers the `_PT_TOL` comment states, and the rounding it relies
+    on: a difference under 5e-9pt is absorbed, one past `_PT_TOL` is not."""
+    assert cf._PT_TOL < 72 / 2400
+    assert cf._PT_TOL > 10.0 * sys.float_info.epsilon
+    assert cf._round_down(6.0 - 4e-9, 2) == 6.0
+    assert cf._round_up(1.34 + 4e-9, 2) == 1.34
+    assert cf._round_down(6.0 - 1.1e-6, 2) == 5.99
+    assert cf._round_up(7.0 + 1.1e-6, 2) == 7.01
+
+
+def _x_height_type(x_pt, scale=1.0, monkeypatch=None, **kw):
+    """A 'dose' label whose x-height is `x_pt` on the page, DejaVu's
+    fraction pinned so the size is exact."""
+    monkeypatch.setattr(cf, "_x_height_fraction_of", lambda t: 0.5)
+    return _xlabel_type(2 * x_pt / scale, scale, **kw)
+
+
+def test_an_x_height_just_under_the_floor_prints_under_it(monkeypatch):
+    """An x-height 1.1e-6pt under 4pt warns as 3.99, not 4.0. One 1e-12pt
+    under is float error and passes."""
+    status, detail = _x_height_type(4.0 - 1.1e-6, monkeypatch=monkeypatch)
+    assert status == "warn" and "('dose', 3.99)" in detail, detail
+    assert _x_height_type(4.0 - 1e-12, monkeypatch=monkeypatch)[0] is True
+
+
+def test_the_x_height_fix_rounds_the_need_once(monkeypatch):
+    """DejaVu at 7pt and scale 0.93 needs 7.31pt on a 7.4pt maximum. Rounding
+    the need to 7.4 first advised 8.0pt, 7.44 on the page, and reported that
+    the maximum allows no larger. 7.9pt fits and clears."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 7.4)
+    status, detail = _xlabel_type(7.0, 0.93)
+    assert status == "warn", detail
+    assert "set it at 7.9pt as authored" in detail, detail
+    assert _xlabel_type(7.9, 0.93)[0] is True
+
+
+def test_the_x_height_fix_falls_back_to_hundredths(monkeypatch):
+    """A 7.35pt need at scale 0.93: 7.9pt lands at 7.347, under the need, and
+    8.0pt at 7.44, over a 7.4pt maximum. 7.91pt fits both."""
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 7.4)
+    monkeypatch.setattr(cf, "_x_height_fraction_of", lambda t: 4.0 / 7.35)
+    status, detail = _xlabel_type(7.0, 0.93)
+    assert status == "warn", detail
+    assert "set it at 7.91pt as authored, 7.35pt on the page" in detail, detail
+    assert "allows no larger" not in detail, detail
+
+
+def test_a_base_on_the_maximum_by_float_error_can_raise_a_script(monkeypatch):
+    """A 5.1pt base with a 0.7 script needs 5.1 * 5 / (5.1 * 0.7), which is
+    9e-16 over a 5 / 0.7 maximum in float. The fix still says to raise the
+    base."""
+    assert 5.1 * 5.0 / (5.1 * 0.7) > 5 / 0.7
+    monkeypatch.setattr(cf, "TYPE_CEILING_PT", 5 / 0.7)
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: (
+        float(t.get_fontsize()) * 0.7 if "$" in t.get_text() else None))
+    fig = plt.figure()
+    fig.text(0.5, 0.5, r"$10^{2}$", fontsize=5.1)
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0], scale=0.5)
+    plt.close(fig)
+    assert status is False, detail
+    assert "raise the base size" in detail, detail
+
+
+def test_the_line_weight_fix_names_a_width_that_clears_it():
+    """1 / 0.745 is 1.342. Printed to two places it was 1.34, 0.998pt on the
+    page and still failing; the fix rounds up to 1.35."""
+    def weight(lw):
+        fig, ax = plt.subplots(figsize=(3, 2))
+        ax.plot([0, 1], [0, 1], lw=lw)
+        result = cf.check_line_weight(fig, scale=0.745)
+        plt.close(fig)
+        return result
+    status, detail = weight(1.0)
+    assert status is False and "at least 1.35 at this scale" in detail, detail
+    assert weight(1.35)[0] is not False
+
+
+def test_float_error_does_not_fail_a_script(monkeypatch):
+    """The script floor takes the slack the body floor does, and shows a
+    failing script to 0.01pt."""
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: 5.0 - 1e-12)
+    assert _xlabel_type(8.0, 1.0)[0] is True
+    monkeypatch.setattr(cf, "_script_min_pt", lambda t: 4.996)
+    status, detail = _xlabel_type(8.0, 1.0)
+    assert status is False and "(4.99, 'dose')" in detail, detail
+
+
+def test_float_error_does_not_fail_a_stroke():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.plot([0, 1], [0, 1], lw=cf.LINE_FLOOR_PT - 1e-12)
+    status, detail = cf.check_line_weight(fig, scale=1.0)
+    ax.lines[0].set_linewidth(cf.LINE_FLOOR_PT - 0.004)
+    thin_status, thin_detail = cf.check_line_weight(fig, scale=1.0)
+    plt.close(fig)
+    assert status is not False, detail
+    assert thin_status is False and "at 0.99pt" in thin_detail, thin_detail
+
+
+def test_float_error_does_not_fail_furniture_or_an_outline():
+    """The furniture and marker-outline floors take the same slack and
+    print a failing width to 0.01pt."""
+    def widths(w):
+        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+        ax.plot([0, 1], [0, 1], lw=2.0, marker="o", mfc="none", mew=w)
+        for spine in ax.spines.values():
+            spine.set_linewidth(w)
+        ax.tick_params(width=2.0)
+        result = cf.check_line_weight(fig, scale=1.0)
+        plt.close(fig)
+        return result
+    status, detail = widths(cf.FURNITURE_FLOOR_PT - 1e-12)
+    assert status is not False, detail
+    status, detail = widths(cf.FURNITURE_FLOOR_PT - 0.004)
+    assert status is False, detail
+    assert "at 0.49pt" in detail and "marker outlines" in detail, detail
+    assert "0.50pt" not in detail, detail
+
+
+def test_a_panel_label_need_is_not_advised_for_body_text(monkeypatch):
+    """Under Nature, body text needing 6.9pt and a label needing 7.6pt get a
+    size each. One size of 7.6pt would put body text over its 7pt maximum."""
+    fracs = {"dose": 4.0 / 6.9, "a": 4.0 / 7.6}
+    monkeypatch.setattr(cf, "_x_height_fraction_of",
+                        lambda t: fracs.get(t.get_text()))
+    fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("dose", fontsize=6.5)
+    ax.text(0, 1, "a", fontsize=7.0, fontweight="bold")
+    status, detail = cf.check_type_size(fig, cf._renderer(fig)[0], scale=1.0,
+                                        venue="nature")
+    plt.close(fig)
+    assert status == "warn", detail
+    assert ("set it at 6.9pt as authored, 6.9pt on the page; set a panel "
+            "label at 7.6pt as authored, 7.6pt on the page") in detail, detail
+
+
 def test_nature_log_ticks_fail_with_a_fix_that_works():
     """Under a 7pt maximum a first-level script is 4.9pt, under the 5pt floor,
     and raising the base would breach the maximum. The fix has to name a route
@@ -4640,7 +4864,7 @@ def test_banking_never_returns_a_hard_failure():
     assert ok is not False or gates(rows)["Banking"] is not False
 
 
-def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
+def test_banking_skips_the_panels_where_banking_means_nothing():
     """Four exclusions, each with a case. A steep aspect is applied to all four
     so that a panel which is *not* skipped would warn, which is what keeps this
     from passing by drawing nothing."""
@@ -4650,7 +4874,7 @@ def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
         fig, ax = plt.subplots(figsize=(2.0, 6.0), dpi=100)
         build(ax)
         fig.canvas.draw()
-        return fig, cf._banking_slopes(ax)
+        return fig, cf._banking_segments(ax)
 
     # A full-amplitude zigzag, so the typical segment is far steeper than the
     # panel's own diagonal and a panel that is read cannot help but warn.
@@ -4681,85 +4905,27 @@ def test_banking_skips_the_panels_where_a_median_slope_means_nothing():
     assert gates(rows)["Banking"] == "warn"
 
 
-def test_banking_reads_the_authored_vertices_not_the_densified_stroke():
-    """Densifying makes every segment 2px long, so a median taken over the
-    densified points measures the densifier rather than the data. The two
-    disagree by construction on a line whose segments differ in length."""
-    import numpy as np
-    fig, ax = plt.subplots(figsize=(5, 4), dpi=100)
-    # Short steep steps and long shallow ones, in equal number: the authored
-    # median sits between them, the densified one is dominated by the long
-    # segments because densifying splits them into far more points.
-    x = np.cumsum([0.0] + [0.2, 8.0] * 15)
-    y = np.cumsum([0.0] + [4.0, 0.4] * 15)
-    line, = ax.plot(x, y)
-    fig.canvas.draw()
-    authored = float(np.median(cf._banking_slopes(ax)))
-
-    dense = cf._polyline_px(line, ax)
-    d = np.diff(dense, axis=0)
-    keep = np.abs(d[:, 0]) > 1e-9
-    densified = float(np.median(np.abs(d[keep, 1] / d[keep, 0])))
-    plt.close(fig)
-    assert authored != pytest.approx(densified, rel=0.2), (
-        f"authored {authored:.3f} and densified {densified:.3f} agree here, so "
-        "this fixture no longer distinguishes the two readings")
-
-
-def test_banking_culls_segments_that_render_flat():
-    """A saturating curve - a converged training run - is 92 near-flat
-    segments out of 119. Slope cannot tell the flat tail from flat at any
-    aspect, and banking a panel on it asks for something sixteen hundred times
-    taller; the cull has to happen before the median, or the gate warns on
-    the most ordinary figure there is."""
+def test_banking_needs_no_cull_for_a_saturating_curve():
+    """A converged training run is mostly flat tail. The median slope read it
+    as banked only after culling the tail, because unculled its median sat
+    under the floor and asked for a panel far taller. Arc length counts the
+    tail as the run it is and banks the curve without a cull."""
     import numpy as np
     x = np.arange(120, dtype=float)
     y = 1.0 - np.exp(-x / 6.0)
     fig, ax = plt.subplots(figsize=(6.4, 4.0), dpi=100)
     ax.plot(x, y, lw=1.5)
     fig.canvas.draw()
-
-    p = ax.transData.transform(np.column_stack([x, y]))
-    d = np.diff(p, axis=0)
-    dx, dy = d[:, 0], d[:, 1]
-    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
-
-    # The docstring's numbers, measured rather than imported: most of the
-    # stroke renders flat, and the raw (unculled) median is below the floor.
-    assert drawn.sum() < 0.5 * len(dx), (
-        f"{drawn.sum()} of {len(dx)} segments drawn; the fixture stopped "
-        "being a saturating curve")
-    keep = np.abs(dx) > 1e-9
-    raw = float(np.median(np.abs(dy[keep] / dx[keep])))
-    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, (
-        f"raw median {raw:.4f}; the gate would not have warned anyway")
-
+    d = np.abs(np.diff(ax.transData.transform(np.column_stack([x, y])), axis=0))
+    raw = float(np.median(d[:, 1] / d[:, 0]))
     ok, rows = cf.audit(fig)
-    slopes = cf._banking_slopes(ax)
+    factor = cf._banking_factor(ax)
     plt.close(fig)
-    assert gates(rows)["Banking"] is True, "the cull did not silence the warn"
-    assert slopes is not None and np.median(slopes) >= 1.0 / cf.BANKING_SLOPE_MAX
+    # The case the cull existed for: an unculled median would have warned.
+    assert raw < 1.0 / cf.BANKING_SLOPE_MAX, raw
+    assert 1.0 / cf.BANKING_SLOPE_MAX <= factor <= cf.BANKING_SLOPE_MAX, factor
+    assert gates(rows)["Banking"] is True
     assert ok is True
-
-
-def test_banking_leaves_the_saw_wave_alone():
-    """The cull exists so that flat segments do not drown a real rate; it must
-    not have the side effect of swallowing the figure the gate exists for. The
-    saw wave renders nothing flat - every limb moves - so nothing is culled and
-    the failure still lands."""
-    import numpy as np
-    fig, x, y = _alternating_rates((2.4, 5.2))
-    ax = fig.axes[0]
-    p = ax.transData.transform(np.column_stack([x, y]))
-    d = np.diff(p, axis=0)
-    dx, dy = d[:, 0], d[:, 1]
-    drawn = (np.abs(dy) >= cf.BANKING_FLAT_PX) & (np.abs(dx) >= cf.BANKING_FLAT_PX)
-    assert drawn.all(), (
-        f"{int(drawn.sum())}/{len(dx)} segments drawn; the cull is eating the "
-        "figure the gate exists for")
-    ok, rows = cf.audit(fig)
-    plt.close(fig)
-    assert gates(rows)["Banking"] == "warn"
 
 
 # --- regressions: gates that fired on correct figures ----------------------
@@ -5681,7 +5847,10 @@ def test_an_inset_connector_is_not_a_data_hue():
     fig, ax, sub = _inset_host()
     for i, color in enumerate(("#472a7a", "#2f6b8e", "#1fa187")):
         ax.plot([0, 1], [i, i], lw=2, color=color)
-    _rect, connectors = ax.indicate_inset_zoom(sub)
+    indicator = ax.indicate_inset_zoom(sub)
+    # The tuple and `InsetIndicator` returns, as in `gallery.broadening`.
+    connectors = (indicator[1] if isinstance(indicator, tuple)
+                  else indicator.connectors)
     assert any(isinstance(c, ConnectionPatch) for c in connectors), (
         "matplotlib stopped building the connectors out of ConnectionPatch; "
         "this test is measuring nothing")
@@ -5692,6 +5861,34 @@ def test_an_inset_connector_is_not_a_data_hue():
             for h, _, _ in entries}
     plt.close(fig)
     assert "#e69f00" not in hues, hues
+
+
+def test_a_thin_inset_indicator_fails_line_weight():
+    """A 0.1pt frame and 0.2pt connectors. From matplotlib 3.10 both are drawn
+    by an `InsetIndicator` in `ax.artists`, not from `ax.patches`, and the
+    gate passed them unmeasured."""
+    fig, ax, sub = _inset_host()
+    indicator = ax.indicate_inset_zoom(sub, lw=0.1)
+    connectors = (indicator[1] if isinstance(indicator, tuple)
+                  else indicator.connectors)
+    for connector in connectors:
+        connector.set_linewidth(0.2)
+    status, detail = cf.check_line_weight(fig, scale=1.0)
+    plt.close(fig)
+    assert status is False, detail
+    assert "a Rectangle edge at 0.10pt" in detail, detail
+    assert "a ConnectionPatch edge at 0.20pt" in detail, detail
+
+
+def test_contrast_stack_reads_an_inset_indicator_on_every_matplotlib():
+    """The indicator's rectangle is drawn at alpha 0.5. It is in `ax.patches`
+    on 3.8.4 and in an `InsetIndicator` from 3.10, and the row read alpha
+    levels [0.5, 1.0] on one and [1.0] on the other."""
+    fig, ax, sub = _inset_host()
+    ax.indicate_inset_zoom(sub)
+    status, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "alpha levels [0.5, 1.0]" in detail, detail
 
 
 def test_overplotting_measures_a_blob_inside_an_inset():
@@ -5729,7 +5926,9 @@ def test_banking_measures_the_aspect_of_an_inset():
     fig, ax = plt.subplots(figsize=(4, 3))
     ax.plot([0, 1], [0, 1], lw=1.5)
     sub = ax.inset_axes([0.45, 0.45, 0.5, 0.5])
-    t = np.linspace(0, 40, 400)
+    # 80, not 40: at 40 the inset is banked within a factor of 0.104, inside
+    # the band, and the test is about the inset being read, not the band.
+    t = np.linspace(0, 80, 800)
     sub.plot(t, np.sin(t))
     ok, rows = cf.audit(fig)
     plt.close(fig)
@@ -5930,10 +6129,11 @@ def test_audit_json_leaves_the_figure_on_its_authored_dpi(clean):
 
 
 # --- a 6pt body floor, and an x-height advisory ----------------------------
-# The gate is PNAS's and Science's 6pt. Under it, Legge & Bigelow's 0.2 degree
-# start of fluent reading, an x-height of 4.0pt at 40cm, is a warning: body
-# size is x-height over the font's fraction, so 8pt is 4.38pt of x-height in
-# DejaVu Sans and 3.60pt in STIXGeneral. Both fonts ship with matplotlib.
+# The gate is 6pt, the minimum PNAS publishes. Under it, Legge & Bigelow's
+# 0.2 degree start of fluent reading, an x-height of 4.0pt at 40cm, is a
+# warning: body size is x-height over the font's fraction, so 8pt is 4.38pt
+# of x-height in DejaVu Sans and 3.60pt in STIXGeneral. Both fonts ship with
+# matplotlib.
 
 
 def _type_in(family, size_pt, label="Dose (mg)", **rc):
@@ -5978,6 +6178,36 @@ def test_the_warning_names_the_size_that_clears_it():
     assert status == "warn", detail
     assert "smallest 8.0pt on page (floor 6.0)" in detail, detail
     assert "set it at 8.9pt as authored, 8.9pt on the page" in detail, detail
+
+
+def test_the_floor_is_judged_before_rounding():
+    """docs/design.md's 8pt label at 750/1008 must still fail."""
+    with plt.rc_context({"font.family": "DejaVu Sans"}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("Dose (mg)", fontsize=8)
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            scale=750 / 1008)
+    plt.close(fig)
+    assert status is False, detail
+    assert "5.95" in detail, detail
+
+
+def test_the_warning_names_a_size_that_clears_every_string():
+    """'dose' at 6.5pt DejaVu Sans has the smaller x-height, but 'time' in
+    STIXGeneral needs 8.9pt. The fix names the larger need."""
+    with plt.rc_context({"font.family": "DejaVu Sans"}):
+        fig, ax = plt.subplots(figsize=(4, 2.4), constrained_layout=True)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("dose", fontsize=6.5)
+        ax.set_ylabel("time", fontsize=8.5, family="STIXGeneral")
+        status, detail = cf.check_type_size(fig, cf._renderer(fig)[0],
+                                            scale=1.0)
+    plt.close(fig)
+    assert status == "warn", detail
+    assert "set it at 8.9pt as authored" in detail, detail
 
 
 def test_numerals_are_not_held_to_the_x_height():
@@ -6055,3 +6285,1891 @@ def test_the_sizes_the_docs_quote(family, size):
         pytest.skip(f"{family} is not installed")
     frac = cf.x_height_fraction(path)
     assert math.ceil(round(cf.XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10 == size
+
+
+# --- invariances: a verdict is a property of the figure as drawn -------------
+#
+# Each test below pins a property the 2026-10-19 review found violated: the
+# verdict moved with something the reader never sees (draw order, vertex
+# density) or contradicted the remedy the row itself prints. Each comes with
+# the control that keeps the fix from passing by switching the gate off.
+
+# tab10's orange and green: dE 1.6 under protanopia, against `CVD_TARGET`.
+CVD_PAIR = ("#ff7f0e", "#2ca02c")
+# Okabe-Ito orange and yellow: clear `CVD_TARGET`, miss `NORMAL_FLOOR` at 20.8.
+NORMAL_PAIR = ("#e69f00", "#f0e442")
+
+
+def _three_lines(order, legend, crossing):
+    """Orange, blue and green lines, drawn in `order`. Orange and green are the
+    CVD failure and blue clears both; with `crossing` the lines meet, without
+    it they are parallel and far apart."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 50)
+    shapes = ({"#ff7f0e": x, "#1f77b4": 0.95 + 0 * x, "#2ca02c": 1.0 - x}
+              if crossing else
+              {"#ff7f0e": 0 * x, "#1f77b4": 1 + 0 * x, "#2ca02c": 2 + 0 * x})
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        ax.plot(x, shapes[c], color=c, label=c)
+    if legend:
+        ax.legend()
+    else:
+        for c in order:
+            ax.text(1.02, float(shapes[c][-1]), c, fontsize=8)
+    return fig
+
+
+def _series_color(fig):
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    return gates(rows)["Series color"]
+
+
+def test_a_legend_gates_every_pair_whatever_the_draw_order():
+    """A legend asks the reader to identify each line against a swatch, which
+    is every pair, not neighbours in a list the reader never sees. Before, the
+    same figure passed or failed depending on which series was plotted
+    second."""
+    import itertools
+    verdicts = {order: _series_color(_three_lines(order, legend=True,
+                                                  crossing=False))
+                for order in itertools.permutations(
+                    ("#ff7f0e", "#1f77b4", "#2ca02c"))}
+    assert set(verdicts.values()) == {False}, verdicts
+
+
+def test_crossing_lines_are_neighbours_on_the_page():
+    """Without a legend the reader still has to tell two strokes apart where
+    they meet. Orange and green cross here with blue drawn between them."""
+    fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=False,
+                       crossing=True)
+    assert _series_color(fig) is False
+
+
+def test_directly_labelled_lines_that_never_meet_keep_the_adjacent_rule():
+    """The control. No legend and no contact: the non-adjacent pair is never
+    compared, by swatch or on the page, so the adjacent rule still applies."""
+    fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=False,
+                       crossing=False)
+    assert _series_color(fig) is True
+
+
+def _two_lines(colors, styles):
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 12)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for k, (c, (ls, marker)) in enumerate(zip(colors, styles)):
+        ax.plot(x, x * (k + 1), color=c, ls=ls, marker=marker, label=c)
+    ax.legend()
+    return fig
+
+
+def test_a_second_channel_carries_a_pair_under_the_cvd_target():
+    """`CVD_TARGET`'s own comment: below it, secondary encoding is mandatory.
+    A pair that carries it - distinct dash and distinct marker - has done what
+    the row's [FIX] asks, and failing it anyway contradicts the row."""
+    ok = _series_color(_two_lines(CVD_PAIR, [("-", "o"), ("--", "s")]))
+    assert ok is True
+
+
+def test_the_same_pair_without_a_second_channel_still_fails():
+    ok = _series_color(_two_lines(CVD_PAIR, [("-", None), ("-", None)]))
+    assert ok is False
+
+
+def test_no_second_channel_excuses_the_normal_vision_floor():
+    """`NORMAL_FLOOR` is the hard floor: "no secondary encoding excuses it"."""
+    from check_palette import check
+    _, rows = check(list(NORMAL_PAIR))
+    status = gates(rows)
+    assert status["CVD separation (adjacent)"] is True
+    assert status["Normal-vision floor (adjacent)"] is False
+    ok = _series_color(_two_lines(NORMAL_PAIR, [("-", "o"), ("--", "s")]))
+    assert ok is False
+
+
+def _subdivided(x, y, k):
+    """The same polyline with every segment split into `k` equal pieces: the
+    stroke on the page is identical, only the vertex count changes."""
+    import numpy as np
+    t = np.linspace(0.0, 1.0, k, endpoint=False)
+    xs = np.concatenate([x[:-1, None] + np.diff(x)[:, None] * t, ], axis=None)
+    ys = np.concatenate([y[:-1, None] + np.diff(y)[:, None] * t, ], axis=None)
+    return np.append(xs, x[-1]), np.append(ys, y[-1])
+
+
+@pytest.mark.parametrize("k", [1, 10, 100])
+def test_banking_does_not_depend_on_how_finely_a_stroke_is_sampled(k):
+    """Splitting every segment into k equal pieces leaves the drawn stroke and
+    its length unchanged, so the factor must not move. A rise cull in pixels,
+    under the median slope this replaced, made it move: at k=100 every segment
+    rose under half a pixel, all were culled, and the panel the gate exists
+    for read "no line panel"."""
+    fig, x, y = _alternating_rates((2.4, 5.2))
+    plt.close(fig)
+    xs, ys = _subdivided(x, y, k)
+    fig, ax = plt.subplots(figsize=(2.4, 5.2), dpi=150)
+    ax.plot(xs, ys, lw=1.2)
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(0, 1)
+    fig.canvas.draw()
+    factor = cf._banking_factor(ax)
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert factor is not None
+    base = _alternating_rates((2.4, 5.2))[0]
+    want = cf._banking_factor(base.axes[0])
+    plt.close(base)
+    assert factor == pytest.approx(want, rel=1e-6)
+    assert gates(rows)["Banking"] == "warn"
+
+
+def test_a_repeated_label_on_panels_that_cannot_share_a_scale_is_not_redundant():
+    """`sharey` on 0-1 and 0-1000 would flatten one panel to a line. The tick
+    half of the row already keys on limits and scale for this reason; the label
+    half has to as well, or it prints a remedy that destroys the figure."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(8, 3), constrained_layout=True)
+    a.plot([0, 1], [0, 1])
+    b.plot([0, 1], [0, 1000])
+    for ax in (a, b):
+        ax.set_ylabel("Accuracy")
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    assert gates(rows)["Axis redundancy"] is True
+
+
+# --- second review round: what the first round's fixes broke -----------------
+#
+# A code review of the invariance round found each of these on its own diff.
+# Each test failed before its fix.
+
+def test_banking_still_warns_on_a_panel_flat_throughout():
+    """A line banked too flat everywhere is the finding. Under the median
+    slope's cull it was culled to nothing and read "no line panel", so the
+    flatter the panel the less the gate said."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(6, 4))
+    x = np.arange(9.0)
+    ax.plot(x, 0.0132 * x)
+    ax.set_ylim(-5, 5)
+    status, detail = cf.check_banking(fig)
+    plt.close(fig)
+    assert status == "warn" and "taller" in detail, detail
+
+
+def test_banking_drops_a_constant_reference_line():
+    """The control. A line with no rise is Heer & Agrawala's slopeless line,
+    which the aspect cannot bank, so a horizontal reference line beside a
+    banked curve leaves the panel banked."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 4))
+    x = np.linspace(0.0, 1.0, 20)
+    ax.plot(x, x)
+    ax.plot(x, 0 * x + 0.5)
+    status, detail = cf.check_banking(fig)
+    plt.close(fig)
+    assert status is True, detail
+
+
+def test_autoscaled_panels_naming_one_quantity_are_still_redundant():
+    """Keying on exact float limits stopped the label half firing on the
+    commonest small multiple: two panels autoscaled a few hundredths apart."""
+    fig, (a, b) = plt.subplots(1, 2, figsize=(5, 2.4), constrained_layout=True)
+    a.plot([0, 1], [0.10, 0.95])
+    b.plot([0, 1], [0.12, 0.97])
+    for ax in (a, b):
+        ax.set_ylabel("Accuracy")
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    plt.close(fig)
+    assert status is False and "ylabel 'Accuracy'" in detail, detail
+
+
+# --- where SHARE_SPAN_RATIO_MAX sits ------------------------------------------
+#
+# The corpus cannot see this constant: no figure in it has two panels naming
+# one quantity in a row or column. These cases are the evidence instead. Each is
+# two autoscaled panels labelled "Value"; the number is the ratio
+# `_largest_sharable` compares. Cases between 1.6 and 4.0 (0-1 beside 0-2,
+# 0-2.5 or 0-3) are left out: whether `sharey` should take that much is the
+# judgement the constant makes.
+
+SHARE_SPAN_CASES = [
+    # (data spans, log, should fire)        ratio
+    (((0.10, 0.95), (0.12, 0.97)), False, True),    # 1.02, autoscale jitter
+    (((0.2, 1.0), (0.3, 1.2)), False, True),        # 1.23, two loss curves
+    (((1, 100), (10, 1000)), True, True),           # 1.45, a decade apart
+    (((0, 50), (0, 80)), False, True),              # 1.60, two regions
+    (((0, 1), (0, 4)), False, False),               # 4.00
+    (((0, 1), (0.4, 0.6)), False, False),           # 5.00, a zoomed panel
+    (((1, 10), (1, 1e6)), True, False),             # 6.00 decades
+    (((0, 1), (0, 10)), False, False),              # 10.0
+    (((20, 25), (80, 85)), False, False),           # 11.9, two regimes
+]
+
+
+@pytest.mark.parametrize("spans,log,fires", SHARE_SPAN_CASES)
+def test_the_share_span_ratio_separates_the_adversarial_set(spans, log, fires):
+    fig, axes = plt.subplots(1, 2, figsize=(4.4, 2.4), constrained_layout=True)
+    for ax, (lo, hi) in zip(axes, spans):
+        ax.plot([0, 1], [lo, hi])
+        if log:
+            ax.set_yscale("log")
+        ax.set_ylabel("Value")
+    (l1, h1), (l2, h2) = (sorted(ax.yaxis.get_transform().transform(
+        ax.get_ylim())) for ax in axes)
+    ratio = (max(h1, h2) - min(l1, l2)) / min(h1 - l1, h2 - l2)
+    r, _ = cf._renderer(fig)
+    status, detail = cf.check_redundancy(fig, r)
+    plt.close(fig)
+    # The bracket the `SHARE_SPAN_RATIO_MAX` comment quotes.
+    assert ratio <= 1.6 + 1e-9 if fires else ratio >= 4.0 - 1e-9, ratio
+    assert ("ylabel 'Value'" in detail) is fires, detail
+
+
+def test_same_process_small_multiples_mostly_share_at_the_ratio():
+    """Panels drawn from one stationary process should share an axis. Across
+    900 seeded figures of 2 to 6 panels and 10 to 100 points, 3 join no pair
+    at 2.0, and none at 2.5. A random walk is not stationary and is not here:
+    its panels' ranges differ for real."""
+    import numpy as np
+    from matplotlib.figure import Figure
+    rng = np.random.default_rng(0)
+    draws = (lambda n: rng.normal(0, 1, n),
+             lambda n: rng.lognormal(0, 1, n),
+             lambda n: rng.poisson(40, n))
+    missed = {2.0: 0, 2.5: 0}
+    for i, draw in enumerate(draws):
+        for k in (2, 3, 4, 6):
+            for n in (10, 30, 100):
+                for _ in range(25):
+                    axes = Figure().subplots(1, k)
+                    for ax in axes:
+                        ax.plot(np.arange(n), draw(n))
+                        if i == 1:
+                            ax.set_yscale("log")
+                    for t in missed:
+                        with pytest.MonkeyPatch.context() as mp:
+                            mp.setattr(cf, "SHARE_SPAN_RATIO_MAX", t)
+                            missed[t] += cf._largest_sharable(list(axes), "y") < 2
+    assert missed == {2.0: 3, 2.5: 0}
+
+
+def test_the_same_circle_from_scatter_and_plot_is_one_marker():
+    """`scatter(marker="o")` and `plot(..., "o")` draw the same circle. Read
+    as two markers, they excused a dE 1.6 pair as carried by a second
+    channel the reader cannot see."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 8)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter(x, x, color=CVD_PAIR[0], marker="o", label="a")
+    ax.plot(x, 1 - x, "o", color=CVD_PAIR[1], label="b")
+    assert _series_color(fig) is False
+
+
+def test_a_vertical_rule_that_crosses_a_line_is_compared_with_it():
+    """`axvline` draws in a blended transform. Read through `transData`, its
+    stroke spanned data y 0 to 1 instead of the panel, and the crossing with
+    the orange diagonal was missed."""
+    import numpy as np
+    x = np.linspace(0.0, 10.0, 50)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot(x, x, color=CVD_PAIR[0])
+    ax.plot(x, 0 * x + 9.5, color="#1f77b4")
+    ax.axvline(5, color=CVD_PAIR[1])
+    assert _series_color(fig) is False
+
+
+def test_a_hidden_legend_does_not_change_which_pairs_are_compared():
+    """A legend the reader never sees is not a key the reader matches against.
+    `legend().set_visible(False)` must leave the verdict where no legend
+    leaves it."""
+    verdicts = []
+    for hide in (False, True):
+        fig = _three_lines(("#ff7f0e", "#1f77b4", "#2ca02c"), legend=hide,
+                           crossing=False)
+        if hide:
+            fig.axes[0].get_legend().set_visible(False)
+        verdicts.append(_series_color(fig))
+    assert verdicts == [True, True]
+
+
+def test_the_series_fix_names_only_channels_the_row_reads():
+    """The row reads dash, marker, hatch and mark type. A [FIX] that sends the
+    author to direct labels sends them to a change that leaves a legended
+    panel failing."""
+    fig = _two_lines(CVD_PAIR, [("-", None), ("-", None)])
+    ok, rows = cf.audit(fig)
+    plt.close(fig)
+    detail = next(d for n, s, d in rows if n == "Series color")
+    fix = detail.split("[FIX]", 1)[1]
+    assert "direct label" not in fix
+    assert all(w in fix for w in ("dash", "marker", "hatch")), fix
+
+
+def test_tab10_orange_and_green_read_as_the_prose_says():
+    """`check_series_color`'s docstring, SKILL.md and design.md quote this
+    pair. The row reports the worst dichromacy model, Machado's."""
+    from check_palette import check
+    detail = dict((n, d) for n, _, d in check(list(CVD_PAIR))[1])[
+        "CVD separation (adjacent)"]
+    assert "dE 1.6 (protan at severity 1.0, Machado)" in detail, detail
+
+
+def test_series_contact_is_the_densifier_spacing_and_not_configurable():
+    """Two strokes crossing between vertices are at most the vertex spacing
+    apart at the nearest vertex pair, so the slack has to be that spacing."""
+    import numpy as np
+    pts = np.array([[0.0, 0.0], [997.0, 13.0], [1500.0, -400.0]])
+    dense = cf._densify_px(pts)
+    assert np.hypot(*np.diff(dense, axis=0).T).max() <= cf.SERIES_CONTACT_PX
+    assert "SERIES_CONTACT_PX" in cf.NOT_CONFIGURABLE
+
+
+def _rings(n):
+    """Two concentric rings of `n` vertices each, 10px apart everywhere, so
+    nothing meets at a 3px tolerance. Most of the outer ring lies inside the
+    inner ring's bounding box, so the prefilter cannot answer for the search."""
+    import numpy as np
+    t = np.linspace(0.0, 2 * np.pi, n)
+    ring = np.column_stack([np.cos(t), np.sin(t)])
+    return 100 * ring + 500, 90 * ring + 500
+
+
+def test_the_numpy_contact_path_agrees_with_scipy(monkeypatch):
+    import numpy as np
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(0)
+    cases = [_rings(400)]
+    for _ in range(40):
+        a = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
+        b = np.cumsum(rng.normal(0, 3, (300, 2)), axis=0) + 300
+        cases.append((a, b))
+    want = [cf._StrokeGaps([a, b]).gap(0, 1, 3.0) for a, b in cases]
+    _without_scipy(monkeypatch)
+    got = [cf._StrokeGaps([a, b]).gap(0, 1, 3.0) for a, b in cases]
+    np.testing.assert_allclose(got, want, rtol=1e-12)
+    assert np.isfinite(want).any() and np.isinf(want).any()
+
+
+def test_the_numpy_contact_path_is_memory_bounded(monkeypatch):
+    """`check_overplotting`'s fallback is capped by `GRID_PAIR_CAP`; this one
+    built a (256, len(b), 2) block per chunk, 1.7GB on noisy lines."""
+    import tracemalloc
+    a, b = _rings(100_000)
+    _without_scipy(monkeypatch)
+    tracemalloc.start()
+    try:
+        assert cf._StrokeGaps([a, b]).gap(0, 1, 3.0) == float("inf")
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 200 * 2**20, f"peak {peak / 2**20:.0f} MiB"
+
+
+# --- the gallery reaches each way a pair is chosen ---------------------------
+#
+# `check_series_color` picks the pairs it compares before it compares any
+# (`_gated_pairs`), and a pair under `CVD_TARGET` passes when a second channel
+# carries it. `gallery-classifiers`, `-abundance`,
+# `-dose-response` and `-interrupted` exist so the corpus sweep reaches each.
+# Each test names the pair and shows the path is what put it there.
+
+def _gallery_figure(name):
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+    import gallery
+    gallery.OUT = None
+    return getattr(gallery, name)()
+
+
+def _gated(ax):
+    distinct = list(dict.fromkeys(
+        h for h, _, _ in cf._data_colors_by_axes(ax.figure)[ax]))
+    pairs = cf._gated_pairs(ax, distinct, cf._data_artists(ax))
+    return {frozenset((distinct[i], distinct[j])) for i, j in pairs}
+
+
+def test_the_roc_legend_gates_both_pairs_stone_disagrees_on():
+    fig = _gallery_figure("classifiers")
+    ax = fig.axes[0]
+    gated = _gated(ax)
+    ax.get_legend().remove()
+    unkeyed = _gated(ax)
+    plt.close(fig)
+    for pair in ({"#0072b2", "#cc79a7"}, {"#009e73", "#cc79a7"}):
+        assert frozenset(pair) in gated, gated
+    # Without the legend every pair is still compared: every ROC curve runs
+    # from (0, 0) to (1, 1), so each touches every other. The legend is the
+    # deciding path in `abundance`, below, not here.
+    assert unkeyed == gated, unkeyed
+
+
+def test_the_figure_legend_is_what_compares_blue_with_purple():
+    fig = _gallery_figure("abundance")
+    pair = frozenset({"#0072b2", "#cc79a7"})
+    keyed = [_gated(ax) for ax in fig.axes]
+    fig.legends[0].remove()
+    unkeyed = [_gated(ax) for ax in fig.axes]
+    plt.close(fig)
+    assert all(pair in g for g in keyed), keyed
+    assert not any(pair in g for g in unkeyed), unkeyed
+
+
+def test_the_red_green_pair_passes_only_as_carried_by_a_second_channel():
+    fig = _gallery_figure("dose_response")
+    status, detail = cf.check_series_color(fig)
+    # Control: the same hues with the markers and dashes taken away.
+    for line in fig.axes[0].lines:
+        line.set_marker("None")
+        line.set_linestyle("-")
+    bare, bare_detail = cf.check_series_color(fig)
+    plt.close(fig)
+    assert status is True, detail
+    assert "dE 5.2 (deutan" in detail and "carried by a second channel" in detail
+    assert bare is False, bare_detail
+
+
+def test_contact_compares_the_rule_change_with_the_series():
+    fig = _gallery_figure("interrupted")
+    ax = fig.axes[0]
+    distinct = list(dict.fromkeys(
+        h for h, _, _ in cf._data_colors_by_axes(fig)[ax]))
+    observed, rule = distinct.index("#0072b2"), distinct.index("#cc79a7")
+    gated = _gated(ax)
+    plt.close(fig)
+    assert abs(observed - rule) > 1, distinct
+    assert frozenset({"#0072b2", "#cc79a7"}) in gated, gated
+
+
+# --- the series-colour row reads numbers, not strings ------------------------
+
+def _two_series():
+    fig, ax = plt.subplots(figsize=(3, 2))
+    ax.plot([0, 1], [0, 1], color=CVD_PAIR[0], label="a")
+    ax.plot([0, 1], [1, 0], color=CVD_PAIR[1], label="b")
+    ax.legend()
+    return fig
+
+
+def test_series_color_does_not_parse_check_palettes_detail_strings(monkeypatch):
+    """`_separation` regex-parsed dE and tritan out of `check`'s prose, so a
+    rewording of a detail string would have moved a verdict."""
+    cp = cf._sibling("check_palette")
+    fig = _two_series()
+    expected = cf.check_series_color(fig)
+
+    def no_check(*args, **kwargs):
+        raise AssertionError("check_series_color called check_palette.check")
+    monkeypatch.setattr(cp, "check", no_check)
+    got = cf.check_series_color(fig)
+    plt.close(fig)
+    assert got == expected
+
+
+def test_series_color_harvests_each_panel_once(monkeypatch):
+    fig, axes = plt.subplots(1, 2, figsize=(4, 2))
+    for ax in axes:
+        ax.plot([0, 1], [0, 1], color=CVD_PAIR[0])
+        ax.plot([0, 1], [1, 0], color=CVD_PAIR[1])
+    calls = []
+    real = cf._data_artists
+    monkeypatch.setattr(cf, "_data_artists",
+                        lambda ax: calls.append(ax) or real(ax))
+    cf.check_series_color(fig)
+    plt.close(fig)
+    assert len(calls) == len(axes), calls
+
+
+# --- third review round: what the second round's fixes left -------------------
+#
+# A code review of `main...review-invariances` found each of these. Each test
+# failed before its fix.
+
+_ORANGE_BLUE_GREEN = ("#ff7f0e", "#1f77b4", "#2ca02c")
+
+
+def _clouds(order):
+    """Three interleaved marker-only clouds drawn with `plot`, no legend."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        ax.plot(rng.random(200), rng.random(200), "o", ms=2, color=c)
+    return fig
+
+
+def test_marker_only_plot_clouds_gate_every_pair_whatever_the_draw_order():
+    """`plot(x, y, "o")` puts every series beside every other, as `scatter`
+    does. Read as neither, orange beside green was compared only when they were
+    neighbours in the plot calls."""
+    import itertools
+    verdicts = {order: _series_color(_clouds(order))
+                for order in itertools.permutations(_ORANGE_BLUE_GREEN)}
+    assert set(verdicts.values()) == {False}, verdicts
+
+
+@pytest.mark.parametrize("crossing", [False, True])
+def test_unkeyed_lines_get_one_verdict_in_every_draw_order(crossing):
+    """Lines are compared where their strokes meet, never by draw order. Flat
+    lines that never touch passed with blue plotted second and failed with
+    green plotted second."""
+    import itertools
+    verdicts = {order: _series_color(_three_lines(order, legend=False,
+                                                  crossing=crossing))
+                for order in itertools.permutations(_ORANGE_BLUE_GREEN)}
+    assert set(verdicts.values()) == {crossing is False}, verdicts
+
+
+# Okabe-Ito blue bars beside `NORMAL_PAIR`: an orange bar and a yellow line.
+_BARS_AND_LINE = ("#e69f00", "#0072b2", "#f0e442")
+
+
+def _bars_and_line(order, line_y):
+    """Orange and blue bars and a yellow line at height `line_y`, drawn in
+    `order`, no legend."""
+    import numpy as np
+    x = np.linspace(-0.5, 1.5, 30)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    for c in order:
+        if c == "#f0e442":
+            ax.plot(x, 0 * x + line_y, color=c)
+        else:
+            ax.bar([_BARS_AND_LINE.index(c)], [1.0], color=c)
+    ax.set_ylim(0, 2)
+    return fig
+
+
+@pytest.mark.parametrize("line_y,fails", [(0.5, True), (1.8, False)])
+def test_a_line_is_compared_with_the_areas_it_crosses(line_y, fails):
+    """A line through the orange bar is beside it on the page whatever the
+    plot calls' order. Mark type does not excuse `NORMAL_FLOOR`. The control
+    line runs clear above both bars."""
+    import itertools
+    verdicts = {order: _series_color(_bars_and_line(order, line_y))
+                for order in itertools.permutations(_BARS_AND_LINE)}
+    assert set(verdicts.values()) == {not fails}, verdicts
+
+
+def _panels(spans):
+    from matplotlib.figure import Figure
+    axes = Figure().subplots(1, len(spans))
+    for ax, (lo, hi) in zip(axes, spans):
+        ax.set_ylim(lo, hi)
+    return list(axes)
+
+
+def test_sharable_panels_are_judged_as_a_group_not_a_chain():
+    """0-1 beside 0-2 and 0-2 beside 0-4 each fit `SHARE_SPAN_RATIO_MAX`, but
+    one axis over all three squashes 0-1 to a quarter of its height. A chain
+    of pairwise joins counted all three."""
+    assert cf.SHARE_SPAN_RATIO_MAX == 2.0
+    assert cf._largest_sharable(_panels([(0, 1), (0, 2), (0, 4)]), "y") == 2
+    assert cf._largest_sharable(_panels([(0, 1), (0, 1.5), (0, 2)]), "y") == 3
+
+
+def test_an_older_vendored_check_palette_warns_instead_of_raising(monkeypatch):
+    """`_sibling` exists for files vendored one at a time. A `check_palette.py`
+    from before `pair_separation` is a sibling that cannot answer, not a crash
+    in `audit`."""
+    cp = cf._sibling("check_palette")
+    monkeypatch.delattr(cp, "pair_separation")
+    fig = _two_series()
+    status, detail = cf.check_series_color(fig)
+    plt.close(fig)
+    assert status == "warn" and "pair_separation" in detail, detail
+
+
+@pytest.mark.parametrize("dashes,carried", [
+    (((0, (4, 2)), (0, (1, 1))), True),
+    (("--", (0, (1, 1))), True),
+    (((0, (1, 1)), (0, (1, 1))), False),
+    # The same dash shifted along the line reads as the same dash.
+    (((0, (4, 2)), (2, (4, 2))), False),
+])
+def test_custom_dash_patterns_are_compared_as_drawn(dashes, carried):
+    """`get_linestyle()` reports every dash tuple as '--', so two visibly
+    different dashes read as one channel."""
+    ok = _series_color(_two_lines(CVD_PAIR, [(d, None) for d in dashes]))
+    assert ok is carried
+
+
+def _bank(draw):
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+    draw(ax)
+    fig.canvas.draw()
+    factor = cf._banking_factor(ax)
+    plt.close(fig)
+    return factor
+
+
+def test_banking_does_not_bridge_a_gap_in_a_line():
+    """A NaN run is a gap on the page. Dropping the NaNs and then differencing
+    banked an invented segment across it."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 100)
+    y = np.sin(6 * x) * x
+    gappy = y.copy()
+    gappy[40:60] = np.nan
+
+    def one(ax):
+        ax.plot(x, gappy)
+        ax.set_ylim(-1, 1)
+
+    def two(ax):
+        ax.plot(x[:40], y[:40], color="C0")
+        ax.plot(x[60:], y[60:], color="C0")
+        ax.set_ylim(-1, 1)
+
+    assert _bank(one) == pytest.approx(_bank(two), rel=1e-6)
+
+
+def test_banking_reads_a_line_through_its_own_transform():
+    """A line drawn in axes coordinates, read through `transData`, banked
+    pixels it does not occupy."""
+    import numpy as np
+    u = np.linspace(0.0, 1.0, 50)
+    v = 0.5 + 0.4 * np.sin(8 * u)
+
+    def axes_coords(ax):
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 100)
+        ax.plot(u, v, transform=ax.transAxes)
+
+    def data_coords(ax):
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 100)
+        ax.plot(10 * u, 100 * v)
+
+    assert _bank(axes_coords) == pytest.approx(_bank(data_coords), rel=1e-6)
+
+
+def test_pair_separation_simulates_each_colour_once(monkeypatch):
+    """Twelve panels of the same six hues under a legend gate 180 pairs. Each
+    hue needs simulating once per deficiency and severity, not once per pair."""
+    import numpy as np
+    cp = cf._sibling("check_palette")
+    cp._cvd_views.cache_clear()
+    calls = []
+    real = cp.simulate_anomalous
+    monkeypatch.setattr(cp, "simulate_anomalous",
+                        lambda *a: calls.append(a) or real(*a))
+    hues = ["#0072b2", "#e69f00", "#009e73", "#cc79a7", "#56b4e9", "#d55e00"]
+    fig, axes = plt.subplots(3, 4, figsize=(8, 6))
+    x = np.linspace(0.0, 1.0, 5)
+    for ax in axes.flat:
+        for k, h in enumerate(hues):
+            ax.plot(x, x + k, color=h, label=h)
+        ax.legend()
+    cf.check_series_color(fig)
+    plt.close(fig)
+    per_hue = 2 * (len(cp.ANOMALOUS_SEVERITIES) + 1)
+    assert len(calls) == len(hues) * per_hue, len(calls)
+
+
+# The geometry `_gated_pairs` reads: the shape an area fills and the part of a
+# stroke the panel shows, measured exactly. A review of the review-invariances
+# branch found each case; each test failed before its fix.
+
+def _drawn_pairs(fig, ax):
+    fig.canvas.draw()
+    gated = _gated(ax)
+    plt.close(fig)
+    return gated
+
+
+def test_a_line_is_compared_with_an_area_whose_shape_it_enters():
+    """A band along the diagonal has the whole panel for a bounding box, and
+    green far above it was compared with orange. Blue sits between the band
+    and green, so only the band can pair them. Green crossing the band is."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(0.0, 1.0, 50)
+    for green_y, enters in ((0.9, False), (0.6, False), (0.3, True),
+                            (0.15, True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x, x, color=orange)
+        ax.fill_between(x, x - 0.05, x + 0.05, color=orange, alpha=0.3)
+        ax.plot([0, 0.25], [green_y - 0.05] * 2, color="#1f77b4")
+        ax.plot([0, 0.25], [green_y] * 2, color=green)
+        ax.set_ylim(-0.1, 1.1)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is enters, green_y
+
+
+def test_a_band_on_a_log_axis_is_read_where_it_is_drawn():
+    """`get_path_collection_extents` applied only the affine part of the
+    transform, which put a band from 10 to 1000 on a log axis above the panel,
+    so a line inside it was never compared with it."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(1.0, 10.0, 50)
+    for green_y, enters in ((100, True), (3, False)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.fill_between(x, 10, 1000, color=orange, alpha=0.4)
+        ax.plot(x, 0 * x + green_y, color=green)
+        ax.plot(x, 0 * x + 1.5, color="#1f77b4")
+        ax.set_yscale("log")
+        ax.set_ylim(1, 1e4)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is enters, green_y
+
+
+def test_lines_that_meet_only_beyond_the_limits_are_not_neighbours():
+    """Green crosses orange at x = 2.5. With the panel cut at x = 0 the
+    crossing is off the page and blue lies between them."""
+    import numpy as np
+    orange, green = CVD_PAIR
+    x = np.linspace(-5.0, 5.0, 200)
+    for xmax, meets in ((0, False), (5, True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(x, 0 * x + 10, color=orange)
+        ax.plot(x, 0 * x + 5, color="#1f77b4")
+        ax.plot(x, 4 * x, color=green)
+        ax.set_xlim(-5, xmax)
+        ax.set_ylim(-20, 12)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is meets, xmax
+
+
+def test_a_line_inside_its_own_dashed_bounds_is_compared_with_its_neighbour():
+    """A line's dashed bounds touch it and are its own hue, so each stroke's
+    nearest was a stroke of its own series: orange and green lines 0.3 apart,
+    each between bounds 0.08 away, were not compared."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, off in zip(CVD_PAIR, (0.0, 0.3)):
+        ax.plot(x, np.sin(x) + off, color=c)
+        for s in (0.08, -0.08):
+            ax.plot(x, np.sin(x) + off + s, "--", color=c)
+    assert frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)
+
+
+def test_error_bar_caps_do_not_change_which_pairs_are_compared():
+    """Caps are marker-only lines, read as marks, so a capped error bar made
+    its panel compare every pair and an uncapped one did not."""
+    import numpy as np
+    x = np.arange(6)
+    gated = {}
+    for capsize in (0, 2, 4):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        for k, c in enumerate(_ORANGE_BLUE_GREEN):
+            ax.errorbar(x, 0 * x + 10 * k, yerr=0.5, capsize=capsize, color=c)
+        gated[capsize] = _drawn_pairs(fig, ax)
+    assert gated[2] == gated[0] == gated[4], gated
+    assert frozenset(CVD_PAIR) not in gated[0], gated[0]
+
+
+def test_a_dash_carries_two_lines_that_each_have_a_plain_band():
+    """Each series is a line and its band. The bands match in all but hue, and
+    asking every artist of one series to differ from every artist of the other
+    let them cancel the dash. The control: two solid lines carry nothing."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 50)
+    verdicts = {}
+    for second in ("--", "-"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        for c, ls, off in ((CVD_PAIR[0], "-", 0.0), (CVD_PAIR[1], second, 0.02)):
+            ax.plot(x, x + off, color=c, ls=ls, label=c)
+            ax.fill_between(x, x + off - 0.05, x + off + 0.05, color=c,
+                            alpha=0.2)
+        ax.legend()
+        verdicts[second] = _series_color(fig)
+    assert verdicts == {"--": True, "-": False}, verdicts
+
+
+def test_an_open_outline_is_compared_only_where_it_is_drawn():
+    """An unfilled `Polygon(closed=False)` draws an L. Closed, it gained the
+    chord from its last vertex to its first, and a line along that chord, far
+    from the L, was compared with it. The control crosses the L."""
+    from matplotlib.patches import Polygon
+    orange, green = CVD_PAIR
+    for xs, ys, crosses in (([0.45, 0.55], [0.55, 0.45], False),
+                            ([0.5, 0.5], [0.05, 0.15], True)):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.add_patch(Polygon([[0.1, 0.9], [0.1, 0.1], [0.9, 0.1]],
+                             closed=False, fill=False, edgecolor=orange))
+        ax.plot(xs, ys, color=green)
+        assert (frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)) is crosses, xs
+
+
+def _brute_gap(a, b):
+    import numpy as np
+    return min(float(np.sqrt(((a[i:i + 256, None] - b[None]) ** 2).sum(-1)).min())
+               for i in range(0, len(a), 256))
+
+
+def test_stroke_gaps_are_exact_with_and_without_scipy(monkeypatch):
+    """Gaps were read on 256 sampled vertices per stroke, further apart than
+    the `SERIES_CONTACT_PX` tie tolerance on a long stroke. Each stroke's
+    nearest is checked against every vertex pair."""
+    import numpy as np
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(3)
+    strokes = [cf._densify_px(np.cumsum(rng.normal(0, 4, (400, 2)), axis=0)
+                              + rng.normal(0, 60, 2) + 300) for _ in range(6)]
+    gap = {(i, j): _brute_gap(strokes[i], strokes[j])
+           for i in range(6) for j in range(6) if i != j}
+    want = []
+    for i in range(6):
+        near = min(g for (a, _), g in gap.items() if a == i)
+        want.append(sorted(j for (a, j), g in gap.items()
+                           if a == i and g <= near + cf.SERIES_CONTACT_PX))
+    for scipy in (True, False):
+        if not scipy:
+            _without_scipy(monkeypatch)
+        gaps = cf._StrokeGaps(strokes)
+        assert (gaps.kd is not None) is scipy
+        assert [sorted(gaps.nearest(i, list(range(6)))) for i in range(6)] == want
+        for (i, j), g in gap.items():
+            assert gaps.gap(i, j, g + 1e-6) == pytest.approx(g, rel=1e-12)
+
+
+def test_the_nearest_search_skips_a_stroke_whose_pairs_are_all_gated(
+        monkeypatch):
+    """120 random walks in six hues: comparing every pair of 256 samples of
+    every pair of strokes took seven seconds. Every hue pair is gated by
+    contact first, so no stroke is searched."""
+    import numpy as np
+    searched = []
+    real = cf._StrokeGaps.nearest
+    monkeypatch.setattr(cf._StrokeGaps, "nearest",
+                        lambda self, i: searched.append(i) or real(self, i))
+    rng = np.random.default_rng(1)
+    hues = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for k in range(120):
+        ax.plot(np.cumsum(rng.normal(size=200)), color=hues[k % 6], lw=0.8)
+    gated = _drawn_pairs(fig, ax)
+    assert len(gated) == 15 and searched == [], (len(gated), len(searched))
+
+
+
+def _level(sd, lw=1.5):
+    import numpy as np
+    rng = np.random.default_rng(1)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    x = np.arange(100.0)
+    ax.plot(x, 0.95 + sd * rng.normal(size=100), lw=lw)
+    ax.set_ylim(0, 1)
+    return fig
+
+
+@pytest.mark.parametrize("sd", [1e-6, 1e-4, 1e-3])
+def test_banking_drops_a_level_line_whatever_its_float_noise(sd):
+    """A metric converged at 0.95, its noise narrower on the page than its
+    stroke, draws as a level line. Only an exactly flat one was dropped, so
+    float noise was banked where an exactly level line read no line panel."""
+    fig = _level(sd)
+    status = cf.check_banking(fig)
+    plt.close(fig)
+    assert status == (True, "no line panel whose aspect encodes a rate"), status
+
+
+def test_banking_keeps_a_line_whose_rise_is_wider_than_its_stroke():
+    """The control, and the line drawn is what decides it: the same values
+    rise about 2.5px, more than a 0.5pt stroke and less than a 4pt one."""
+    verdicts = {}
+    for lw in (0.5, 4.0):
+        fig = _level(1.5e-3, lw)
+        verdicts[lw] = cf.check_banking(fig)[1]
+        plt.close(fig)
+    assert verdicts[0.5].startswith("1 line panel"), verdicts
+    assert verdicts[4.0] == "no line panel whose aspect encodes a rate", verdicts
+
+# --- matplotlib behaviours the third round leaned on --------------------------
+#
+# Each was found reading matplotlib 3.8.4 and 3.11.1, the two versions CI runs.
+
+
+@pytest.mark.parametrize("area", ["fill_between", "vlines"])
+def test_a_line_is_compared_with_a_collection_it_crosses(area):
+    """`Collection.get_window_extent` returns a null box for `vlines` on both
+    versions and for `fill_between` on 3.8.4, so a line crossing one was
+    never compared with it."""
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 30)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    if area == "fill_between":
+        ax.fill_between(x, 0.2, 0.8, color=NORMAL_PAIR[0])
+    else:
+        ax.vlines([0.3, 0.6], 0.0, 1.0, color=NORMAL_PAIR[0], lw=3)
+    ax.plot(x, 0 * x + 0.5, color=NORMAL_PAIR[1])
+    ax.set_ylim(0, 1)
+    assert _series_color(fig) is False
+
+
+def test_a_line_that_draws_nothing_is_not_a_series():
+    """`plot(..., ls="none")` without a marker puts no ink on the page, yet it
+    read as marks and made the panel gate every pair."""
+    verdicts = []
+    for ghost in (False, True):
+        fig = _three_lines(_ORANGE_BLUE_GREEN, legend=False, crossing=False)
+        if ghost:
+            fig.axes[0].plot([0, 1], [0, 2], ls="none", color="#9467bd")
+        verdicts.append(_series_color(fig))
+    assert verdicts == [True, True]
+
+
+# --- matplotlib-review fixes ---------------------------------------------------
+# Each reproduces a wrong verdict found reading the gates against matplotlib's
+# own artist model: what an artist draws, in the space it was placed in.
+
+def _row(fig, name):
+    _, rows = cf.audit(fig)
+    plt.close(fig)
+    return {r[0]: (r[1], r[2]) for r in rows}[name]
+
+
+def test_casing_given_as_an_array_is_read_as_casing():
+    """`withStroke(foreground=...)` takes any colour spec, an ndarray
+    included. `if halo_color:` raised on one, and the gate's crash read as a
+    hard FAIL."""
+    import numpy as np
+    from matplotlib import patheffects as pe
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1], [0, 1])
+    ax.text(0.2, 0.7, "Cased label", fontsize=10, path_effects=[
+        pe.withStroke(linewidth=3, foreground=np.array([1.0, 1.0, 1.0]))])
+    status, detail = _row(fig, "Text readability")
+    assert "gate raised" not in detail, detail
+    assert status is True, detail
+
+
+def test_a_text_alpha_fades_its_casing_too():
+    """`Stroke` draws with a copy of the text's graphics context. Black text at
+    alpha 0.6, cased in white over black, gets a #999999 casing and holds
+    3.8:1; read against unfaded white it held 5.7:1. A stroke that sets
+    `alpha=1` keeps its casing white."""
+    import numpy as np
+    from matplotlib import patheffects as pe
+    rows = []
+    for stroke in ({}, {"alpha": 1.0}):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.imshow(np.zeros((4, 4)), cmap="gray", vmin=0, vmax=1,
+                  extent=(0, 1, 0, 1), aspect="auto")
+        ax.set_axis_off()
+        ax.text(0.5, 0.5, "Cased label", fontsize=14, color="black",
+                alpha=0.6, ha="center", va="center", path_effects=[
+                    pe.withStroke(linewidth=12, foreground="w", **stroke)])
+        rows.append(_row(fig, "Text readability"))
+    assert "at 3.8:1" in rows[0][1], rows[0][1]
+    assert rows[1][0] is True, rows[1][1]
+
+
+def test_translucent_text_is_judged_at_the_colour_it_draws():
+    """Black text at alpha 0.15 lands as #d9d9d9 on white, about 1.4:1. It
+    passed when the gate read `get_color()` and ignored `get_alpha()`."""
+    verdicts = []
+    for alpha in (1.0, 0.15):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.plot([0, 1], [0, 1])
+        ax.text(0.55, 0.2, "Faint label", fontsize=10, color="black",
+                alpha=alpha)
+        verdicts.append(_row(fig, "Text readability")[0])
+    assert verdicts == [True, False], verdicts
+
+
+def test_mark_ratio_reads_the_size_a_dot_marker_draws():
+    """`"."` draws at half its markersize, as `marker_extent_pt` measures.
+    Read raw, `"."` at ms 12 beside `"o"` at ms 5 was 5.8x and failed; drawn,
+    the two are 6pt and 5pt across."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.plot([0, 1, 2], [0, 1, 2], ".", markersize=12)
+    ax.plot([0, 1, 2], [2, 1, 0], "o", markersize=5)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_mark_ratio_skips_a_hidden_scatter():
+    """The line loop skipped invisible artists and the scatter loop did not:
+    a hidden s=2000 scatter failed the figure at 200x."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    ax.scatter([0, 1, 2], [0, 1, 2], s=20)
+    ax.scatter([1], [1], s=2000).set_visible(False)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_negative_bars_on_an_axis_that_stops_short_of_zero_are_truncated():
+    """Negative bars hang from zero. `ylim(-9, -3)` cuts their baseline the
+    way `ylim(3, 9)` cuts positive ones, and only the second was caught."""
+    verdicts = []
+    for sign in (1, -1):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        ax.bar([1, 2, 3], [sign * 5, sign * 7, sign * 8])
+        ax.set_ylim(sorted((sign * 3, sign * 9)))
+        ok, detail = cf.check_form(fig)
+        plt.close(fig)
+        verdicts.append(ok)
+    assert verdicts == [False, False], detail
+    assert "short of zero" in detail, detail
+
+
+def test_overplotting_drops_a_mark_that_is_not_drawn():
+    """A NaN offset draws nothing. `cKDTree` refuses non-finite data, so one
+    NaN in a scatter turned the row into "gate raised ValueError"."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    x, y = rng.random(400), rng.random(400)
+    details = []
+    for poison in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        xs = x.copy()
+        if poison:
+            xs[0] = np.nan
+        ax.scatter(xs, y, s=4)
+        details.append(cf.check_overplotting(fig))
+        plt.close(fig)
+    assert all(isinstance(ok, bool) for ok, _ in details), details
+    assert details[0][0] == details[1][0], details
+
+
+def test_overplotting_places_a_scatter_in_its_own_coordinates():
+    """`transform=ax.transAxes` puts offsets in axes fractions. Mapped through
+    `transData` on a 0-1000 axis instead, a sparse cloud collapsed into one
+    corner and read as 100% contact."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    x, y = rng.random(200), rng.random(200)
+    verdicts = []
+    for in_axes in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        if in_axes:
+            ax.set_xlim(0, 1000)
+            ax.set_ylim(0, 1000)
+            ax.scatter(x, y, s=4, transform=ax.transAxes)
+        else:
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.scatter(x, y, s=4)
+        verdicts.append(cf.check_overplotting(fig))
+        plt.close(fig)
+    assert verdicts[0] == verdicts[1], verdicts
+    assert verdicts[0][0] is True, verdicts
+
+
+def test_overplotting_measures_marks_on_a_date_axis():
+    """`np.asarray(get_xdata(), dtype=float)` raises on datetimes and the
+    error was swallowed, so a dense marker-only cloud on a date axis read as
+    "no scatter overplotting". `get_xydata` is after unit conversion."""
+    import datetime as dt
+    import numpy as np
+    rng = np.random.default_rng(2)
+    days, y = rng.random(3000) * 30, rng.random(3000)
+    start = dt.datetime(2024, 1, 1)
+    verdicts = []
+    for dated in (False, True):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        x = ([start + dt.timedelta(days=float(d)) for d in days] if dated
+             else days)
+        ax.plot(x, y, "o", markersize=4, linestyle="none")
+        verdicts.append(_row(fig, "Overplotting")[0])
+    assert verdicts == ["warn", "warn"], verdicts
+
+
+@pytest.mark.parametrize("style", ["ggplot", "seaborn-v0_8-darkgrid"])
+def test_ink_reads_a_tinted_axes_face_as_ground(style):
+    """These styles grey the axes and leave the figure white. The page colour
+    was read off the figure's corner pixel, so the whole panel counted as ink
+    and one sine line read 0.95."""
+    import numpy as np
+    with plt.style.context(style):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        x = np.linspace(0, 10, 200)
+        ax.plot(x, np.sin(x))
+        ok, detail = cf.check_ink(fig)
+        plt.close(fig)
+    assert ok is True, detail
+
+
+def test_fonts_reports_a_missing_face_named_directly():
+    """`font.family` may name a face rather than a generic family. There is
+    no `font.<name>` list then, and the lookup that drove the check was empty,
+    so a face that is not installed was never reported."""
+    import logging
+    import matplotlib as mpl
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+    with mpl.rc_context({"font.family": "NoSuchFontXYZ"}):
+        ok, detail = cf.check_fonts(plt.figure())
+    plt.close("all")
+    assert ok == "warn", detail
+    assert "NoSuchFontXYZ" in detail, detail
+
+
+# --- matplotlib parity, second pass ------------------------------------------
+#
+# The rest of the 2026-10-25 review: places where the code disagreed with its
+# own comment or with what matplotlib does. Each test fails on the code before
+# the fix.
+
+def test_contrast_stack_groups_fills_not_scatters():
+    """The comment says only filled regions are grouped; the code grouped
+    `ax.collections`. Three scatters in one colour collapsed to one level, and
+    an `axvspan` fan, which lands in `ax.patches`, counted four. Patches were
+    grouped on `get_fill()`, so outlines drawn by `fill(facecolor="none")`
+    collapsed as a fan where the same strokes from `plot` read five levels."""
+    fig, ax = plt.subplots()
+    for a in (0.2, 0.4, 0.6):
+        ax.scatter([0, 1], [a, a], alpha=a, color=OKABE[4])
+    _, scatters = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], color="k")
+    for a in (0.1, 0.2, 0.3, 0.4):
+        ax.axvspan(0.5 * a, 1 - 0.5 * a, alpha=a, color=OKABE[4])
+    fan = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], color="k")
+    for a in (0.2, 0.4, 0.6, 0.8):
+        ax.fill([0.1 * a, 1 - 0.1 * a, 0.5], [0, 0, a], facecolor="none",
+                edgecolor=OKABE[4], alpha=a)
+    outlines = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "[0.2, 0.4, 0.6]" in scatters, scatters
+    assert fan[0] is True, fan
+    assert outlines[0] is False, outlines
+    assert "[0.2, 0.4, 0.6, 0.8, 1.0]" in outlines[1], outlines
+
+
+def test_corners_rotate_an_annotation_with_an_arrow():
+    """The upright measure took `get_window_extent`, arrow included, so it
+    never matched the text-only box and every rotated annotation fell back to
+    the axis-aligned box."""
+    import numpy as np
+    fig, ax = plt.subplots()
+    t = ax.annotate("rotated label", (0.1, 0.1), xytext=(0.5, 0.5),
+                    rotation=45, arrowprops=dict(arrowstyle="->"))
+    r, _ = cf._renderer(fig)
+    bb = cf._text_only_extent(t, r)
+    corners = cf._corners(t, bb, r)
+    plt.close(fig)
+    flat = np.array([(bb.x0, bb.y0), (bb.x1, bb.y0),
+                     (bb.x1, bb.y1), (bb.x0, bb.y1)])
+    assert not np.allclose(corners, flat)
+
+
+@pytest.mark.parametrize("weight", ["demibold", "demi", "semibold", "bold",
+                                    "heavy", "extra bold", "black", 600])
+def test_is_bold_reads_every_weight_matplotlib_maps_to_600_or_more(weight):
+    fig = plt.figure()
+    t = fig.text(0, 0, "x", fontweight=weight)
+    plt.close(fig)
+    assert cf._is_bold(t)
+
+
+@pytest.mark.parametrize("weight", ["normal", "medium", "roman", 500])
+def test_is_bold_rejects_weights_under_600(weight):
+    fig = plt.figure()
+    t = fig.text(0, 0, "x", fontweight=weight)
+    plt.close(fig)
+    assert not cf._is_bold(t)
+
+
+def test_describe_returns_the_figure_as_annotated():
+    """0.10.0 returned `fig` under `-> None`; the annotation was the bug, so
+    a caller chaining `fig = describe(fig, ...)` keeps working."""
+    fig = plt.figure()
+    out = cf.describe(fig, "A description long enough to carry a finding.")
+    plt.close(fig)
+    assert out is fig
+
+
+def test_artist_kind_calls_a_line_collection_a_line():
+    """`vlines` and errorbar bars are strokes; they were read as "area"."""
+    fig, ax = plt.subplots()
+    lc = ax.vlines([0, 1], 0, 1)
+    plt.close(fig)
+    assert cf._artist_kind(lc) == "line"
+
+
+@pytest.mark.parametrize("draw", ["errorbar", "vlines"])
+def test_series_color_reads_a_line_collection_beside_a_line(draw):
+    """`_artist_kind` calls a `LineCollection` a line, and only `Line2D` has
+    `get_xydata`: the stroke readers read a collection's paths, or the gate
+    raises."""
+    import numpy as np
+    x = np.linspace(0, 1, 20)
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    if draw == "errorbar":
+        ax.errorbar(x, x, yerr=0.1, color=OKABE[4])
+    else:
+        ax.vlines(x, 0, x, color=OKABE[4])
+    ax.plot(x, 1 - x, color=OKABE[5])
+    status, detail = _row(fig, "Series color")
+    assert not detail.startswith(cf.GATE_RAISED), detail
+    assert status is True, detail
+
+
+def test_error_bar_series_are_compared_with_each_other():
+    """Read as strokes, an error bar's bars touch its line in its own hue.
+    Two error bar series 0.3 apart are still compared: a stroke's nearest is
+    sought among strokes of another hue."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, off in zip(CVD_PAIR, (0.0, 0.3)):
+        ax.errorbar(x, np.sin(x) + off, yerr=0.05, color=c)
+    assert frozenset(CVD_PAIR) in _drawn_pairs(fig, ax)
+
+
+@pytest.mark.parametrize("fmt,carried", [(("o-", "s--"), True),
+                                         (("none", "none"), False)])
+def test_error_bars_neither_cancel_nor_make_a_second_channel(fmt, carried):
+    """Error bars are plain in every series. Filed with each series' line,
+    they cancelled the marker and dash that tell `fmt="o-"` from `"s--"`,
+    which pass drawn with `plot`. Bars alone are told apart by nothing."""
+    import numpy as np
+    x = np.linspace(0, 6, 40)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    for c, f, off in zip(CVD_PAIR, fmt, (0.0, 0.3)):
+        ax.errorbar(x, np.sin(x) + off, yerr=0.05, fmt=f, color=c, label=c)
+    ax.legend()
+    status, detail = _row(fig, "Series color")
+    assert status is carried, detail
+
+
+def test_tick_and_polar_helpers_see_inset_axes():
+    fig, ax, sub = _inset_host()
+    sub.plot([0, 1], [0, 1])
+    polar = ax.inset_axes([0.05, 0.05, 0.3, 0.3], projection="polar")
+    fig.canvas.draw()
+    ticks = cf._tick_texts(fig)
+    radial = cf._polar_radial_ticks(fig)
+    plt.close(fig)
+    assert all(id(t) in ticks for t in sub.get_xticklabels())
+    assert all(id(t) in radial for t in polar.get_yticklabels())
+
+
+def test_furniture_helpers_see_inset_axes():
+    from matplotlib.colors import to_rgb
+    fig, ax, sub = _inset_host()
+    sub.set_facecolor("#ddeeff")
+    sub.set_title("Zoom")
+    sub.plot([0, 1], [0, 1], label="a")
+    sub.legend()
+    colors = cf._furniture(fig)
+    furniture_ids = cf._furniture_text_ids(fig)
+    legend_ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert tuple(c * 255.0 for c in to_rgb("#ddeeff")) in colors
+    assert id(sub.title) in furniture_ids
+    assert all(id(t) in legend_ids for t in sub.get_legend().get_texts())
+
+
+def test_identity_channel_sees_a_legend_inside_an_inset():
+    fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
+    ax.axis("off")
+    sub = ax.inset_axes([0.1, 0.1, 0.8, 0.8])
+    sub.plot([0, 1], [0, 1], color=OKABE[4], label="one")
+    sub.plot([0, 1], [1, 0], color=OKABE[1], label="two")
+    sub.legend()
+    ok, detail = cf.check_identity_channel(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def test_legend_readers_see_a_subfigure_legend():
+    """`subfig.legend()` lands in the subfigure's `legends`; both readers
+    read only the root figure's, and the gate warned "no legend"."""
+    fig = plt.figure(figsize=(6, 3))
+    sf = fig.subfigures(1, 2)[1].subfigures(2, 1)[0]
+    ax = sf.subplots()
+    ax.plot([0, 1], color=OKABE[0], label="one")
+    ax.plot([1, 0], color=OKABE[3], label="two")
+    lg = sf.legend()
+    ok, detail = cf.check_identity_channel(fig)
+    ids = cf._legend_text_ids(fig)
+    plt.close(fig)
+    assert ok is True, detail
+    assert all(id(t) in ids for t in lg.get_texts())
+
+
+# --- matplotlib parity, review of the parity fixes ---------------------------
+
+@pytest.mark.parametrize("case", ["dashed pair", "a line between"])
+def test_series_color_reads_vlines_as_it_reads_the_same_plot(case):
+    """`_second_channel` read dashes only from a `Line2D`, so a dashed
+    `vlines` pair was told to separate by dash. A stroke between two `vlines`
+    hues gates them as it gates two `plot` lines: neither is a draw-order
+    neighbour."""
+    import numpy as np
+    verdicts = []
+    for spell in ("plot", "vlines"):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        if case == "dashed pair":
+            x = np.linspace(0, 1, 12)
+            for c, ls, dx in (("#0072b2", "-", 0), ("#2a6fb0", "--", 0.04)):
+                if spell == "plot":
+                    for xi in x + dx:
+                        ax.plot([xi, xi], [0, 1], color=c, lw=1.5, ls=ls)
+                else:
+                    ax.vlines(x + dx, 0, 1, color=c, lw=1.5, linestyles=ls)
+        else:
+            for c, xs in (("#0072b2", 2), (OKABE[1], 3), ("#2a6fb0", 4)):
+                if spell == "plot" or c == OKABE[1]:
+                    ax.plot([xs, xs], [0, 1], color=c, lw=2)
+                else:
+                    ax.vlines([xs], 0, 1, color=c, lw=2)
+            ax.set_xlim(0, 6)
+        status, detail = _row(fig, "Series color")
+        verdicts.append((status, "by dash" in detail))
+    assert verdicts[0] == verdicts[1], verdicts
+
+
+def _sine_ink(fig, ax):
+    import numpy as np
+    x = np.linspace(0, 10, 200)
+    ax.plot(x, np.sin(x))
+    ok, detail = cf.check_ink(fig)
+    plt.close(fig)
+    return ok, detail
+
+
+@pytest.mark.parametrize("hide", ["axis", "frame"])
+def test_ink_ground_skips_an_axes_patch_agg_never_draws(hide):
+    """Agg draws the axes patch only when `axison` and `frameon` are both
+    True. Under `ggplot` the predicted grey ground was missing from the render
+    and the whole panel read 1.00."""
+    with plt.style.context("ggplot"):
+        fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+        if hide == "axis":
+            ax.axis("off")
+        else:
+            ax.set_frame_on(False)
+        ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_ink_ground_includes_a_subfigure_face():
+    fig = plt.figure(figsize=(4, 3))
+    sf = fig.subfigures(1, 1)
+    sf.set_facecolor("#dddddd")
+    ax = sf.subplots()
+    ax.patch.set_alpha(0.0)
+    ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_ink_ground_blends_a_translucent_face_as_agg_does():
+    """Agg clears to transparent white and a translucent face drawn onto it
+    keeps its own colour; compositing it over opaque white predicted 153 where
+    the buffer holds 51."""
+    fig, ax = plt.subplots(figsize=(4, 3), constrained_layout=True)
+    fig.patch.set_facecolor((0.2, 0.2, 0.2, 0.5))
+    ax.patch.set_alpha(0.3)
+    ok, detail = _sine_ink(fig, ax)
+    assert ok is True, detail
+
+
+def test_mark_ratio_reads_a_scatter_marker_path_as_plot_does():
+    """`scatter` applies the marker's own transform too, so `"."` draws at
+    half of `sqrt(s)`. Read only on the `plot` side, two equal dot clouds
+    read 4.0x at s=36 and ms=6."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots()
+    ax.scatter(rng.random(10), rng.random(10), marker=".", s=36)
+    ax.plot(rng.random(10), rng.random(10), ".", ms=6)
+    ok, detail = cf.check_mark_ratio(fig)
+    plt.close(fig)
+    assert "mark area 1.0x" in detail, detail
+
+
+def test_mark_gates_take_a_vertex_array_marker():
+    """A marker may be an (N, 2) vertex array. `in (...)` compared it
+    elementwise and raised."""
+    import numpy as np
+    verts = np.array([[0, 0], [1, 0], [0.5, 1]])
+    fig, ax = plt.subplots()
+    ax.plot([0, 1, 2], [0, 1, 0], ls="none", marker=verts)
+    ax.plot([0, 1, 2], [1, 0, 1], "o")
+    cf.check_mark_ratio(fig)
+    cf.check_overplotting(fig)
+    plt.close(fig)
+
+
+def test_contrast_stack_groups_a_patch_collection_fan():
+    from matplotlib.collections import PatchCollection
+    from matplotlib.patches import Rectangle
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], color="k")
+    for a in (0.2, 0.3, 0.4, 0.5):
+        ax.add_collection(PatchCollection(
+            [Rectangle((0.5 * a, 0), 1 - a, 1)], alpha=a,
+            facecolor=OKABE[4], edgecolor="none"))
+    ok, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def _png_size(fig):
+    import io
+    import matplotlib.image as mpimg
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+    return mpimg.imread(buf).shape[:2]
+
+
+def test_a_second_audit_leaves_savefig_output_unchanged():
+    """matplotlib 3.8.4's canvas `__init__` sets `_original_dpi = fig.dpi`,
+    which inside `audit` is `MEASURE_DPI`. `savefig` reads `_original_dpi`, so
+    after two audits it wrote at 150 dpi."""
+    fig, ax = plt.subplots(dpi=100)
+    ax.plot([0, 1], [0, 1])
+    before = _png_size(fig)
+    cf.audit(fig)
+    cf.audit(fig)
+    after = (fig.dpi, fig._original_dpi, _png_size(fig))
+    plt.close(fig)
+    assert after == (100, 100, before)
+
+
+def _layout(fig):
+    out = [tuple(ax._position.bounds) + tuple(ax._originalPosition.bounds)
+           for ax in cf._all_axes(fig)]
+    out.append(fig._suptitle.get_position())
+    out.append(tuple(vars(fig.subplotpars).values()))
+    out.extend(tuple(sf.bbox_relative.bounds) for sf in fig.subfigs)
+    return out
+
+
+@pytest.mark.parametrize("layout", ["constrained", "tight", "subfigures"])
+def test_audit_leaves_the_layout_where_it_found_it(layout):
+    """A layout engine runs on every draw and starts from where the last one
+    left the axes. `audit` draws at `MEASURE_DPI`, so it used to move them,
+    and the next `savefig` wrote the moved layout."""
+    if layout == "subfigures":
+        fig = plt.figure(figsize=(5, 3), layout="constrained")
+        axs = [sf.add_subplot() for sf in fig.subfigures(1, 2, width_ratios=(2, 1))]
+    else:
+        fig, axs = plt.subplots(1, 2, figsize=(5, 3), layout=layout)
+    for ax in axs:
+        ax.plot([0, 1], [0, 1], label="a long legend entry")
+        ax.set_ylabel("a label long enough to need room")
+    axs[0].legend(ncols=2, loc="lower center", bbox_to_anchor=(0.5, 1.0))
+    fig.suptitle("A title")
+    fig.savefig(io.BytesIO(), format="png")
+    before = _layout(fig)
+    cf.audit(fig)
+    after = _layout(fig)
+    plt.close(fig)
+    assert after == before
+
+
+@pytest.mark.parametrize("style", ["ggplot", "seaborn-v0_8-darkgrid"])
+def test_ink_reads_a_twin_against_its_hosts_face(style):
+    """`twinx` hides the twin's patch, so the host's face is the ground under
+    it. Read against the figure's white instead, a grey-faced twin measured
+    0.94 ink and warned."""
+    with plt.style.context(style):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot([0, 1, 2], [0, 1, 0])
+        ax.twinx().plot([0, 1, 2], [5, 3, 8], color="C1")
+        ok, detail = cf.check_ink(fig)
+    plt.close(fig)
+    assert ok is True, detail
+
+
+def _ink_truth(fig):
+    """Each axes' ink fraction against a render with every axes emptied, so
+    the ground is whatever Agg actually drew under the marks."""
+    import numpy as np
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    canvas = FigureCanvasAgg(fig)
+    canvas.draw()
+    full = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int).copy()
+    hidden = [a for ax in cf._all_axes(fig) for a in ax.get_children()
+              if a is not ax.patch and a.get_visible()]
+    for a in hidden:
+        a.set_visible(False)
+    canvas.draw()
+    ground = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
+    for a in hidden:
+        a.set_visible(True)
+    canvas.draw()
+    h, r = full.shape[0], canvas.get_renderer()
+    out = []
+    for ax in cf._all_axes(fig):
+        bb = ax.get_window_extent(renderer=r)
+        x0, x1 = int(max(bb.x0, 0)), int(min(bb.x1, full.shape[1]))
+        y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
+        d = np.abs(full[h - y1:h - y0, x0:x1]
+                   - ground[h - y1:h - y0, x0:x1]).sum(axis=2)
+        out.append(float((d > cf.INK_DELTA_MIN).mean()))
+    return out, canvas
+
+
+@pytest.mark.parametrize("hatch", [None, "//"])
+@pytest.mark.parametrize("face", ["translucent", "none", "polar"])
+def test_ink_reads_an_axes_partly_over_another_as_agg_draws_it(face, hatch):
+    """A later axes half over a grey one. The ground was one colour per
+    panel, taken from a host that contained the panel whole, so a partial
+    overlap read the grey half of each panel as ink: 0.41 and 0.47 where the
+    render holds 0.06 and 0.05. A hatched face is ground too."""
+    import re
+    fig = plt.figure(figsize=(4, 3), dpi=cf.MEASURE_DPI)
+    a = fig.add_axes((0.1, 0.1, 0.5, 0.8))
+    a.set_facecolor("#888888")
+    a.patch.set_hatch(hatch)
+    b = fig.add_axes((0.35, 0.2, 0.55, 0.6),
+                     projection="polar" if face == "polar" else None)
+    if face == "translucent":
+        b.patch.set_alpha(0.5)
+    elif face == "none":
+        b.set_facecolor("none")
+    else:
+        b.set_facecolor("#cccccc")
+    b.patch.set_hatch(hatch)
+    for ax in (a, b):
+        ax.plot([0, 1], [0, 1], color="k")
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+
+@pytest.mark.parametrize("backdrop", ["add_artist", "patches", "figimage"])
+def test_ink_reads_a_figure_level_backdrop_as_ground(backdrop):
+    """A figure-level artist drawn before the axes is under every mark, as
+    the figure's own patch is. Left out of the ground, a sine on a grey
+    backdrop read 1.00 ink and warned."""
+    import re
+    import numpy as np
+    from matplotlib.patches import Rectangle
+    fig, axs = plt.subplots(1, 2, figsize=(5, 3), dpi=cf.MEASURE_DPI)
+    x = np.linspace(0, 10, 200)
+    for ax in axs:
+        ax.set_facecolor("none")
+        ax.plot(x, np.sin(x))
+    if backdrop == "add_artist":
+        fig.add_artist(Rectangle((0, 0), 1, 1, transform=fig.transFigure,
+                                 color="#dddddd", zorder=-1))
+    elif backdrop == "patches":
+        fig.patches.append(Rectangle(
+            (0.05, 0.05), 0.45, 0.9, transform=fig.transFigure,
+            color="#dddddd", zorder=-1, figure=fig))
+    else:
+        fig.figimage(np.full((450, 750), 0.85), cmap="gray", vmin=0, vmax=1,
+                     zorder=-1)
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+
+def test_ink_reads_a_figure_artist_between_axes_as_ground():
+    """A figure-level rectangle at zorder 0.5, between an axes at 0 and one
+    at 1. Only artists before the first axes counted as ground, so both
+    panels read 1.00 ink where the render holds 0.04 and 0.03."""
+    import re
+    from matplotlib.patches import Rectangle
+    fig = plt.figure(figsize=(4, 3), dpi=cf.MEASURE_DPI)
+    a = fig.add_axes((0.1, 0.1, 0.5, 0.8), zorder=0)
+    fig.add_artist(Rectangle((0.05, 0.05), 0.9, 0.9,
+                             transform=fig.transFigure, color="#bbbbbb",
+                             zorder=0.5))
+    b = fig.add_axes((0.35, 0.2, 0.55, 0.6), zorder=1)
+    for ax in (a, b):
+        ax.set_facecolor("none")
+        ax.plot([0, 1], [0, 1], color="k")
+    truth, canvas = _ink_truth(fig)
+    _, detail = cf.check_ink(fig, canvas=canvas)
+    plt.close(fig)
+    got = [float(f) for f in re.findall(r"ax\d (\d\.\d\d)", detail)]
+    assert got == pytest.approx(truth, abs=0.01), detail
+
+def _halo_case(case):
+    fig, ax = plt.subplots(figsize=(4, 3))
+    if case == "axis off":
+        ax.set_facecolor("#e5e5e5")
+        ax.axis("off")
+        return fig, ax, "#ffffff", "#e5e5e5"
+    if case == "frame off":
+        ax.set_facecolor("#e5e5e5")
+        ax.set_frame_on(False)
+        return fig, ax, "#ffffff", "#e5e5e5"
+    if case == "translucent":
+        fig.set_facecolor("#333333")
+        ax.set_facecolor((1, 1, 1, 0.5))
+        return fig, ax, "#999999", "#ffffff"
+    ax.set_facecolor("#e5e5e5")
+    inset = ax.inset_axes((0.2, 0.2, 0.6, 0.6))
+    inset.set_facecolor("none")
+    return fig, inset, "#e5e5e5", "#ffffff"
+
+
+@pytest.mark.parametrize("case", ["axis off", "frame off", "translucent",
+                                  "inset"])
+def test_a_halo_edge_is_read_against_the_ground_agg_drew(case):
+    """`_ground` took the axes' own facecolor, drawn or not, unblended, or
+    `none` falling through to the figure's. A 0.3pt edge in the colour
+    actually under the marks failed the furniture floor, and one in the
+    colour `_ground` guessed passed."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    verdicts = {}
+    for role in ("halo", "visible"):
+        fig, ax, halo, other = _halo_case(case)
+        ax.scatter(rng.random(30), rng.random(30), s=40, color=OKABE[4],
+                   edgecolors=halo if role == "halo" else other,
+                   linewidths=0.3)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+def test_a_halo_edge_is_read_against_the_ground_under_the_drawn_marks():
+    """`_ground` voted over every offset, clipped ones too. With most of a
+    scatter outside a small dark axes, the margin's white outvoted the face:
+    the `#333` halo failed as an outline and a white one passed as a halo."""
+    import numpy as np
+    verdicts = {}
+    for role, edge in (("halo", "#333333"), ("visible", "#ffffff")):
+        rng = np.random.default_rng(0)
+        fig = plt.figure(figsize=(4, 3))
+        ax = fig.add_axes((0.4, 0.4, 0.2, 0.2))
+        ax.set_facecolor("#333333")
+        ax.scatter(rng.random(200) * 5 - 2, rng.random(200) * 5 - 2, s=40,
+                   color=OKABE[1], edgecolors=edge, linewidths=0.3)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+
+@pytest.mark.parametrize("under", ["imshow", "pcolormesh", "inset", "twinx"])
+def test_a_halo_edge_is_read_against_what_is_drawn_under_the_marks(under):
+    """`_ground` stopped at the axes' patch. Over a black image on a white face
+    a black edge, invisible against the image, failed as an outline and a
+    white one passed as a halo. An inset with no face reads its parent's
+    image the same way, and a twin its host's."""
+    import numpy as np
+    verdicts = {}
+    for role, edge in (("halo", "#000000"), ("visible", "#ffffff")):
+        rng = np.random.default_rng(0)
+        fig, ax = plt.subplots(figsize=(4, 3))
+        dark = np.zeros((8, 8))
+        if under == "pcolormesh":
+            ax.pcolormesh(np.linspace(0, 1, 9), np.linspace(0, 1, 9), dark,
+                          cmap="gray", vmin=0, vmax=1)
+        else:
+            ax.imshow(dark, cmap="gray", vmin=0, vmax=1,
+                      extent=(0, 1, 0, 1))
+        if under == "inset":
+            ax = ax.inset_axes((0.2, 0.2, 0.6, 0.6))
+            ax.set_facecolor("none")
+        elif under == "twinx":
+            ax = ax.twinx()
+            ax.set_ylim(0, 1)
+        ax.scatter(rng.random(30), rng.random(30), s=40, color=OKABE[4],
+                   edgecolors=edge, linewidths=0.3)
+        verdicts[role] = cf.check_line_weight(fig)
+        plt.close(fig)
+    assert verdicts["halo"][0] is True, verdicts["halo"][1]
+    assert "marker outlines" in verdicts["visible"][1], verdicts["visible"][1]
+
+
+def test_mark_readers_skip_masked_offsets():
+    """A masked offset draws no mark, and `_marks_px` read all ten offsets of
+    a scatter with five masked. Each mark reader reads the five, as does
+    `_series_px`, which `check_label_attribution` reads rivals through;
+    `_marks_rim` sixteen points round each."""
+    import numpy as np
+    fig, ax = plt.subplots()
+    x = np.arange(10.0)
+    sc = ax.scatter(x, np.ma.masked_where(x % 2 == 1, x))
+    fig.canvas.draw()
+    try:
+        assert len(cf._marks_px(sc, ax)) == 5
+        assert len(cf._marks_display(sc, ax)) == 5
+        assert len(cf._series_px(sc, ax)) == 5
+        assert len(cf._marks_rim(sc, ax)) == 5 * 16
+    finally:
+        plt.close(fig)
+
+
+def test_the_forward_ground_is_each_artists_ground_image():
+    """`_ForwardGround` draws one buffer forward instead of one render per
+    artist. Asked in creation order and back again, it returns exactly what
+    `_ground_image(..., below=artist)` renders. Neither order is draw order:
+    the scatter is created last and, at `zorder=1.5`, drawn first."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.imshow(np.linspace(0, 1, 64).reshape(8, 8), cmap="gray",
+              extent=(0, 1, 0, 1), aspect="auto")
+    rng = np.random.default_rng(0)
+    artists = [ax.plot(rng.random(8), rng.random(8), "o-", mec="w", lw=3)[0]
+               for _ in range(4)]
+    artists.append(ax.scatter(rng.random(20), rng.random(20), s=80,
+                              edgecolors="k", zorder=1.5))
+    fig.canvas.draw()
+    forward = cf._ForwardGround()
+    try:
+        for artist in artists + artists[::-1]:
+            assert np.array_equal(forward.image(ax, artist),
+                                  cf._ground_image(fig, upto=ax, below=artist))
+    finally:
+        plt.close(fig)
+
+
+_OWN_LINES = ([(edges, lw, "o") for edges in ("halo", "open marker")
+               for lw in (1, 1.5, 2, 3, 4, 5, 6, 8, 12)]
+              + [("halo", 3, marker) for marker in "s^D"])
+
+
+@pytest.mark.parametrize("edges, lw, marker", _OWN_LINES)
+def test_marks_on_their_own_line_read_alike_in_both_spellings(edges, lw,
+                                                              marker):
+    """`plot` then a `scatter` along it, and one `'o-'` line, draw the same
+    page. Read at the marks' centres, the separate line was ground and the
+    one line's own stroke was not: a white halo edge was measured as an
+    outline in the first spelling only, and an open marker's only edge passed
+    there as a halo. Under 6pt marks a line from 5pt up is what their edges
+    are seen against, in both spellings and at 100, 200 and 300 dpi."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    y = 0.2 + 0.6 * x
+    line, face, edge = {"halo": ("#222222", OKABE[0], "white"),
+                        "open marker": (OKABE[3], "white", OKABE[3])}[edges]
+    measured = []
+    for dpi in (100, 200, 300):
+        for spelling in ("plot and scatter", "one line"):
+            fig, ax = plt.subplots(figsize=(4, 3), dpi=dpi)
+            if spelling == "one line":
+                ax.plot(x, y, marker + "-", color=line, lw=lw, ms=6,
+                        mfc=face, mec=edge, mew=0.3)
+            else:
+                ax.plot(x, y, color=line, lw=lw)
+                ax.scatter(x, y, s=36, marker=marker, facecolors=face,
+                           edgecolors=edge, linewidths=0.3, zorder=3)
+            measured.append("marker outlines"
+                            in cf.check_line_weight(fig, scale=1.0)[1])
+            plt.close(fig)
+    assert measured == [(lw >= 5) == (edges == "halo")] * 6, measured
+
+
+@pytest.mark.parametrize("lw, ground", [(4.0, False), (5.0, True)])
+def test_a_line_is_ground_for_its_own_marks_once_it_covers_their_rim(lw,
+                                                                     ground):
+    """`_marks_rim`: a line under 6pt marks, 6.3pt drawn with their 0.3pt
+    edge, is their ground past about 0.7 of that width. White edges are a
+    halo on a 4pt line and an outline on a 5pt one."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.plot(x, 0.2 + 0.6 * x, "o-", color="#222222", lw=lw, ms=6,
+            mfc=OKABE[0], mec="white", mew=0.3)
+    detail = cf.check_line_weight(fig, scale=1.0)[1]
+    plt.close(fig)
+    assert ("marker outlines" in detail) is ground, detail
+
+
+@pytest.mark.parametrize("offset", [0.0, 0.078])
+def test_a_band_reads_alike_drawn_as_a_wide_line_or_a_fill(offset):
+    """White 0.3pt edges on marks inside a dark band are an outline whether
+    the band is a 20pt line or a `fill_between` band about 23pt across. With
+    strokes kept out of the ground, the line's band read as a halo. Marks
+    along the band's edge read alike both ways too, at 100, 200 and 300
+    dpi."""
+    import numpy as np
+    x = np.linspace(0, 1, 12)
+    y = 0.2 + 0.6 * x
+    measured = []
+    for dpi in (100, 200, 300):
+        for band in ("line", "fill"):
+            fig, ax = plt.subplots(figsize=(4, 3), dpi=dpi)
+            ax.set_xlim(-0.05, 1.05)
+            ax.set_ylim(0, 1)
+            if band == "line":
+                ax.plot(x, y, color="#222222", lw=20, solid_capstyle="butt")
+            else:
+                ax.fill_between(x, y - 0.078, y + 0.078, color="#222222",
+                                lw=0)
+            ax.scatter(x, y + offset, s=36, color=OKABE[0],
+                       edgecolors="white", linewidths=0.3, zorder=3)
+            measured.append("marker outlines"
+                            in cf.check_line_weight(fig, scale=1.0)[1])
+            plt.close(fig)
+    assert len(set(measured)) == 1, measured
+    assert measured[0] or offset, measured
+
+
+@pytest.mark.parametrize("layout", ["apart", "overlapping"])
+def test_an_earlier_axes_is_ground_only_where_its_box_meets_the_marks(layout):
+    """`_ground_layers` gives an earlier axes that does not hold the marks'
+    axes its patch alone unless the two boxes meet. What that costs: an
+    unclipped line drawn from a panel beside them, across the marks, is not
+    ground."""
+    fig = plt.figure(figsize=(6, 3))
+    left = fig.add_axes((0.1, 0.1, 0.35, 0.8))
+    right = fig.add_axes((0.55 if layout == "apart" else 0.3, 0.1, 0.35, 0.8))
+    line, = left.plot([0, 3], [0.5, 0.5], lw=8, clip_on=False)
+    left.set_xlim(0, 1)
+    marks = right.scatter([0.5], [0.5], s=36, edgecolors="white")
+    fig.canvas.draw()
+    try:
+        layers = cf._ground_layers(fig, upto=right, below=marks)
+        assert any(a is left.patch for a in layers)
+        assert any(a is line for a in layers) is (layout == "overlapping")
+    finally:
+        plt.close(fig)
+
+
+def test_contrast_stack_reads_every_spelling_of_graded_fills_alike():
+    """Three one-colour fills at graded alpha, written six ways matplotlib
+    allows. Patches went ungrouped, so `bar` and `axvspan` read four levels
+    where a `PatchCollection` of the same bars read two."""
+    from matplotlib.collections import PatchCollection
+    from matplotlib.colors import to_rgba
+    from matplotlib.patches import Rectangle
+    c, alphas = OKABE[4], (0.2, 0.4, 0.6)
+    spellings = [
+        lambda ax: [ax.bar([i], [1], color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+        lambda ax: ax.bar([0, 1, 2], [1, 1, 1],
+                          color=[to_rgba(c, a) for a in alphas]),
+        lambda ax: [ax.add_collection(PatchCollection(
+            [Rectangle((i, 0), 0.8, 1)], facecolor=c, alpha=a))
+            for i, a in enumerate(alphas)],
+        lambda ax: ax.add_collection(PatchCollection(
+            [Rectangle((i, 0), 0.8, 1) for i in range(3)],
+            facecolor=[to_rgba(c, a) for a in alphas])),
+        lambda ax: [ax.fill_between([i, i + 0.8], 0, 1, color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+        lambda ax: [ax.axvspan(i, i + 0.8, color=c, alpha=a)
+                    for i, a in enumerate(alphas)],
+    ]
+    verdicts = set()
+    for spell in spellings:
+        fig, ax = plt.subplots()
+        ax.plot([0, 3], [0, 1], color="k")
+        spell(ax)
+        verdicts.add(cf.check_contrast_stack(fig))
+        plt.close(fig)
+    assert len(verdicts) == 1, verdicts
+    assert next(iter(verdicts))[0] is True, verdicts
+
+
+def test_contrast_stack_keeps_a_line_at_a_graded_bar_alpha():
+    """A graded run was dropped by value, so a line at 0.4 beside bars at
+    0.2, 0.4 and 0.6 lost its level: four levels read as three."""
+    fig, ax = plt.subplots()
+    for i, a in enumerate((0.2, 0.4, 0.6)):
+        ax.bar([i], [1], color=OKABE[0], alpha=a)
+    ax.plot([0, 2], [0, 1], color=OKABE[3], alpha=0.4)
+    ax.plot([0, 2], [0.5, 0.5], color="k")
+    ax.plot([0, 2], [0.2, 0.8], color=OKABE[5], alpha=0.8)
+    ok, detail = cf.check_contrast_stack(fig)
+    plt.close(fig)
+    assert "[0.4, 0.6, 0.8, 1.0]" in detail, detail
+    assert ok is False, detail

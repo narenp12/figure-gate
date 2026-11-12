@@ -50,6 +50,7 @@ import importlib
 import itertools
 import math
 import sys
+import warnings
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -74,23 +75,24 @@ if TYPE_CHECKING:
 # comparing, which turns a break into a silent one. That is the opposite of what
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
-    "DID_NOT_RUN",
+    "DID_NOT_RUN", "GATE_RAISED",
     "MEASURE_DPI", "METRIC_RC_KEYS", "DRAW_RC_ATTR", "MARK_RATIO_MAX",
     "ALPHA_RAMP_MIN_STEPS", "MARK_ORNAMENT_GAP", "ALPHA_LEVELS_MAX",
     "OPAQUE_ALPHA_MIN", "INK_DELTA_MIN", "OVERPLOT_THRESHOLD",
-    "MAX_SERIES_HUES", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
+    "MAX_SERIES_HUES", "SERIES_CONTACT_PX", "INK_TOKENS", "FRAME_TOL", "LABEL_MARGIN",
     "MARK_RIDE_TOL_PX", "MARK_RIDE_FRAC_MIN", "SERIES_ENCLOSED_FRAC",
     "TEXT_CLUTTER_MAX", "TEXT_BLEND_TOL", "TEXT_EDGE_WINDOW", "TEXT_EDGE_TOL",
     "TEXT_BACKDROP_MIN_SHARE", "TEXT_FOOTPRINT_MIN_PX", "TEXT_CONTRAST_MIN",
     "TEXT_CONTRAST_MIN_LARGE", "LARGE_TEXT_PT", "LARGE_TEXT_BOLD_PT",
     "BOLD_WEIGHT_MIN", "TYPE_FLOOR_PT", "XHEIGHT_FLOOR_PT", "TYPE_CEILING_PT", "MATH_SCRIPT_FLOOR_PT",
     "PLACED_FRAC_WARN", "LINE_FLOOR_PT", "FURNITURE_FLOOR_PT",
-    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS", "BANKING_FLAT_PX",
+    "BANKING_SLOPE_MAX", "BANKING_MIN_POINTS",
+    "SHARE_SPAN_RATIO_MAX",
     "STYLE_SHEET", "CONTENT_WIDTH_PT", "VENUE_WIDTH_PT", "VENUE_TYPE_CEILING_PT",
     "VENUE_PANEL_LABEL_PT",
     "content_width_pt", "type_ceiling_pt", "x_height_fraction",
     "page_scale", "CONFIG_FILENAMES", "CONFIG_TABLE", "CONFIG_ALIASES",
-    "NOT_CONFIGURABLE", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
+    "NOT_CONFIGURABLE", "RETIRED_KEYS", "config_keys", "find_config", "load_config", "check_clipping", "check_collisions",
     "check_text_readability", "check_contrast_stack", "scatter_diameter_pt",
     "marker_extent_pt", "marker_stroke_pt", "collection_stroke_pt",
     "check_mark_ratio", "GRID_PAIR_CAP", "check_overplotting",
@@ -144,6 +146,10 @@ def _sibling(name: str) -> Any:
 # these files are vendored one at a time, and a contract between two of them
 # cannot live in an import either one may not have.
 DID_NOT_RUN = "did not run: "
+
+# The opening of a row whose gate raised. `suggest_fixes` skips it the way it
+# skips `DID_NOT_RUN`: the gate measured nothing about the figure.
+GATE_RAISED = "gate raised "
 
 # The resolution every pixel measurement in this file is taken at, regardless of
 # what the figure was authored at.
@@ -255,6 +261,12 @@ OVERPLOT_THRESHOLD = 0.5
 # simulated color blindness.
 MAX_SERIES_HUES = 6
 
+# Slack, in display pixels, beyond the two strokes' half-widths at which two
+# line series count as meeting on the page. It is the densifier's vertex
+# spacing: two strokes that cross between vertices are at most this far apart
+# at the nearest pair of vertices. See `_StrokeGaps`.
+SERIES_CONTACT_PX = 2.0
+
 # Rows `audit` can return "warn" for and never False. They are the checks whose
 # verdict depends on something the script cannot see: whether the document's
 # caption already carries the description, whether the saturated panel is a
@@ -353,9 +365,9 @@ LARGE_TEXT_BOLD_PT = 14.0
 BOLD_WEIGHT_MIN = 600
 
 # Type floor, in points ON THE PAGE, after the figure is scaled to fit: the
-# minimum PNAS and Science publish. PNAS: "no smaller than 6 points after
-# reduction". Science: "6 point minimum" for symbols. Nature's minimum is
-# lower, 5pt. The quotes are in `EXTERNAL_CLAIMS` in
+# minimum PNAS publishes, "no smaller than 6 points (2 mm) ... after
+# reduction". Science publishes no text floor; its "6 point minimum" is for
+# symbols. Nature's minimum is lower, 5pt. The quotes are in `EXTERNAL_CLAIMS` in
 # tests/test_prose_claims.py. A body size is what venues specify, so it is the
 # hard gate; the x-height floor below is advisory.
 TYPE_FLOOR_PT = 6.0
@@ -382,7 +394,7 @@ TYPE_CEILING_PT = math.inf
 _CONFIG_VENUE: str | None = None
 
 # Type floor for a sub- or superscript, ON THE PAGE, and the reason it is not
-# the x-height floor.
+# the body floor.
 #
 # Mathtext does not render at the size the author asked for. Each nesting level
 # of a script is drawn at `SHRINK_FACTOR = 0.7` of the level above, so an 11pt
@@ -395,8 +407,7 @@ _CONFIG_VENUE: str | None = None
 # and two of the three were failed on `$\mathdefault{10^{-11}}$`, which is
 # matplotlib's own log-axis tick label and which no author wrote. Setting a
 # script smaller than its base is not a defect, it is how mathematics has been
-# typeset for a century, and the body floor is the start of fluent reading,
-# above any journal's minimum.
+# typeset for a century.
 #
 # 5.0 is where two independent sources agree the floor actually is. LaTeX's own
 # table in `fontmath.ltx` maps every body size to a script and a scriptscript
@@ -447,32 +458,33 @@ LINE_FLOOR_PT = 1.0
 FURNITURE_FLOOR_PT = 0.5
 
 # --- banking -----------------------------------------------------------------
-# How far the typical line segment may sit from 45 degrees before the panel's
-# aspect ratio is reported. Cleveland banks a panel by choosing the aspect that
-# puts the median absolute segment slope at 1, where slope discrimination is
-# most accurate; this is the factor either side of that at which the gate says
-# so, and it is one number rather than two because a slope of 10 and a slope of
-# 0.1 are the same misjudgement rotated.
+# How far a line panel's aspect may sit from banked before it is reported.
+# Banked is Talbot, Gerth & Hanrahan's (2011): the aspect that minimises the
+# arc length of the plotted strokes at constant area, which puts a single
+# straight line at 45 degrees, where Cleveland found slope discrimination most
+# accurate. This is the factor either side of that aspect at which the gate
+# says so, and it is one number rather than two because ten times too tall and
+# ten times too wide are the same misjudgement rotated. For one straight line
+# the factor is the reciprocal of its page slope, so 10 is a line at 84 degrees
+# or at 6.
 #
-# Deliberately loose. 10 is a segment at 84 degrees or at 6, which is a panel
-# that is essentially vertical or essentially flat over its own typical step,
-# and there is no argument about those. Tighter bands were measured against the
-# corpus first: the 14 series in `examples/` that this gate reads span 0.19 to
-# 2.95, so [0.25, 4] would have fired on one of them and [0.1, 10] leaves the
-# nearest legitimate case a factor of 1.9 clear.
+# Deliberately loose. Set when the gate read Cleveland's median slope instead:
+# the 14 series in `examples/` it read then spanned 0.19 to 2.95, so [0.25, 4]
+# would have fired on one of them and [0.1, 10] left the nearest legitimate
+# case a factor of 1.9 clear. Arc length moves no corpus verdict.
 BANKING_SLOPE_MAX = 10.0
 # Below this many vertices a line is furniture, not a rate: a reference rule, a
 # leg of a schematic, the two points of an annotation leader. The corpus has 24
 # such strokes and none of them has a typical slope worth reporting.
 BANKING_MIN_POINTS = 8
-# A segment shorter than this in either axis, in display pixels, is drawn flat
-# or drawn upright and carries no orientation a reader can compare. Half a pixel
-# is the resolution the page has. Heer & Agrawala cull exactly-zero and
-# exactly-infinite slopes for the same reason - they are unchanged by the aspect
-# ratio and still move the median that sets it - and a segment that renders as
-# horizontal is the same case arrived at from the render instead of the
-# arithmetic. See `_banking_slopes`.
-BANKING_FLAT_PX = 0.5
+# Two panels naming one quantity count as one scale when sharing an axis would
+# cost each at most this factor of its own span: the union of their limits,
+# measured in the axis's scale, over the narrower span. The adversarial set in
+# `tests/test_figure.py` puts panels that should share at 1.6 or less and
+# panels that should not at 4.0 or more, so any factor in [1.6, 4.0) separates
+# it; 2.0 within that range is a judgement. At 2.0, 3 of 900 seeded
+# same-process small multiples join no pair, and none at 2.5.
+SHARE_SPAN_RATIO_MAX = 2.0
 
 # SET THIS PER PROJECT if your sheet is not beside this file: the path to the
 # `figure.mplstyle` that `check_style_sheet` compares the live rcParams
@@ -746,11 +758,16 @@ NOT_CONFIGURABLE = {
         "CSS's definition of a bold face, which matplotlib follows. Not this "
         "project's number to set",
     "GRID_PAIR_CAP":
-        "the memory bound on check_overplotting's fallback, about 100MB of "
-        "working set. It moves no verdict",
+        "the memory bound on the scipy-free paths of check_overplotting and "
+        "the series stroke-contact test, about 100MB of working set. It moves "
+        "no verdict",
     "RAMP_LUT_N":
         "the sample count a registered ramp is compared over, not a boundary "
         "any verdict falls on",
+    "SERIES_CONTACT_PX":
+        "the 2px vertex spacing of `_densify_px`, which is how far apart two "
+        "crossing strokes can be at their nearest vertices. Smaller misses "
+        "crossings; larger joins strokes that do not meet",
 }
 
 
@@ -781,6 +798,16 @@ def _config_targets() -> dict[str, Any]:
     for name in ("CONTENT_WIDTH_PT", "STYLE_SHEET"):
         targets[name] = sys.modules[__name__]
     return targets
+
+
+# Keys a released version accepted and this one does not. `load_config` warns
+# and skips each rather than raising on a file that was valid when written.
+RETIRED_KEYS = {
+    "BANKING_FLAT_PX":
+        "it culled banking segments that rose less than this many pixels; "
+        "banking is now by arc length, which needs no segment cull, and drops "
+        "only a line whose rise on the page is under its stroke width",
+}
 
 
 def _pinned_reason(key: str) -> Any:
@@ -865,7 +892,8 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     Every key is checked before any is assigned, so a file with one bad key
     changes nothing. A key that names no constant raises rather than being
-    skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
+    skipped, unless a released version accepted it: a `RETIRED_KEYS` key
+    warns and is skipped. A `venue` naming no row of `VENUE_WIDTH_PT` comes back as the
     `KeyError` `content_width_pt` raises, which lists the rows it knows.
 
     Args:
@@ -876,6 +904,9 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
         `{name: value}` for every constant assigned, `CONTENT_WIDTH_PT`
         included when the file set it through `venue`. Empty when there is no
         file to read.
+
+    Warns:
+        FutureWarning: A key is in `RETIRED_KEYS`.
 
     Raises:
         ValueError: A key names no settable constant, a value has the wrong
@@ -901,6 +932,11 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
 
     planned: dict[str, Any] = {}
     for key, value in table.items():
+        if key in RETIRED_KEYS and key not in targets:
+            warnings.warn(f"{path} sets {key}, which v0.10.0 accepted and this "
+                          f"version ignores: {RETIRED_KEYS[key]}",
+                          FutureWarning, stacklevel=2)
+            continue
         if key == "venue":
             if not isinstance(value, str):
                 raise ValueError(
@@ -954,15 +990,72 @@ def load_config(path: Any = None, *, start: Any = None) -> dict[str, Any]:
     return planned
 
 
-def _authored_dpi(fig: Figure) -> float:
-    """The dpi the figure belongs on when this file is finished with it.
+@contextlib.contextmanager
+def _on_own_canvas(fig: Figure) -> Any:
+    """Hand `fig` back on the canvas it arrived on.
 
-    `_original_dpi` is private but is set unconditionally in `Figure.__init__`,
-    and it is the only record of the authored value once a HiDPI canvas has
-    overwritten `fig.dpi`. `Figure.set_dpi` does not touch it, which is what
-    makes it survive the measurement below.
+    The audit draws on a new `FigureCanvasAgg`, which rebinds `fig.canvas`.
+    matplotlib's own `savefig` swaps canvases the same way and puts the old one
+    back in a `finally` (`FigureCanvasBase._switch_canvas_and_return_print_method`),
+    so an audited figure still shows in its GUI window.
+
+    The swap happens on entry, before `_at_measure_dpi` moves the dpi.
+    `fig.dpi = MEASURE_DPI` calls `set_size_inches(forward=True)`, which on a
+    GUI canvas resizes the window. Under TkAgg the window's resize event then
+    arrived after the audit and resized the figure, so every audit grew the
+    next `savefig`.
+
+    `_original_dpi` is put back too. It is the authored dpi, and `savefig`
+    writes at it. matplotlib 3.8's canvas `__init__` overwrites it with
+    `fig.dpi`, which inside `audit` is `MEASURE_DPI`, so a second audit used
+    to hand back a figure that saved at 150 dpi.
     """
-    return float(getattr(fig, "_original_dpi", fig.dpi))
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    before = fig.canvas
+    original = getattr(fig, "_original_dpi", None)
+    try:
+        FigureCanvasAgg(fig)
+        yield
+    finally:
+        if fig.canvas is not before:
+            fig.set_canvas(before)
+        if original is not None:
+            fig._original_dpi = original
+
+
+@contextlib.contextmanager
+def _layout_kept(fig: Figure) -> Any:
+    """Hand `fig` back with its axes and subfigures where they were.
+
+    A layout engine runs on every draw and starts from where the last draw
+    left things: `constrained` moves axes, subfigures and the `sup*` labels,
+    and `tight` calls `subplots_adjust`. Drawing at `MEASURE_DPI` therefore
+    moved them, so the next audit measured a different layout and the next
+    `savefig` wrote one.
+    """
+    axes = _all_axes(fig)
+    boxes = [(ax._position.frozen(), ax._originalPosition.frozen())
+             for ax in axes]
+    figures = _all_figures(fig)
+    panes = [(f, f.bbox_relative.frozen()) for f in figures[1:]]
+    labels = [(t, t.get_position()) for f in figures
+              for t in (getattr(f, n, None)
+                        for n in ("_suptitle", "_supxlabel", "_supylabel"))
+              if t is not None]
+    pars = dict(vars(fig.subplotpars))
+    try:
+        yield
+    finally:
+        for ax, (active, original) in zip(axes, boxes):
+            ax._position.set(active)
+            ax._originalPosition.set(original)
+            ax.stale = True
+        for f, box in panes:
+            f.bbox_relative.set(box)
+        for t, xy in labels:
+            t.set_position(xy)
+        fig.subplotpars.update(**pars)
 
 
 @contextlib.contextmanager
@@ -974,21 +1067,20 @@ def _at_measure_dpi(fig: Figure) -> Any:
     figure, and a figure the caller still owns has to come back the way it
     arrived, so this is a context manager rather than an assignment.
 
-    Restoring to `_authored_dpi` rather than to whatever `fig.dpi` held on entry
-    is deliberate: under a HiDPI GUI backend the entry value is the authored dpi
-    times the display's device pixel ratio, which is a fact about the display
-    and not about the figure. That is the same correction this function has
-    always made, now written where it can be read.
+    The dpi it held on entry is the one restored, as `savefig` restores it. Under
+    a HiDPI GUI backend that is the authored dpi times the device pixel ratio,
+    and `_on_own_canvas` hands the figure back to the canvas holding that ratio.
+    `savefig` writes at `_original_dpi`, so the doubled value does not double
+    the output.
     """
     before = fig.dpi
-    after = _authored_dpi(fig)
     try:
         if before != MEASURE_DPI:
             fig.dpi = MEASURE_DPI
         yield
     finally:
-        if fig.dpi != after:
-            fig.dpi = after
+        if fig.dpi != before:
+            fig.dpi = before
 
 
 @contextlib.contextmanager
@@ -1039,6 +1131,47 @@ def _at_draw_rc(fig: Figure) -> Any:
         yield
 
 
+# Figures inside `_measuring`, so a gate `audit` calls does not enter it again.
+_MEASURED: set[int] = set()
+
+
+@contextlib.contextmanager
+def _measuring(fig: Figure) -> Any:
+    """`_on_own_canvas`, `_layout_kept`, `_at_draw_rc` and `_at_measure_dpi`,
+    in that order: the canvas swaps before the dpi moves, for the reason
+    `_on_own_canvas` gives. Re-entered for the same figure, it does nothing."""
+    if id(fig) in _MEASURED:
+        yield
+        return
+    with (_on_own_canvas(fig), _layout_kept(fig), _at_draw_rc(fig),
+          _at_measure_dpi(fig)):
+        _MEASURED.add(id(fig))
+        try:
+            yield
+        finally:
+            _MEASURED.discard(id(fig))
+
+
+def _measured(gate: Callable[..., Any]) -> Callable[..., Any]:
+    """Run `gate(fig, ...)` inside `_measuring(fig)`, on a figure drawn there.
+    For the gates that read display geometry and take no renderer: called on
+    their own, they measured pixels at whatever dpi the author set.
+
+    Called on their own, they also draw first, as `audit` does before any gate.
+    matplotlib applies autoscaled limits and the layout engine at draw, so on a
+    figure never drawn the gates read the default 0-1 limits and the axes where
+    `subplots` put them: `check_series_color` passed three autoscaled lines
+    that `audit` failed. Inside `audit` the figure is already drawn."""
+    @functools.wraps(gate)
+    def run(fig: Figure, *args: Any, **kwargs: Any) -> Any:
+        if id(fig) in _MEASURED:
+            return gate(fig, *args, **kwargs)
+        with _measuring(fig):
+            _renderer(fig)
+            return gate(fig, *args, **kwargs)
+    return run
+
+
 def _renderer(fig: Figure) -> tuple[Any, Any]:
     """Return (renderer, canvas): an Agg canvas at `MEASURE_DPI`, drawn.
 
@@ -1065,16 +1198,17 @@ def _renderer(fig: Figure) -> tuple[Any, Any]:
     dpi it is handed to, and `audit` is what holds the figure there while the
     gates read the canvas it returns.
 
-    Note this rebinds `fig.canvas`: a figure that has been audited is no longer
-    attached to its GUI canvas and will not show in a window. `check_ink` and
-    `check_text_readability` already did this; it is now unconditional.
+    It draws on the `FigureCanvasAgg` `_on_own_canvas` put there, and binds a
+    new one only if `fig.canvas` is anything else.
 
     Reused across checks so check_ink does not render a second time.
     """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     if fig.dpi != MEASURE_DPI:
         fig.dpi = MEASURE_DPI
-    canvas = FigureCanvasAgg(fig)
+    canvas = fig.canvas
+    if type(canvas) is not FigureCanvasAgg:
+        canvas = FigureCanvasAgg(fig)
     canvas.draw()
     return canvas.get_renderer(), canvas
 
@@ -1126,10 +1260,20 @@ def _texts(fig: Figure, r: Any) -> list[tuple[Any, Any]]:
 
 def _tick_texts(fig: Figure) -> set[int]:
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         for t in ax.get_xticklabels() + ax.get_yticklabels():
             ids.add(id(t))
     return ids
+
+
+def _all_figures(fig: Figure) -> list[Any]:
+    """`fig` first, then every subfigure nested in it. `subfig.legend()`
+    lands in the subfigure's `legends`, not the figure's."""
+    figures, queue = [], [fig]
+    while queue:
+        figures.append(queue.pop(0))
+        queue.extend(getattr(figures[-1], "subfigs", []))
+    return figures
 
 
 def _all_axes(fig: Figure) -> list[Any]:
@@ -1208,7 +1352,7 @@ def _polar_radial_ticks(fig: Figure) -> set[int]:
     strings went unjudged instead of assuming they passed.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         if getattr(ax, "name", "") == "polar":
             ids.update(id(t) for t in ax.get_yticklabels())
     return ids
@@ -1244,7 +1388,7 @@ def _corners(t: Any, bb: Any, r: Any) -> np.ndarray:
     original = t.get_rotation()
     try:
         t.set_rotation(0)
-        upright = t.get_window_extent(renderer=r)
+        upright = _text_only_extent(t, r)
         w, h = float(upright.width), float(upright.height)
     except Exception:
         return flat
@@ -1405,6 +1549,22 @@ def _halo(t: Any) -> tuple[Any, float]:
     return None, 0.0
 
 
+def _halo_alpha(t: Any, color: Any) -> float:
+    """The opacity Agg draws a text's casing at. `Stroke` draws with a copy of
+    the text's graphics context, so a text `alpha` fades the casing as it fades
+    the glyphs unless the stroke sets its own; with neither, the foreground
+    colour's own alpha."""
+    from matplotlib import patheffects as pe
+    from matplotlib.colors import to_rgba
+    for effect in (t.get_path_effects() or ()):
+        if isinstance(effect, pe.Stroke):
+            own = (getattr(effect, "_gc", None) or {}).get("alpha")
+            if own is not None:
+                return float(own)
+            break
+    return float(t.get_alpha()) if t.get_alpha() is not None else to_rgba(color)[3]
+
+
 def _furniture(fig: Figure) -> list[tuple[float, ...]]:
     """Colors a label is allowed to sit on, read off the figure that drew them.
 
@@ -1421,7 +1581,7 @@ def _furniture(fig: Figure) -> list[tuple[float, ...]]:
     """
     from matplotlib.colors import to_rgb
     out = {tuple(to_rgb(fig.get_facecolor()))}
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         out.add(tuple(to_rgb(ax.get_facecolor())))
         for axis in (ax.xaxis, ax.yaxis):
             for line in axis.get_gridlines():
@@ -1563,8 +1723,17 @@ def _foreign_ink(block: np.ndarray, furniture: Sequence[tuple[float, ...]],
     return float(edge.sum() - _near_any(pix, anchors, tol).sum()) / area
 
 
+def _over(src: Any, src_alpha: Any, dst: Any) -> Any:
+    """`src` at `src_alpha` drawn over an opaque `dst`, as Agg blends:
+    `sa * src + (1 - sa) * dst`, broadcast over whatever arrays were passed."""
+    import numpy as np
+    src, dst = np.asarray(src, dtype=float), np.asarray(dst, dtype=float)
+    return src_alpha * src + (1.0 - src_alpha) * dst
+
+
 def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
-                    mask: np.ndarray | None = None) -> tuple[np.ndarray, float]:
+                    mask: np.ndarray | None = None,
+                    alpha: float = 1.0) -> tuple[np.ndarray, float]:
     """The contrast the text holds over all but the worst `min_share` of its
     box, and the backdrop pixel that sets it.
 
@@ -1591,13 +1760,19 @@ def _worst_backdrop(block: np.ndarray, fg: Sequence[float], min_share: float,
     `mask` selects the pixels the label covers. On an oblique box the corners of
     the sampled block are page the label never reaches, and a dark field in one
     of those corners would set the verdict for a string sitting on light ground.
+
+    `alpha` is the text's own opacity. Agg blends a translucent glyph with the
+    pixel under it, so that blend is the colour the reader sees.
     """
     import numpy as np
     if mask is not None:
         pix = block[mask].reshape(-1, 3).astype(float)
     else:
         pix = block.reshape(-1, 3).astype(float)
-    ratios = _contrast_field_255(fg, pix)
+    ink = np.asarray(fg, dtype=float)
+    if alpha < 1.0:
+        ink = _over(ink, alpha, pix)
+    ratios = _contrast_field_255(ink, pix)
     # An actual pixel and its actual ratio, not an interpolated quantile: the
     # colour is reported to the author and has to be one that is really there.
     k = int(min_share * (len(ratios) - 1))
@@ -1651,7 +1826,7 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
     crossed.
     """
     import numpy as np
-    from matplotlib.colors import to_rgb
+    from matplotlib.colors import to_rgb, to_rgba
 
     items = _texts(fig, r)
     if not items:
@@ -1663,13 +1838,13 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
         # re-enter, so the whole body runs at the one resolution and `r` is
         # remeasured against it.
         #
-        # `_at_draw_rc` for the same reason and in the same order `audit` enters
-        # them. A figure whose builder reported on it has a record, and reading
-        # this gate under the caller's font list instead would put the two
-        # routes on two different faces: measured on `gallery-density` under
+        # `_measuring` also pins the font list, as `audit` does. A figure
+        # whose builder reported on it has a record, and reading this gate
+        # under the caller's font list instead would put the two routes on two
+        # different faces: measured on `gallery-density` under
         # matplotlib 3.8.4, ax0's ink fraction came back 0.07 through `audit`
         # and 0.08 here.
-        with _at_draw_rc(fig), _at_measure_dpi(fig):
+        with _measuring(fig):
             r, canvas = _renderer(fig)
             return check_text_readability(fig, r, canvas, scale, placed_frac,
                                           venue)
@@ -1732,8 +1907,12 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
             continue
         checked += 1
 
-        fg = np.array(to_rgb(t.get_color())) * 255.0
+        rgba = to_rgba(t.get_color(), t.get_alpha())
+        fg, alpha = np.array(rgba[:3]) * 255.0, float(rgba[3])
         halo_color, _ = _halo(t)
+        # The foreground may be any colour spec, an array included, so the
+        # test is for presence and not truthiness.
+        cased = halo_color is not None
         name = str(t.get_text())[:22]
 
         frac = _foreign_ink(block, furniture, TEXT_BLEND_TOL, mask)
@@ -1741,20 +1920,24 @@ def check_text_readability(fig: Figure, r: Any, canvas: Any = None,
             cluttered.append(
                 f"{name!r} sits on data ink over {frac:.0%} of its box"
                 + (" — the casing hides it by erasing the data underneath"
-                   if halo_color else " and wears no casing"))
+                   if cased else " and wears no casing"))
 
         pt = t.get_fontsize() * scale
         bold = _is_bold(t)
         floor = (TEXT_CONTRAST_MIN_LARGE
                  if pt >= LARGE_TEXT_PT or (pt >= LARGE_TEXT_BOLD_PT and bold)
                  else TEXT_CONTRAST_MIN)
-        if halo_color:
+        if cased:
             # Casing replaces the backdrop under the strokes, so that is what
-            # the reader reads against.
-            ratio = _contrast_255(fg, np.array(to_rgb(halo_color)) * 255.0)
+            # the reader reads against, laid over it at the opacity Agg draws
+            # it with.
+            ground = _over(np.array(to_rgb(halo_color)) * 255.0,
+                           _halo_alpha(t, halo_color), block)
+            _, ratio = _worst_backdrop(ground, fg, TEXT_BACKDROP_MIN_SHARE,
+                                       mask, alpha)
         else:
             _, ratio = _worst_backdrop(block, fg, TEXT_BACKDROP_MIN_SHARE,
-                                       mask)
+                                       mask, alpha)
         if ratio < floor:
             faint.append(f"{name!r} at {ratio:.1f}:1 on its backdrop "
                          f"(text needs {floor}:1)")
@@ -1811,7 +1994,9 @@ def _contrast_field_255(fg: Sequence[float], pixels: np.ndarray) -> np.ndarray:
         lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
         return lin @ np.array([0.2126, 0.7152, 0.0722])
 
-    back, front = lum(pixels), float(lum(fg))
+    # `fg` may be one colour or one per pixel: `_worst_backdrop` composites
+    # translucent text over each backdrop pixel before measuring it.
+    back, front = lum(pixels), lum(fg)
     hi, lo = np.maximum(back, front), np.minimum(back, front)
     return (hi + 0.05) / (lo + 0.05)
 
@@ -1919,11 +2104,12 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
     import numpy as np
 
     alphas: list[float] = []
-    families: dict[Any, set[float]] = {}
+    members: dict[Any, list[int]] = {}    # indices into `alphas`, per family
     ranked = False
+    from matplotlib.collections import Collection, PathCollection
+    from matplotlib.patches import Patch
     for ax in _all_axes(fig):
-        collections_here = set(map(id, ax.collections))
-        for a in list(ax.collections) + list(ax.lines) + list(ax.patches):
+        for a in list(ax.collections) + list(ax.lines) + _drawn_patches(ax):
             if not a.get_visible():
                 continue
             before = len(alphas)
@@ -1961,30 +2147,43 @@ def check_contrast_stack(fig: Figure) -> tuple[bool | str, str]:
                                         else float(values.min()), 2))
                     if float(values.min()) != solid_here:
                         ranked = True       # the ramp itself is the hierarchy
-            # Only filled regions are grouped. A run of overlapping fills in one
-            # colour is an interval encoding drawn once, which is a fan chart;
-            # a run of LINES in one colour is several series told apart by
+            # Only filled regions are grouped, overlapping or not. A run of
+            # fills in one colour is one opacity encoding, whether it is a fan
+            # chart or bars graded by alpha, and matplotlib spells the same
+            # bars as one `PatchCollection` with an alpha per face, which counts
+            # once; grouping is what gives every spelling one verdict
+            # (`test_contrast_stack_reads_every_spelling_of_graded_fills_alike`).
+            # A run of LINES in one colour is several series told apart by
             # opacity, which is the haze this row exists to catch, and
             # `test_contrast_stack_counts_alpha_levels_inside_an_inset` pins
-            # exactly that at six lines of one colour.
-            if id(a) in collections_here:
+            # exactly that at six lines of one colour. A scatter is marks, so
+            # it is not grouped either. `fill_between` and `stackplot` are
+            # filled collections; `fill`, `axvspan` and `bar` add filled
+            # patches. A patch with `facecolor="none"` is an outline (`_fills`).
+            filled = (isinstance(a, (Collection, Patch))
+                      and not isinstance(a, PathCollection) and _fills(a))
+            if filled:
                 key = _artist_rgb(a)
                 if key is not None:
-                    families.setdefault(key, set()).update(
-                        v for v in alphas[before:] if v < OPAQUE_ALPHA_MIN)
+                    members.setdefault(key, []).extend(
+                        i for i in range(before, len(alphas))
+                        if alphas[i] < OPAQUE_ALPHA_MIN)
     if not alphas:
         return True, "no data artists"
 
     solid = any(x >= OPAQUE_ALPHA_MIN for x in alphas)
+    families = {key: {alphas[i] for i in run} for key, run in members.items()}
     # A graded run of one colour is one decision. Drop every member of such a
     # run and put back a single representative, so the run costs one slot
     # rather than one per band. Opacity is read off the raw values above,
-    # because whether anything is solid is a fact about pixels.
-    graded = {v for run in families.values() if len(run) >= ALPHA_RAMP_MIN_STEPS
-              for v in run}
+    # because whether anything is solid is a fact about pixels. The run's own
+    # entries are dropped, not its values: a line at a value some graded bar
+    # also has is still a level of its own.
+    graded = {i for key, run in families.items()
+              if len(run) >= ALPHA_RAMP_MIN_STEPS for i in members[key]}
     if graded:
         ranked = True
-    kept = {v for v in alphas if v not in graded}
+    kept = {v for i, v in enumerate(alphas) if i not in graded}
     for run in families.values():
         if len(run) >= ALPHA_RAMP_MIN_STEPS:
             kept.add(max(run))
@@ -2037,7 +2236,8 @@ def scatter_diameter_pt(size: float | np.ndarray) -> float | np.ndarray:
     return size ** 0.5
 
 
-def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
+def marker_extent_pt(line: Any, dpi: float,
+                     stroked: bool = True) -> tuple[float, float]:
     """The width and height in points that a `plot` marker actually draws.
 
     `markersize` is a diameter in points, which is the honest half of the
@@ -2099,6 +2299,8 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
         line: A `Line2D`.
         dpi: The resolution the figure will be measured at, needed only for
             `","`, whose size is a device pixel rather than a length.
+        stroked: Count the edge stroke. `check_mark_ratio` passes False,
+            because its `scatter` side reads `s` alone.
 
     Returns:
         `(width_pt, height_pt)` of the drawn mark's bounding box.
@@ -2112,7 +2314,7 @@ def marker_extent_pt(line: Any, dpi: float) -> tuple[float, float]:
     style = MarkerStyle(marker)
     box = style.get_path().transformed(style.get_transform()).get_extents()
     size = float(line.get_markersize())
-    stroke = marker_stroke_pt(line)
+    stroke = marker_stroke_pt(line) if stroked else 0.0
     width, height = box.width * size, box.height * size
     return (width + (stroke if height else 0.0),
             height + (stroke if width else 0.0))
@@ -2195,6 +2397,33 @@ def _str_equal(value: Any, text: str) -> bool:
     return isinstance(value, str) and value == text
 
 
+def _no_marker(marker: Any) -> bool:
+    """Whether a `Line2D` marker draws nothing. A marker may be an ndarray of
+    vertices, which `in ("", "None")` compares elementwise and raises on."""
+    return marker is None or (isinstance(marker, str)
+                              and marker.strip().lower() in ("", "none"))
+
+
+def _marker_path_extent(coll: Any, short: bool = False) -> float:
+    """The long side of a scatter's marker path, in units of `sqrt(s)`, or the
+    short side with `short`.
+
+    `scatter` keeps the marker path already through `MarkerStyle.get_transform`,
+    so `"."` carries its half scale here as it does for `plot`. `"o"` is 1.0,
+    and `"|"` is 0.0 on its short side: its width is the stroke. A collection
+    with no single marker path counts as 1.0, as before.
+    """
+    from matplotlib.collections import PathCollection
+    paths = coll.get_paths() if isinstance(coll, PathCollection) else []
+    if len(paths) != 1 or not len(paths[0].vertices):
+        return 1.0
+    box = paths[0].get_extents()
+    if not (box.width or box.height):
+        return 1.0
+    return float((min if short else max)(box.width, box.height))
+
+
+@_measured
 def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     """One mark far larger than the rest stops reading as a mark and starts
     reading as an ornament stuck on top of the plot.
@@ -2233,15 +2462,25 @@ def check_mark_ratio(fig: Figure) -> tuple[bool | str, str]:
     for ax in _all_axes(fig):
         sizes: list[float] = []
         for c in ax.collections:
-            s: Any = getattr(c, "get_sizes", lambda: [])()
-            sizes.extend(math.pi * (scatter_diameter_pt(float(v)) / 2.0) ** 2
-                         for v in s if v > 0)
-        for ln in ax.lines:
-            if not ln.get_visible() or ln.get_marker() in ("", "None", None):
+            if not c.get_visible():
                 continue
-            ms = float(ln.get_markersize())
-            if ms > 0:
-                sizes.append(math.pi * (ms / 2.0) ** 2)
+            s: Any = getattr(c, "get_sizes", lambda: [])()
+            unit = _marker_path_extent(c)
+            sizes.extend(
+                math.pi * (unit * scatter_diameter_pt(float(v)) / 2.0) ** 2
+                for v in s if v > 0)
+        for ln in ax.lines:
+            if not ln.get_visible() or _no_marker(ln.get_marker()):
+                continue
+            if float(ln.get_markersize()) <= 0:
+                continue
+            # The drawn path, as `check_overplotting` reads it: `"."` draws
+            # at half its markersize and `","` at one pixel. The long side is
+            # the diameter, so a `"|"` counts as long as it is. Unstroked, to
+            # match the `scatter` side above.
+            d = float(max(marker_extent_pt(ln, fig.dpi, stroked=False)))
+            if d > 0:
+                sizes.append(math.pi * (d / 2.0) ** 2)
         if len(sizes) < 2:
             continue
         sizes.sort()
@@ -2409,17 +2648,27 @@ def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> fl
     `cKDTree` is passed in rather than imported so the caller decides once
     whether scipy is present; None takes the same grouping over a uniform grid
     instead of a tree, in `_grid_contacts`, for the same answer.
+
+    A mark at a non-finite position or radius is not drawn, so it is dropped
+    before either path runs and is not counted in the fraction. `cKDTree`
+    refuses non-finite data outright. `scatter` hands its offsets over as a
+    masked array, so masked entries are filled with NaN first.
     """
     import numpy as np
+    xy = np.ma.filled(np.ma.asarray(xy, dtype=float), np.nan)
+    radius_px = np.ma.filled(np.ma.asarray(radius_px, dtype=float), np.nan)
+    drawn = np.isfinite(xy).all(axis=1) & np.isfinite(radius_px)
+    if not drawn.all():
+        xy, radius_px = xy[drawn], radius_px[drawn]
     n = len(xy)
+    if not n:
+        return 0.0
     r_max = float(radius_px.max())
     uniform = bool(np.ptp(radius_px) == 0.0)
 
     if cKDTree is None:
         hit = np.zeros(n, dtype=bool)
-        here = np.flatnonzero(np.isfinite(xy).all(axis=1)
-                              & np.isfinite(radius_px))
-        groups = [g[np.isin(g, here)] for g in _radius_octaves(radius_px)]
+        groups = _radius_octaves(radius_px)
         for target in groups:
             if len(target) == 0:
                 continue
@@ -2476,14 +2725,16 @@ def _contact_fraction(xy: np.ndarray, radius_px: np.ndarray, cKDTree: Any) -> fl
     return float(hit.sum()) / n
 
 
+@_measured
 def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
     """Warn when scatter points overlap into an unreadable mass.
 
     For each PathCollection with offsets (a scatter), the fraction of points
     whose nearest neighbour in display pixels sits closer than the two marks'
     radii summed - which is exactly when the two discs intersect on the page.
-    Above the threshold the marks merge into a blob — thin the count, use
-    hollow markers, add transparency, or switch to hexbin.
+    Above the threshold the marks merge into a blob: thin the count or switch
+    to hexbin. Fill and partial alpha are not read, so transparency and hollow
+    markers leave the number where it was.
 
     `ax.plot(x, y, "o")` draws the same cloud through a different API, and for
     seven releases this row could not see it: a marker-only `Line2D` has no
@@ -2575,8 +2826,10 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
                 continue
             if offsets.size < 2:
                 continue
+            # The offsets live in whatever space the artist was placed in;
+            # `transform=ax.transAxes` puts them in axes fractions.
             try:
-                xy = ax.transData.transform(offsets)
+                xy = coll.get_offset_transform().transform(offsets)
             except Exception:
                 continue
             sizes: Any = getattr(coll, "get_sizes", lambda: [])()
@@ -2591,7 +2844,9 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
             # already match. `np.resize` tiles, which is that same cycle.
             if sizes.size != n:
                 sizes = np.resize(sizes, n)
-            drawn = scatter_diameter_pt(sizes) + collection_stroke_pt(coll)
+            # The narrower side, as for `plot` markers below.
+            drawn = (_marker_path_extent(coll, short=True)
+                     * scatter_diameter_pt(sizes) + collection_stroke_pt(coll))
             radius_px = drawn / 2.0 * dpi / 72.0
 
             frac = _contact_fraction(xy, radius_px, cKDTree)
@@ -2601,16 +2856,17 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
         for j, line in enumerate(ax.lines):
             if not line.get_visible():
                 continue
-            if line.get_marker() in ("", "None", None, " "):
+            if _no_marker(line.get_marker()):
                 continue
             # A line drawn through its marks is a path, not a cloud. Only the
             # marker-only spelling is the one `scatter` has an equivalent of.
             if str(line.get_linestyle()) not in ("", "None", "none", " "):
                 continue
+            # `get_xydata` is after unit conversion, so a date axis reads as
+            # floats; `get_xdata` hands back the datetimes themselves.
             try:
-                xy = ax.transData.transform(np.column_stack([
-                    np.asarray(line.get_xdata(), dtype=float),
-                    np.asarray(line.get_ydata(), dtype=float)]))
+                xy = line.get_transform().transform(
+                    np.asarray(line.get_xydata(), dtype=float))
             except Exception:
                 continue
             xy = xy[np.isfinite(xy).all(axis=1)]
@@ -2632,6 +2888,38 @@ def check_overplotting(fig: Figure) -> tuple[bool | str, str]:
                     "  [FIX] thin counts or switch to hexbin. This measures how "
                     "close the marks are, so transparency and hollow markers "
                     "do not move it")
+
+
+def _largest_sharable(axes: list[Any], axis: str) -> int:
+    """The most panels in `axes` that could share one `axis` axis.
+
+    Spans are compared in the axis's own scale, so two log panels a decade
+    apart are as far apart as two linear ones a span apart. A group can share
+    when the union of all its limits is within `SHARE_SPAN_RATIO_MAX` of its
+    narrowest span, which is what the shared axis squashes that panel by. The
+    answer is the largest such group. Joining pairs instead chains: 0-1, 0-2
+    and 0-4 pass pairwise and fail as one axis."""
+    import numpy as np
+    spans = []
+    for a in axes:
+        lo, hi = sorted(getattr(a, f"{axis}axis").get_transform().transform(
+            np.asarray(getattr(a, f"get_{axis}lim")(), dtype=float)))
+        spans.append((float(lo), float(hi)))
+    best = 1 if spans else 0
+    # For each panel as the group's narrowest, every window of the allowed
+    # width that starts at some panel's lower limit and covers this one.
+    for lo_n, hi_n in spans:
+        width = hi_n - lo_n
+        if width <= 0:
+            continue
+        reach = SHARE_SPAN_RATIO_MAX * width
+        for start in {lo for lo, _ in spans if lo <= lo_n}:
+            if hi_n > start + reach:
+                continue
+            best = max(best, sum(1 for lo, hi in spans
+                                 if hi - lo >= width and lo >= start
+                                 and hi <= start + reach))
+    return best
 
 
 def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
@@ -2658,13 +2946,23 @@ def check_redundancy(fig: Figure, r: Any) -> tuple[bool | str, str]:
         rows.setdefault(r_, []).append(ax)
         cols.setdefault(c_, []).append(ax)
 
+    # Keyed on scale and on limits that could share an axis, as well as the
+    # label: the remedy is `sharey`, and two panels at 0-1 and 0-1000 that name
+    # the same quantity cannot share one without flattening a panel. Exact
+    # limits are too strict a key, because autoscaled panels differ by a few
+    # hundredths; `SHARE_SPAN_RATIO_MAX` says how far apart is too far.
     dupes = []
     for group, getter, axis in ((rows, "get_ylabel", "y"),
                                 (cols, "get_xlabel", "x")):
         for _, axes in group.items():
-            vals = [getattr(a, getter)().strip() for a in axes]
-            vals = [v for v in vals if v]
-            for label, n in Counter(vals).items():
+            keyed: dict[tuple[str, str], list[Any]] = {}
+            for a in axes:
+                label = getattr(a, getter)().strip()
+                if label:
+                    scale = getattr(a, f"get_{axis}scale")()
+                    keyed.setdefault((label, scale), []).append(a)
+            for (label, _scale), same in keyed.items():
+                n = _largest_sharable(same, axis)
                 if n > 1:
                     dupes.append(f"{axis}label {label!r} x{n}")
 
@@ -2779,11 +3077,15 @@ def _script_min_pt(t: Any) -> float | None:
 
 
 def _is_bold(t: Any) -> bool:
-    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier."""
+    """Whether a `Text` is set at `BOLD_WEIGHT_MIN` or heavier.
+
+    Names are read through `font_manager.weight_dict`, the table matplotlib
+    itself resolves them with, so "demibold" and "demi" count as 600.
+    """
+    from matplotlib.font_manager import weight_dict
     weight = t.get_fontweight()
-    return (weight in ("bold", "heavy", "black", "extra bold", "semibold")
-            or (isinstance(weight, (int, float))
-                and weight >= BOLD_WEIGHT_MIN))
+    weight = weight_dict.get(weight, weight) if isinstance(weight, str) else weight
+    return isinstance(weight, (int, float)) and weight >= BOLD_WEIGHT_MIN
 
 
 def _is_panel_label(t: Any) -> bool:
@@ -2792,6 +3094,40 @@ def _is_panel_label(t: Any) -> bool:
     s = str(t.get_text()).strip()
     return (len(s) == 1 and "a" <= s <= "z" and _is_bold(t)
             and t.get_fontstyle() == "normal")
+
+
+# The float slack every on-page size and width is judged with. 1e-6pt is under
+# a 2400dpi dot (72/2400 = 0.03pt) and over float64's error on a 10pt size
+# (about 2e-15pt). `_round_down` and `_round_up` at 0.01pt absorb differences
+# under 5e-9pt, so a value failing by more than 1e-6pt never prints as its limit.
+_PT_TOL = 1e-6
+
+
+def _round_down(x: float, places: int = 1) -> float:
+    return math.floor(round(x * 10 ** places, 6)) / 10 ** places
+
+
+def _round_up(x: float, places: int = 1) -> float:
+    return math.ceil(round(x * 10 ** places, 6)) / 10 ** places
+
+
+def _below_floor(x: float, floor: float) -> bool:
+    return x < floor - _PT_TOL
+
+
+def _above_ceiling(x: float, ceiling: float) -> bool:
+    return x > ceiling + _PT_TOL
+
+
+def _advise_at_least(floor: float, scale: float, places: int = 1) -> float:
+    """The authored size that lands on or over `floor` at `scale`. Up, or the
+    advised size fails the floor it names."""
+    return _round_up(floor / scale, places)
+
+
+def _advise_at_most(ceiling: float, scale: float, places: int = 1) -> float:
+    """The authored size that lands on or under `ceiling` at `scale`."""
+    return _round_down(ceiling / scale, places)
 
 
 def check_type_size(fig: Figure, r: Any, scale: float | None = None,
@@ -2815,7 +3151,8 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     ghosts = _ghost_ticks(fig)
     texts = [t for t, _ in _texts(fig, r) if id(t) not in ghosts]
     scale = float(scale)
-    sizes = [(round(float(t.get_fontsize()) * scale, 1), str(t.get_text())[:22])
+    # Compared unrounded, the case docs/design.md gives.
+    sizes = [(float(t.get_fontsize()) * scale, str(t.get_text())[:22])
              for t in texts]
     if not sizes:
         return True, "no text"
@@ -2828,16 +3165,18 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     can_raise = True
     for t in texts:
         pt = _script_min_pt(t)
-        if pt is not None and pt * scale < MATH_SCRIPT_FLOOR_PT:
-            scripts.append((round(pt * scale, 1), str(t.get_text())[:22]))
+        if pt is not None and _below_floor(pt * scale, MATH_SCRIPT_FLOOR_PT):
+            scripts.append((_round_down(pt * scale, 2), str(t.get_text())[:22]))
             # The base on the page that lifts this script to the floor. Under
             # Nature's 7pt maximum a first-level script tops out at 4.9pt.
             base = float(t.get_fontsize()) * MATH_SCRIPT_FLOOR_PT / pt
-            can_raise = can_raise and base <= ceiling
+            can_raise = can_raise and not _above_ceiling(base, ceiling)
 
-    small = sorted({(pt, s) for pt, s in sizes if pt < floor})
-    large = sorted({(pt, s) for t, (pt, s) in zip(texts, sizes)
-                    if pt > (label_ceiling if _is_panel_label(t) else ceiling)},
+    small = sorted({(_round_down(pt, 2), s) for pt, s in sizes
+                    if _below_floor(pt, floor)})
+    large = sorted({(_round_up(pt, 2), s) for t, (pt, s) in zip(texts, sizes)
+                    if _above_ceiling(pt, label_ceiling if _is_panel_label(t)
+                                      else ceiling)},
                    reverse=True)
     mn = min(pt for pt, _ in sizes)
     if small or large or scripts:
@@ -2846,7 +3185,8 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
             bits.append(f"under {floor}pt on page at scale {scale:.2f}: "
                         f"{small[:4]}  [FIX] cut words, do not shrink type")
         if large:
-            fix = (f"set text at {ceiling / scale:.1f}pt as authored, "
+            authored = _advise_at_most(ceiling, scale)
+            fix = (f"set text at {authored}pt as authored, "
                    f"{ceiling}pt on the page")
             if label_ceiling > ceiling:
                 fix += (f"; a panel label may be {label_ceiling}pt, bold and "
@@ -2874,10 +3214,10 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
         if frac is None:
             continue
         x_pt = float(t.get_fontsize()) * scale * frac
-        if x_pt < XHEIGHT_FLOOR_PT - 1e-9:
-            need = math.ceil(round(XHEIGHT_FLOOR_PT / frac * 10, 6)) / 10
+        if _below_floor(x_pt, XHEIGHT_FLOOR_PT):
             cap = label_ceiling if _is_panel_label(t) else ceiling
-            low.append((round(x_pt, 2), str(t.get_text())[:22], need, cap))
+            low.append((_round_down(x_pt, 2), str(t.get_text())[:22],
+                        XHEIGHT_FLOOR_PT / frac, cap))
 
     detail = f"smallest {mn:.1f}pt on page (floor {floor})"
     if ceiling < math.inf:
@@ -2885,11 +3225,32 @@ def check_type_size(fig: Figure, r: Any, scale: float | None = None,
     warnings = []
     if low:
         low.sort()
-        _, _, need, cap = low[0]
-        fix = (f"set it at {need / scale:.1f}pt as authored, {need}pt on the "
-               "page, or use a face with a taller x-height" if need <= cap
-               else f"the {cap}pt maximum allows no larger: use a face with a "
-               "taller x-height")
+        # One size per maximum: the largest need under it, not the need of
+        # the smallest x-height, since fonts differ in their fractions. Body
+        # text and panel labels are advised apart, so a label's need is not
+        # pushed onto body text over the body maximum.
+        parts = []
+        fits = True
+        for cap in sorted({c for _, _, _, c in low}):
+            need = max(n for _, _, n, c in low if c == cap)
+            label = cap > ceiling
+            # Rounded once, from the exact need. In 0.01pt where 0.1pt
+            # overshoots a maximum the exact size fits under.
+            authored = _advise_at_least(need, scale)
+            if _above_ceiling(authored * scale, cap):
+                authored = _advise_at_least(need, scale, 2)
+            if _above_ceiling(authored * scale, cap):
+                fits = False
+                parts.append(f"the {cap}pt {'panel-label ' * label}maximum "
+                             "allows no larger: use a face with a taller "
+                             "x-height")
+            else:
+                parts.append(f"set {'a panel label' if label else 'it'} at "
+                             f"{authored}pt as authored, "
+                             f"{_round_down(authored * scale, 2)}pt on the page")
+        fix = "; ".join(parts)
+        if fits:
+            fix += ", or use a face with a taller x-height"
         shown = [(s, x) for x, s, _, _ in low][:4]
         warnings.append(
             f"x-height under {XHEIGHT_FLOOR_PT}pt on page: {shown}  [FIX] {fix}"
@@ -2923,6 +3284,214 @@ def _axes_drew_anything(ax: Axes) -> bool:
                 "tables", "artists"))
 
 
+def _ground_layers(fig: Figure, upto: Axes | None = None,
+                   below: Any = None) -> list[Any]:
+    """What Agg draws under the marks of every axes, in the order it draws it.
+
+    The figure's patch, each subfigure's, every figure-level artist that some
+    axes is drawn after (a backdrop rectangle, a `figimage`, a panel drawn
+    between two axes), and each axes' patch. `Figure.draw` and `_AxesBase.draw`
+    sort children by zorder, stably, and an axes draws its patch before its
+    child axes. An axes patch is drawn only when `axison` and
+    `get_frame_on()` are true and the patch is visible. `axis("off")` clears
+    `axison` and `twinx` hides the twin's patch, so each leaves the ground
+    under it. With `upto`, the walk stops where that axes' marks are
+    drawn: after its own patch, before anything over it.
+
+    With `below`, an artist of `upto`, the walk goes on to what Agg draws
+    before it (`_drawn_before`), in `upto` and in each axes holding `upto`, and
+    in each axes drawn before `upto` that does not hold it and whose box meets
+    `upto`'s, such as a twin's host: an image, a fill or a stroke under the
+    marks is what they are seen against. An axes whose box does not meet
+    `upto`'s gives its patch alone, since only what overflows that box, a tick
+    label or an unclipped artist, could lie under the marks, so a grid of
+    panels is not drawn whole under each panel's marks.
+    """
+    from matplotlib.axes import Axes
+    from matplotlib.figure import SubFigure
+
+    out: list[Any] = []
+    # Figure-level artists not yet known to have an axes drawn after them.
+    pending: list[Any] = []
+
+    class _Reached(Exception):
+        pass
+
+    def axes(ax: Axes) -> None:
+        if not ax.get_visible():
+            return
+        pending.clear()
+        if ax.axison and ax.get_frame_on() and ax.patch.get_visible():
+            out.append(ax.patch)
+        if ax is upto:
+            if below is not None:
+                out.extend(_drawn_before(ax, below))
+            raise _Reached
+        if below is not None and not _holds(ax, upto):
+            if upto is None or ax.bbox.overlaps(upto.bbox):
+                out.extend(_drawn_before(ax))
+            return
+        for child in sorted((c for c in ax.get_children()
+                             if isinstance(c, Axes) and not c.get_animated()),
+                            key=lambda c: c.get_zorder()):
+            if below is None:
+                axes(child)
+            elif _holds(child, upto):
+                out.extend(_drawn_before(ax, child))
+                axes(child)
+
+    def figure(f: Any) -> None:
+        if not f.get_visible():
+            return
+        if f.patch.get_visible():
+            out.append(f.patch)
+        for child in sorted((c for c in f.get_children()
+                             if c is not f.patch and not c.get_animated()),
+                            key=lambda c: c.get_zorder()):
+            if isinstance(child, SubFigure):
+                figure(child)
+            elif isinstance(child, Axes):
+                axes(child)
+            elif child.get_visible():
+                out.append(child)
+                pending.append(child)
+
+    try:
+        figure(fig)
+    except _Reached:
+        pass
+    return [a for a in out if not any(a is p for p in pending)]
+
+
+def _drawn_before(ax: Axes, artist: Any = None) -> list[Any]:
+    """The visible children `ax` draws before `artist`, in the order it draws
+    them: all of them when `artist` is None, none when it is not one of them.
+
+    As `_AxesBase.draw` orders them on matplotlib 3.8.4 and 3.11.1: its
+    children but the patch, sorted by zorder, stably, without the spines when
+    the frame is not drawn, the axis objects when `axison` is false, or
+    anything animated. A child axes in the list is drawn whole. 3.8.4 also
+    draws an animated `AxesImage`, which this leaves out.
+    """
+    hidden = {id(a) for a in ax._axis_map.values()} if not ax.axison else set()
+    if not (ax.axison and ax.get_frame_on()):
+        hidden |= {id(s) for s in ax.spines.values()}
+    out: list[Any] = []
+    for child in sorted((c for c in ax.get_children()
+                         if c is not ax.patch and id(c) not in hidden
+                         and not c.get_animated()),
+                        key=lambda c: c.get_zorder()):
+        if child is artist:
+            return out
+        if child.get_visible():
+            out.append(child)
+    return out if artist is None else []
+
+
+def _own_line(artist: Any) -> Any:
+    """A `Line2D`'s line without its markers; None unless `artist` is a
+    `Line2D` that draws both.
+
+    `Line2D.draw` strokes the line and then draws the markers, so one `'o-'`
+    line's markers have that line under them, as a `scatter` has a separate
+    `plot` drawn before it. `_drawn_before` leaves the artist itself out.
+    """
+    import copy
+    from matplotlib.lines import Line2D
+    if not isinstance(artist, Line2D) or _no_marker(artist.get_marker()):
+        return None
+    stroke = str(artist.get_linestyle()).strip().lower()
+    if stroke in ("none", "", " ") or artist.get_linewidth() <= 0:
+        return None
+    line = copy.copy(artist)
+    line.stale_callback = None      # the copy must not mark the figure stale
+    line.set_marker("none")
+    return line
+
+
+def _holds(ax: Axes, target: Axes) -> bool:
+    """Whether `target` is `ax` or an axes drawn inside it."""
+    return ax is target or any(_holds(c, target) for c in ax.child_axes)
+
+
+def _ground_image(fig: Figure, shape: tuple[int, int] | None = None,
+                  upto: Axes | None = None, below: Any = None) -> np.ndarray:
+    """The ground Agg draws under the marks, as 8-bit RGB.
+
+    `_ground_layers` drawn onto a fresh `RendererAgg` at the figure's dpi, so
+    the blend, the antialiased edges and a polar face are Agg's own. A style
+    that greys the axes and not the figure (`ggplot`, seaborn's `darkgrid`)
+    otherwise reads its whole panel as ink, and one ground per panel misreads
+    a translucent axes partly over another.
+
+    Args:
+        fig: The drawn figure.
+        shape: `(height, width)` of the canvas buffer; the figure's own size
+            in pixels if omitted.
+        upto, below: Passed to `_ground_layers`; with `below`, its own line
+            (`_own_line`) is drawn last.
+
+    Returns:
+        A `(height, width, 3)` uint8 array.
+    """
+    import numpy as np
+    from matplotlib.backends.backend_agg import RendererAgg
+
+    if shape is None:
+        w, h = fig.bbox.size
+    else:
+        h, w = shape
+    renderer = RendererAgg(int(w), int(h), fig.dpi)
+    for artist in _ground_layers(fig, upto, below):
+        artist.draw(renderer)
+    own = _own_line(below)
+    if own is not None:
+        own.draw(renderer)
+    return np.asarray(renderer.buffer_rgba())[:, :, :3]
+
+
+class _ForwardGround:
+    """`_ground_image(fig, upto=ax, below=artist)` for one artist after another,
+    on one Agg buffer drawn forward.
+
+    The layers under a later artist's marks are the layers under an earlier
+    one's and what is drawn between them, so a panel's twelve outlined lines
+    take one render, not twelve. A request that does not extend what is drawn
+    starts a fresh buffer. An artist's own line (`_own_line`) is drawn over a
+    saved copy of the buffer and taken off at the next request, so the buffer
+    the next artist extends holds the layers alone: added as a layer, it would
+    break that prefix, and each line would take a render of its own. The image
+    returned is a view, valid until the next request.
+    """
+
+    def __init__(self) -> None:
+        self.layers: list[Any] = []
+        self.renderer: Any = None
+        self.saved: Any = None
+
+    def image(self, ax: Axes, artist: Any) -> np.ndarray:
+        import numpy as np
+        from matplotlib.backends.backend_agg import RendererAgg
+        fig = _root_figure(ax)
+        if self.saved is not None:
+            self.renderer.restore_region(self.saved)
+            self.saved = None
+        layers = _ground_layers(fig, upto=ax, below=artist)
+        if (self.renderer is None or len(self.layers) > len(layers)
+                or any(a is not b for a, b in zip(self.layers, layers))):
+            w, h = fig.bbox.size
+            self.renderer = RendererAgg(int(w), int(h), fig.dpi)
+            self.layers = []
+        for layer in layers[len(self.layers):]:
+            layer.draw(self.renderer)
+        self.layers = layers
+        own = _own_line(artist)
+        if own is not None:
+            self.saved = self.renderer.copy_from_bbox(fig.bbox)
+            own.draw(self.renderer)
+        return np.asarray(self.renderer.buffer_rgba())[:, :, :3]
+
+
 def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
               canvas: Any = None) -> tuple[bool | str, str]:
     """Ink as a fraction of each plotting area, measured off the rendered
@@ -2945,19 +3514,16 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
     import numpy as np
 
     if canvas is None:
-        # Same reason as `check_text_readability`, and the same two context
-        # managers in the same order: an ink fraction is a count of pixels, and
-        # a count of pixels is only a measurement at a fixed resolution and a
-        # fixed font list. See `MEASURE_DPI` and `METRIC_RC_KEYS`.
-        with _at_draw_rc(fig), _at_measure_dpi(fig):
+        # Same reason as `check_text_readability`: an ink fraction is a count
+        # of pixels, and a count of pixels is only a measurement at a fixed
+        # resolution and a fixed font list. See `MEASURE_DPI` and `METRIC_RC_KEYS`.
+        with _measuring(fig):
             _, canvas = _renderer(fig)
             return check_ink(fig, context_axes, canvas)
     buf = np.asarray(canvas.buffer_rgba())[:, :, :3].astype(int)
     h = buf.shape[0]
-    # The page colour is read off the top-left pixel, which assumes nothing is
-    # drawn in that corner.
-    bg = buf[0, 0]
-    ink_mask = (np.abs(buf - bg).sum(axis=2) > INK_DELTA_MIN)
+
+    ground = _ground_image(fig, buf.shape[:2]).astype(int)
 
     if context_axes is None:
         context_axes = []
@@ -2975,14 +3541,15 @@ def check_ink(fig: Figure, context_axes: Sequence[Axes] | None = None,
         x0, x1 = int(max(bb.x0, 0)), int(min(bb.x1, buf.shape[1]))
         y0, y1 = int(max(bb.y0, 0)), int(min(bb.y1, h))
         # Agg's origin is top-left, the figure's is bottom-left
-        sub = ink_mask[h - y1:h - y0, x0:x1]
+        block = buf[h - y1:h - y0, x0:x1]
+        sub = (np.abs(block - ground[h - y1:h - y0, x0:x1]).sum(axis=2)
+               > INK_DELTA_MIN)
         if sub.size == 0:
             continue
 
         if id(ax) in context_ids:
             # Separate surface pixels from mark pixels via 2-means on color.
-            sub_buf = buf[h - y1:h - y0, x0:x1].astype(float)
-            flat = sub_buf.reshape(-1, 3)
+            flat = block.astype(float).reshape(-1, 3)
             m1 = flat.mean(axis=0)
             # Seeded apart from the mean: two equal centroids never split.
             m2 = m1 + 30.0
@@ -3089,11 +3656,16 @@ def _marks_px(artist: Any, ax: Axes) -> np.ndarray | None:
     try:
         if isinstance(artist, Line2D):
             xy = np.asarray(artist.get_xydata(), dtype=float)
+            to_px = artist.get_transform()
         else:
-            xy = np.asarray(artist.get_offsets(), dtype=float)
+            # A masked offset draws no mark; `np.asarray` keeps its value.
+            xy = np.ma.filled(np.ma.asarray(artist.get_offsets(), dtype=float),
+                              np.nan)
+            to_px = artist.get_offset_transform()
         if xy.ndim != 2 or len(xy) == 0:
             return None
-        return np.asarray(ax.transData.transform(xy), dtype=float)
+        px = np.asarray(to_px.transform(xy), dtype=float)
+        return px[np.isfinite(px).all(axis=1)]
     except (AttributeError, ValueError, TypeError):
         return None
 
@@ -3148,7 +3720,7 @@ def _artist_kind(artist: Any) -> str:
     band and its mean line and its points is three types in one hue, which is
     the opposite: one identity, several artists. Kind tells them apart."""
     from matplotlib.lines import Line2D
-    from matplotlib.collections import PathCollection
+    from matplotlib.collections import LineCollection, PathCollection
     if isinstance(artist, Line2D):
         # `plot(..., linestyle="none", marker="o")` is a Line2D that draws no
         # line. Calling it one made a path and its own start marker, in one
@@ -3159,6 +3731,8 @@ def _artist_kind(artist: Any) -> str:
         return "line" if drawn else "marks"
     if isinstance(artist, PathCollection):
         return "marks"
+    if isinstance(artist, LineCollection):
+        return "line"      # vlines, hlines, errorbar bars
     return "area"          # bars, fill_between polys, other patches
 
 
@@ -3192,38 +3766,113 @@ def _data_colors_by_axes(
       enough to see is a real question and `check_line_weight` still asks it.
     - the ink tokens, per `INK_TOKENS` above
     """
-    from matplotlib.patches import ConnectionPatch
+    return {ax: _flatten(artists)
+            for ax, artists in _data_artists_by_axes(fig).items()}
 
+
+def _flatten(artists: list[tuple[Any, str | None, str, list[str]]]
+             ) -> list[tuple[str, str | None, str]]:
+    """`_data_artists` output as one `(hex, label, kind)` per colour."""
+    return [(h, label, kind) for _, label, kind, hexes in artists
+            for h in hexes]
+
+
+def _data_artists_by_axes(
+        fig: Figure) -> dict[Axes, list[tuple[Any, str | None, str, list[str]]]]:
+    """`_data_artists` for every panel that draws a categorical colour."""
     out = {}
     for ax in _all_axes(fig):
-        items = []
-        for artist in list(ax.lines) + list(ax.patches) + list(ax.collections):
-            if not artist.get_visible():
-                continue
-            if isinstance(artist, ConnectionPatch):
-                continue
-            if getattr(artist, "get_array", lambda: None)() is not None:
-                continue
-            raw = str(artist.get_label() or "")
-            label = raw if raw and not raw.startswith("_") else None
-            kind = _artist_kind(artist)
-            seen = set()
-            for getter in ("get_color", "get_facecolor", "get_edgecolor"):
-                fn = getattr(artist, getter, None)
-                if fn is None:
-                    continue
-                try:
-                    value = fn()
-                except (ValueError, TypeError, AttributeError):
-                    continue
-                for c in _colors_of(value):
-                    h = _hex(c)
-                    if h and h not in INK_TOKENS and h not in seen:
-                        seen.add(h)
-                        items.append((h, label, kind))
-        if items:
-            out[ax] = items
+        artists = _data_artists(ax)
+        if artists:
+            out[ax] = artists
     return out
+
+
+def _drawn_patches(ax: Axes) -> list[Any]:
+    """`ax.patches`, plus the frame and connectors of each `InsetIndicator`.
+
+    From matplotlib 3.10 `indicate_inset_zoom` adds one `InsetIndicator` to
+    `ax.artists`, and its `draw` draws the rectangle and the connectors itself,
+    so neither is in `ax.patches` as both are on 3.8 and 3.9. Reading
+    `connectors` updates them, as that `draw` does first.
+    """
+    patches = list(ax.patches)
+    try:
+        from matplotlib.inset import InsetIndicator
+    except ImportError:  # matplotlib < 3.10
+        return patches
+    for artist in ax.artists:
+        if isinstance(artist, InsetIndicator) and artist.get_visible():
+            patches.append(artist.rectangle)
+            patches.extend(artist.connectors or ())
+    return patches
+
+
+def _draws_nothing(line: Any) -> bool:
+    """A `Line2D` with no stroke and no marker, which puts no ink on the page:
+    `plot(..., ls="none")` used to pad autoscaling or carry a label."""
+    stroke = str(line.get_linestyle()).strip().lower()
+    return ((stroke in ("none", "", " ") or line.get_linewidth() <= 0)
+            and _no_marker(line.get_marker()))
+
+
+def _data_artists(ax: Axes) -> list[tuple[Any, str | None, str, list[str]]]:
+    """`[(artist, label, kind, hexes)]` for one panel, harvested on the terms
+    `_data_colors_by_axes` documents. Kept per artist so the separation row can
+    ask where a series is drawn and what else tells it apart."""
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import ConnectionPatch
+
+    caps = _errorbar_caps(ax)
+    out = []
+    for artist in (list(ax.lines) + _drawn_patches(ax)
+                   + list(ax.collections)):
+        if not artist.get_visible():
+            continue
+        if isinstance(artist, ConnectionPatch) or id(artist) in caps:
+            continue
+        if isinstance(artist, Line2D) and _draws_nothing(artist):
+            continue
+        if getattr(artist, "get_array", lambda: None)() is not None:
+            continue
+        raw = str(artist.get_label() or "")
+        label = raw if raw and not raw.startswith("_") else None
+        hexes: list[str] = []
+        for getter in ("get_color", "get_facecolor", "get_edgecolor"):
+            fn = getattr(artist, getter, None)
+            if fn is None:
+                continue
+            try:
+                value = fn()
+            except (ValueError, TypeError, AttributeError):
+                continue
+            for c in _colors_of(value):
+                h = _hex(c)
+                if h and h not in INK_TOKENS and h not in hexes:
+                    hexes.append(h)
+        if hexes:
+            out.append((artist, label, _artist_kind(artist), hexes))
+    return out
+
+
+def _errorbar_caps(ax: Axes) -> set[int]:
+    """`id`s of the caps of every error bar in a panel.
+
+    `errorbar` draws its caps as marker-only `Line2D`s, the second member of
+    its `ErrorbarContainer`. `_artist_kind` reads those as marks, so a capped
+    error bar made its panel gate every pair and an uncapped one did not. A cap
+    is the end of a bar, in the bar's colour, and the bar is harvested."""
+    from matplotlib.container import ErrorbarContainer
+    return {id(cap) for c in ax.containers if isinstance(c, ErrorbarContainer)
+            for cap in c.lines[1]}
+
+
+def _errorbar_bars(ax: Axes) -> set[int]:
+    """`id`s of the bars of every error bar in a panel: the `LineCollection`s
+    that are the third member of its `ErrorbarContainer`."""
+    from matplotlib.container import ErrorbarContainer
+    return {id(bar) for c in ax.containers if isinstance(c, ErrorbarContainer)
+            for bar in c.lines[2]}
 
 
 def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
@@ -3233,27 +3882,467 @@ def _data_colors(fig: Figure) -> list[tuple[str, str | None]]:
             for h, label, _ in items]
 
 
-def _axes_all_pairs(ax: Axes) -> bool:
+def _axes_all_pairs(ax: Axes,
+                    artists: list[tuple[Any, str | None, str, list[str]]]
+                    ) -> bool:
     """Which separation mode a *panel* needs. `check_palette.py` has to ask for
     this on the command line because a list of hexes does not say what it will be
-    drawn as; a built figure does say. Scatter puts every series next to every
-    other, so every pair has to separate. Lines and bars only ever put
-    neighbours next to each other, and gating all pairs there would fail
-    palettes the guide explicitly sanctions.
+    drawn as; a built figure does say. Marks put every series next to every
+    other, so every pair has to separate: `scatter`, and `plot` with a marker
+    and no line, which `_artist_kind` calls marks too. A legend does too, by
+    another route:
+    it asks the reader to identify each series against a swatch, which is the
+    task `NORMAL_FLOOR`'s comment sets the floors for, and any line can be
+    mistaken for any swatch. Without either, `_gated_pairs` decides.
 
     Asked per axes, not per figure: a scatter in one panel does not make a
-    line-only panel two panels over answer to the stricter rule."""
-    from matplotlib.collections import PathCollection
-    return any(isinstance(c, PathCollection) for c in ax.collections)
+    line-only panel two panels over answer to the stricter rule. A figure
+    legend is the exception, since it keys every panel. A hidden legend keys
+    nothing."""
+    if any(kind == "marks" for _, _, kind, _ in artists):
+        return True
+    legend = ax.get_legend()
+    if legend is not None and legend.get_visible():
+        return True
+    parent: Any = ax.figure
+    while parent is not None:
+        if any(lg.get_visible() for lg in getattr(parent, "legends", ())):
+            return True
+        parent = getattr(parent, "_parent", None)
+    return False
 
 
+def _stroke_pt(artist: Any) -> float:
+    """The widest stroke an artist draws, in points. A `LineCollection`
+    reports one width per segment."""
+    return max(_collection_widths(artist), default=0.0)
+
+
+def _gated_pairs(ax: Axes, distinct: list[str],
+                 artists: list[tuple[Any, str | None, str, list[str]]]
+                 ) -> set[tuple[int, int]]:
+    """Index pairs into `distinct` that the separation rows compare.
+
+    Every pair where `_axes_all_pairs` says so. Otherwise a pair is compared
+    where the page puts it side by side: area hues that are neighbours in draw
+    order, which is what a stacked bar puts side by side, every pair of line
+    series whose strokes meet, each stroke with its nearest of another hue,
+    and a line with every area whose shape its stroke enters. A hue drawn only
+    as lines takes no part in draw order, which is a list the reader never
+    sees: flat lines that never touched passed with blue plotted between
+    orange and green and failed with the calls reordered.
+
+    Strokes and areas are read where they are drawn, inside the box each is
+    clipped to (`_on_page`): two lines that cross only beyond the axis limits
+    meet nowhere a reader can see."""
+    import numpy as np
+    n = len(distinct)
+    if _axes_all_pairs(ax, artists):
+        return set(itertools.combinations(range(n), 2))
+    index = {h: i for i, h in enumerate(distinct)}
+    line_only = set(index.values())
+    for _, _, kind, hexes in artists:
+        if kind != "line":
+            line_only -= {index[h] for h in hexes}
+    ordered = [i for i in range(n) if i not in line_only]
+    pairs = set(zip(ordered, ordered[1:]))
+    strokes, areas = [], []
+    for artist, _, kind, hexes in artists:
+        ids = [index[h] for h in hexes]
+        if kind == "line":
+            px = _on_page(_polyline_px(artist, ax), artist, ax)
+            if px is not None and len(px):
+                strokes.append((artist, px, ids))
+        else:
+            polys, filled = _area_px(artist)
+            if polys and np.all(np.ptp(np.vstack(polys), axis=0) > 0):
+                outline = _on_page(np.vstack([_densify_px(p) for p in polys]),
+                                   artist, ax)
+                areas.append((polys if filled else [], outline, ids))
+
+    def wanted(ia: list[int], ib: list[int]) -> set[tuple[int, int]]:
+        return {(min(i, j), max(i, j)) for i in ia for j in ib if i != j}
+
+    gaps = _StrokeGaps([px for _, px, _ in strokes])
+    dpi = ax.figure.dpi
+    for (i, (a, _, ia)), (j, (b, _, ib)) in itertools.combinations(
+            enumerate(strokes), 2):
+        new = wanted(ia, ib) - pairs
+        if not new:
+            continue
+        tol = ((_stroke_pt(a) + _stroke_pt(b)) / 2.0 * dpi / 72.0
+               + SERIES_CONTACT_PX)
+        if gaps.gap(i, j, tol) <= tol:
+            pairs |= new
+    # Each stroke beside its nearest: what a reader tells it apart from where
+    # nothing touches. A stroke whose every pair is already gated can add
+    # none, so it is not searched: on 120 random walks in six hues every pair
+    # is gated by the contact test above. Only a stroke that makes a pair is
+    # a rival: a line's own dashed bounds touch it and are its own hue.
+    hues = {h for _, _, ids in strokes for h in ids}
+    for i, (_, _, ia) in enumerate(strokes):
+        if wanted(ia, list(hues)) - pairs:
+            rivals = [j for j, (_, _, ib) in enumerate(strokes)
+                      if wanted(ia, ib)]
+            for j in gaps.nearest(i, rivals):
+                pairs |= wanted(ia, strokes[j][2])
+    for a, pa, ia in strokes:
+        tol = _stroke_pt(a) / 2.0 * dpi / 72.0 + SERIES_CONTACT_PX
+        for polys, outline, ib in areas:
+            new = wanted(ia, ib) - pairs
+            if new and _enters(pa, polys, outline, tol):
+                pairs |= new
+    return pairs
+
+
+def _on_page(px: np.ndarray | None, artist: Any, ax: Axes) -> np.ndarray | None:
+    """The display vertices of `px` that `artist` draws: those inside the box
+    it is clipped to, or all of them when it is not clipped. A clip path with
+    no box, as on a polar axes, is read as the axes' box."""
+    if px is None or not len(px) or not artist.get_clip_on():
+        return px
+    box = artist.get_clip_box() or ax.bbox
+    return px[(px[:, 0] >= box.x0) & (px[:, 0] <= box.x1)
+              & (px[:, 1] >= box.y0) & (px[:, 1] <= box.y1)]
+
+
+class _StrokeGaps:
+    """Distances between the vertices of densified strokes, each pair measured
+    once and only as far as the question needs.
+
+    `gap(i, j, bound)` is the smallest distance from a vertex of stroke `i` to
+    one of stroke `j` when that is at most `bound`, and infinity otherwise. It
+    is exact, with scipy (one `cKDTree` per stroke, built the first time the
+    stroke is asked about) or without it (`_grid_gap`), so the pairs never
+    depend on what is installed. The 256 sampled vertices per stroke this
+    replaces sit about 1/255 of the stroke's length apart, more than
+    `SERIES_CONTACT_PX`, the tie tolerance `nearest` applies, on a long stroke.
+    """
+
+    def __init__(self, pts: list[np.ndarray]) -> None:
+        import numpy as np
+        try:
+            from scipy.spatial import cKDTree
+        except ImportError:                  # optional, see `_box_blur`
+            cKDTree = None
+        self.kd = cKDTree
+        self.pts = pts
+        self.lo = [p.min(axis=0) for p in pts]
+        self.hi = [p.max(axis=0) for p in pts]
+        self.trees: dict[int, Any] = {}
+        self.known: dict[tuple[int, int], tuple[float, float]] = {}
+        self.inf = np.inf
+
+    def gap(self, i: int, j: int, bound: float) -> float:
+        key = (min(i, j), max(i, j))
+        got, asked = self.known.get(key, (self.inf, -1.0))
+        if got > bound and asked < bound:
+            got = self._measure(i, j, bound)
+            self.known[key] = (got, bound)
+        return got if got <= bound else self.inf
+
+    def _measure(self, i: int, j: int, bound: float) -> float:
+        import numpy as np
+        lo = np.maximum(self.lo[i], self.lo[j]) - bound
+        hi = np.minimum(self.hi[i], self.hi[j]) + bound
+        if np.any(lo > hi):
+            return self.inf
+        pa = self.pts[i][np.all((self.pts[i] >= lo) & (self.pts[i] <= hi),
+                                axis=1)]
+        if not len(pa):
+            return self.inf
+        if self.kd is None:
+            pb = self.pts[j][np.all((self.pts[j] >= lo) & (self.pts[j] <= hi),
+                                    axis=1)]
+            return _grid_gap(pa, pb, bound) if len(pb) else self.inf
+        if j not in self.trees:
+            self.trees[j] = self.kd(self.pts[j])
+        # The tree leaves out a neighbour exactly at its bound; the grid keeps
+        # it. Asked a hair wider and cut here, both keep it.
+        d, _ = self.trees[j].query(pa, k=1,
+                                   distance_upper_bound=np.nextafter(bound, np.inf))
+        found = float(d.min())
+        return found if found <= bound else self.inf
+
+    def nearest(self, i: int, among: list[int]) -> list[int]:
+        """The strokes in `among` within `SERIES_CONTACT_PX` of the one
+        nearest stroke `i`.
+
+        The search is bounded before it starts. The closest pair among 32
+        sampled vertices of each stroke is a distance two real vertices are
+        apart, so the nearest stroke is no farther than that. Only strokes
+        within that distance plus `SERIES_CONTACT_PX` are measured."""
+        import numpy as np
+        others = [j for j in among if j != i]
+        if not others:
+            return []
+        own = self._sample(i)
+        bound = min(float(np.hypot(*(own[:, None, :]
+                                     - self._sample(j)[None, :, :]).T).min())
+                    for j in others) + SERIES_CONTACT_PX
+        found = {}
+        for j in others:
+            reach = np.maximum(0.0, np.maximum(self.lo[j] - self.hi[i],
+                                               self.lo[i] - self.hi[j]))
+            if float(np.hypot(*reach)) <= bound:
+                found[j] = self.gap(i, j, bound)
+        near = min(found.values())
+        return [j for j, g in found.items() if g <= near + SERIES_CONTACT_PX]
+
+    def _sample(self, i: int) -> np.ndarray:
+        import numpy as np
+        p = self.pts[i]
+        return p[np.linspace(0, len(p) - 1, min(len(p), 32)).astype(int)]
+
+
+def _grid_gap(pa: np.ndarray, pb: np.ndarray, bound: float) -> float:
+    """The smallest distance between a vertex of `pa` and one of `pb` when it
+    is at most `bound`, else infinity: `_StrokeGaps` without scipy, exact and
+    bounded in memory.
+
+    Cells `bound` wide, so two vertices within `bound` sit in the same or
+    neighbouring cells. Each vertex of `pa` is paired only with the vertices of
+    `pb` in its nine cells, and the pairs are measured `GRID_PAIR_CAP` at a time.
+    A dense all-pairs block per chunk of `pa`, which this replaces, came to
+    1.7GB per chunk on three noisy 20000-point lines."""
+    import numpy as np
+    origin = np.minimum(pa.min(axis=0), pb.min(axis=0))
+    step = max(float(bound), 1e-9)
+    ca = np.floor((pa - origin) / step).astype(np.int64)
+    cb = np.floor((pb - origin) / step).astype(np.int64)
+    width = int(max(ca[:, 1].max(), cb[:, 1].max())) + 3
+    key_b = (cb[:, 0] + 1) * width + (cb[:, 1] + 1)
+    order = np.argsort(key_b, kind="stable")
+    key_b, pb = key_b[order], pb[order]
+    best = np.inf
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            key_a = (ca[:, 0] + 1 + dx) * width + (ca[:, 1] + 1 + dy)
+            first = np.searchsorted(key_b, key_a, side="left")
+            count = np.searchsorted(key_b, key_a, side="right") - first
+            has = np.flatnonzero(count)
+            if not len(has):
+                continue
+            ends = np.cumsum(count[has])
+            start = 0
+            while start < len(has):
+                stop = int(np.searchsorted(ends, (ends[start - 1] if start
+                                                  else 0) + GRID_PAIR_CAP,
+                                           side="right"))
+                stop = max(stop, start + 1)
+                rows = has[start:stop]
+                n = count[rows]
+                ia = np.repeat(rows, n)
+                offset = np.arange(int(n.sum())) - np.repeat(
+                    np.cumsum(n) - n, n)
+                ib = np.repeat(first[rows], n) + offset
+                d = pa[ia] - pb[ib]
+                best = min(best, float(np.sqrt((d * d).sum(axis=1)).min()))
+                start = stop
+    return best if best <= bound else np.inf
+
+
+def _area_px(artist: Any) -> tuple[list[np.ndarray], bool]:
+    """The outlines an area artist draws, in display pixels, and whether it
+    paints inside them (`_fills`). Only a painted outline is closed; an
+    unfilled one is its stroke, and closing it would draw a chord.
+
+    Each path goes through the transforms matplotlib draws it with. A patch
+    takes its whole transform. A collection takes `_prepare_points`, the
+    helper `Collection.draw` calls, which applies the non-affine part of the
+    transform; then, as `RendererBase._iter_collection_raw_paths` and
+    `_iter_collection` do, each path's own transform, the affine part, and
+    its offset. `get_path_collection_extents`, which this replaces, applies
+    only the affine part, and put a `fill_between` band on a log axis
+    hundreds of pixels from where it is drawn. Its box also covered page a
+    diagonal band never fills.
+    """
+    import numpy as np
+    from matplotlib.collections import Collection
+    from matplotlib.transforms import Affine2D, IdentityTransform
+    try:
+        if not isinstance(artist, Collection):
+            paths = [artist.get_transform().transform_path(artist.get_path())]
+        else:
+            master, offset_trf, offsets, raw = artist._prepare_points()
+            per = artist.get_transforms()
+            drawn = [raw[k % len(raw)].transformed(
+                         (Affine2D(per[k % len(per)]) if len(per)
+                          else IdentityTransform()) + master)
+                     for k in range(max(len(raw), len(per)) if len(raw) else 0)]
+            shift = (offset_trf.transform(offsets) if len(offsets)
+                     else np.zeros((1, 2)))
+            paths = [drawn[k % len(drawn)].transformed(
+                         Affine2D().translate(*shift[k % len(shift)]))
+                     for k in range(max(len(drawn), len(shift)) if drawn else 0)]
+    except (ValueError, TypeError, AttributeError, RuntimeError):
+        return [], False
+    filled = _fills(artist)
+    out = []
+    for path in paths:
+        for poly in path.to_polygons(closed_only=filled):
+            poly = poly[np.isfinite(poly).all(axis=1)]
+            if len(poly) >= 2:
+                out.append(poly)
+    return out, filled
+
+
+def _fills(artist: Any) -> bool:
+    """Whether an area artist paints its inside: a hatch, a collection's face
+    (`_is_filled`), or a patch's fill in a colour that is not transparent."""
+    from matplotlib.collections import Collection
+    if getattr(artist, "get_hatch", lambda: None)():
+        return True
+    if isinstance(artist, Collection):
+        return _is_filled(artist)
+    return bool(artist.get_fill() and artist.get_facecolor()[3] > 0)
+
+
+def _enters(stroke: np.ndarray, polys: list[np.ndarray],
+            outline: np.ndarray | None, tol: float) -> bool:
+    """Whether a stroke's densified vertices lie inside an area's painted
+    outlines (`polys`) or within `tol` of the part of an outline that is
+    drawn."""
+    from matplotlib.path import Path
+    if any(Path(p).contains_points(stroke).any() for p in polys):
+        return True
+    return (outline is not None and len(outline) > 0
+            and _StrokeGaps([stroke, outline]).gap(0, 1, tol) <= tol)
+
+
+def _dash(line: Any) -> Any:
+    """A `Line2D`'s or `LineCollection`'s on-off dash sequence before
+    linewidth scaling, or None for a solid line. `get_linestyle()` reports
+    every dash tuple as '--', which made `(0, (4, 2))` and `(0, (1, 1))` one
+    dash. The offset is dropped: it shifts a dash along the line without
+    changing how it looks. A collection whose segments differ gives the tuple
+    of their sequences. The private attributes are on matplotlib 3.8.4 and
+    3.11.1; the style name stands in where they are missing."""
+    def seq(pattern: Any) -> Any:
+        dashes = pattern[1]
+        return (None if dashes is None
+                else tuple(round(float(x), 3) for x in dashes))
+
+    patterns = getattr(line, "_us_linestyles", None)
+    if patterns is not None:
+        seqs = tuple(dict.fromkeys(seq(p) for p in patterns))
+        return seqs[0] if len(seqs) == 1 else seqs
+    pattern = getattr(line, "_unscaled_dash_pattern", None)
+    if pattern is None:
+        return str(line.get_linestyle())
+    return seq(pattern)
+
+
+def _second_channel(artist: Any, kind: str) -> tuple[Any, ...]:
+    """What besides hue tells this artist's series apart: mark type, dash,
+    marker shape and hatch. `_carried` compares two series by these.
+
+    A marker is compared as the path it draws, on both sides. `scatter` keeps
+    only the path and `plot` only the marker name, and comparing a name with a
+    path called the same circle two markers."""
+    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.markers import MarkerStyle
+
+    def shape(path: Any) -> tuple[float, ...]:
+        return tuple(np.round(path.vertices, 3).ravel())
+
+    hatch = getattr(artist, "get_hatch", lambda: None)() or None
+    if isinstance(artist, Line2D):
+        marker = artist.get_marker()
+        drawn = None
+        if not _no_marker(marker):
+            style = MarkerStyle(marker)
+            drawn = shape(style.get_path().transformed(style.get_transform()))
+        return (kind, _dash(artist) if kind == "line" else None, drawn, hatch)
+    if kind == "marks":
+        paths = artist.get_paths()
+        return (kind, None, shape(paths[0]) if len(paths) else None, hatch)
+    if kind == "line":
+        return (kind, _dash(artist), None, hatch)    # vlines, errorbar bars
+    return (kind, None, None, hatch)
+
+
+def _carried(a: dict[str, set[tuple[Any, ...]]],
+             b: dict[str, set[tuple[Any, ...]]]) -> bool:
+    """Whether something besides hue tells two series apart, given each one's
+    `_second_channel`s by kind: they draw no kind in common, or in some kind
+    both draw they share no channel. A line and its band in each of two hues,
+    the lines dashed differently, are told apart by their lines; asking every
+    artist to differ let the two plain bands cancel the dash."""
+    shared = a.keys() & b.keys()
+    return not shared or any(a[k].isdisjoint(b[k]) for k in shared)
+
+
+def _separation(cp: Any, ax: Axes, distinct: list[str],
+                artists: list[tuple[Any, str | None, str, list[str]]],
+                ) -> tuple[list[str], list[str]]:
+    """The two separation rows for one panel, as `(fails, notes)`.
+
+    Each gated pair is measured on its own with `check_palette.pair_separation`,
+    so the row can say which pair a second channel carries. A pair under
+    `CVD_TARGET` that one carries is a note, not a failure: the constant's own
+    comment makes secondary encoding mandatory below it, and the row's [FIX]
+    asks for it. `NORMAL_FLOOR` is excused by nothing, as its comment says.
+    `artists` is `_data_artists(ax)`, harvested once by the caller."""
+    channels: dict[str, dict[str, set[tuple[Any, ...]]]] = {}
+    # Error bars are their own kind: plain in every series, filed as lines
+    # they cancelled the dash or marker on the series' line.
+    bars = _errorbar_bars(ax)
+    for artist, _, kind, hexes in artists:
+        key = "bars" if id(artist) in bars else kind
+        for h in hexes:
+            channels.setdefault(h, {}).setdefault(key, set()).add(
+                _second_channel(artist, kind))
+    measured = []
+    for i, j in sorted(_gated_pairs(ax, distinct, artists)):
+        a, b = distinct[i], distinct[j]
+        carried = _carried(channels.get(a, {}), channels.get(b, {}))
+        measured.append((a, b, cp.pair_separation(a, b), carried))
+    if not measured:
+        return [], []
+    # Tritan is printed, never gated, and the number printed is the panel's
+    # worst over the gated pairs, as one `check` call over the panel reported
+    # it, not the tritan distance of whichever pair is worst under protan or
+    # deutan.
+    tritan = min(sep["tritan"] for _, _, sep, _ in measured)
+
+    def cvd(a: str, b: str, sep: dict[str, Any]) -> str:
+        return cp._cvd_detail(a, b, sep["cvd"], sep["cvd_kind"],
+                              sep["cvd_severity"], tritan, fix=False)
+
+    fails, notes = [], []
+    # CVD: a pair under the target fails unless a second channel carries it.
+    hard = [m for m in measured if m[2]["cvd"] < cp.CVD_TARGET and not m[3]]
+    if hard:
+        a, b, sep, _ = min(hard, key=lambda m: m[2]["cvd"])
+        # `check_palette`'s remedy is for a list of hexes. Here the channels
+        # the row can see are the ones worth naming.
+        fails.append(cvd(a, b, sep)
+                     + "  [FIX] separate the pair by dash, marker, hatch "
+                       "or mark type as well as hue, or re-step")
+    else:
+        a, b, sep, _ = min(measured, key=lambda m: m[2]["cvd"])
+        detail = cvd(a, b, sep)
+        if sep["cvd"] < cp.CVD_TARGET:
+            detail += (" - carried by a second channel (mark type, dash, "
+                       "marker or hatch)")
+        notes.append(detail)
+    # Normal vision: excused by nothing.
+    a, b, sep, _ = min(measured, key=lambda m: m[2]["normal"])
+    detail = cp._normal_detail(a, b, sep["normal"])
+    (fails if sep["normal"] < cp.NORMAL_FLOOR else notes).append(detail)
+    return fails, notes
+
+
+@_measured
 def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     """The hues actually drawn, put through the palette gates.
 
     The hole this closes: `check_palette.py` judges a list of hexes someone
     remembered to paste into a terminal, and this file never looked at color at
     all. A figure on matplotlib's default `tab10` cycle - whose orange and green
-    measure CAM02-UCS dE 2.4 under protanopia, against a floor of 10.5 - passed
+    measure CAM02-UCS dE 1.6 under protanopia, against a floor of 10.5 - passed
     every composition check
     clean. Two scripts in one project that never spoke.
 
@@ -3302,7 +4391,8 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     the grain of truth in the complaint, and the answer to it is to step the
     ramp wider rather than to guess at intent from four hexes.
     """
-    by_ax = _data_colors_by_axes(fig)
+    artists_by_ax = _data_artists_by_axes(fig)
+    by_ax = {ax: _flatten(artists) for ax, artists in artists_by_ax.items()}
     if not by_ax:
         return True, "no categorical series colors"
 
@@ -3311,6 +4401,15 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
     if cp is None:
         notes.append("check_palette.py is not importable beside this file, "
                      "so separation went unchecked")
+    else:
+        # Vendored one file at a time, the sibling can be older than this file.
+        missing = [n for n in ("pair_separation", "_cvd_detail",
+                               "_normal_detail") if not hasattr(cp, n)]
+        if missing:
+            notes.append("check_palette.py beside this file has no "
+                         + ", ".join(missing)
+                         + ", so separation went unchecked")
+            cp = None
 
     for ax, items in by_ax.items():
         distinct = list(dict.fromkeys(h for h, _, _ in items))
@@ -3338,14 +4437,10 @@ def check_series_color(fig: Figure) -> tuple[bool | str, str]:
                              "  [WHY] the color cycle wrapped")
 
         if len(distinct) >= 2 and cp is not None:
-            _, rows = cp.check(distinct, all_pairs=_axes_all_pairs(ax))
-            for name, status, detail in rows:
-                if not name.startswith(("CVD separation", "Normal-vision floor")):
-                    continue
-                if status is False:
-                    fails.append(detail)
-                else:
-                    notes.append(detail.split("  [FIX]")[0].strip())
+            fails_ax, notes_ax = _separation(cp, ax, distinct,
+                                             artists_by_ax[ax])
+            fails += fails_ax
+            notes += notes_ax
 
     max_per_panel = max(
         (len(list(dict.fromkeys(h for h, _, _ in items)))
@@ -3384,8 +4479,9 @@ def check_dual_axis(fig: Figure) -> tuple[bool | str, str]:
     frame, which keeps the gate off `secondary_yaxis` and off correct work.
     """
     pairs = []
-    for i, j in itertools.combinations(range(len(fig.axes)), 2):
-        a, b = fig.axes[i], fig.axes[j]
+    axes = _all_axes(fig)
+    for i, j in itertools.combinations(range(len(axes)), 2):
+        a, b = axes[i], axes[j]
         if any(abs(x - y) > FRAME_TOL for x, y in
                zip(a.get_position().bounds, b.get_position().bounds)):
             continue
@@ -3560,6 +4656,7 @@ def _baselined_bars(ax: Axes) -> str | None:
     return None
 
 
+@_measured
 def check_form(fig: Figure) -> tuple[bool | str, str]:
     """The mechanical subset of form choice - the three cases where the form is
     wrong no matter what the data is: a pie or donut (any `Wedge`), a 3D axes,
@@ -3604,11 +4701,14 @@ def check_form(fig: Figure) -> tuple[bool | str, str]:
         scale = ax.get_yscale() if vertical else ax.get_xscale()
         # A log axis cannot include zero, so a log bar chart is truncated by
         # construction and this gate has nothing to say about it.
-        if scale == "linear" and min(lim) > 0:
+        # Negative bars hang from zero too, so an axis that stops short of
+        # zero from below cuts them the same way.
+        if scale == "linear" and (min(lim) > 0 or max(lim) < 0):
             axis = "y" if vertical else "x"
+            edge = min(lim) if min(lim) > 0 else max(lim)
             bad.append(
-                f"ax{i} bars on a truncated {axis} axis (starts at "
-                f"{min(lim):.4g}): bar length encodes the value, so a "
+                f"ax{i} bars on a truncated {axis} axis (stops at "
+                f"{edge:.4g}, short of zero): bar length encodes the value, so a "
                 "cut baseline misstates every ratio  [FIX] the fix is the "
                 "form, not the axis - use a dot plot")
     if not bad:
@@ -3627,9 +4727,11 @@ def check_identity_channel(fig: Figure) -> tuple[bool | str, str]:
     labeled = {h for h, label in _data_colors(fig) if label}
     if len(labeled) < 2:
         return True, "fewer than two identified series"
-    if fig.legends or any(ax.get_legend() is not None for ax in fig.axes):
+    panels = _all_axes(fig)
+    if (any(f.legends for f in _all_figures(fig))
+            or any(ax.get_legend() is not None for ax in panels)):
         return True, f"{len(labeled)} series, legend present"
-    if any(ax.texts for ax in fig.axes):
+    if any(ax.texts for ax in panels):
         return True, f"{len(labeled)} series, in-axes text (assumed direct labels)"
     return "warn", (f"{len(labeled)} series told apart by hue alone - no legend "
                     "and no text in the axes"
@@ -3704,12 +4806,22 @@ def _drawstyle_xy(line: Any) -> np.ndarray:
 
 
 def _polyline_px(line: Any, ax: Axes) -> np.ndarray | None:
-    """A `Line2D`'s stroke in display space, drawstyle expanded and densified."""
+    """A `Line2D`'s stroke in display space, drawstyle expanded and densified.
+
+    Through the line's own transform, as `_path_px` does: `axvline` and
+    `axhline` draw in a blended one, and read through `transData` an
+    `axvline`'s stroke spans data y 0 to 1 rather than the panel."""
     import numpy as np
+    from matplotlib.lines import Line2D
+    if not isinstance(line, Line2D):
+        # A `LineCollection` (`vlines`, errorbar bars) keeps its strokes as
+        # paths and has no `get_xydata`.
+        return _path_px(line, ax)
     xy = _drawstyle_xy(line)
     if xy.ndim != 2 or len(xy) == 0:
         return None
-    return _densify_px(np.asarray(ax.transData.transform(xy), dtype=float))
+    return _densify_px(np.asarray(line.get_transform().transform(xy),
+                                  dtype=float))
 
 
 def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
@@ -3728,8 +4840,6 @@ def _path_px(artist: Any, ax: Axes) -> np.ndarray | None:
     """
     import numpy as np
     transform = artist.get_transform()
-    if transform is None:
-        transform = ax.transData
     runs = []
     for path in artist.get_paths():
         if not len(path.vertices):
@@ -3814,7 +4924,9 @@ def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
         return _polyline_px(artist, ax)
     try:
         if len(getattr(artist, "get_sizes", lambda: [])()):
-            offsets = np.asarray(artist.get_offsets(), dtype=float)
+            # A masked offset draws no mark; `np.asarray` keeps its value.
+            offsets = np.ma.filled(
+                np.ma.asarray(artist.get_offsets(), dtype=float), np.nan)
             transform = (artist.get_offset_transform()
                          if hasattr(artist, "get_offset_transform")
                          else ax.transData)
@@ -3830,7 +4942,8 @@ def _series_px(artist: Any, ax: Axes) -> np.ndarray | None:
 
 
 def _legend_text_ids(fig: Figure) -> set[int]:
-    """Ids of every Text that belongs to a legend, figure-level or axes-level.
+    """Ids of every Text that belongs to a legend: figure-, subfigure- or
+    axes-level.
 
     A legend is a lookup key placed *away* from the curves by design, so its
     entries can never pass a proximity check - and they slip past the `t.axes is
@@ -3838,8 +4951,8 @@ def _legend_text_ids(fig: Figure) -> set[int]:
     attribution check has to drop them explicitly or it fails every figure that
     keeps a legend."""
     ids: set[int] = set()
-    legends = list(fig.legends)
-    for ax in fig.axes:
+    legends = [lg for f in _all_figures(fig) for lg in f.legends]
+    for ax in _all_axes(fig):
         lg = ax.get_legend()
         if lg is not None:
             legends.append(lg)
@@ -3945,7 +5058,7 @@ def _furniture_text_ids(fig: Figure) -> set[int]:
     may carry the same string and must still be judged.
     """
     ids: set[int] = set()
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         ids.add(id(ax.title))
         ids.add(id(ax.xaxis.label))
         ids.add(id(ax.yaxis.label))
@@ -4024,7 +5137,7 @@ def check_label_attribution(fig: Figure, r: Any) -> tuple[bool | str, str]:
     bad, checked = [], 0
     legend_ids = _legend_text_ids(fig) | _furniture_text_ids(fig)
     all_texts = _texts(fig, r)
-    for ax in fig.axes:
+    for ax in _all_axes(fig):
         px = {}
         for artist in (*ax.lines, *ax.collections):
             if not artist.get_visible():
@@ -4212,30 +5325,142 @@ def _collection_widths(artist: Any) -> list[float]:
         return [float(raw)]
 
 
-def _ground(ax: Axes) -> tuple[float, float, float, float]:
-    """The colour behind an axes' marks: its facecolor, else the figure's, else
-    white. `set_facecolor("none")` is RGBA (0, 0, 0, 0), and reading its RGB
-    would take the page under it for black."""
-    from matplotlib.colors import to_rgba
+def _ground(ax: Axes, points: Any = None,
+            image: Any = None) -> tuple[float, float, float]:
+    """The most common colour Agg has drawn at `points`, as RGB in 0-1.
 
-    for colour in (ax.get_facecolor(), ax.figure.get_facecolor()):
-        rgba = to_rgba(colour)
-        if rgba[3] > 0.0:
-            return rgba
-    return (1.0, 1.0, 1.0, 1.0)
+    `_ground_image` up to this axes, read at each point. Reading the axes' own
+    facecolor instead took an `axis("off")` panel's undrawn grey, a
+    translucent face's unblended colour and an inset's `none` for the ground,
+    and each flipped `check_line_weight` on a halo edge.
+
+    Args:
+        ax: The axes the marks belong to.
+        points: `(N, 2)` display coordinates; the axes' centre if omitted or
+            empty. Points off the image are dropped; white if none remain.
+        image: `_ground_image(fig, upto=ax)`, or `below=` the artist whose
+            marks these are, if the caller already has it.
+    """
+    import numpy as np
+
+    img = _ground_image(_root_figure(ax), upto=ax) if image is None else image
+    h, w = img.shape[:2]
+    if points is None or len(points) == 0:
+        bb = ax.bbox
+        points = [((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2)]
+    pts = np.asarray(points, dtype=float).reshape(-1, 2)
+    pts = pts[np.isfinite(pts).all(axis=1)
+              & (pts[:, 0] >= 0) & (pts[:, 0] < w)
+              & (pts[:, 1] >= 0) & (pts[:, 1] < h)]
+    if len(pts) == 0:
+        return (1.0, 1.0, 1.0)
+    # Agg's origin is top-left, the figure's is bottom-left
+    px = img[h - 1 - pts[:, 1].astype(int),
+             pts[:, 0].astype(int)].astype(np.int64)
+    # One integer per colour, and the smallest colour still wins a tie.
+    # `np.unique(axis=0)` sorts rows, which is slower than sorting one integer
+    # per colour.
+    keys, counts = np.unique((px[:, 0] << 16) | (px[:, 1] << 8) | px[:, 2],
+                             return_counts=True)
+    key = int(keys[int(np.argmax(counts))])
+    return ((key >> 16) / 255.0, (key >> 8 & 255) / 255.0, (key & 255) / 255.0)
 
 
-def _marker_outline_pt(artist: Any, background: Any) -> float:
+def _root_figure(ax: Axes) -> Figure:
+    """The `Figure` an axes is drawn on, through any subfigures."""
+    from matplotlib.figure import SubFigure
+
+    fig = ax.figure
+    while isinstance(fig, SubFigure):
+        fig = fig._parent
+    return fig
+
+
+def _drawn_rows(rows: Any, artist: Any, ax: Axes) -> Any:
+    """The rows of `rows`, display x and y first, whose point Agg draws for
+    `artist`: inside the box it is clipped to (`_on_page`) and its clip path."""
+    import numpy as np
+    rows = _on_page(rows, artist, ax)
+    if rows is None:
+        return np.empty((0, 2))
+    clip = artist.get_clip_path()
+    if artist.get_clip_on() and clip is not None and len(rows):
+        rows = rows[clip.get_fully_transformed_path().contains_points(
+            rows[:, :2])]
+    return rows
+
+
+def _marks_display(artist: Any, ax: Axes) -> Any:
+    """`_marks_px` without the marks its clip box (`_on_page`) or clip path
+    hides.
+
+    Kept for tests; `_marks_rim` filters through `_drawn_rows` the same way.
+    """
+    return _drawn_rows(_marks_px(artist, ax), artist, ax)
+
+
+def _marks_rim(artist: Any, ax: Axes) -> Any:
+    """Display points round the outer edge of each mark `_drawn_rows`
+    keeps, where its outline meets what it is drawn against.
+
+    Sixteen points on an ellipse of the drawn mark's half width and half
+    height, edge stroke included, kept where Agg draws. A line's marks are
+    sized by `marker_extent_pt`; a scatter's path at `sqrt(s)` is widened by
+    `collection_stroke_pt` the same way. Read at the centres, the ground was
+    what lay under the faces: a line drawn by its own `plot` along a scatter was the
+    ground for its marks whatever its width, and one `'o-'` line's own stroke
+    never was. Read here, a line under its own marks is their ground once it
+    covers most of the rim, past about 0.7 of the marks' drawn width.
+    """
+    import numpy as np
+    from matplotlib.lines import Line2D
+
+    fig = _root_figure(ax)
+    k = fig.dpi / 72.0
+    if isinstance(artist, Line2D):
+        px = _marks_px(artist, ax)
+        if px is None:
+            return np.empty((0, 2))
+        w, h = marker_extent_pt(artist, fig.dpi)
+        rows = np.c_[px, np.tile([w * k / 2, h * k / 2], (len(px), 1))]
+    else:
+        offsets = np.ma.filled(np.ma.asarray(artist.get_offsets(),
+                                             dtype=float), np.nan)
+        paths = artist.get_paths()
+        sizes = np.asarray(artist.get_sizes(), dtype=float)
+        if offsets.ndim != 2 or not len(offsets) or not paths or not sizes.size:
+            return np.empty((0, 2))
+        px = np.asarray(artist.get_offset_transform().transform(offsets),
+                        dtype=float)
+        # matplotlib cycles paths and sizes over the offsets.
+        side = np.array([[e.width, e.height]
+                         for e in (p.get_extents() for p in paths)])
+        n = np.arange(len(px))
+        drawn = np.sqrt(sizes[n % len(sizes)])[:, None] * side[n % len(side)]
+        drawn = drawn + collection_stroke_pt(artist) * (drawn[:, ::-1] > 0)
+        rows = np.c_[px, drawn * k / 2][np.isfinite(px).all(axis=1)]
+    rows = _drawn_rows(rows, artist, ax)
+    if not len(rows):
+        return np.empty((0, 2))
+    turn = np.linspace(0.0, 2 * np.pi, 16, endpoint=False)
+    ring = np.c_[np.cos(turn), np.sin(turn)]
+    rim = (rows[:, None, :2] + rows[:, None, 2:] * ring[None]).reshape(-1, 2)
+    return _drawn_rows(rim, artist, ax)
+
+
+def _marker_outline_pt(artist: Any, background: Callable[[], Any]) -> float:
     """The width of a marker outline the reader has to see, in points.
 
     An outline carries the mark when the marker is unfilled (`+`, `x`) or
     hollow, or when it is a second colour on the fill. It carries nothing when
     it repeats the fill colour, which is matplotlib's `"face"` edge and every
-    seaborn sheet's, or when it is the axes background, which is a halo.
+    seaborn sheet's, or when it is the ground under the marks (`_ground`),
+    which is a halo.
 
     Args:
         artist: A `Line2D` with markers or a `PathCollection` from `scatter`.
-        background: The colour behind the marks, from `_ground`.
+        background: Returns the colour the outlines are drawn against, from
+            `_ground`; called only when an outline differs from its fill.
 
     Returns:
         The outline width in points, or 0.0 if no outline carries the mark.
@@ -4246,7 +5471,7 @@ def _marker_outline_pt(artist: Any, background: Any) -> float:
     from matplotlib.markers import MarkerStyle
 
     if isinstance(artist, Line2D):
-        if str(artist.get_marker()) in ("None", "none", "", " "):
+        if _no_marker(artist.get_marker()):
             return 0.0
         width = marker_stroke_pt(artist)
         if width <= 0.0:
@@ -4266,16 +5491,19 @@ def _marker_outline_pt(artist: Any, background: Any) -> float:
         return width                                   # hollow
     n = max(len(edges), len(faces))
     edges, faces = np.resize(edges, (n, 4)), np.resize(faces, (n, 4))
-    bg = np.asarray(to_rgba(background), dtype=float)[:3]
+    bg = None
     for edge, face in zip(edges, faces):
         if edge[3] <= 0.0 or np.allclose(edge[:3], face[:3], atol=1e-3):
             continue
+        if bg is None:
+            bg = np.asarray(to_rgba(background()), dtype=float)[:3]
         if np.allclose(edge[:3], bg, atol=1e-3):
             continue
         return width
     return 0.0
 
 
+@_measured
 def check_line_weight(fig: Figure, scale: float | None = None,
                       placed_frac: float = 1.0,
                       venue: str | None = None) -> tuple[bool | str, str]:
@@ -4328,8 +5556,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         widths.append(on_page)
-        if on_page < LINE_FLOOR_PT:
-            thin.append(f"{name} at {on_page:.2f}pt")
+        if _below_floor(on_page, LINE_FLOOR_PT):
+            thin.append(f"{name} at {_round_down(on_page, 2):.2f}pt")
 
     def measure_furniture(width: Any, name: str) -> None:
         """The same, against the lower floor furniture is held to."""
@@ -4337,8 +5565,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         furniture_widths.append(on_page)
-        if on_page < FURNITURE_FLOOR_PT:
-            thin_furniture.append(f"{name} at {on_page:.2f}pt")
+        if _below_floor(on_page, FURNITURE_FLOOR_PT):
+            thin_furniture.append(f"{name} at {_round_down(on_page, 2):.2f}pt")
 
     def measure_outline(width: float, name: str) -> None:
         """A marker outline, against the furniture floor."""
@@ -4346,9 +5574,9 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         if on_page <= 0:
             return
         furniture_widths.append(on_page)
-        if on_page < FURNITURE_FLOOR_PT:
+        if _below_floor(on_page, FURNITURE_FLOOR_PT):
             thin_outline.append(f"the marker outlines of {name} at "
-                                f"{on_page:.2f}pt")
+                                f"{_round_down(on_page, 2):.2f}pt")
 
     def stroked(artist: Any) -> bool:
         """Whether this patch actually puts an edge on the page.
@@ -4368,6 +5596,14 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             return False
         return float(artist.get_linewidth() or 0.0) > 0.0
 
+    forward = _ForwardGround()
+
+    def ground(ax: Axes, artist: Any) -> tuple[float, float, float]:
+        """`_ground` round an artist's marks (`_marks_rim`): what Agg draws
+        before them, an image under a scatter and a line under its own
+        markers included."""
+        return _ground(ax, _marks_rim(artist, ax), forward.image(ax, artist))
+
     for ax in _all_axes(fig):
         # A colorbar's dividers ship at 0.4pt and are matplotlib's, not
         # anybody's design decision — the same reason `check_ink` skips this
@@ -4382,7 +5618,8 @@ def check_line_weight(fig: Figure, scale: float | None = None,
             label = str(artist.get_label() or "")
             named = label if label and not label.startswith("_") else None
             if isinstance(artist, (Line2D, PathCollection)):
-                measure_outline(_marker_outline_pt(artist, _ground(ax)),
+                measure_outline(_marker_outline_pt(
+                    artist, functools.partial(ground, ax, artist)),
                                 named or "a series")
             name = named or "a stroke"
             if isinstance(artist, Line2D):
@@ -4404,7 +5641,7 @@ def check_line_weight(fig: Figure, scale: float | None = None,
 
         # Patch edges and the arrow on an annotation. A schematic is drawn
         # entirely out of these, and none of it reached the loop above.
-        for patch in ax.patches:
+        for patch in _drawn_patches(ax):
             if patch.get_visible() and stroked(patch):
                 measure(patch.get_linewidth(),
                         f"a {type(patch).__name__} edge")
@@ -4460,16 +5697,18 @@ def check_line_weight(fig: Figure, scale: float | None = None,
         seen = list(dict.fromkeys(thin))
         return False, (f"under {LINE_FLOOR_PT}pt on page at scale {scale:.2f}: "
                        f"{seen[:4]}  [FIX] set linewidth to at least "
-                       f"{LINE_FLOOR_PT / scale:.2f} at this scale"
+                       f"{_advise_at_least(LINE_FLOOR_PT, scale, 2):.2f} at "
+                       "this scale"
                        "  [WHY] SIAM: lines thinner than one point break up or "
                        "disappear in print")
     if thin_outline:
         seen = list(dict.fromkeys(thin_outline))
         return False, (f"under {FURNITURE_FLOOR_PT}pt on page at scale "
                        f"{scale:.2f}: {seen[:4]}  [FIX] set markeredgewidth "
-                       f"to at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
-                       "scale  [WHY] Science: line widths have a minimum of "
-                       "0.5 point at the final reduced size")
+                       "to at least "
+                       f"{_advise_at_least(FURNITURE_FLOOR_PT, scale, 2):.2f} "
+                       "at this scale  [WHY] Science: line widths have a "
+                       "minimum of 0.5 point at the final reduced size")
     if thin_furniture:
         seen = list(dict.fromkeys(thin_furniture))
         how = ("linewidth, or `tick_params(which=\"both\", width=...)` for "
@@ -4477,9 +5716,10 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                else "linewidth")
         return False, (f"furniture under {FURNITURE_FLOOR_PT}pt on page at "
                        f"scale {scale:.2f}: {seen[:4]}  [FIX] set {how} to "
-                       f"at least {FURNITURE_FLOOR_PT / scale:.2f} at this "
-                       "scale  [WHY] Science: line widths have a minimum of "
-                       "0.5 point at the final reduced size")
+                       "at least "
+                       f"{_advise_at_least(FURNITURE_FLOOR_PT, scale, 2):.2f} "
+                       "at this scale  [WHY] Science: line widths have a "
+                       "minimum of 0.5 point at the final reduced size")
 
     data = (f"{len(widths)} strokes, thinnest {min(widths):.2f}pt on page "
             f"(floor {LINE_FLOOR_PT})" if widths else
@@ -4490,9 +5730,10 @@ def check_line_weight(fig: Figure, scale: float | None = None,
                   f"{min(furniture_widths):.2f}pt (floor {FURNITURE_FLOOR_PT})")
 
 
-def _banking_slopes(ax: Axes) -> np.ndarray | None:
-    """Absolute display-space segment slopes of the strokes in one panel, or
-    None where banking is not a question this panel answers.
+def _banking_segments(ax: Axes) -> np.ndarray | None:
+    """`(|dx|, |dy|)` in display pixels for each authored segment of the
+    strokes in one panel, or None where banking is not a question this panel
+    answers.
 
     Four exclusions, each measured against the corpus rather than reasoned into
     existence. A line with `linestyle="none"` draws marks, not a stroke, and the
@@ -4502,26 +5743,13 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     furniture rather than a rate. And an x that does not run one way is a
     parametric curve, where "the typical slope" is not a rate of anything.
 
-    Slopes come off the vertices the author gave, not the densified stroke:
-    densifying makes every segment the same 2px length and the median of that
-    is an artefact of the densifier. For a `step` line that also reads the
-    treads rather than the risers, which is what the reader compares.
-
-    Segments that render flat or upright are culled. Heer & Agrawala cull
-    "slopeless" lines - zero or infinite slope - because they are unchanged by
-    the aspect ratio and still drag the median that sets it. Generalised here
-    from exactly horizontal to *drawn* horizontal, which is the same argument
-    against the page rather than against the arithmetic: a segment whose rise is
-    under `BANKING_FLAT_PX` cannot be told from flat at any aspect a reader
-    will see, and no rescaling of the panel makes it carry a rate.
-
-    That is not a nicety. A saturating curve - a converged training run, which
-    is about as common as figures get - is 92 near-flat segments out of 119, and
-    without the cull its median slope is 0.0006: the gate warned that a
-    perfectly ordinary figure needed to be sixteen hundred times taller. Culled, the
-    same panel reads 1.30, which is banked. The saw wave the gate exists to
-    catch has nothing culled and is unaffected.
-    """
+    A line whose rise on the page is under its own stroke width is dropped
+    too: it draws as a level line, Heer & Agrawala's slopeless line, a
+    reference level the aspect cannot bank. Dropping only an exactly flat one
+    banked float noise on a converged metric. Nothing else is culled.
+    Arc length needs no cull for flat segments: a saturating curve's flat tail
+    contributes its run and pulls the aspect only as far as its share of the
+    curve's length."""
     import numpy as np
     if ax.get_aspect() != "auto":
         return None
@@ -4534,18 +5762,20 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
         xy = np.asarray(line.get_xydata(), dtype=float)
         if xy.ndim != 2 or len(xy) < BANKING_MIN_POINTS:
             continue
-        pts = ax.transData.transform(xy)
-        pts = pts[np.isfinite(pts).all(axis=1)]
-        if len(pts) < BANKING_MIN_POINTS:
+        # Through the line's own transform, as `_polyline_px` reads it. A
+        # non-finite vertex is a gap in the stroke, so segments are taken
+        # within each finite run and never across one.
+        pts = line.get_transform().transform(xy)
+        finite = np.isfinite(pts).all(axis=1)
+        if finite.sum() < BANKING_MIN_POINTS:
             continue
-        dx = np.diff(pts[:, 0])
-        if not (np.all(dx > 0) or np.all(dx < 0)):
+        d = np.diff(pts, axis=0)[finite[1:] & finite[:-1]]
+        if not len(d) or not (np.all(d[:, 0] > 0) or np.all(d[:, 0] < 0)):
             continue
-        dy = np.diff(pts[:, 1])
-        drawn = (np.abs(dy) >= BANKING_FLAT_PX) & (np.abs(dx) >= BANKING_FLAT_PX)
-        if not drawn.any():
+        d = np.abs(d)
+        if np.ptp(pts[finite, 1]) < line.get_linewidth() * ax.figure.dpi / 72:
             continue
-        runs.append(np.abs(dy[drawn] / dx[drawn]))
+        runs.append(d)
     if not runs:
         return None
     # Pooled across the panel's strokes, because the aspect is one choice made
@@ -4553,14 +5783,56 @@ def _banking_slopes(ax: Axes) -> np.ndarray | None:
     return np.concatenate(runs)
 
 
+def _banking_factor(ax: Axes) -> float | None:
+    """The factor by which banking would multiply the panel's height-to-width
+    ratio, or None where `_banking_segments` finds nothing to bank.
+
+    Talbot, Gerth & Hanrahan (2011): the aspect that minimises the summed
+    length of the strokes while the plot keeps its area. Scaling the height by
+    sqrt(a) and the width by 1/sqrt(a) gives each segment length
+    sqrt(dx^2/a + dy^2 a). Each term is convex in log(a), as their paper's
+    search parameter is, so the sum has one minimum and a golden-section search
+    over log(a) finds it. Unlike the median slope it replaced, it moves little
+    with how a curve was sampled; `choosing-a-form.md` samples one curve three
+    ways."""
+    import numpy as np
+    seg = _banking_segments(ax)
+    if seg is None:
+        return None
+    dx2, dy2 = seg[:, 0] ** 2, seg[:, 1] ** 2
+
+    def length(s: float) -> float:
+        return float(np.sum(np.sqrt(dx2 * math.exp(-s) + dy2 * math.exp(s))))
+
+    # One new probe per step, the survivor reused, until the bracket on
+    # log(a) is 1e-9 wide: the factor to about nine digits.
+    lo, hi = -30.0, 30.0
+    ratio = (math.sqrt(5.0) - 1.0) / 2.0
+    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+    fa, fb = length(a), length(b)
+    while hi - lo > 1e-9:
+        if fa < fb:
+            hi, b, fb = b, a, fa
+            a = hi - ratio * (hi - lo)
+            fa = length(a)
+        else:
+            lo, a, fa = a, b, fb
+            b = lo + ratio * (hi - lo)
+            fb = length(b)
+    return math.exp((lo + hi) / 2.0)
+
+
+@_measured
 def check_banking(fig: Figure) -> tuple[bool | str, str]:
     """Whether a panel's aspect ratio lets the reader compare rates of change.
 
-    Cleveland banks a panel to 45 degrees: choose the height-to-width ratio that
-    puts the median absolute segment slope at 1, because slope discrimination is
-    most accurate near 45 and falls away either side of it. A cycle that is
-    plain in one aspect ratio is invisible in another, and the wrong one is
-    usually the one the default produced.
+    Banking to 45 degrees is Cleveland's: slope discrimination is most accurate
+    near 45 and falls away either side of it, so the aspect should put the
+    strokes there. The aspect that does it is Talbot, Gerth & Hanrahan's, the
+    one minimising the strokes' arc length at constant area; `_banking_factor`
+    says why that and not the median slope. A cycle that is plain in one aspect
+    ratio is invisible in another, and the wrong one is usually the one the
+    default produced.
 
     The failure is a resolution failure, and it is measurable. On a saw wave
     whose decay limbs alternate between two rates, one exactly twice the other:
@@ -4570,38 +5842,32 @@ def check_banking(fig: Figure) -> tuple[bool | str, str]:
 
     Advisory, and loose, because the right aspect is a judgement about what the
     reader's job is and this cannot know that. `BANKING_SLOPE_MAX` is a factor
-    of ten either side of banked - a typical segment steeper than 84 degrees or
-    flatter than 6 - which is a panel essentially vertical or essentially flat
-    over its own typical step. See `_banking_slopes` for what is excluded and
-    why; a scatter, a map at fixed aspect and a parametric curve are all cases
-    where the median slope means nothing.
+    of ten either side of banked, which for one straight line is a stroke
+    steeper than 84 degrees or flatter than 6. See `_banking_segments` for what
+    is excluded and why; a scatter, a map at fixed aspect and a parametric curve
+    are all cases where banking means nothing.
     """
-    import numpy as np
     floor = 1.0 / BANKING_SLOPE_MAX
     bad, seen = [], []
     for i, ax in enumerate(_all_axes(fig)):
-        slopes = _banking_slopes(ax)
-        if slopes is None or not len(slopes):
+        factor = _banking_factor(ax)
+        if factor is None:
             continue
-        median = float(np.median(slopes))
-        seen.append(median)
-        if floor <= median <= BANKING_SLOPE_MAX:
+        # A factor over 1 multiplies the height-to-width ratio: the panel
+        # should be taller. Under 1 it should be wider by the reciprocal.
+        by = max(factor, 1.0 / factor)
+        seen.append(by)
+        if floor <= factor <= BANKING_SLOPE_MAX:
             continue
-        degrees = math.degrees(math.atan(median))
-        # Banking multiplies the height-to-width ratio by 1/median. Making the
-        # panel wider multiplies its width, dividing the ratio; making it
-        # taller multiplies the height, so the author acts on 1/median.
-        factor = 1.0 / median if median < 1 else median
-        bad.append(f"ax{i} typical segment at {degrees:.0f} deg "
-                   f"(slope {median:.2g}); banking wants the panel "
-                   f"{factor:g}x " + ("wider" if median > 1 else "taller"))
+        bad.append(f"ax{i} banking wants the panel {by:.3g}x "
+                   + ("taller" if factor > 1 else "wider"))
     if not seen:
         return True, "no line panel whose aspect encodes a rate"
     if not bad:
+        lo, hi = f"{min(seen):.2g}", f"{max(seen):.2g}"
         return True, (f"{len(seen)} line panel"
-                      f"{'s' if len(seen) != 1 else ''}, typical segment "
-                      f"{math.degrees(math.atan(min(seen))):.0f}-"
-                      f"{math.degrees(math.atan(max(seen))):.0f} deg")
+                      f"{'s' if len(seen) != 1 else ''}, "
+                      f"{lo if lo == hi else lo + '-' + hi}x from banked")
     return "warn", ("; ".join(bad)
                     + "  [FIX] set the panel aspect, or the figure size, to the "
                       "ratio named above"
@@ -4916,11 +6182,23 @@ def check_fonts(fig: Figure) -> tuple[bool | str, str]:
                      "production; set both to 42")
 
     family = mpl.rcParams["font.family"]
-    generic = family[0] if isinstance(family, (list, tuple)) else family
-    wanted = list(mpl.rcParams.get(f"font.{generic}", []))
+    families = ([family] if isinstance(family, str) else list(family)) or [
+        "sans-serif"]
+    generic = families[0]
+    # `font.family` holds generic names, concrete face names, or both. A
+    # generic name stands for its `font.<generic>` list; a concrete one is
+    # itself, and when it is missing nothing else in the list says so.
+    wanted = []
+    for name in families:
+        key = {"sans": "sans-serif", "sans serif": "sans-serif"}.get(
+            name.lower(), name.lower())
+        if key in ("serif", "sans-serif", "cursive", "fantasy", "monospace"):
+            wanted.extend(mpl.rcParams.get(f"font.{key}", []))
+        else:
+            wanted.append(name)
     if wanted:
         try:
-            got = get_font(findfont(FontProperties(family=generic))).family_name
+            got = get_font(findfont(FontProperties(family=families))).family_name
         except Exception:
             got = None
         if got is not None and not any(got.lower() == w.lower() for w in wanted):
@@ -4939,7 +6217,7 @@ ALT_TEXT_ATTR = "_figure_gate_alt"
 ALT_TEXT_MIN_CHARS = 60
 
 
-def describe(fig: Figure, text: str) -> None:
+def describe(fig: Figure, text: str) -> Figure:
     """Attach a text description to a figure, for readers who cannot see it.
 
     Across 100,000 public Jupyter notebooks, 99.81% of programmatically
@@ -4958,10 +6236,11 @@ def describe(fig: Figure, text: str) -> None:
 
     Args:
         fig: The figure to attach the description to.
-        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor.
+        text: The description. `ALT_TEXT_MIN_CHARS` is the gate's floor. It
+            is stashed on `fig` for `alt_metadata` to read.
 
     Returns:
-        `None`. The description is stashed on `fig` for `alt_metadata` to read.
+        `fig`, as 0.10.0 did.
     """
     setattr(fig, ALT_TEXT_ATTR, str(text))
     return fig
@@ -5249,8 +6528,11 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
 
     Args:
         fig: The built figure. Measured through an Agg canvas at `MEASURE_DPI`
-            and handed back on its authored dpi, so the verdict depends on
-            neither the backend it was made on nor the resolution it was set to.
+            and handed back on the dpi it arrived on, as `savefig` does, so the
+            verdict depends on neither the backend it was made on nor the
+            resolution it was set to. Under a HiDPI backend that is the
+            authored dpi times the device pixel ratio; `_original_dpi` stays
+            the authored one.
         scale: Placed size over authored size, overriding `page_scale`
             outright.
         placed_frac: Fraction of the content width the figure is placed at.
@@ -5261,7 +6543,7 @@ def audit(fig: Figure, scale: float | None = None, placed_frac: float = 1.0,
         `(ok, rows)`. `rows` are `(label, status, detail)`, one per gate, in
         report order; `ok` is False only when a row is a hard False.
     """
-    with _at_draw_rc(fig), _at_measure_dpi(fig):
+    with _measuring(fig):
         rows = _rows(fig, scale, placed_frac, venue, context_axes)
     return all(s is not False for _, s, _ in rows), rows
 
@@ -5271,8 +6553,8 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
           ) -> list[tuple[str, bool | str, str]]:
     """Every gate's row, measured on one canvas at `MEASURE_DPI`.
 
-    `audit` calls this inside `_at_draw_rc` and `_at_measure_dpi`, so the
-    figure's rcParams and dpi are restored however this returns. A gate that
+    `audit` calls this inside `_measuring`, so the figure's canvas, layout,
+    rcParams and dpi are restored however this returns. A gate that
     raises is caught here, per gate, and becomes a row: False for a hard gate,
     "warn" for an advisory one.
     """
@@ -5303,7 +6585,7 @@ def _rows(fig: Figure, scale: float | None, placed_frac: float,
             # The detail says whose defect it is. A reader whose build just
             # turned red should not go looking at their own figure first.
             status = "warn" if gate.advisory else False
-            detail = (f"gate raised {type(exc).__name__}: {exc}  [FIX] this is "
+            detail = (f"{GATE_RAISED}{type(exc).__name__}: {exc}  [FIX] this is "
                       f"a defect in the checker, or a matplotlib change it has "
                       f"not caught up with -- not something wrong with the "
                       f"figure. Please report it.")

@@ -519,6 +519,51 @@ def test_the_cyclic_wrap_is_a_colour_distance_not_a_lightness_one():
     assert cp.cmap_kind(ends) == "diverging"
 
 
+def test_the_cyclic_wrap_threshold_sits_in_an_empty_band():
+    """`CMAP_WRAP_DE_MAX` says any value between 0.4 and 27 sorts the registry
+    the same way. Every map that reaches the wrap test, measured."""
+    colormaps = pytest.importorskip("matplotlib").colormaps
+    wraps = {"cyclic": [], "diverging": []}
+    for name in colormaps:
+        if name.endswith("_r") or colormaps[name].N < cp.CMAP_QUALITATIVE_N:
+            continue
+        samples = cmap_samples(name)
+        kind = cp.cmap_kind(samples)
+        if kind in wraps:
+            wraps[kind].append(cp.delta_e(cp.hex_to_linear(samples[0]),
+                                          cp.hex_to_linear(samples[-1])))
+    assert wraps["cyclic"] and wraps["diverging"]
+    assert max(wraps["cyclic"]) < 0.4 <= cp.CMAP_WRAP_DE_MAX
+    assert cp.CMAP_WRAP_DE_MAX <= 27 < min(wraps["diverging"])
+
+
+LSTAR_PER_OKLAB_L_MAPS = ("viridis", "cividis", "plasma", "magma", "inferno",
+                          "Blues", "Greens", "Greys", "YlOrBr", "PuBu")
+
+
+def test_the_oklab_lightness_floors_state_their_lstar_equivalent():
+    """`ORDINAL_DL_MIN` says one OKLab L is a median 118 L* (p5 94, p95 130)
+    along these maps, so the floor is about 7.1 L*, between Stone et al.'s
+    lightness ND(50) at two degrees (5.45) and at 0.333 (7.33).
+    `CMAP_SPAN_MIN` says ~2.4 L*."""
+    import statistics
+    ratios = []
+    for name in LSTAR_PER_OKLAB_L_MAPS:
+        ll = [(cp.linear_to_oklab(v)[0], _cielab(v)[0])
+              for v in map(cp.hex_to_linear, cmap_samples(name))]
+        ratios += [(s1 - s0) / (l1 - l0) for (l0, s0), (l1, s1)
+                   in zip(ll, ll[1:]) if abs(l1 - l0) > 1e-3]
+    ratios.sort()
+    median = statistics.median(ratios)
+    p5, p95 = (ratios[int(q * (len(ratios) - 1))] for q in (0.05, 0.95))
+    assert round(median) == 118
+    assert round(p5) == 94 and round(p95) == 130
+    nd_hairline, nd_patch = 5.079 + 0.751 / (1 / 3), 5.079 + 0.751 / 2
+    assert (round(nd_hairline, 2), round(nd_patch, 2)) == (7.33, 5.45)
+    assert nd_patch < round(cp.ORDINAL_DL_MIN * median, 1) == 7.1 < nd_hairline
+    assert round(cp.CMAP_SPAN_MIN * median, 1) == 2.4
+
+
 def test_check_palette_still_imports_nothing_outside_the_standard_library():
     import ast
     from pathlib import Path
@@ -540,8 +585,10 @@ def test_check_palette_still_imports_nothing_outside_the_standard_library():
     # cost this file the claim it exists to keep. The walk is over
     # every `Import` node, so the function-local `import json` is on this list
     # rather than hidden by being deferred.
-    assert imported <= {"__future__", "argparse", "collections", "itertools",
-                        "json", "math"}, imported
+    #
+    # `functools` is `lru_cache` on `_cvd_views`.
+    assert imported <= {"__future__", "argparse", "collections", "functools",
+                        "itertools", "json", "math"}, imported
 
 
 # --- anomalous trichromacy ---------------------------------------------------
@@ -618,33 +665,51 @@ def test_the_severity_matrices_belong_on_linear_light():
 
 
 def test_dichromacy_is_not_the_worst_case():
-    """The named failure. Two hues this file would accept as series slots that
-    clear `CVD_TARGET` under both dichromacy models and miss it at severity
-    0.9, where far more readers actually sit.
+    """The named failure. Two hues this file would accept as series slots,
+    54.1 dE apart in full colour, that clear `CVD_TARGET` under both dichromacy
+    models and miss it at protan severity 0.8.
 
-    Measured over 244650 such pairs in CAM02-UCS, 1.27% of them do this, and
-    dichromacy overstates separation by up to 12.7 dE. Both numbers grew when
-    the metric changed in 0.8.0 - they read 0.87% and 10.5 in OKLab - so the
-    sweep the gate does is doing more work now, not less.
+    Measured over 244650 such pairs in CAM02-UCS, 0.13% of them do this, and
+    dichromacy overstates separation by up to 10.7 dE.
     """
-    a, b = "#8e4dc7", "#1402ef"
+    a, b = "#1a80b8", "#fb00e4"
     la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
 
-    # Every dichromacy view, not just the one that crosses: the gate takes the
-    # worst of them, so the claim is that all of them clear the floor.
-    at_dichromacy = min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind))
-                        for kind in ("protan", "deutan"))
-    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.9),
-                             cp.simulate_anomalous(lb, "protan", 0.9))
+    # Every dichromacy view under both models: the gate takes the worst of
+    # them, so the claim is that all of them clear the floor.
+    at_dichromacy = min(
+        min(cp.delta_e(cp.simulate(la, kind), cp.simulate(lb, kind)),
+            cp.delta_e(cp.simulate_anomalous(la, kind, 1.0),
+                       cp.simulate_anomalous(lb, kind, 1.0)))
+        for kind in ("protan", "deutan"))
+    at_severity = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.8),
+                             cp.simulate_anomalous(lb, "protan", 0.8))
     assert at_dichromacy >= cp.CVD_TARGET > at_severity, (
         f"the fixture stopped crossing the floor: {at_dichromacy:.2f} at "
-        f"dichromacy, {at_severity:.2f} at severity 0.9")
+        f"dichromacy, {at_severity:.2f} at severity 0.8")
+    assert cp.delta_e(la, lb) >= cp.NORMAL_FLOOR
 
     ok, rows = cp.check([a, b])
     assert ok is False
     row = next(r for r in rows if r[0].startswith("CVD separation"))
     assert row[1] is False
-    assert "severity 0.9" in row[2], row[2]
+    assert "severity 0.8" in row[2], row[2]
+
+
+def test_the_retracted_fixture_was_the_two_models_disagreeing():
+    """`#8e4dc7` against `#1402ef` was the documented example until
+    2026-10-19: 19.2 under Vienot, 8.3 at severity 0.9. Under Machado's own
+    severity 1.0 it reads under 8.3, so within one model dichromacy was the
+    worst case all along, and the gate now says so."""
+    la, lb = cp.hex_to_linear("#8e4dc7"), cp.hex_to_linear("#1402ef")
+    machado_1 = cp.delta_e(cp.simulate_anomalous(la, "protan", 1.0),
+                           cp.simulate_anomalous(lb, "protan", 1.0))
+    machado_9 = cp.delta_e(cp.simulate_anomalous(la, "protan", 0.9),
+                           cp.simulate_anomalous(lb, "protan", 0.9))
+    assert machado_1 < machado_9 < cp.CVD_TARGET
+    _, rows = cp.check(["#8e4dc7", "#1402ef"])
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert "severity 1.0, Machado" in row[2], row[2]
 
 
 def test_the_bundled_cycle_survives_the_severity_sweep():
@@ -674,13 +739,30 @@ def test_severity_zero_is_normal_vision_and_the_ends_are_rejected_cleanly():
         cp.simulate_anomalous(lin, "protan", 1.4)
 
 
-def test_the_sweep_leaves_dichromacy_to_the_vienot_matrices():
-    """`ANOMALOUS_SEVERITIES` stops at 0.9 on purpose. Reading 1.0 under both
-    models would move every dichromacy number the style guide publishes, for a
-    view `simulate` already covers."""
+def test_the_sweep_reads_dichromacy_under_both_models():
+    """`ANOMALOUS_SEVERITIES` stops at 0.9, because 1.0 is dichromacy, and
+    `check` reads 1.0 under Vienot and under Machado. With Vienot alone the
+    sweep mixed two models and credited their disagreement to anomalous
+    trichromacy."""
     assert 1.0 not in cp.ANOMALOUS_SEVERITIES
     assert max(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.9)
     assert min(cp.ANOMALOUS_SEVERITIES) == pytest.approx(0.1)
+    # A pair only Machado's dichromacy fails: Vienot and every anomalous
+    # severity clear the floor, 31.4 apart in full colour. Before, it passed.
+    a, b = "#e303a6", "#8306bb"
+    la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+    kinds = ("protan", "deutan")
+    vienot = min(cp.delta_e(cp.simulate(la, k), cp.simulate(lb, k))
+                 for k in kinds)
+    anomalous = min(cp.delta_e(cp.simulate_anomalous(la, k, s),
+                               cp.simulate_anomalous(lb, k, s))
+                    for k in kinds for s in cp.ANOMALOUS_SEVERITIES)
+    machado = min(cp.delta_e(cp.simulate_anomalous(la, k, 1.0),
+                             cp.simulate_anomalous(lb, k, 1.0)) for k in kinds)
+    assert min(vienot, anomalous) >= cp.CVD_TARGET > machado
+    ok, rows = cp.check([a, b])
+    row = next(r for r in rows if r[0].startswith("CVD separation"))
+    assert row[1] is False and "severity 1.0, Machado" in row[2], row[2]
 
 
 # --- the tritan gate that was measured and not shipped -----------------------
@@ -801,6 +883,51 @@ def test_the_separation_floors_reproduce_the_size_model_they_derive_from():
         "was not shipped")
 
 
+STONE_ND_THIRD_DEGREE = [c + k * 3 for c, k in (
+    (5.079, 0.751), (5.339, 1.541), (5.349, 2.871))]
+
+
+def _stone_nd(la, lb):
+    """Stone et al.'s per-axis distance at 0.333 degrees, in ND(50) units."""
+    return math.sqrt(sum(((x - y) / n) ** 2 for x, y, n in zip(
+        _cielab(la), _cielab(lb), STONE_ND_THIRD_DEGREE)))
+
+
+def test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation():
+    """`style-guide.md`: inside the 2 ND(50) the size model was measured to,
+    it fails two shipped-cycle pairs that CAM02-UCS passes over `CVD_TARGET`.
+    Kept as a measurement, not a gate."""
+    shipped = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00",
+               "#CC79A7"]
+    expected = {("#009E73", "#CC79A7", "deutan"): (1.54, 1.66, 14.76),
+                ("#0072B2", "#CC79A7", "protan"): (1.94, 2.10, 13.96)}
+    for (a, b, kind), (machado, vienot, ucs) in expected.items():
+        assert a in shipped and b in shipped
+        la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+        m = [cp.simulate_anomalous(v, kind, 1.0) for v in (la, lb)]
+        v = [cp.simulate(x, kind) for x in (la, lb)]
+        assert round(_stone_nd(*m), 2) == machado < 2
+        assert round(_stone_nd(*v), 2) == vienot
+        assert round(cp.delta_e(*m), 2) == ucs > cp.CVD_TARGET
+
+
+def test_the_size_model_itself_fails_three_okabe_ito_pairs():
+    """`style-guide.md` says Stone et al.'s per-axis model at 0.333 degrees,
+    floor 4 ND(50), fails three Okabe-Ito pairs where CAM02-UCS fails one.
+    Coefficients are their Table 3, read from the paper 2026-10-20."""
+    in_nd, in_ucs = {}, {}
+    for a, b in itertools.combinations(OKABE_ITO, 2):
+        la, lb = cp.hex_to_linear(a), cp.hex_to_linear(b)
+        in_nd[a, b] = _stone_nd(la, lb)
+        in_ucs[a, b] = cp.delta_e(la, lb)
+    misses = {k: round(v, 2) for k, v in in_nd.items() if v < 4}
+    assert misses == {
+        ("#E69F00", "#F0E442"): 3.91, ("#E69F00", "#D55E00"): 3.59,
+        ("#56B4E9", "#0072B2"): 3.42}
+    assert [k for k, v in in_ucs.items() if v < cp.NORMAL_FLOOR] == [
+        ("#E69F00", "#F0E442")]
+
+
 def test_the_bridge_between_the_two_colour_spaces_is_population_dependent():
     """Why `_slot_pairs` exists, as an assertion rather than a comment.
 
@@ -919,3 +1046,56 @@ def test_cmap_kind_rgb_calls_a_flat_ramp_misc():
     float-sRGB route reached it nowhere in the suite."""
     flat = [(0.47, 0.46, 0.44)] * cp.CMAP_QUALITATIVE_N
     assert cp.cmap_kind_rgb(flat) == "misc"
+
+
+# --- the numbers behind the separation rows ----------------------------------
+# `check_figure._separation` used to call `check` once per pair and read dE and
+# tritan back out of the detail strings with a regex. `pair_separation` hands
+# over the numbers instead; this holds them to what `check` prints.
+
+def _pairs_to_compare():
+    rng = random.Random(0)
+    shipped = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00",
+               "#CC79A7", "#ff7f0e", "#2ca02c", "#d62728", "#1f77b4"]
+    drawn = [f"#{rng.randrange(1 << 24):06x}" for _ in range(30)]
+    pairs = list(itertools.combinations(shipped, 2))
+    pairs += list(zip(drawn[::2], drawn[1::2]))
+    return pairs
+
+
+@pytest.mark.parametrize("a,b", _pairs_to_compare())
+def test_pair_separation_is_the_numbers_check_prints(a, b):
+    rows = {name.split(" (")[0]: detail for name, _, detail in cp.check([a, b])[1]}
+    sep = cp.pair_separation(a, b)
+    cvd = re.search(r"dE (\d+\.\d) \((\w+) at severity ([^)]*)\) - tritan "
+                    r"(\d+\.\d)", rows["CVD separation"])
+    normal = re.search(r"dE (\d+\.\d)", rows["Normal-vision floor"])
+    assert f"{sep['cvd']:.1f}" == cvd.group(1)
+    assert sep["cvd_kind"] == cvd.group(2)
+    assert sep["cvd_severity"] == cvd.group(3)
+    assert f"{sep['tritan']:.1f}" == cvd.group(4)
+    assert f"{sep['normal']:.1f}" == normal.group(1)
+
+
+@pytest.mark.parametrize("drawn, ink", [("#52514E", "#52514e"),
+                                        ("#52514e", "52514e"),
+                                        ("52514E", "#52514e")])
+def test_ink_tokens_match_regardless_of_case(drawn, ink):
+    """`#52514E` passed as ink against `#52514e` in the palette was not
+    exempted, and failed Chroma floor. Nor was `52514e`, though
+    `hex_to_linear` reads the `#` as optional."""
+    ok, rows = cp.check(["#0072b2", "#e69f00", drawn],
+                        ink=frozenset({ink}))
+    chroma = next(r for r in rows if r[0] == "Chroma floor")
+    assert chroma[1] is True, chroma
+
+
+@pytest.mark.parametrize("severity, tenth", [
+    (0.05, 0.1), (0.15, 0.2), (0.25, 0.3), (0.35, 0.4), (0.45, 0.5),
+    (0.55, 0.6), (0.65, 0.7), (0.75, 0.8), (0.85, 0.9), (0.95, 1.0)])
+def test_anomalous_severity_rounds_half_up(severity, tenth):
+    """Every half-tenth rounds up. `round` is half-to-even, and read 0.05,
+    0.25, 0.45, 0.65 and 0.85 a tenth low."""
+    rgb = (0.2, 0.5, 0.1)
+    assert (cp.simulate_anomalous(rgb, "deutan", severity)
+            == cp.simulate_anomalous(rgb, "deutan", tenth))

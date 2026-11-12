@@ -259,11 +259,14 @@ contour dash, colormap kind, font embedding, and alt text, in that order.
 `check_palette.py` gates lightness band, chroma floor, colorblind separation,
 normal-vision separation, and contrast against the surface.
 
-**Series color** runs the hues the figure drew through the palette gates,
-inferring adjacent versus all-pairs from whether the marks are scatter. Without
-it, a figure on matplotlib's default `tab10` cycle passes every composition row
-while its orange and green sit at CAM02-UCS ΔE 2.4 under protanopia, against a
-floor of 10.5.
+**Series color** runs the hues the figure drew through the palette gates. A
+panel with a legend, or with marks drawn without a line, gates every pair.
+Otherwise it gates areas that are neighbours in draw order, lines whose strokes
+meet, each line and its nearest of another hue, and a line and each area it
+crosses. A pair under the CVD floor passes when a dash, marker, hatch or mark
+type also separates it. Without it, a figure on matplotlib's default `tab10`
+cycle passes every composition row while its orange and green sit at CAM02-UCS
+ΔE 1.6 under protanopia, against a floor of 10.5.
 
 **WARN is not FAIL.** A sub-3:1 hue is legal *if* it carries a visible direct
 label, and a saturated panel is fine *if* it is a heatmap. Read the row and
@@ -402,7 +405,7 @@ Verify against
 `\the\textwidth` in your own document before trusting one for anything that
 matters, because a `geometry` call in the preamble silently overrides all of it.
 
-6pt is the minimum PNAS and Science publish. Under 4pt of x-height, where
+6pt is the minimum PNAS publishes. Under 4pt of x-height, where
 reading slows (Legge & Bigelow 2011, quoted in `references/style-guide.md`),
 the row warns. The body size that clears the warning depends on the font and
 on which fonts the machine has. With the style sheet, keep every string at

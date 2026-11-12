@@ -45,6 +45,26 @@ behind a threshold this project enforces.
   `EXTERNAL_CLAIMS["fluent print size"]`,
   `RETRACTED_CLAIMS["7.5pt as the size where text is comfortable"]`, and
   `Legge` in `GUIDE_CITED`.
+- `check_figure.SERIES_CONTACT_PX = 2.0`, in `NOT_CONFIGURABLE`.
+- `check_figure.SHARE_SPAN_RATIO_MAX = 2.0`.
+- Invariance tests in `tests/test_figure.py`: draw order, stroke contact,
+  second channel, vertex density, and label redundancy across scales.
+- `SHARE_SPAN_CASES`,
+  `test_the_share_span_ratio_separates_the_adversarial_set` and
+  `test_same_process_small_multiples_mostly_share_at_the_ratio` in
+  `tests/test_figure.py`.
+- `RETRACTED_CLAIMS["autoscaled small multiples landing well inside a span
+  ratio of 2"]`.
+- `examples/gallery.py`: `classifiers`, `abundance`, `dose_response` and
+  `interrupted`, with their PNGs and entries on the gallery page.
+- Four tests in `tests/test_figure.py` pinning the pair each one puts in front
+  of `check_series_color`, and seven `CHECKED` entries in
+  `tests/test_alt_text_numbers.py` for their alt text.
+- `check_palette.pair_separation(color_a, color_b)`: `cvd`, `cvd_kind`,
+  `cvd_severity`, `tritan` and `normal` for one pair.
+- `EXTERNAL_CLAIMS["anomalous trichromacy the commoner form"]`,
+  `test_the_anomalous_share_is_the_sum_the_table_gives`, and `Sharpe` in
+  `GUIDE_CITED`.
 
 #### Changed
 
@@ -78,17 +98,247 @@ behind a threshold this project enforces.
   becomes `test_line_weight_measures_tick_marks`.
 - `check_line_weight` holds marker outlines to `FURNITURE_FLOOR_PT` when
   `_marker_outline_pt` finds they carry the mark: unfilled or hollow markers,
-  or an edge colour that is neither the face nor the background. A
-  transparent axes background is read as the figure's, then white.
+  or an edge colour that is neither the face nor the background. The
+  background is `_ground`: the most common colour `_ground_image` holds on
+  the rims (`_marks_rim`) of the marks Agg draws inside their clip box and
+  clip path (`_drawn_rows`). `_ground_image` draws everything before that
+  artist, and a `Line2D`'s own line (`_own_line`), in its axes and in each
+  earlier axes whose box meets it (a twin's host). `check_line_weight` draws
+  that ground forward on one buffer (`_ForwardGround`), and only for an
+  outline that differs from its fill. `_ground_image` returns Agg's uint8 RGB.
 - `check_line_weight` reads tick widths through `marker_stroke_pt`, so
   `color="none"` ticks measure 0, and skips spines, ticks and gridlines on an
   axes with `axison` false and ticks and gridlines on a hidden axis.
+- `check_type_size` compares on-page sizes to the floor and ceiling before
+  rounding, with `_PT_TOL = 1e-6` of slack, as do the mathtext script floor
+  and `check_line_weight`'s three floors. Failing sizes and widths print to
+  0.01pt, rounded away from the limit.
+- The x-height `[FIX]` names the largest size any low string needs under
+  each maximum, body text and panel labels apart.
+- The x-height `[FIX]` divides the unrounded need by the scale, advises to
+  0.01pt where 0.1pt lands over the maximum, and prints the page size the
+  advised size gives. `check_line_weight`'s three `[FIX]`s round widths up to
+  0.01pt.
+- The ceiling `[FIX]` rounds the authored size down to 0.1pt, the x-height
+  `[FIX]` rounds it up.
+- `check_series_color` gates every pair in a panel with a legend, as in one
+  with marks and no line (`scatter`, or `plot` with a marker only). Otherwise
+  it gates these, each read inside the box its artist is clipped to:
+  - area hues that are neighbours in draw order;
+  - every pair of line series whose strokes come within `SERIES_CONTACT_PX`
+    of touching;
+  - each stroke and its nearest of another hue;
+  - a line and each area whose shape it enters.
+
+  A hue drawn only as lines takes no part in draw order.
+- `check_series_color`: a pair under `CVD_TARGET` passes when a mark type,
+  dash, marker or hatch also separates the two series in some kind of artist
+  both draw (`_carried`). `NORMAL_FLOOR` is not excused.
+- `_carried` reads error bars (`_errorbar_bars`) as a kind of their own, not
+  as lines.
+- `check_banking` banks by arc length at constant area (Talbot, Gerth &
+  Hanrahan 2011), through `_banking_factor`, not by median absolute slope,
+  and drops only a line whose rise on the page is under its stroke width.
+  `BANKING_FLAT_PX` is retired: `load_config` warns (`FutureWarning`) and
+  skips it, as every `RETIRED_KEYS` key. The row's
+  detail gives the aspect factor: "ax0 banking wants the panel 130x
+  taller", or "3 line panels, 1.2-3.5x from banked".
+- `choosing-a-form.md` and `docs/gates.md` describe the arc-length criterion;
+  Talbot et al. join the References and `EXTERNAL_CLAIMS["arc length
+  banking"]`.
+- `check_palette.check` reads dichromacy under Machado's severity 1.0 as well
+  as Viénot's, reported as `severity 1.0, Machado`.
+- The severity claim above `MACHADO` and in `style-guide.md`: 0.13% of
+  244650 slot pairs, up to 10.7 dE, with `#1a80b8` and `#fb00e4` as the
+  example. `RETRACTED_CLAIMS` holds the 1.27% and `#8e4dc7` version.
+- `test_the_sweep_leaves_dichromacy_to_the_vienot_matrices` becomes
+  `test_the_sweep_reads_dichromacy_under_both_models`.
+- `check_overplotting`'s docstring no longer lists hollow markers and
+  transparency as remedies.
+- The `CMAP_WRAP_DE_MAX` comment and `style-guide.md`: 1.0 is about 2 CIELAB,
+  not one JND. `RETRACTED_CLAIMS` holds the JND version.
+- `ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` state their CIELAB L* equivalents,
+  about 7.1 and 2.4.
+- `style-guide.md` "What is evidence for them": Stone et al.'s per-axis model
+  fails three Okabe-Ito pairs at `NORMAL_FLOOR`, not one. Pinned in
+  `test_the_size_model_itself_fails_three_okabe_ito_pairs`.
+- `style-guide.md`: why the gate stays in CAM02-UCS, and the two shipped-cycle
+  pairs Stone et al.'s model fails at 2 ND(50) under simulation, pinned in
+  `test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation`.
+  Szafir (2017) joins the References, `EXTERNAL_CLAIMS["size model tested
+  range"]` and `GUIDE_CITED`.
+- `check_redundancy` counts a repeated axis title among panels on one scale
+  type whose limits could share an axis within `SHARE_SPAN_RATIO_MAX`, not
+  among panels with identical limits.
+- `check_series_color`: a hidden legend does not make a panel gate every pair;
+  `plot` and `scatter` markers are compared as drawn paths; `axvline` and
+  `axhline` strokes are read through their own transform, in label attribution
+  too; the CVD `[FIX]` names dash, marker, hatch or mark type.
+- `_StrokeGaps` without scipy uses a grid capped by `GRID_PAIR_CAP`.
+- `check_figure.NOT_CONFIGURABLE` gains `SERIES_CONTACT_PX`, and its
+  `GRID_PAIR_CAP` reason names the contact test. `config_keys()` loses
+  `SERIES_CONTACT_PX` and gains `SHARE_SPAN_RATIO_MAX`.
+- tab10's orange and green are quoted at dE 1.6 under protanopia, the number
+  the row prints, in `SKILL.md`, `design.md` and `check_series_color`.
+- The `SHARE_SPAN_RATIO_MAX` comment states the range the adversarial set
+  allows, [1.6, 4.0), and its same-process miss count.
+- The gallery count is twenty-four in `gallery.py`, the README, `design.md`,
+  the gallery page and the tests that count it.
+- `style-guide.md`: anomalous trichromacy is 5.71% of European men and
+  dichromacy 2.28%, from Sharpe et al. (1999) Table 1.6, added to its
+  References.
+- `simulate_anomalous`'s docstring says below 1.0 is anomalous trichromacy,
+  and no longer says it is where most deficiency sits.
+- `check_figure._separation` takes the panel's `_data_artists` from
+  `check_series_color` and measures each pair with `pair_separation`, not by
+  calling `check_palette.check` and parsing its detail strings.
+  `check_palette._cvd_detail` takes `fix`; `_separation` passes `False`.
+- `check_series_color` warns, naming what is missing, when the
+  `check_palette.py` beside it has no `pair_separation`, `_cvd_detail` or
+  `_normal_detail`.
+- `check_series_color` compares dashes by `Line2D`'s on-off sequence, not by
+  `get_linestyle()`, and ignores the dash offset.
+- `_data_artists` skips a `Line2D` with no stroke and no marker.
+- `_gated_pairs` reads an area as the outlines `_area_px` returns, each path
+  through the transforms matplotlib draws it with, and stroke gaps exactly
+  through `_StrokeGaps`.
+- `_data_artists` skips error bar caps (`_errorbar_caps`).
+- `_largest_sharable` counts the largest group whose union of limits is
+  within `SHARE_SPAN_RATIO_MAX` of its narrowest span, not a chain of pairs.
+- `_banking_segments` takes segments within each finite run of a line, and
+  reads the line through its own transform.
+- `_banking_factor` reuses the surviving probe and stops at a 1e-9 bracket on
+  log(a).
+- `check_palette._cvd_views` caches each colour's simulated views;
+  `_separation_numbers` reads distances from them.
+- `test_check_palette_still_imports_nothing_outside_the_standard_library`
+  allows `functools`.
+- `check_line_weight`, `check_contrast_stack` and `_data_artists` read each
+  `InsetIndicator`'s rectangle and connectors with `ax.patches`
+  (`_drawn_patches`).
+- `pyproject.toml` raises matplotlib's `indicate_inset` unpacking warning as an
+  error.
+- `examples/gallery.py` (`broadening`) and
+  `test_an_inset_connector_is_not_a_data_hue` read the connectors from
+  `InsetIndicator.connectors` where `indicate_inset_zoom` returns one, and
+  index the tuple otherwise.
+- `check_text_readability` tests casing with `is not None`, and composites
+  the text's alpha over its backdrop, or over its casing laid on the backdrop
+  at the opacity Agg draws the casing with (`_halo_alpha`), before measuring
+  contrast.
+- `_worst_backdrop` takes `alpha`; `_contrast_field_255` takes one colour or
+  one per pixel.
+- `check_mark_ratio` skips invisible collections and the `" "` marker, and
+  reads `plot` markers through `marker_extent_pt(..., stroked=False)`.
+- `marker_extent_pt` takes `stroked` (default `True`).
+- `check_form` flags bars on a linear axis whose limits are both below zero.
+- `_contact_fraction` drops marks at a non-finite position or radius, masked
+  offsets included, before either path.
+- `check_overplotting` and `_marks_px` place points through the artist's own
+  transform, and read lines through `get_xydata`.
+- `check_ink` measures each pixel against `_ground_image`, which draws
+  `_ground_layers` on a fresh `RendererAgg`: the figure's and each
+  subfigure's patch, every figure-level artist some axes is drawn after,
+  and each axes' patch where `axison` and `get_frame_on()` hold.
+- `check_fonts` expands each `font.family` entry: a generic name to its
+  `font.<generic>` list, a face name to itself.
+- `check_contrast_stack` groups filled collections other than scatters, and
+  patches that `_fills`, by colour, not every entry in `ax.collections`, and drops a
+  graded run's own entries rather than every entry at one of its values.
+- `_corners` measures the upright box through `_text_only_extent`.
+- `check_dual_axis` pairs `_all_axes`, not `fig.axes`.
+- `_is_bold` resolves weight names through `font_manager.weight_dict`.
+- `_artist_kind` returns `"line"` for a `LineCollection`; `_polyline_px`
+  reads one through `_path_px`, and `_gated_pairs` takes its widest stroke
+  (`_stroke_pt`). `_dash` reads a `LineCollection`'s `_us_linestyles`, and
+  `_second_channel` compares its dash.
+- `_tick_texts`, `_polar_radial_ticks`, `_furniture`, `_legend_text_ids`,
+  `_furniture_text_ids`, `check_identity_channel` and
+  `check_label_attribution` walk `_all_axes`. `_legend_text_ids`,
+  `check_identity_channel` and `_layout_kept` walk `_all_figures`.
+- `describe` is annotated `-> Figure`, which it returns.
+- `audit`, and `check_ink` and `check_text_readability` called without a
+  canvas, put back the canvas, `fig.dpi` and `_original_dpi` the figure
+  arrived with (`_on_own_canvas`, `_at_measure_dpi`), and the axes positions,
+  subfigure boxes, `sup*` label positions and `subplotpars` (`_layout_kept`).
+  `_authored_dpi` is removed. `_on_own_canvas` moves the figure to a
+  `FigureCanvasAgg` on entry, and `_renderer` draws on it.
+- `tests/test_audit_idempotence.py` audits every gallery, demo and
+  external-style figure twice.
+- `_measuring` enters `_on_own_canvas`, `_layout_kept`, `_at_draw_rc` and
+  `_at_measure_dpi` once per figure, for `audit`, `check_ink` and
+  `check_text_readability`. `@_measured` runs `check_banking`, `check_form`,
+  `check_line_weight`, `check_mark_ratio`, `check_overplotting` and
+  `check_series_color` inside it, and draws the figure first when one is
+  called on its own.
+- `check_mark_ratio` scales a scatter's `sqrt(s)` by its marker path's long
+  side (`_marker_path_extent`).
+- `check_overplotting` scales it by the short side
+  (`_marker_path_extent(..., short=True)`).
+  `"|"` has a short side of 0, so its width is its stroke.
+- `check_mark_ratio`, `check_overplotting`, `_draws_nothing`, `_second_channel`
+  and `_marker_outline_pt` test for no marker with
+  `_no_marker`, which takes a vertex-array marker.
+- `_over(src, src_alpha, dst)`, Agg's blend over an opaque ground, used by
+  `_worst_backdrop` and cased `check_text_readability`.
+- `_marks_px` and `_series_px` skip masked and non-finite marks;
+  `_marks_display` is `_marks_px` inside `_on_page` and the artist's clip path.
+- `check_figure.GATE_RAISED` and `suggest_fixes.GATE_RAISED`; `suggest` skips
+  a row whose detail opens with it.
+- `check_palette.check` matches `ink` case-insensitively and with or
+  without the `#`.
+- `simulate_anomalous` rounds severity to the nearest tenth half up.
 
 ### Why it changed
 
+A code review of the invariance round found draw order still deciding pairs.
+Lines that never met passed with blue plotted between orange and green and
+failed with the calls reordered, and `plot(x, y, "o")` clouds escaped both the
+all-pairs rule and the contact test. Draw order is kept for areas, where it is
+what a stacked bar puts side by side. A line against an area is carried by
+mark type in the CVD row, so `NORMAL_FLOOR` is what it answers to.
+`make sweep` over the 25 corpus figures records no verdict change; one detail
+moves, in `gallery-interrupted`, where `#d55e00` and `#cc79a7` were neighbours
+in draw order and are now not compared.
+
+Pairwise joins in `_largest_sharable` chained: 0-1, 0-2 and 0-4 counted as
+three panels for one `sharey`, which squashes 0-1 to a quarter. A dropped NaN
+run was banked as one invented segment across the gap. `get_linestyle()`
+returns '--' for every dash tuple. A vendored `check_palette.py` older than
+`pair_separation` raised `AttributeError` out of `audit`.
+
+Read against matplotlib 3.8.4 and 3.11.1, the versions CI runs:
+`Collection.get_window_extent` is a null box for `vlines` on both and for
+`fill_between` on 3.8.4, so a line crossing one was never compared with it.
+`plot(..., ls="none")` without a marker draws nothing, and read as marks it
+made its panel gate every pair.
+
+A review of the stack found pairs still read off geometry the page does not
+draw. An area was its bounding box, which for a band along the diagonal is the
+panel. On a log axis `get_path_collection_extents` applied only the affine part
+of the transform, so a band from 10 to 1000 missed a line inside it. Strokes
+were read past the axis limits, so lines crossing only off the panel were
+compared. Error bar caps are marker-only lines, so a capped panel compared
+every pair. Two series each drawn as a line and a plain band failed with their
+lines dashed apart, because the bands matched. Nearest strokes were read on 256
+samples per stroke, every pair of samples of every pair of strokes: 6.9s on 120
+random walks, now 0.27s with scipy and 0.08s without. 19 adversarial
+series-pair cases go from 8 wrong to none on matplotlib 3.8.4 and 3.11.1. Of
+400 seeded random-walk panels, 30 change pairs, 29 of them panels whose x
+limits cut the lines; all 30 now match distances over every vertex pair, and
+none did before. The corpus records no row change.
+
+A review of the stack found the remaining line cull too strict. Dropping only
+a line with no rise at all banked float noise: a metric converged at 0.95 with
+noise of sd 1e-4 on a 0-1 axis wanted its panel 107x taller, and at sd 1e-6
+10200x, where the exact level read no line panel. A line is now dropped when
+its rise on the page is under its own stroke width, the width at which it
+draws as a level line, so no constant is added. Loading a v0.10.0 file that
+set `BANKING_FLAT_PX` raised `ValueError`.
+
 `TYPE_FLOOR_PT = 7.5` had no source. It shipped in the initial release, and
 "7.5 is where it is comfortable" was added two days later. 6.0 is the minimum
-PNAS and Science publish, already quoted in `EXTERNAL_CLAIMS["journal type
+PNAS publishes, already quoted in `EXTERNAL_CLAIMS["journal type
 floors"]`.
 
 An x-height gate was built and rejected. Legge & Bigelow (2011) put the start
@@ -110,6 +360,22 @@ verdict change; their smallest string is 9.0pt.
 (#107). In a SkillsBench A/B, 5 runs per arm on three Nature-placed tasks, all
 5 with-skill text-size failures were text at 7.5 to 8.0pt. Capping the floor at the
 ceiling adds no number the guides do not publish.
+
+Rounding first passed docs/design.md's own failing case. The x-height `[FIX]` read the string
+with the smallest x-height, so with 'dose' at 6.5pt in DejaVu Sans and 'time'
+at 8.5pt in STIXGeneral it named 7.4pt, which 'time' already exceeds.
+Rounded to the nearest 0.1pt, each `[FIX]` could name a size that fails its
+own check: under Nature at scale 0.745 the ceiling fix named 9.4pt, 7.003pt on
+the page, and a STIXGeneral string set at the advised 11.9pt still warned.
+The x-height need was rounded before the scale divided it: DejaVu Sans at
+scale 0.93 needs 7.31pt, rounded to 7.4, advised 8.0pt, 7.44pt on the page,
+over a 7.4pt maximum, so the `[FIX]` said none fits; 7.9pt does.
+`check_line_weight` printed its advice with `:.2f`, 1.34 at scale 0.745, which
+is 0.998pt on the page. Sizes were rounded to 0.1pt before the compare, so
+5.95pt passed a 6pt floor.
+One x-height size for every string could advise a panel label's need for
+body text over Nature's 7pt body maximum. No face bundled with matplotlib
+reaches that case; the test fakes the fractions.
 
 Viénot 1999 models protanopia and deuteranopia only. DaltonLens's review of
 open-source simulators calls Brettel 1997 "the most solid and basically only
@@ -174,6 +440,275 @@ markers with a 1.0pt black edge in the same 9in figure: 0.4pt printed. Held to
 are held to `FURNITURE_FLOOR_PT`. Five seaborn sheets draw 0.24 to 0.48pt edges in the face
 colour; those carry nothing and are skipped. The corpus records no verdict
 change, and none of the 84 style-sheet figures fails.
+
+A review on 2026-10-19 found four rows whose verdict moved with something the
+reader never sees, or that failed a figure for doing what the row's `[FIX]`
+asks. Orange and green lines that cross passed when blue was plotted between
+them and failed with the calls reordered. The same pair drawn solid-and-circle
+against dashed-and-square, with a legend, failed and was told to add
+"direct labels/gaps/texture". `BANKING_FLAT_PX = 0.5` culled every segment of
+the saw wave once each was split into ten, so the panel the row exists for
+read "no line panel". And two panels titled "Accuracy" at 0 to 1 and 0 to
+1000 were told to `sharey`.
+
+A legend makes the reader identify each series against a swatch, the task the
+floors' multiples were chosen for, so every pair is compared. Measured
+over the first two to six colours of every registered qualitative colormap
+and the theme, 15 of 70 pass adjacent and fail all-pairs; these now fail as
+legended lines. Set1 (blue and purple, dE 4.6 under deuteranopia) and Paired
+(green and red, 5.6) are among them. So is matplotlib's `okabe_ito` from five
+colours, on orange `#e69f00` against yellow `#f0e442` at 20.8 against
+`NORMAL_FLOOR = 21.0`.
+
+The corpus records no verdict change. `gallery-broadening` reads three line
+panels for banking instead of one: the other two had been culled whole.
+`demo` with its legend now reports orange against green, dE 20.7.
+
+The severity sweep compared Viénot at 1.0 with Machado below it. Over the
+same 244650 slot pairs, 1.35% clear `CVD_TARGET` under Viénot and miss it at a
+lower Machado severity; 0.13% clear it under both dichromacy models and miss
+it below. Nine tenths of the published effect was the two models disagreeing.
+The documented pair, `#8e4dc7` against `#1402ef`, reads 7.97 under Machado's
+own severity 1.0, below its 8.3 at 0.9. Of the 309 pairs only the sweep
+fails, 177 clear `NORMAL_FLOOR`; no other row catches them, so the sweep stays.
+
+Dropping Viénot for a single-model sweep would pass 0.59% of pairs Viénot
+calls too close. Reading both tightens instead: 0.44% of pairs newly fail.
+Against colorspacious, which sweeps Machado to 100, false passes on the
+oracle test's 4005 pairs go from 9 to 0. The corpus records no verdict change.
+
+`CMAP_WRAP_DE_MAX` called one CAM02-UCS unit a just-noticeable difference, with
+no source. Through the file's own bridge, a median 1.99 CIELAB per unit, it is
+twice the theoretical 2-degree JND Stone et al. give. The threshold rests on
+the registry instead: the two twilights wrap at 0.000 and 0.376, the nearest
+diverging map at 27.963.
+
+`ORDINAL_DL_MIN` and `CMAP_SPAN_MIN` gate on OKLab lightness differences, which
+the same file says have no published unit. Along ten sequential maps one OKLab
+L is a median 118 L*, so 0.06 is about 7.1 L*. Stone et al.'s lightness fit
+puts ND(50) at 5.45 L* for a two-degree patch and 7.33 for a 0.333-degree
+target, so adjacent ordinal steps sit just under the half-of-observers line on
+a hairline. No threshold moved.
+
+The style guide called Okabe-Ito missing `NORMAL_FLOOR` at exactly the pair the
+shipped cycle drops "the strongest argument these numbers have". In Stone et
+al.'s own model, at 4 ND(50) for a 0.333-degree target, sky blue against blue
+(3.42) and orange against vermillion (3.59) miss too, and the shipped cycle
+keeps both. The CAM02-UCS bridge is a median, and it is what passes them.
+
+The metric stays. The 4 ND(50) that fails those pairs is past the 2 ND(50)
+Szafir (2017) measured to. Switching would fail the shipped cycle on four pairs, and no
+in-band six-colour cycle drawn from Okabe-Ito and Tol's sets passes it (0 of
+38760). The two simulated pairs it fails at 2 ND(50), inside the measured
+range, are recorded rather than gated, because no study ties an ND(50)
+multiple to identifying a series.
+
+A code review of this branch found the invariance fixes had broken their own
+rows. The slope cull read a panel banked too flat throughout as "no line
+panel": nine points at page slope 0.0096 warned before and passed after. Exact
+limits as the redundancy key missed two "Accuracy" panels autoscaled to 0.10
+to 0.95 and 0.12 to 0.97. A `scatter` circle beside a `plot` circle excused a
+dE 1.6 pair as carried by a second channel. An `axvline` crossing a line was
+read at data y 0 to 1 and never compared. A hidden legend switched the panel to
+all-pairs. The scipy-free contact test peaked at 784 MiB on two 100000-vertex
+rings; the grid peaks under 200 MiB and takes 1.07s where scipy takes 1.18s on
+three 20000-point lines. The corpus records no verdict change.
+
+`SHARE_SPAN_RATIO_MAX = 2.0` was a judgement the corpus cannot test: none of
+its 21 figures has two panels in a row or column naming one quantity. An
+adversarial set takes its place. Its panels that should share an axis reach
+1.60 and its panels that should not start at 4.00, so any factor in [1.6, 4.0)
+separates them. Moving the constant to 1.5 or 4.0 fails one case each. Of 900
+seeded same-process small multiples (normal, lognormal on a log axis, Poisson;
+2 to 6 panels of 10 to 100 points), 3 join no pair at 2.0 and none at 2.5. The
+constant stays at 2.0: the cases between 2 and 3 have no right answer to test,
+and a miss leaves the row silent where a false fire fails the figure.
+
+The corpus could not see the series-colour changes above. 12 of its 16 panels
+that gate two or more hues compared one pair, orange against sky blue; none had
+a figure legend, a coloured reference line or a pair a second channel had to
+carry; `#0072B2`, `#D55E00` and `#CC79A7` were never drawn. The four new
+figures each reach one path, modelled on CC-BY figures in PLOS ONE, cited in
+each builder's comment. Swept with the checker from before
+this round, they move two verdicts: `gallery-dose-response` fails Series color
+without the second-channel excuse, and `gallery-interrupted` fails Label
+attribution while `axvline` is read at data y 0 to 1. The two legend figures
+move Series color detail from dE 15.1 and 39.5 to 12.8. Before the code-review
+round, one verdict moves. The 21 existing figures record no verdict change.
+
+`_separation` read dE and tritan back out of `check`'s detail strings with a
+regex, so rewording a detail string could have moved a verdict, and it
+harvested each panel's artists a second time. The two separation rows' detail
+strings are now written once, in `check_palette`, for both callers. Verdicts
+and details did not move: the 25-figure sweep is byte-identical before and
+after, and so is `check_series_color` on 400 seeded random figures, 165 of them
+failing and 37 carried by a second channel.
+
+`simulate_anomalous` said severities below 1.0 are "where most colour vision
+deficiency actually sits", with no source. Birch (2012), already cited, gives
+totals only. Sharpe, Stockman, Jägle & Nathans (1999) Table 1.6 splits 45 989
+European men: 1.08% protanomaly, 4.63% deuteranomaly, 1.01% protanopia, 1.27%
+deuteranopia, so anomalous trichromats are 5.71 of the 7.99 points. The
+sourced claim lives in the style guide, where the ledger can hold it.
+
+Banking read Cleveland's median absolute slope, which depends on how a curve
+was sampled: `y = sqrt(x)` with 40 points spaced three ways needed its aspect
+changed 1.9x, 0.949x or 2.51x. Talbot, Gerth & Hanrahan (2011) name this
+defect in three of the four earlier criteria and recommend minimising arc
+length at constant area, which reads 1.37x to 1.38x on all three. Arc length
+also needs no cull for flat segments, so `BANKING_FLAT_SLOPE`, added earlier in
+this release and a judgement, is gone with it. The 25-figure corpus records no
+verdict change; ten Banking details change wording.
+
+matplotlib 3.10 returns an `InsetIndicator` from `indicate_inset_zoom` and
+warns that "From 3.12 it will no longer be possible to unpack the return value
+into two elements." Both call sites unpacked it. Raised as an error, the
+warning fails CI's latest-matplotlib jobs on a call site that unpacks; the
+3.8.4 job takes the tuple branch. On 3.10 and later the rectangle and
+connectors are drawn by the `InsetIndicator`, not from `ax.patches`, so
+`check_line_weight` passed a 0.1pt frame, and
+`test_an_inset_connector_is_not_a_data_hue` passed with the `ConnectionPatch`
+exclusion it pins deleted. `check_contrast_stack` read the rectangle's alpha
+of 0.5 as a level on 3.8.4 and not on 3.11.1.
+
+A review of the gates against matplotlib's artist model found ten wrong
+verdicts, each reproduced by a test in `tests/test_figure.py`. An ndarray
+casing colour raised in `if halo_color:` and the crash read as a hard FAIL.
+Black text at alpha 0.15 passed. `"."` at ms 12 beside `"o"` at ms 5 failed at
+5.8x; they draw 6pt and 5pt. A hidden s=2000 scatter failed a figure at 200x.
+Negative bars on `ylim(-9, -3)` passed. One NaN in a scatter made `cKDTree`
+raise. A `transform=ax.transAxes` scatter was placed through `transData`, and
+a marker cloud on a date axis was never measured because
+`asarray(get_xdata(), dtype=float)` raised on datetimes. Under `ggplot` and
+`seaborn-v0_8-darkgrid` one sine line read 0.95 ink, because the figure corner
+is white and the axes face is grey; `test_external_style_corpus` asserted that
+fire as a property of dark grounds. `font.family = "NoSuchFontXYZ"` left the
+substitution check an empty list. Mark ratio leaves edge strokes uncounted on
+both sides, as its `scatter` side already did: counted, `gallery-field` moves
+from 4.8x to 5.1x and fails a threshold calibrated without them. The 25-figure
+corpus records no verdict change; `gallery-field`'s Mark ratio detail moves
+from 4.8x to 4.4x, because a star's path is narrower than its markersize.
+
+The same review found code that disagreed with its own comment or with
+matplotlib; each case has a test that fails on the old code. Three scatters
+in one colour collapsed to one alpha level, and a four-band `axvspan` fan
+counted four. A rotated annotation with an arrow fell back to its axis-aligned
+box, 5x the ink at 45 degrees. `"demibold"` and `"demi"` are weight 600 in
+matplotlib and were read as regular. `vlines` read as an area.
+`sub.twinx()` lands in `fig.axes` and the inset `sub` does not, so
+`check_dual_axis` compared the twin with every frame but its own. Seven helpers
+and gates still walked `fig.axes`, so an inset's ticks, legend, title and face
+went unseen; a legend inside an inset left `check_identity_channel` warning.
+`describe` returned `fig` under a `-> None` signature; it still returns `fig`, so callers that chain it keep working. `savefig` restores the
+canvas it swaps (`FigureCanvasBase._switch_canvas_and_return_print_method`);
+`audit` did not, so an audited figure no longer showed in its window.
+`suggest` offered figure remedies for a gate that crashed. `#52514E` as ink
+did not exempt `#52514e`. `round` is half-to-even, so severity 0.05, 0.25,
+0.45, 0.65 and 0.85 read a tenth low. The corpus records no verdict change. Text collision
+counts fewer objects on `gallery-broadening`, `gallery-counts` and
+`gallery-secondary-scale`, because inset and secondary-axis tick labels now
+take the tick exemption host ticks already had.
+
+Reviewing those fixes found more. `check_ink` read 1.00 under `ggplot` with
+`axis("off")`, on a grey `SubFigure`, and over a translucent figure face: Agg
+skips the axes patch unless `axison` and `frameon` hold, and blends onto the
+transparent white it clears to. `scatter(marker=".", s=36)` beside
+`plot(".", ms=6)`, the same dot, read 4.0x, and a `"."` cloud at `s=36` warned
+72% merging where the `plot` spelling passed. A vertex-array marker raised in
+both mark gates. A `PatchCollection` fan was not grouped. On matplotlib 3.8.4
+the canvas `__init__` sets `_original_dpi = fig.dpi`, so a second `audit` left
+`savefig` writing at 150 dpi. `savefig` writes at `_original_dpi` and puts
+`fig.dpi` back as it found it, so a HiDPI figure now comes back on its doubled
+dpi, matching the canvas it is handed back to. Two tests required the authored
+dpi on the assumption that the doubled dpi doubled the output; on 3.8.4 and
+3.11.1 it does not. The corpus records no verdict change.
+
+Verifying those fixes found two more. A layout engine runs on every draw from
+where the last draw left the axes, and `audit` left them moved. Under
+`seaborn-v0_8-talk` the first audit passed a panel that the second warned
+on, at 19.7x from banked and 0.86 ink; the next `savefig` then wrote it 0.08
+of the figure wide. `twinx` hides the twin's patch, so the host's face is the
+twin's ground; read against the figure's white, a `ggplot` twin measured 0.94
+ink and warned. That fix took one ground per panel from a host containing it
+whole. An axes half over a grey one then read the grey half as ink, 0.41 and
+0.47 where the render holds 0.06 and 0.05, and a grey polar face read its
+corners as ink. The ground is now composited per pixel. The corpus records no
+verdict change.
+
+Six public gates read display geometry and, called on their own, measured it
+at the dpi the author set. With three lines 0.03 apart, `check_series_color`
+failed the orange and green pair at 40 and 72 dpi and passed it at 150 and
+600. The four context managers were entered in one order at three sites;
+`_measuring` holds that order once. On a figure never drawn they also read
+matplotlib's default 0-1 limits and the axes before the layout engine moved
+them. On autoscaled lines and a scatter under `constrained_layout`,
+`check_series_color` passed what `audit` failed, `check_overplotting` passed
+what it warned on, and `check_banking` read 1.8x where `audit` read 1.6x.
+
+A marker outline is seen against what lies round the mark, not under it.
+Read at the centres, a line drawn by its own `plot` along a scatter was ground
+for the marks at any width, and one `'o-'` line's own stroke never was. So the
+two spellings of one page split. Both misreads were in the `plot` and
+`scatter` spelling: a white halo edge measured as an outline, and an open
+marker's only edge passed as a halo. Leaving strokes out of the ground joined
+the spellings and split a band drawn as a 20pt line from a `fill_between` band
+23pt across. Read on the rim with strokes and `_own_line` drawn, 23 of 23
+adversarial pairs agree, against 22 with strokes left out, and the verdicts
+hold at 100, 200 and 300 dpi. They are own lines from 1 to 12pt under 6pt
+marks in both spellings, square, triangle and diamond markers, and a band
+drawn both ways; `test_marks_on_their_own_line_read_alike_in_both_spellings`
+and `test_a_band_reads_alike_drawn_as_a_wide_line_or_a_fill` run them. The
+rim is where WCAG 2.2's Understanding 1.4.11 tests a graphical object,
+"against adjacent color(s)"; taking its most common colour is this project's
+choice. A literature search found no perception study of outlines this thin:
+Szafir (2018) tests lines down to 0.05 degrees, and 0.3pt at 50cm is 0.012.
+Of the gallery's 83 line and scatter artists, 3 have a `_marker_outline_pt`
+above 0 and 1 reads a ground; of the external corpus's 196, 84 have one above
+0 and 3 read a ground. No verdict changes. `check_line_weight` takes 0.07s on
+2x2 panels of 12 outlined `'o-'` lines, 0.03s on 20000 outlined marks and 0.17s
+on a 6x6 grid of outlined scatters, where drawing every earlier panel under
+each one's marks took 0.29s.
+
+The same one-colour ground remained in two places. `_ground` took the axes'
+own facecolor, so under `axis("off")`, a translucent face or a `none`-faced
+inset a 0.3pt halo edge in the colour under the marks failed the furniture
+floor and a visible one passed. A figure-level backdrop drawn before the axes
+(`fig.add_artist`, `fig.patches`, `figimage`) read 1.00 ink, and so did one
+drawn between two axes: 0.04 and 0.03 in the render. `_ground` also counted
+marks clipped outside the axes, so with most of a scatter outside a small
+`#333` axes the margin's white won the vote and both halo verdicts inverted;
+it rendered once per artist, 36 renders for a 2x2 figure where 4 do. It
+also stopped at the axes' patch, so over a black `imshow` or `pcolormesh` on a
+white face, or an inset with no face over one, a black 0.3pt edge failed as an
+outline and a white one passed as a halo. Converting each render to float took
+5.8ms of 7.3ms on a 9in figure. A hatched face needed no change. The furniture
+colours `_foreign_ink` matches also take raw facecolors, and the label's own
+ground already anchors that test: four layered probes gave detail strings
+identical to opaque equivalents, so they are unchanged. Under TkAgg
+`fig.dpi = MEASURE_DPI` resized the window through
+`set_size_inches(forward=True)`, its resize event set the figure to 6x4.5in
+from 4x3, and each audit grew the next `savefig` 1.5x, on matplotlib 3.8.4
+and 3.11.1. The corpus records no
+verdict change.
+
+A code review of the stack found four more. A dashed `vlines` beside a solid
+one was told to separate by dash, which the same lines drawn with `plot` were
+not. A stroke between two `vlines` hues no longer makes them draw-order
+neighbours; that matches `plot`, and a test pins the two spellings together.
+`subfig.legend()` lands in `SubFigure.legends`, so a subfigure legend left
+`check_identity_channel` warning "no legend". A line at alpha 0.4 beside bars
+graded 0.2, 0.4 and 0.6 lost its level, so four levels read as three. `make
+sweep` over the 25 corpus figures records no verdict change. The diagram in
+`docs/design.md` had lost the two-line diamond
+`test_the_design_flow_diagram_draws_an_svg` reads.
+
+`_marks_px` read the value under a masked scatter offset, where `scatter`
+draws no mark: all ten offsets of a scatter with five masked. `_series_px`
+did the same, so `check_label_attribution` counted them as rivals. A
+`fill(facecolor="none")` outline counted as a fill, so graded outlines were
+grouped as one level. A text `alpha`
+fades its casing as well as its glyphs, and black text at 0.6 cased in white
+over black read 5.7:1 against white where Agg draws 3.8:1.
 
 ## 0.10.0 — 2026-09-30
 

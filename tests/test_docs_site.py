@@ -120,7 +120,7 @@ def symlinks():
 
 def test_the_symlinks_were_found():
     """Both tests below are parametrized over this list, so an empty one does
-    not fail them -- it deletes them. Twenty-eight pages and images point out of
+    not fail them -- it deletes them. Thirty-two pages and images point out of
     `docs/`; if that count drops, either something became a copy (which
     `test_no_page_has_become_a_copy` catches) or this collection stopped
     working (which nothing else would).
@@ -130,8 +130,8 @@ def test_the_symlinks_were_found():
     the assertion had been moved to 17 and the prose still read twelve and 13.
     That is the defect this whole file exists to catch, one level in.
     """
-    assert len(symlinks()) == 28, (
-        f"found {len(symlinks())} symlinks under docs/, expected 28 - if the "
+    assert len(symlinks()) == 32, (
+        f"found {len(symlinks())} symlinks under docs/, expected 32 - if the "
         "site legitimately gained or lost a page, update this number with it")
 
 
@@ -166,6 +166,17 @@ def test_no_page_has_become_a_copy():
         f"{copies} are real files under docs/ - they should be symlinks to the "
         "single copy, or added to AUTHORED if they are genuinely site-only")
 
+
+
+def test_no_gallery_image_is_a_copy():
+    """The test above reads pages only. The four gallery images added with the
+    series-colour figures were copies, so `make sweep` rewrote `examples/` and
+    the site kept the old render."""
+    copies = sorted(p.name for p in docs_paths("gallery-*.png")
+                    if not p.is_symlink())
+    assert not copies, (
+        f"{copies} are real files under docs/images/ - they should be symlinks "
+        "to examples/, where the gallery writes them")
 
 # --- a page's name in a browser tab is the page's name ------------------------
 # Zensical titles a page from its filename. Not from its `# heading`, and not

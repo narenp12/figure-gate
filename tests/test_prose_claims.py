@@ -184,9 +184,9 @@ def test_the_corpus_accounts_for_every_tracked_document():
     assert accounted == set(tracked), (
         "documents are tracked but in neither class: "
         f"{sorted(doc_id(p) for p in set(tracked) - accounted)}")
-    assert (len(tracked), len(PROSE_DOCS)) == (26, 17), (
+    assert (len(tracked), len(PROSE_DOCS)) == (27, 17), (
         f"the repository tracks {len(tracked)} distinct markdown documents and "
-        f"sweeps {len(PROSE_DOCS)}, expected 26 and 17 - if that is a real "
+        f"sweeps {len(PROSE_DOCS)}, expected 27 and 17 - if that is a real "
         "addition, these numbers move with it, which is the point of writing "
         "them down")
 
@@ -208,6 +208,7 @@ def test_the_historical_class_holds_only_the_records():
         "specs/2026-08-15-docs-rewrite-ground-up-design.md",
         "specs/2026-08-31-audit-rc-context-drift-design.md",
         "specs/2026-08-31-check-figure-false-positives-design.md",
+        "specs/2026-10-20-legend-matching-experiment-design.md",
     ], "the set of documents exempted as historical records changed"
 
 
@@ -1230,11 +1231,11 @@ KNOWN_HEXES |= {h.lower() for h in
 # still has to be a real pair, or the demonstration is a story. Each of these
 # carries the measurement it appears with, and `test_palette.py` pins it.
 COUNTEREXAMPLE_HEXES = {
-    # 19.2 dE at dichromacy, 8.3 at severity 0.9: the pair that says dichromacy
-    # is not the worst case. See test_dichromacy_is_not_the_worst_case.
-    # It clears dichromacy by 8.7 and misses the worst severity by 2.2, so the
-    # demonstration survives rounding.
-    "#8e4dc7", "#1402ef",
+    # 14.0 and 12.4 dE under the two dichromacy models, 9.8 at protan severity
+    # 0.8: the pair that says dichromacy is not the worst case. See
+    # test_dichromacy_is_not_the_worst_case. Its margins are 1.9 and 0.7, so
+    # the demonstration survives rounding to the 0.1 the guide prints.
+    "#1a80b8", "#fb00e4",
 }
 KNOWN_HEXES |= COUNTEREXAMPLE_HEXES
 
@@ -1367,6 +1368,37 @@ def test_the_rdbu_window_is_the_one_that_passes_the_palette_gates():
 # because that is where the surviving copy was.
 
 RETRACTED_CLAIMS = {
+    "autoscaled small multiples landing well inside a span ratio of 2": {
+        "pattern": r"lands? well inside 2",
+        "instead": "3 of 900 seeded same-process small multiples join no "
+                   "pair at SHARE_SPAN_RATIO_MAX = 2.0",
+        "why": "it was not measured. "
+               "test_same_process_small_multiples_mostly_share_at_the_ratio "
+               "measures it",
+        "retracted": "2026-10-20",
+    },
+    "anomalous trichromacy failing 1.27% of pairs dichromacy passes": {
+        "pattern": r"1\.27\s*%\s*clear|#8e4dc7",
+        "instead": "0.13% clear CVD_TARGET under both dichromacy models and "
+                   "miss it at some lower severity; #1a80b8 against #fb00e4 "
+                   "is one such pair",
+        "why": "the 1.27% compared Vienot at 1.0 with Machado below it, so "
+               "most of it was the two models disagreeing. #8e4dc7 against "
+               "#1402ef reads 7.97 under Machado's own severity 1.0, below "
+               "its 8.3 at 0.9",
+        "retracted": "2026-10-19",
+    },
+    "one CAM02-UCS unit being one just-noticeable difference": {
+        "pattern": r"(unit|ΔE)[^.]{0,60}one just[- ]noticeable",
+        "instead": "1.0 CAM02-UCS is about 2 CIELAB over the slot gamut, "
+                   "twice the theoretical 2-degree JND Stone et al. give and "
+                   "a third of their practical ND(50,2); CMAP_WRAP_DE_MAX "
+                   "rests on its measured clearance, not on a JND",
+        "why": "no source was given, and the file's own bridge (median 1.99 "
+               "CIELAB per unit) with the Stone quote in EXTERNAL_CLAIMS "
+               "puts one unit at two theoretical JNDs",
+        "retracted": "2026-10-20",
+    },
     "ACM or Elsevier rejecting a submission for Type 3 fonts": {
         "pattern": r"(ACM|Elsevier)[^.]{0,80}reject[^.]{0,40}submission",
         "instead": "IEEE PDF eXpress does not accept Type 3 and refuses the "
@@ -1388,6 +1420,16 @@ RETRACTED_CLAIMS = {
                "2026-08-17. The numbers that are there are quoted in "
                "EXTERNAL_CLAIMS under 'journal type floors'",
         "retracted": "2026-08-17",
+    },
+    "Science publishing a 6pt text minimum": {
+        "pattern": r"(PNAS(?:'s)?,? (?:and )?Science|Science(?:'s)? and "
+                   r"PNAS)[^.]{0,20}(publish|set|require|minim|6 ?pt)",
+        "instead": "6pt is the minimum PNAS publishes. Science's 6 point "
+                   "minimum is for symbols",
+        "why": "Science publishes no text floor, as EXTERNAL_CLAIMS under "
+               "'journal type floors' quotes. The 6pt floor shipped citing "
+               "both journals",
+        "retracted": "2026-10-19",
     },
     "page_scale returning a length per authored inch": {
         "pattern": r"points?[^.]{0,40}per authored inch",
@@ -1446,8 +1488,9 @@ RETRACTED_CLAIMS = {
     },
     "7.5pt as the size where text is comfortable": {
         "pattern": r"7\.5[^.]{0,60}comfortable",
-        "instead": "the floor is an x-height of 4pt on the page, where Legge "
-                   "& Bigelow (2011) put the start of fluent reading",
+        "instead": "the floor is 6pt on the page, the minimum PNAS "
+                   "publishes. Under a 4pt x-height, where Legge & Bigelow "
+                   "(2011) put the start of fluent reading, the row warns",
         "why": "7.5 shipped in the initial release with no source, and "
                "'comfortable' was added two days later. In STIX Two Text, "
                "the style sheet's font, 7.5pt is an x-height of 0.177 "
@@ -1467,9 +1510,24 @@ RETRACTED_CLAIMS = {
 
 
 def _retraction_corpus():
-    """Documents and modules, because the claim survived in a module."""
+    """Documents, modules and tests, because the claim survived in a module
+    and then in a test comment. This file is left out: it holds the
+    patterns."""
+    tests = sorted(p for p in (ROOT / "tests").glob("*.py")
+                   if p.name != pathlib.Path(__file__).name)
     return PROSE_DOCS + [pathlib.Path(inspect.getfile(module))
-                         for module in MODULES.values()]
+                         for module in MODULES.values()] + tests
+
+
+def _retraction_text(path):
+    """A test's comments only. Its docstrings and fixtures may quote a
+    retracted claim to pin why it was retracted."""
+    text = path.read_text(encoding="utf-8")
+    if path.parent.name == "tests":
+        text = "\n".join(line.strip().lstrip("#")
+                         for line in text.splitlines()
+                         if line.strip().startswith("#"))
+    return " ".join(text.split())
 
 
 @pytest.mark.parametrize("claim", sorted(RETRACTED_CLAIMS))
@@ -1477,7 +1535,7 @@ def test_a_retracted_claim_is_written_nowhere(claim):
     entry = RETRACTED_CLAIMS[claim]
     found = []
     for path in _retraction_corpus():
-        text = " ".join(path.read_text(encoding="utf-8").split())
+        text = _retraction_text(path)
         if re.search(entry["pattern"], text, re.I):
             found.append(path.relative_to(ROOT).as_posix())
     assert not found, (
@@ -1548,6 +1606,36 @@ def test_the_page_scale_pattern_still_matches_the_docstrings_it_retired():
 # claim without repeating the search, and so an uncited external number fails.
 
 EXTERNAL_CLAIMS = {
+    "arc length banking": {
+        "document": "choosing-a-form.md",
+        "anchor": "minimises the arc length of the panel's strokes",
+        "source": "Talbot, Gerth & Hanrahan, IEEE TVCG 17(12), 2276-2282, 2011",
+        "doi": "10.1109/TVCG.2011.167",
+        "verified": "2026-10-20",
+        "quote": "we recommend a simple, effective method for selecting the "
+                 "aspect ratio: minimize the arc length of the data curve "
+                 "while keeping the area of the plot constant. ... Three are "
+                 "not parameterization invariant, meaning that the "
+                 "semantically unimportant way a curve is approximated by line "
+                 "segments can dramatically change the selected aspect ratio "
+                 "... Thus, a single diagonal line will always be banked to 45 "
+                 "degrees.",
+    },
+    "anomalous trichromacy the commoner form": {
+        "document": "style-guide.md",
+        "anchor": "5.71% are anomalous trichromats and 2.28% dichromats",
+        "source": "Sharpe, Stockman, Jägle & Nathans, in Gegenfurtner & "
+                  "Sharpe (eds.), Color Vision: From Genes to Perception, "
+                  "Cambridge University Press, 1999, pp. 3-52, Table 1.6",
+        "no_doi": "a chapter in a 1999 Cambridge University Press edited "
+                  "volume, which carries an ISBN and no chapter DOI; read "
+                  "from the authors' PDF as archived by the Wayback Machine",
+        "verified": "2026-10-20",
+        "quote": "Gender No. Protan Deutan Anomaly Anopia Anomaly Anopia Male "
+                 "45,989 1.08 1.01 4.63 1.27 Female 30,711 0.03 0.02 0.36 0.01 "
+                 "Table 1.6: Incidences (in percent) for X-chromosome-linked "
+                 "color vision deficiencies in men and women.",
+    },
     "SIAM line weight": {
         "document": "style-guide.md",
         "anchor": "lines one point or thicker",
@@ -1687,7 +1775,10 @@ EXTERNAL_CLAIMS = {
         "source": "Stone, Szafir & Setlur, Color and Imaging Conference "
                   "22(1), 253-258",
         "doi": "10.2352/CIC.2014.22.1.art00045",
-        "verified": "2026-07-31",
+        # Re-read 2026-10-20 from graphics.cs.wisc.edu/Papers/2014/SAS14/
+        # 2014CIC_48_Stone_v3.pdf, with Table 3 (C and K per axis), which
+        # test_the_size_model_itself_fails_three_okabe_ito_pairs reads.
+        "verified": "2026-10-20",
         "quote": "In the paper, we describe a way to model discriminability as "
                  "a function of size for target sizes ranging from 6 degrees "
                  "to 1/3 of visual angle. ... A theoretical CIELAB JND, where "
@@ -1696,6 +1787,17 @@ EXTERNAL_CLAIMS = {
                  "we find the required difference, or in our notation, "
                  "ND(50,2), is closer to 6 ... For 0.33 degrees, the required "
                  "difference is closer to 11.",
+    },
+    "size model tested range": {
+        "document": "style-guide.md",
+        "anchor": "Szafir (2017) tested steps up to 2 ND(50) and no further",
+        "source": "Szafir, IEEE TVCG 24(1), 392-401, 2017, section 4.1; "
+                  "read from danielleszafir.com/colordiff_vis2017.pdf",
+        "doi": "10.1109/TVCG.2017.2744359",
+        "verified": "2026-10-20",
+        "quote": "used steps of 0.5ND(50,Size), 0.75ND(50,Size), "
+                 "1ND(50,Size), 1.25ND(50,Size), 1.5ND(50,Size), or "
+                 "2ND(50,Size)",
     },
     "cvd severity matrices": {
         "document": "style-guide.md",
@@ -2130,8 +2232,8 @@ def _message_strings(func):
 
     The docstring is excluded, and that exclusion is the point. It is the one
     string in a gate that nobody reading a failing build ever sees, and several
-    of them explain the fix at length: `check_overplotting`'s names alpha,
-    hexbin and hollow markers. Walking it would pass a gate whose actual
+    of them explain the fix at length: `check_overplotting`'s names hexbin.
+    Walking it would pass a gate whose actual
     message said nothing, which is the failure mode this detector exists to
     catch.
     """
@@ -2196,9 +2298,12 @@ def test_the_reason_marker_does_not_read_as_a_fix_marker():
 def test_the_palette_rows_split_their_markers_too():
     """`check_palette.check` writes rows that `check_colormap` splices
     into its own detail, so its clauses are read under the same convention and
-    are not reached by the gate-function walk above."""
-    tree = ast.parse(inspect.getsource(cp.check).lstrip())
-    strings = [node.value for node in ast.walk(tree)
+    are not reached by the gate-function walk above. The two separation rows'
+    details are written by `_cvd_detail` and `_normal_detail`, which
+    `check_series_color` shares."""
+    strings = [node.value
+               for fn in (cp.check, cp._cvd_detail, cp._normal_detail)
+               for node in ast.walk(ast.parse(inspect.getsource(fn).lstrip()))
                if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     reasons = [s for s in strings if WHY_MARK in s]
     assert reasons, (
@@ -2361,7 +2466,8 @@ def _gallery_builder_count():
     ("tests/test_docs_match_code.py", r"([\w-]+) figures, \1 descriptions"),
 ])
 def test_test_docstrings_count_the_gallery_it_has(path, pattern):
-    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22}
+    words = {"eleven": 11, "twenty": 20, "twenty-one": 21, "twenty-two": 22,
+             "twenty-four": 24}
     text = " ".join((ROOT / path).read_text(encoding="utf-8").split())
     stated = re.search(pattern, text, re.I)
     assert stated, f"{path} no longer counts the gallery in the form read here"
@@ -2375,12 +2481,64 @@ def test_test_docstrings_count_the_gallery_it_has(path, pattern):
 # the two copies are held to each other.
 
 def test_the_severity_sweep_is_quoted_the_same_in_the_guide_and_the_module():
+    """The pair count, the share under both models, the overstatement, and
+    the share against Viénot alone with the part of it the models' own
+    disagreement at 1.0 accounts for."""
     def figures(text):
+        text = re.sub(r"^\s*#\s?", "", text, flags=re.M)    # comment wraps
         text = " ".join(text.split()).replace("244 650", "244650")
         return (re.search(r"over (\d+) pairs", text).group(1),
                 re.search(r"([\d.]+)% clear", text).group(1),
-                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1))
+                re.search(r"by (?:up to|as much as) ([\d.]+)", text).group(1),
+                re.search(r"Vi[eé]not alone the share is ([\d.]+)%",
+                          text).group(1),
+                re.search(r"(\w+ tenths) of (?:that|it) is the two models "
+                          r"disagreeing", text).group(1))
 
     guide = (SKILL / "references" / "style-guide.md").read_text(encoding="utf-8")
     module = (SKILL / "scripts" / "check_palette.py").read_text(encoding="utf-8")
     assert figures(guide) == figures(module)
+
+
+def test_the_anomalous_share_is_the_sum_the_table_gives():
+    """The guide states sums of Sharpe et al.'s Table 1.6, not cells of it, so
+    the arithmetic is checked against the row the ledger quotes."""
+    entry = EXTERNAL_CLAIMS["anomalous trichromacy the commoner form"]
+    p_anomaly, p_anopia, d_anomaly, d_anopia = (
+        float(v) for v in re.search(r"Male 45,989 ([\d.]+) ([\d.]+) ([\d.]+) "
+                                    r"([\d.]+)", entry["quote"]).groups())
+    text = " ".join(document(entry["document"]).read_text(encoding="utf-8").split())
+    stated = re.search(r"of the ([\d.]+)% of European men .*? ([\d.]+)% are "
+                       r"anomalous trichromats and ([\d.]+)% dichromats", text)
+    total, anomalous, dichromat = (float(v) for v in stated.groups())
+    assert anomalous == pytest.approx(p_anomaly + d_anomaly)
+    assert dichromat == pytest.approx(p_anopia + d_anopia)
+    assert total == pytest.approx(anomalous + dichromat)
+
+
+
+def test_the_banking_sampling_numbers_are_the_ones_the_gate_measures():
+    """`choosing-a-form.md` quotes what the median slope and arc length make
+    of one curve sampled three ways. Both are recomputed here."""
+    import numpy as np
+    text = " ".join(document("choosing-a-form.md").read_text(encoding="utf-8").split())
+    stated = re.search(r"needed its aspect changed ([\d.]+)x, ([\d.]+)x or "
+                       r"([\d.]+)x by the median and ([\d.]+)x to ([\d.]+)x by "
+                       r"arc length", text)
+    assert stated, "the sampling sentence was rewritten"
+    *medians, arc_lo, arc_hi = (float(v) for v in stated.groups())
+    t = np.linspace(0.0, 1.0, 40)
+    got_median, got_arc = [], []
+    for x in (t, t ** 3, 1 - (1 - t) ** 3):
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
+        ax.plot(x, np.sqrt(x))
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        fig.canvas.draw()
+        d = np.abs(np.diff(ax.transData.transform(
+            np.column_stack([x, np.sqrt(x)])), axis=0))
+        got_median.append(1.0 / float(np.median(d[:, 1] / d[:, 0])))
+        got_arc.append(cf._banking_factor(ax))
+        plt.close(fig)
+    assert [round(m, 3) for m in got_median] == pytest.approx(medians, abs=0.01)
+    assert round(min(got_arc), 2) == arc_lo and round(max(got_arc), 2) == arc_hi
