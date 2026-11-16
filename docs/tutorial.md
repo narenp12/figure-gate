@@ -91,7 +91,7 @@ Composition audit: loss
   [PASS] Axis redundancy    axis furniture not duplicated
   [FAIL] Type size          under 6.0pt on page at scale 1.00: [(5.0, 'Epoch'), (5.0, 'Validation loss')]  [FIX] cut words, do not shrink type
   [PASS] Line weight        2 strokes, thinnest 1.50pt on page (floor 1.0)
-  [PASS] Banking            1 line panel, typical segment 12-12 deg
+  [PASS] Banking            1 line panel, 3.5x from banked
   [PASS] Ink coverage       ink fraction: ax0 0.04 (typical 0.02-0.55)
   [PASS] Series color       up to 2 data hues per panel: worst pair dE 51.4 ...
   [PASS] Dual axis          one data scale per frame

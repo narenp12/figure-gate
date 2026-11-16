@@ -143,7 +143,7 @@ def test_the_series_cycle_is_the_palette_the_guide_prescribes():
     """Until this key existed the sheet set every visual default except the one
     that decides whether a colorblind reader can separate two curves, so a
     figure built on it inherited matplotlib's `tab10` -- whose orange and green
-    measure dE 2.4 under protanopia."""
+    measure dE 1.6 under protanopia."""
     cycle = [c.upper() for c in parsed()["axes.prop_cycle"].by_key()["color"]]
     assert cycle == OKABE_SERIES, cycle
 

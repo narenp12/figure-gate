@@ -28,19 +28,19 @@ Render the figure and look at it.
 
 A figure on matplotlib's default `tab10` cycle, with a `twinx` second axis,
 returned nothing but passing rows from the composition checks. `check_palette.py`
-rated that same cycle's orange and green at dE 2.4 under protanopia: one hue to
+rates that same cycle's orange and green at dE 1.6 under protanopia: one hue to
 that reader, against a floor of 10.5. The composition checker had no access to
 the colors it was drawing.
 
 `check_series_color` closes that gap. It reads the hues off the figure's own
-artists, decides from the mark types whether the figure needs adjacent
-separation (lines, bars) or all-pairs separation (scatter), and runs them through
+artists, decides which pairs the reader compares (the Series color row of
+[the gate reference](gates.md#figure-gates) lists them), and runs them through
 the palette gates. That is row 12 of the 21.
 
 ```mermaid
 flowchart TD
     figure["figure on its axis"] --> read["check_series_color"]
-    read -- "mark types" --> need{"adjacent or<br/>all-pairs?"}
+    read -- "legend, marks, contact" --> need{"all-pairs or<br/>side by side?"}
     need --> gates["the palette gates"]
     gates --> verdict{"series colour row"}
     verdict -- "cleared" --> pass["the row clears with the figure"]
@@ -201,7 +201,7 @@ change. It cannot check that the sentence describes the change accurately.
 
 ???+ note "Gates are tested for their ability to fail"
 
-    The suite is 2404 tests, and each check has one asserting it catches a
+    The suite is 2789 tests, and each check has one asserting it catches a
     figure with exactly that defect. The style sheet has its own tests because
     `#` starts a comment in matplotlib's style format: `grid.color: #e1e0d9`
     parses as an empty value, matplotlib keeps its default, and every other test
@@ -239,5 +239,5 @@ across a release.
 - [Choosing a form](choosing-a-form.md) for the decision no styling rule
   rescues. Only its mechanical subset is gated: a script can rule out a pie or a
   truncated bar baseline, but it cannot tell you a box plot is hiding an n of 8.
-- [The gallery](gallery.md) for twenty audited figures, and the defects that
-  writing them exposed in the checks.
+- [The gallery](gallery.md) for twenty-four audited figures, and the defects
+  that writing them exposed in the checks.

@@ -20,8 +20,8 @@ threshold sits where it does, see
 
 `check_figure.py` renders the figure through an Agg canvas at
 `MEASURE_DPI = 150`, measures the result, and hands the figure back on the dpi
-it arrived on. Drawing on Agg rebinds `fig.canvas`, so an audited figure no
-longer shows in a GUI window. `audit()` returns these 21 rows in this order.
+and canvas it arrived on, as `savefig` does. `audit()` returns these 21 rows in
+this order.
 
 Where a row below says *panel*, it means every axes on the figure, an
 `ax.inset_axes` or a `secondary_xaxis` included. Those are added through
@@ -38,12 +38,12 @@ string counts the top-level panels first and the child axes after them.
 | Contrast stack | `ALPHA_LEVELS_MAX = 3` | nothing in the figure is opaque, or transparency uses more than 3 distinct levels. Overlapping fills of one colour count as a single level. A single flat alpha is not judged for a focal point |
 | Mark ratio | `MARK_RATIO_MAX = 5.0` | largest data mark exceeds 5x the smallest by area |
 | Overplotting | `OVERPLOT_THRESHOLD = 0.5` | over half a cloud's marks sit close enough to some other mark for the two to touch on the page, whether the cloud was drawn by `scatter` or by `plot` with markers and no connecting line *(advisory)* |
-| Axis redundancy | shared scale | panels sharing limits, scale type and axis title repeat tick labels or axis titles |
+| Axis redundancy | `SHARE_SPAN_RATIO_MAX = 2.0` | panels on one scale type naming one quantity repeat their axis title, and sharing the axis would cost no panel more than 2x its span; or panels sharing limits, scale type and axis title repeat tick labels |
 | Type size | `TYPE_FLOOR_PT = 6.0`, `XHEIGHT_FLOOR_PT = 4.0`, `TYPE_CEILING_PT = inf`, `MATH_SCRIPT_FLOOR_PT = 5.0` | a string renders under 6pt *on the printed page*, or a mathtext sub- or superscript renders under 5pt there. A string with a lowercase letter whose x-height lands under 4pt warns: 7.4pt in DejaVu Sans, 8.5pt in STIX Two Text, 8.9pt in STIXGeneral. Scripts are measured rather than read off the property. A venue in `VENUE_TYPE_CEILING_PT` (Nature: 7pt) sets the ceiling, and `TYPE_CEILING_PT` caps it; a floor above the ceiling drops to it, and a string over the ceiling fails. A bold, upright, one-letter lowercase panel label is held to `VENUE_PANEL_LABEL_PT` (Nature: 8pt) |
 | Line weight | `LINE_FLOOR_PT = 1.0`, `FURNITURE_FLOOR_PT = 0.5` | a data stroke renders under 1pt on the printed page: a line, a line collection, an unfilled contour, a patch edge or an annotation arrow. Spines, gridlines and tick marks are furniture and are held to the lower floor, as are marker outlines unless they repeat the fill or the background |
-| Banking | `BANKING_SLOPE_MAX = 10.0` | a line panel's median segment slope is over 10 or under 1/10, so the aspect ratio puts the typical segment past 84 degrees or under 6 *(advisory)* |
+| Banking | `BANKING_SLOPE_MAX = 10.0` | the aspect that minimises a line panel's arc length at constant area is more than 10x taller or wider than the panel's own *(advisory)* |
 | Ink coverage | `INK_MIN, INK_MAX = 0.02, 0.55` | a panel's ink fraction falls outside the band *(advisory)* |
-| Series color | palette gates, `MAX_SERIES_HUES = 6` | the hues drawn fail CVD or normal-vision separation, or one panel carries more than 6 |
+| Series color | palette gates, `MAX_SERIES_HUES = 6`, `SERIES_CONTACT_PX = 2.0` | a gated pair of hues drawn fails normal-vision separation, or fails CVD separation with no second channel (mark type, dash, marker or hatch) between the two series, or one panel carries more than 6. A panel with a legend or marks without a line gates every pair; otherwise areas that are neighbours in draw order, lines whose strokes meet, each line and its nearest of another hue, and a line and each area it crosses |
 | Dual axis | none | a `twinx` second scale carries data of its own |
 | Form | none | pie, 3D, or bars on a truncated baseline, whether drawn by the bar helper or built by hand from plain rectangles. Bars that each carry their own offset have no shared baseline and are not judged here |
 | Identity channel | none | two or more series, no legend and no text in the axes *(advisory)* |
@@ -118,7 +118,7 @@ The lightness and chroma rows stay in OKLab.
 |---|---|---|
 | Lightness band | `L_MIN, L_MAX = 0.43, 0.77` | OKLab lightness outside the band |
 | Chroma floor | `CHROMA_MIN = 0.10` | OKLab chroma below it, so the color reads as gray |
-| CVD separation | `CVD_TARGET = 10.5` | two hues under 10.5 dE in protan or deutan simulation, at dichromacy or at any severity in `ANOMALOUS_SEVERITIES` |
+| CVD separation | `CVD_TARGET = 10.5` | two hues under 10.5 dE in protan or deutan simulation, at dichromacy under either Viénot's or Machado's model, or at any severity in `ANOMALOUS_SEVERITIES` |
 | Normal-vision floor | `NORMAL_FLOOR = 21.0` | two hues under 21 dE in full color |
 | Contrast vs surface | `CONTRAST_MIN = 3.0` | a hue under 3:1 on the page *(advisory)* |
 
@@ -126,8 +126,9 @@ Ink tokens passed through `ink=` are exempt from the lightness and chroma rows.
 
 The separation rows are named `CVD separation (adjacent)` or
 `CVD separation (all-pairs)` after the comparison they ran. `all_pairs=False` is
-the default and compares neighbours, which is what a line chart needs.
-`all_pairs=True` compares every pair, which is what a scatter needs.
+the default and compares neighbours. `all_pairs=True` compares every pair, which
+is what a legend or a scatter needs: the reader matches each mark against every
+other hue.
 
 Protanopia and deuteranopia are gated. Tritan separation is measured and printed
 in the detail string, but not gated.

@@ -121,9 +121,10 @@ def test_the_gate_agrees_with_the_oracle_on_the_pairs_it_judges():
 
     Both sides simulate colour vision and measure the worst view, so this is the
     gate's whole decision compared against an independent implementation of it.
-    They are not identical by construction - this file uses Vienot at dichromacy
-    where colorspacious uses Machado at severity 100 - so a handful of pairs
-    near the threshold are expected to differ and the assertion is on the rate.
+    They are not identical by construction - this file reads dichromacy under
+    Vienot as well as Machado at severity 100, where colorspacious has only
+    Machado - so the gate can only be the stricter, and the assertion is on
+    the rate.
 
     Before 0.8.0 the same comparison put specificity at 0.786: the OKLab metric
     passed one pair in twenty that the oracle called too close. That number is
@@ -158,7 +159,8 @@ def test_the_gate_agrees_with_the_oracle_on_the_pairs_it_judges():
                  for k in ("protan", "deutan")]
         views += [cp.delta_e(cp.simulate_anomalous(la, k, s),
                              cp.simulate_anomalous(lb, k, s))
-                  for k in ("protan", "deutan") for s in cp.ANOMALOUS_SEVERITIES]
+                  for k in ("protan", "deutan")
+                  for s in (*cp.ANOMALOUS_SEVERITIES, 1.0)]
         return min(views)
 
     tp = tn = fp = fn = 0

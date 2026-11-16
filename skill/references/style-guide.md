@@ -369,13 +369,11 @@ The measure works in three steps:
   lightness span spent moving against its own direction. Under
   `CMAP_BACKTRAVEL_MAX = 0.02` over the whole map is sequential. Under it over
   both halves is diverging, or cyclic when the two ends are within
-  `CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, one just-noticeable
-  difference, which is what "the ends are the same colour" means once the metric
-  has a unit.
+  `CMAP_WRAP_DE_MAX = 1.0` of each other in CAM02-UCS ΔE, about 2 CIELAB.
 
 The 18 maps in the registry that reach that last branch wrap at 0.000 and 0.376,
-the two twilights, or at 27.963 and above, everything diverging. The threshold
-has two orders of magnitude of clearance either side.
+the two twilights, or at 27.963 and above, everything diverging. Any threshold
+between 0.4 and 27 sorts them the same way.
 
 Everything else is `misc`, and `misc` is the only outcome that fails. `jet`,
 `rainbow`, `hsv`, and `gist_ncar` land there. A reader cannot order two values in
@@ -446,18 +444,23 @@ tinted page.
 
 **Dichromacy is not the worst case, so the separation row is swept over
 severity.** Colour vision deficiency includes anomalous trichromacy, meaning a
-cone whose peak sensitivity is shifted rather than one that is missing.
+cone whose peak sensitivity is shifted rather than one that is missing. It is
+the commoner form: of the 7.99% of European men with a red-green deficiency in
+Sharpe et al.'s Table 1.6, 5.71% are anomalous trichromats and 2.28% dichromats.
 Simulating only the endpoint would be sound if the endpoint were the hardest
 view.
 
 Measured over 244 650 pairs of hues this validator would accept as series slots,
-1.27% clear ΔE 10.5 under dichromacy and miss it at some lower severity, and
-dichromacy overstates separation by as much as 12.7 ΔE. `#8e4dc7` and `#1402ef`
-are one such pair, at 19.2 under dichromacy and 8.3 at severity 0.9.
+0.13% clear ΔE 10.5 under both dichromacy models and miss it at some lower
+severity, and dichromacy overstates separation by as much as 10.7 ΔE. `#1a80b8`
+and `#fb00e4` are one such pair: 54.1 in full colour, 14.0 and 12.4 under the two
+dichromacy models, and 9.8 at protan severity 0.8.
 
 So the row reports the worst view found and names the severity it was found at,
 using the Machado, Oliveira and Fernandes (2009) matrices for
-`ANOMALOUS_SEVERITIES` and the Viénot matrices at dichromacy. The bundled
+`ANOMALOUS_SEVERITIES` and both Viénot's and Machado's matrices at dichromacy.
+The second model matters: against Viénot alone the share is 1.35%, and nine
+tenths of it is the two models disagreeing at severity 1.0. The bundled
 cycle's worst adjacent pair reads 31.7, which is what says the stricter reading
 is not a floor nobody can satisfy.
 
@@ -504,10 +507,28 @@ against a metric that had no calibration.
 palette. Run against the published Okabe-Ito eight-colour set, `CVD_TARGET`
 clears all 28 pairs and `NORMAL_FLOOR` misses exactly one: orange `#E69F00`
 against yellow `#F0E442`, at 20.75. Yellow is one of the two colours the shipped
-cycle already drops. Arriving at that independently is the strongest argument
-these numbers have, and it is why the result is pinned in
-`test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor` rather
-than sanded off with a friendlier fixture.
+cycle already drops. The result is pinned in
+`test_okabe_ito_yellow_beside_its_orange_misses_the_normal_vision_floor`.
+
+That agreement depends on the metric. In Stone et al.'s own per-axis model at
+0.333°, where the floor is 4 ND(50), three pairs miss: sky blue `#56B4E9`
+against blue `#0072B2` at 3.42, orange against vermillion `#D55E00` at 3.59,
+and orange against yellow at 3.91. The shipped cycle keeps the first two. The
+CAM02-UCS bridge is a median, not a per-pair conversion, and it is what passes
+them. The Okabe-Ito result supports the floors' scale, not their placement to
+within a pair.
+
+The gate stays in CAM02-UCS anyway, because the 4× that fails those pairs is an
+extrapolation. Szafir (2017) tested steps up to 2 ND(50) and no further, and the model is linear through zero, so 2 ND(50) is
+already its predicted 100% detection. Inside that range the model disagrees with
+the gate twice on the shipped cycle under simulation. Bluish green `#009E73`
+against reddish purple `#CC79A7` reads 1.54 ND(50) under Machado deuteranopia
+and 1.66 under Viénot; blue `#0072B2` against the same purple reads 1.94 under
+Machado protanopia and 2.10 under Viénot. CAM02-UCS puts them at 14.76 and
+13.96, over `CVD_TARGET`. They are pinned in
+`test_the_size_model_at_2x_fails_two_shipped_pairs_under_simulation` rather
+than gated: no study maps any multiple of ND(50) onto identifying a series
+against its legend.
 
 **Why there is still no size-weighted gate.** A gate multiplying the floors by
 Stone et al.'s size ratio was built and thrown away. Publication line widths are
@@ -610,7 +631,7 @@ The scale is per figure because the shrink differs. A 14in figure on a 750pt
 slide shrinks to 0.74x, an 8.6in one is 1.21x, and the same 10pt label is fine in
 one and illegible in the other.
 
-**The floor is 6pt, the minimum PNAS and Science publish.** PNAS requires
+**The floor is 6pt, the minimum PNAS publishes.** PNAS requires
 numbers, letters and symbols no smaller than 6pt after reduction, which is the
 same requirement its guidelines also state as 2mm. Science publishes no text
 floor at all: it asks for a 6pt minimum on *symbols*, 0.5pt on line widths, and
@@ -833,10 +854,19 @@ kinds, and the reason `misc` fails, comes from this literature.
   0.333° to 6°, and report it as about 6 CIELAB ΔE at two degrees rising to
   about 11 at a third of a degree. The section above derives the floors from
   it, and says why it is not a gate.
+- Szafir, D. A. (2017). Modeling Color Difference for Visualization Design.
+  *IEEE Transactions on Visualization and Computer Graphics* 24(1), 392-401.
+  doi:10.1109/TVCG.2017.2744359. Size models for points, bars and lines,
+  measured at steps up to 2 ND(50).
 - Birch, J. (2012). Worldwide prevalence of red-green color deficiency.
   *Journal of the Optical Society of America A* 29(3), 313-320.
   doi:10.1364/JOSAA.29.000313. The prevalence figures the CVD gate is scoped
   by.
+- Sharpe, L. T., Stockman, A., Jägle, H. & Nathans, J. (1999). Opsin genes,
+  cone photopigments, color vision, and color blindness. In K. R. Gegenfurtner
+  & L. T. Sharpe (eds.), *Color Vision: From Genes to Perception*, 3-52.
+  Cambridge University Press. Table 1.6 splits the red-green deficiencies of
+  45 989 men into anomalous and dichromatic forms.
 - Machado, G. M., Oliveira, M. M. & Fernandes, L. A. F. (2009). A
   physiologically-based model for simulation of color vision deficiency. *IEEE
   Transactions on Visualization and Computer Graphics* 15(6), 1291-1298.

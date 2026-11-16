@@ -1123,12 +1123,12 @@ def site_alt_texts():
 
 
 def test_the_examples_still_describe_every_figure():
-    """Twenty figures, twenty descriptions, plus the demo. A refactor that
+    """Twenty-four figures, twenty-four descriptions, plus the demo. A refactor that
     changes the call shape would otherwise leave this file comparing the site
     against a shorter list and finding no disagreement."""
-    assert len(described_strings()) == 21, (
+    assert len(described_strings()) == 25, (
         f"read {len(described_strings())} descriptions out of demo.py and "
-        "gallery.py, expected 21 - the call shape changed and "
+        "gallery.py, expected 25 - the call shape changed and "
         "described_strings() needs updating with it")
 
 
@@ -1317,7 +1317,9 @@ def test_the_constant_the_guide_quotes_is_the_codes_value(document, name,
 WORD_NUMBERS = {"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
                 "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
                 "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-                "eighteen": 18, "nineteen": 19, "twenty": 20}
+                "eighteen": 18, "nineteen": 19, "twenty": 20,
+                "twenty-one": 21, "twenty-two": 22, "twenty-three": 23,
+                "twenty-four": 24}
 
 ROSTER_COUNT_CLAIMS = {
     "the audit() summary": (README, r"returns `\(ok, rows\)`\s*\S*\s*(\d+) rows"),
@@ -1364,9 +1366,10 @@ def test_the_docs_state_the_real_roster_count(label):
 GALLERY_PY = ROOT / "examples" / "gallery.py"
 
 GALLERY_COUNT_CLAIMS = {
-    "gallery.py's docstring": (GALLERY_PY, r"(\w+) figures hard enough"),
-    "the gallery page": (DOCS_GALLERY, r"builds these (\w+) figures and audits"),
-    "the README": (README, r"Writing those (\w+) exposed"),
+    "gallery.py's docstring": (GALLERY_PY, r"([\w-]+) figures hard enough"),
+    "the gallery page": (DOCS_GALLERY,
+                         r"builds these ([\w-]+) figures and audits"),
+    "the README": (README, r"Writing those ([\w-]+) exposed"),
 }
 
 
@@ -1685,8 +1688,8 @@ def test_the_gates_page_names_only_publishers_with_a_type_minimum():
 # --- sources the style guide cites in its body --------------------------------
 # Luo, Cui & Li, Viénot, Tufte and Okabe & Ito were named in the body and absent
 # from the References, which `CONTRIBUTING.md` says a cited work may not be.
-GUIDE_CITED = ("Kovesi", "Stone", "Machado", "Okabe", "Viénot", "Luo",
-               "Potluri", "Lundgard", "Bateman", "Tufte", "Legge")
+GUIDE_CITED = ("Kovesi", "Stone", "Szafir", "Machado", "Okabe", "Viénot", "Luo",
+               "Potluri", "Lundgard", "Bateman", "Tufte", "Legge", "Sharpe")
 
 
 @pytest.mark.parametrize("surname", GUIDE_CITED)
@@ -1697,22 +1700,24 @@ def test_a_source_the_style_guide_names_is_in_its_references(surname):
         f"the style guide cites {surname} and its References do not list them")
 
 
-def test_an_audited_figure_is_left_on_an_agg_canvas():
-    """`docs/gates.md` says drawing on Agg rebinds `fig.canvas`, so an audited
-    figure no longer shows in a GUI window. A GUI canvas cannot be built in CI,
-    so an SVG canvas stands in for any canvas that is not Agg."""
+def test_an_audited_figure_is_handed_back_its_canvas():
+    """`docs/gates.md` says the figure comes back on the canvas it arrived on,
+    as `savefig` does. A GUI canvas cannot be built in CI, so an SVG canvas
+    stands in for any canvas that is not Agg."""
     import matplotlib
     matplotlib.use("agg")
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.backends.backend_svg import FigureCanvasSVG
     from matplotlib.figure import Figure
 
     import check_figure as cf
 
-    assert "rebinds `fig.canvas`" in GATES.read_text(encoding="utf-8"), (
+    gates = " ".join(GATES.read_text(encoding="utf-8").split())
+    assert "the dpi and canvas it arrived on" in gates, (
         "docs/gates.md no longer makes the claim; drop this test with it")
     fig = Figure()
-    FigureCanvasSVG(fig)
+    svg = FigureCanvasSVG(fig)
     fig.add_subplot().plot([0, 1], [0, 1])
     cf.audit(fig)
-    assert type(fig.canvas) is FigureCanvasAgg
+    cf.check_ink(fig)
+    cf.check_text_readability(fig, None)
+    assert fig.canvas is svg

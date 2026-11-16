@@ -40,7 +40,7 @@ from typing import NamedTuple
 # comparing, which turns a break into a silent one. That is the opposite of what
 # the list is for, so completeness here is load-bearing rather than tidy.
 __all__ = [
-    "DID_NOT_RUN", "Remedy", "REMEDIES", "suggest", "format_suggestions",
+    "DID_NOT_RUN", "GATE_RAISED", "Remedy", "REMEDIES", "suggest", "format_suggestions",
 ]
 
 
@@ -50,6 +50,9 @@ __all__ = [
 # copies are the same string, the way `AUDIT_SCHEMA` is gated across the two
 # checkers.
 DID_NOT_RUN = "did not run: "
+
+# `check_figure.GATE_RAISED`, written out for the same reason.
+GATE_RAISED = "gate raised "
 
 
 class Remedy(NamedTuple):
@@ -180,7 +183,9 @@ def suggest(rows: Sequence[tuple[str, bool | str, str]],
     that they did not: no style sheet to compare against, and no `check_palette`
     to classify a colour with. "Apply the sheet inside the same rc_context" is
     the wrong answer to "there is no sheet", and each of those rows already
-    carries the right one in its own `[FIX]` clause.
+    carries the right one in its own `[FIX]` clause. A row opening with
+    `GATE_RAISED` is skipped for the same reason: the gate crashed and measured
+    nothing about the figure.
 
     Args:
         rows: `(label, status, detail)` triples, as `audit` or `check`
@@ -191,7 +196,8 @@ def suggest(rows: Sequence[tuple[str, bool | str, str]],
         Empty when nothing fired that this file has an answer for.
     """
     marked = [name for name, status, detail in rows
-              if status is not True and not detail.startswith(DID_NOT_RUN)]
+              if status is not True
+              and not detail.startswith((DID_NOT_RUN, GATE_RAISED))]
     out = []
     for name in marked:
         found = [r for r in REMEDIES if r.gate == name]
